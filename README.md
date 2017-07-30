@@ -8,5 +8,6 @@ Current features:
 * Converts parse tree into hierarchical HIR (High-level IR)
 * Resolves scoping, converts to SSA form
 * Performs lambda lifting on closures
-* Flattens IR into flat LIR (Low-level IR)
+* Flattens HIR into flat LIR (Low-level IR)
+* Performs basic constant propagation
 * Produces DOT graph from LIR
