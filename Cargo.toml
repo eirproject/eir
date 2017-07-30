@@ -1,0 +1,10 @@
+[package]
+authors = ["HansiHE <hansihe@hansihe.com>"]
+name = "core_erlang"
+version = "0.1.0"
+
+[build-dependencies]
+peg = "0.5.4"
+
+[dependencies]
+string-intern = "0.1.6"
