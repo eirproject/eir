@@ -43,7 +43,7 @@ pub struct FunctionDefinition {
     pub ident: FunctionIdent,
     pub visibility: FunctionVisibility,
     pub hir_fun: hir::Function,
-    pub lir_function: Option<lir::Function>,
+    pub lir_function: Option<lir::FunctionCfg>,
 }
 #[derive(Debug)]
 pub enum FunctionVisibility {
@@ -82,18 +82,8 @@ impl AFunctionName {
 
 pub fn from_parsed(parsed: &parser::Module) -> Module {
     let mut module = ::ir::hir::from_parsed::from_parsed(parsed);
-    //println!("{:#?}", module);
 
     let mut env =  ScopeTracker::new();
-    //let mut function_scope = HashMap::new();
-    //for function in &parsed.definitions {
-    //    function_scope.insert(
-    //        ::ir::hir::pass::ssa::ScopeDefinition::Function(
-    //            function.name.0.clone()),
-    //        env.new_ssa()
-    //    );
-    //}
-    //env.push_scope(function_scope);
 
     // Assign SSA variables
     for func in &mut module.functions {
@@ -108,7 +98,6 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
             &mut env, &mut func.hir_fun.body);
         env.pop_scope();
     }
-    //env.pop_scope();
 
     // Extract lambdas
     let mut lambda_collector = ::ir::hir::pass::extract_lambda::LambdaCollector::new();
@@ -124,8 +113,11 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
 
     for function in module.functions.iter_mut() {
         let lir_mut = function.lir_function.as_mut().unwrap();
-        ::ir::lir::pass::propagate_atomics(&mut lir_mut.basic_blocks);
+        println!("{}", function.ident);
+        ::ir::lir::pass::propagate_atomics(lir_mut);
+        //::ir::lir::pass::validate(lir_mut);
     }
+
 
     module
 }

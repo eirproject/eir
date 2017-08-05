@@ -2,6 +2,6 @@ target/
 **/*.rs.bk
 Cargo.lock
 
-cfg.dot
-cfg.dot.pdf
+*.dot
+*.dot.pdf
 *.core

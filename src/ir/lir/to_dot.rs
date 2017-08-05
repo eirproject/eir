@@ -20,21 +20,21 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
         .map(|a| (a.var.clone(), a.ssa)).collect();
     write!(w, "entry [ label=<entry|fun: {} free: {:?} write[{:?}]> ];\n",
            fun_name, function.visibility, args)?;
-    write!(w, "entry -> blk_{};\n\n", lir.entry.0)?;
+    write!(w, "entry -> blk_{};\n\n", lir.entry().0)?;
 
-    for block in &lir.basic_blocks {
+    for block in lir.blocks_iter() {
         let block_name = block.label.0;
 
         write!(w, "blk_{} [ label=<{}|", block_name, block_name)?;
 
-        //for phi in &block.phi_nodes {
-        //    if phi.dead {
-        //        continue;
-        //    }
-        //    let fmt = format_label(&format!("${}, = PHI[{:?}]\n",
-        //                                    phi.output.0, phi.inputs));
-        //    write!(w, "{}", fmt)?;
-        //}
+        for phi in &block.phi_nodes {
+            //if phi.dead {
+            //    continue;
+            //}
+            let fmt = format_label(&format!("{:?}, = PHI[{:?}]\n",
+                                            phi.ssa, phi.entries));
+            write!(w, "{}", fmt)?;
+        }
 
         for op in block.ops.iter() {
             if op.writes.len() > 0 {

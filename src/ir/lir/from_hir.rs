@@ -18,19 +18,20 @@ impl Module {
 
 impl FunctionDefinition {
     fn lower(&mut self) {
-        let mut builder = lir::LirBuilder::new();
+        let mut builder = lir::FunctionCfg::new(
+            self.hir_fun.args.iter().map(|a| a.ssa).collect());
         let ret = self.hir_fun.body.lower(&mut builder);
         builder.basic_op(
             lir::OpKind::ReturnOk,
             vec![lir::Source::Variable(ret)], vec![]);
 
-        self.lir_function = Some(builder.build());
+        self.lir_function = Some(builder);
     }
 }
 
 use self::hir::SingleExpressionKind as HSEK;
 impl hir::SingleExpression {
-    fn lower(&self, b: &mut lir::LirBuilder) -> ::ir::SSAVariable {
+    fn lower(&self, b: &mut lir::FunctionCfg) -> ::ir::SSAVariable {
         match self.kind {
             HSEK::InterModuleCall { ref module, ref name, ref args } => {
                 let mut reads_r = vec![module.lower(b), name.lower(b)];
@@ -116,6 +117,9 @@ impl hir::SingleExpression {
                 then.ssa
             },
             HSEK::Case { ref val, ref clauses } => {
+
+                //::pattern::to_decision_tree(clauses);
+
                 for v in &val.values {
                     v.lower(b);
                 }
@@ -138,17 +142,19 @@ impl hir::SingleExpression {
                     let clause_label = b.add_block();
                     b.add_jump(from_label, clause_label);
                     b.set_block(clause_label);
-                    clause.body.lower(b);
+                    let clause_ret = clause.body.lower(b);
 
                     b.basic_op(lir::OpKind::Jump, vec![], vec![]);
                     let clause_done_label = b.get_block();
                     b.add_jump(clause_done_label, done_label);
+
+                    b.add_phi(clause_done_label, clause_ret,
+                              done_label, self.ssa);
                 }
 
                 b.set_block(done_label);
 
-                // TODO
-                SSAVariable(0)
+                self.ssa
             },
             HSEK::Tuple(ref elems) => {
                 for elem in elems.iter() {

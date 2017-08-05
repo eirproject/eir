@@ -141,7 +141,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 assign_ssa_single_expression(env, arg);
             }
             assign_ssa_single_expression(env, fun);
-            expr.ssa = fun.ssa;
+            expr.ssa = env.new_ssa();
         },
         SingleExpressionKind::Try { ref mut body, ref mut then_vars, ref mut then,
                                     ref mut catch_vars, ref mut catch } => {

@@ -16,6 +16,6 @@ fn main() {
 
     let mut out = ::std::fs::File::create("cfg.dot").unwrap();
     core_erlang::ir::lir::to_dot::function_to_dot(
-        &hir.functions[27], &mut out).unwrap();
+        &hir.functions[6], &mut out).unwrap();
 
 }
