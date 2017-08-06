@@ -10,6 +10,7 @@ pub mod parser;
 pub mod ir;
 pub mod interpreter;
 pub mod pattern;
+pub mod util;
 
 #[cfg(test)]
 mod tests {
