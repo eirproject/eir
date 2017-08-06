@@ -35,7 +35,8 @@ impl<'a> MatchCompileContext<'a> {
         let mut cfg = cfg::PatternCfg::new();
         let fail_leaf = cfg.add_fail();
         let leaves = clauses.iter()
-            .map(|_| cfg.add_leaf())
+            .enumerate()
+            .map(|(idx, _)| cfg.add_leaf(idx))
             .collect();
 
         MatchCompileContext {
@@ -66,8 +67,6 @@ impl<'a> MatchCompileContext<'a> {
             })
             .collect();
         matrix::MatchMatrix {
-            variables_len: self.pattern.dimentions().0,
-            clauses_len: self.pattern.dimentions().1,
             data: data,
             variables: self.input_variables.clone(),
             clause_leaves: self.leaves.clone(),
@@ -104,7 +103,7 @@ fn matrix_to_decision_tree(parent: cfg::CfgNodeIndex, ctx: &mut MatchCompileCont
                            matrix: &matrix::MatchMatrix,
                            introduced_vars: Vec<cfg::PatternCfgVariable>, lvl: u32) {
     println!("{} - {:?}, {:?}:", lvl, spec_t, spec);
-    matrix.to_table(ctx).printstd();
+    matrix.to_table(ctx.pattern).printstd();
 
     let edge = cfg::CfgEdge {
         kind: spec.clone(),

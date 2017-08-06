@@ -30,8 +30,8 @@ impl PatternCfg {
         self.graph.add_node(CfgNodeKind::Fail)
     }
 
-    pub fn add_leaf(&mut self) -> CfgNodeIndex {
-        self.graph.add_node(CfgNodeKind::Leaf)
+    pub fn add_leaf(&mut self, num: usize) -> CfgNodeIndex {
+        self.graph.add_node(CfgNodeKind::Leaf(num))
     }
 
     pub fn add_root(&mut self) -> CfgNodeIndex {
@@ -71,5 +71,5 @@ pub enum CfgNodeKind {
     Root,
     Match(PatternCfgVariable),
     Fail,
-    Leaf,
+    Leaf(usize),
 }

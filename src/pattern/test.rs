@@ -15,7 +15,7 @@ fn list_merge_pattern() {
     pattern.add_clause(vec![wildcard, sentinel]);
     pattern.add_clause(vec![list_cell, list_cell]);
 
-    super::to_decision_tree(&pattern);
+    //super::to_decision_tree(&pattern);
 
 }
 
@@ -33,5 +33,5 @@ fn advanced_pattern() {
 
     pattern.add_clause(vec![wildcard, list_cell_1]);
 
-    //super::to_decision_tree(&pattern);
+    super::to_decision_tree(&pattern);
 }
