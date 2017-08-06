@@ -57,7 +57,7 @@ impl PatternCfg {
 }
 
 pub struct CfgEdge {
-    pub kind: super::pattern::PatternNode,
+    pub kind: super::pattern::PatternNodeKind,
     pub variable_binds: Vec<PatternCfgVariable>,
 }
 impl ::std::fmt::Debug for CfgEdge {

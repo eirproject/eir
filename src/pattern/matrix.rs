@@ -2,7 +2,7 @@ use ::std::collections::HashSet;
 
 use ::prettytable::Table;
 
-use super::pattern::{ PatternNodeIndex, Pattern, PatternNode };
+use super::pattern::{ PatternNodeIndex, Pattern, PatternNodeKind };
 
 #[derive(Debug)]
 pub struct MatchMatrix {
@@ -54,7 +54,8 @@ impl MatchMatrix {
         let clauses = self.data.chunks(self.variables.len());
         for clause in clauses {
             for variable_pattern in clause.iter() {
-                if pattern.node(variable_pattern.node) == &PatternNode::Wildcard {
+                if pattern.node(variable_pattern.node).kind ==
+                    PatternNodeKind::Wildcard {
                     sums[variable_pattern.variable_num].1 = false;
                 } else {
                     if sums[variable_pattern.variable_num].1 {
@@ -74,13 +75,13 @@ impl MatchMatrix {
     }
 
     pub fn collect_specialization_types<'a>(&self, pattern: &'a Pattern,
-                                        variable: usize) -> HashSet<&'a PatternNode> {
+                                        variable: usize) -> HashSet<&'a PatternNodeKind> {
         let mut types = HashSet::new();
 
         let clauses = self.data.chunks(self.variables.len());
         for clause in clauses {
             let variable_pattern = &clause[variable];
-            types.insert(pattern.node(variable_pattern.node));
+            types.insert(&pattern.node(variable_pattern.node).kind);
         }
 
         types
@@ -88,8 +89,8 @@ impl MatchMatrix {
 
     pub fn specialize(&self, ctx: &mut super::MatchCompileContext,
                       variable: usize,
-                      on: &PatternNode) -> (Vec<super::cfg::PatternCfgVariable>,
-                                           MatchMatrix) {
+                      on: &PatternNodeKind) -> (Vec<super::cfg::PatternCfgVariable>,
+                                                MatchMatrix) {
         let wildcard = ctx.pattern.wildcard();
         let expanded_arity = on.children();
 
@@ -111,16 +112,20 @@ impl MatchMatrix {
             let pat = &clause[variable];
             let pat_node = ctx.pattern.node(pat.node);
 
-            let is_wildcard = pat_node == &PatternNode::Wildcard;
-            let is_match = pat_node == on;
+            let is_wildcard = pat_node.kind == PatternNodeKind::Wildcard;
+            let is_match = &pat_node.kind == on;
 
             if is_wildcard || is_match {
                 final_clause_leaves.push(self.clause_leaves[clause_num]);
 
                 if is_match {
-                    let children = ctx.pattern.node_children(pat.node);
-                    assert!(children.clone().count() == expanded_arity);
-                    data.extend(children);
+                    let children: Vec<_> =
+                        ctx.pattern.node_children(pat.node).collect();
+                    assert!(children.len() == expanded_arity);
+
+                    // Order of children in reverse additive order, as per docs.
+                    // Need to reverse.
+                    data.extend(children.iter().rev());
                 } else {
                     data.extend((0..expanded_arity).map(|_| wildcard));
                 }
@@ -133,28 +138,6 @@ impl MatchMatrix {
                 }
             }
         }
-
-        //let data: Vec<_> = self.data
-        //    .chunks(self.variables_len)
-        //    .flat_map(|clause| {
-        //        let pat = &clause[variable];
-        //        let pat_node = ctx.pattern.node(pat.node);
-        //        if pat_node == on || pat_node == PatternNode::Wildcard {
-        //            final_clauses += 1;
-        //            let e1 = clause.iter().take(variable).map(|p| p.node);
-        //            let e2 = if pat_node == on {
-        //                Either::Left(ctx.pattern.node_children(pat.node))
-        //            } else {
-        //                let vals = vec![wildcard; expanded_arity];
-        //                Either::Right(vals.into_iter())
-        //            };
-        //            let e3 = clause.iter().skip(variable+1).map(|p| p.node);
-        //            Either::Left(e1.chain(e2).chain(e3))
-        //        } else {
-        //            Either::Right(vec![].into_iter())
-        //        }
-        //    })
-        //    .collect();
 
         let final_variables_num = self.variables.len() - 1 + expanded_arity;
         if final_variables_num * final_clause_leaves.len() == 0 {
@@ -171,7 +154,7 @@ impl MatchMatrix {
     pub fn default(&self, ctx: &mut super::MatchCompileContext,
                    variable: usize) -> (Vec<super::cfg::PatternCfgVariable>,
                                         MatchMatrix) {
-        self.specialize(ctx, variable, &PatternNode::Wildcard)
+        self.specialize(ctx, variable, &PatternNodeKind::Wildcard)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -188,7 +171,7 @@ impl MatchMatrix {
             let has_wildcard_head = self.data
                 .chunks(self.variables.len())
                 .next().unwrap()
-                .iter().all(|p| pattern.node(p.node) == &PatternNode::Wildcard);
+                .iter().all(|p| pattern.node(p.node).kind == PatternNodeKind::Wildcard);
             if has_wildcard_head {
                 Some(self.clause_leaves[0])
             } else {

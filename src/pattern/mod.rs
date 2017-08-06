@@ -1,6 +1,8 @@
 // Implements a variant of
 // http://www.cs.tufts.edu/~nr/cs257/archive/luc-maranget/jun08.pdf
 
+use ::std::collections::HashMap;
+
 mod pattern;
 mod cfg;
 mod matrix;
@@ -8,19 +10,13 @@ mod matrix;
 #[cfg(test)]
 mod test;
 
-use ::std::collections::HashSet;
-use ::std::slice::{ Chunks, ChunksMut };
-
-use ::petgraph::Graph;
 use ::petgraph::graph::NodeIndex;
-
-use ::parser::AtomicLiteral;
-use ::ir::hir::{ Clause, Pattern, PatternNode };
 
 #[derive(Debug)]
 pub struct MatchCompileContext<'a> {
     pattern: &'a pattern::Pattern,
     cfg: cfg::PatternCfg,
+    pattern_var_bindings: HashMap<pattern::PatternVariable, cfg::PatternCfgVariable>,
 
     // Outcomes
     leaves: Vec<NodeIndex>,
@@ -47,10 +43,32 @@ impl<'a> MatchCompileContext<'a> {
             leaves: leaves,
             cfg: cfg,
             pattern: pattern,
+            pattern_var_bindings: HashMap::new(),
         }
     }
 
-    pub fn root_matrix(&self) -> matrix::MatchMatrix {
+    pub fn add_var_binding(&mut self, pat_var: pattern::PatternVariable,
+                           cfg_var: cfg::PatternCfgVariable) {
+        if pat_var.0 != 0 {
+            if let Some(v) = self.pattern_var_bindings.get(&pat_var).cloned() {
+                assert!(v == cfg_var);
+            } else {
+                self.pattern_var_bindings.insert(pat_var, cfg_var);
+            }
+        }
+    }
+
+    pub fn add_matrix_bindings(&mut self, mat: &matrix::MatchMatrix) {
+        for (clause_num, _clause) in mat.clause_leaves.iter().enumerate() {
+            for (pat_num, cfg_var) in mat.variables.iter().enumerate() {
+                let elem = &mat.data[(mat.variables.len()*clause_num) + pat_num];
+                let pat_var = self.pattern.node(elem.node).bind;
+                self.add_var_binding(pat_var, *cfg_var);
+            }
+        }
+    }
+
+    pub fn root_matrix(&mut self) -> matrix::MatchMatrix {
         let clauses = self.pattern.clauses();
         let data = clauses.iter()
             .enumerate()
@@ -74,36 +92,25 @@ impl<'a> MatchCompileContext<'a> {
     }
 
     pub fn expand_match(&mut self,
-                        on: &pattern::PatternNode) -> Vec<cfg::PatternCfgVariable> {
-        (0..(on.children())).map(|_| self.cfg.new_variable()).collect()
+                        on: &pattern::PatternNodeKind) -> Vec<cfg::PatternCfgVariable> {
+        let res = (0..(on.children()))
+            .map(|_| self.cfg.new_variable())
+            .collect();
+        println!("{:?}", res);
+        res
     }
 
 }
 
-//fn matrix_add_child(parent: cfg::CfgNodeIndex, ctx: &mut MatchCompileContext,
-//                    spec: pattern::PatternNode, spec_t: cfg::PatternCfgVariable,
-//                    matrix: &matrix::MatchMatrix) {
-//    if matrix.is_empty() {
-//        ctx.cfg.add_edge(parent, ctx.fail_leaf, spec);
-//        return;
-//    }
-//
-//    if let Some(node) = matrix.has_wildcard_head(&ctx.pattern) {
-//        ctx.cfg.add_edge(parent, node, spec);
-//        return;
-//    }
-//
-//    let cfg_node = ctx.cfg.add_child(parent, spec, spec_t);
-//    matrix_to_decision_tree(cfg_node, ctx, matrix);
-//}
-
 fn matrix_to_decision_tree(parent: cfg::CfgNodeIndex, ctx: &mut MatchCompileContext,
-                           spec: &pattern::PatternNode,
+                           spec: &pattern::PatternNodeKind,
                            spec_t: cfg::PatternCfgVariable,
                            matrix: &matrix::MatchMatrix,
                            introduced_vars: Vec<cfg::PatternCfgVariable>, lvl: u32) {
-    println!("{} - {:?}, {:?}:", lvl, spec_t, spec);
-    matrix.to_table(ctx.pattern).printstd();
+    //println!("{} - {:?}, {:?}:", lvl, spec_t, spec);
+    //matrix.to_table(ctx.pattern).printstd();
+
+    ctx.add_matrix_bindings(matrix);
 
     let edge = cfg::CfgEdge {
         kind: spec.clone(),
@@ -121,14 +128,13 @@ fn matrix_to_decision_tree(parent: cfg::CfgNodeIndex, ctx: &mut MatchCompileCont
     }
 
     let specialize_variable = matrix.select_specialize_variable(&ctx.pattern);
-    //println!("{}", specialize_variable);
     let specialize_variable_t = matrix.get_var(specialize_variable);
 
     let cfg_node = ctx.cfg.add_child(parent, edge, specialize_variable_t);
 
     let mut specialization_types = matrix.collect_specialization_types(
         &ctx.pattern, specialize_variable);
-    specialization_types.remove(&pattern::PatternNode::Wildcard);
+    specialization_types.remove(&pattern::PatternNodeKind::Wildcard);
 
     for specialization in specialization_types.iter() {
         let (introduced, specialized) = matrix.specialize(ctx, specialize_variable,
@@ -136,33 +142,32 @@ fn matrix_to_decision_tree(parent: cfg::CfgNodeIndex, ctx: &mut MatchCompileCont
         matrix_to_decision_tree(cfg_node, ctx, *specialization,
                                 specialize_variable_t, &specialized,
                                 introduced, lvl+1);
-        //matrix_add_child(parent, ctx, *specialization, specialize_variable_t,
-        //                 &specialized)
     }
 
     let (introduced, default) = matrix.default(ctx, specialize_variable);
-    matrix_to_decision_tree(cfg_node, ctx, &pattern::PatternNode::Wildcard,
+    matrix_to_decision_tree(cfg_node, ctx, &pattern::PatternNodeKind::Wildcard,
                             specialize_variable_t, &default, introduced, lvl+1);
-    //matrix_add_child(parent, ctx, pattern::PatternNode::Wildcard,
-    //                 specialize_variable_t, &default);
 
 }
 
-pub fn to_decision_tree(pattern: &pattern::Pattern) {
+pub fn to_decision_tree(pattern: &pattern::Pattern) -> cfg::PatternCfg {
     let mut context = MatchCompileContext::new(pattern);
-    println!("{:#?}", context);
+    //println!("{:#?}", context);
 
     let root = context.root_matrix();
-    //root.to_table(&context).printstd();
-    //println!("{:#?}", root);
 
     let root_cfg = context.cfg.add_root();
-    matrix_to_decision_tree(root_cfg, &mut context, &pattern::PatternNode::Wildcard,
+    matrix_to_decision_tree(root_cfg, &mut context,
+                            &pattern::PatternNodeKind::Wildcard,
                             cfg::PatternCfgVariable(0), &root,
                             root.variables.clone(), 0);
 
-    use ::std::io::Write;
-    let dot = ::petgraph::dot::Dot::new(&context.cfg.graph);
-    let mut dot_file = ::std::fs::File::create("pat_cfg.dot").unwrap();
-    write!(dot_file, "{:?}", dot).unwrap();
+    //println!("{:#?}", context.pattern_var_bindings);
+
+    //use ::std::io::Write;
+    //let dot = ::petgraph::dot::Dot::new(&context.cfg.graph);
+    //let mut dot_file = ::std::fs::File::create("pat_cfg.dot").unwrap();
+    //write!(dot_file, "{:?}", dot).unwrap();
+
+    context.cfg
 }

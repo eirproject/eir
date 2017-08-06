@@ -1,28 +1,29 @@
-use ::std::slice::{ Chunks, ChunksMut };
-
 use ::petgraph::{ Graph, Direction };
 use ::petgraph::graph::NodeIndex;
 
 pub type PatternNodeIndex = NodeIndex;
 
-pub type PatternGraph = Graph<PatternNode, ()>;
+pub type PatternGraph = Graph<PatternNodeO, ()>;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct PatternVariable(pub usize);
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub enum PatternNode {
+pub enum PatternNodeKind {
     ListCell,
     Sentinel,
     Tuple(usize),
     Map(),
     Wildcard,
 }
-impl PatternNode {
+impl PatternNodeKind {
 
     pub fn children(&self) -> usize {
         match *self {
-            PatternNode::Wildcard => 0,
-            PatternNode::Sentinel => 0,
-            PatternNode::Tuple(arity) => arity,
-            PatternNode::ListCell => 2,
+            PatternNodeKind::Wildcard => 0,
+            PatternNodeKind::Sentinel => 0,
+            PatternNodeKind::Tuple(arity) => arity,
+            PatternNodeKind::ListCell => 2,
             _ => unimplemented!(),
         }
     }
@@ -31,6 +32,7 @@ impl PatternNode {
 
 #[derive(Debug)]
 pub struct Pattern {
+    curr_var: usize,
     graph: PatternGraph,
     root: Vec<PatternNodeIndex>,
     variables_len: usize,
@@ -38,12 +40,27 @@ pub struct Pattern {
     wildcard: PatternNodeIndex,
 }
 
+#[derive(Clone)]
+pub struct PatternNodeO {
+    pub kind: PatternNodeKind,
+    pub bind: PatternVariable,
+}
+impl ::std::fmt::Debug for PatternNodeO {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(f, "{:?} V{}", self.kind, self.bind.0)
+    }
+}
+
 impl Pattern {
 
     pub fn new(variables: usize) -> Self {
         let mut graph = Graph::new();
-        let wildcard = graph.add_node(PatternNode::Wildcard);
+        let wildcard = graph.add_node(PatternNodeO {
+            kind: PatternNodeKind::Wildcard,
+            bind: PatternVariable(0),
+        });
         Pattern {
+            curr_var: 0,
             graph: graph,
             root: Vec::new(),
             variables_len: variables,
@@ -64,7 +81,7 @@ impl Pattern {
             .collect()
     }
 
-    pub fn node(&self, idx: PatternNodeIndex) -> &PatternNode {
+    pub fn node(&self, idx: PatternNodeIndex) -> &PatternNodeO {
         &self.graph[idx]
     }
 
@@ -73,12 +90,20 @@ impl Pattern {
         self.graph.neighbors_directed(idx, Direction::Outgoing)
     }
 
-    pub fn add_node(&mut self, node: PatternNode) -> PatternNodeIndex {
-        self.graph.add_node(node)
+    pub fn add_node(&mut self, node: PatternNodeKind) -> PatternNodeIndex {
+        self.curr_var += 1;
+        self.graph.add_node(PatternNodeO {
+            kind: node,
+            bind: PatternVariable(self.curr_var),
+        })
     }
 
-    pub fn add_child(&mut self, parent: PatternNodeIndex, child: PatternNode) -> PatternNodeIndex {
-        let res = self.graph.add_node(child);
+    pub fn add_child(&mut self, parent: PatternNodeIndex, child: PatternNodeKind) -> PatternNodeIndex {
+        self.curr_var += 1;
+        let res = self.graph.add_node(PatternNodeO {
+            kind: child,
+            bind: PatternVariable(self.curr_var),
+        });
         self.graph.add_edge(parent, res, ());
         res
     }
@@ -101,7 +126,7 @@ impl Pattern {
             self.validate_node(child);
         }
 
-        assert!(child_count == self.graph[node].children());
+        assert!(child_count == self.graph[node].kind.children());
     }
 
     pub fn dimentions(&self) -> (usize, usize) {
