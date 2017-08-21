@@ -5,10 +5,6 @@ pub fn validate(cfg: &mut FunctionCfg) {
 
     let mut assigns = HashSet::new();
 
-    for arg in cfg.args_iter() {
-        assigns.insert(*arg);
-    }
-
     for block in cfg.blocks_iter() {
         for phi in block.phi_nodes.iter() {
             if assigns.contains(&phi.ssa) {

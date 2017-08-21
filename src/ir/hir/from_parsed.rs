@@ -55,28 +55,43 @@ impl Expression {
     }
 }
 
-fn pat_node_from_parsed(node: &::parser::Pattern) -> PatternNode {
+fn pat_node_from_parsed(node: &::parser::Pattern,
+                        values: &mut Vec<SingleExpression>) -> PatternNode {
     use ::parser::Pattern as PP;
     match *node {
         PP::Variable(ref v) => PatternNode::Variable(v.clone()),
         PP::Atomic(ref a) => PatternNode::Atomic(a.clone()),
         PP::Bind(ref var, ref pat) =>
-            PatternNode::Bind(var.clone(), Box::new(pat_node_from_parsed(&pat.0))),
+            PatternNode::Bind(var.clone(), Box::new(
+                pat_node_from_parsed(&pat.0, values))),
         PP::Tuple(ref pats) =>
             PatternNode::Tuple(
-                pats.iter().map(|p| pat_node_from_parsed(&p.0)).collect()
+                pats.iter().map(|p| pat_node_from_parsed(&p.0, values)).collect()
             ),
         PP::List(ref pats, ref tail) =>
             PatternNode::List(
-                pats.iter().map(|p| pat_node_from_parsed(&p.0)).collect(),
-                Box::new(pat_node_from_parsed(&tail.0))
+                pats.iter().map(|p| pat_node_from_parsed(&p.0, values)).collect(),
+                Box::new(pat_node_from_parsed(&tail.0, values))
             ),
+        PP::Map(ref kvs) => {
+            PatternNode::Map(
+                kvs.iter().map(|kv| {
+                    let curr_val_num = values.len();
+                    values.push(SingleExpression::from_parsed_single(&kv.0));
+                    (
+                        curr_val_num,
+                        Box::new(pat_node_from_parsed(&(kv.1).0, values))
+                    )
+                }).collect(),
+            )
+        },
     }
 }
 
 impl Pattern {
-    fn from_parsed(pat: &::parser::Pattern) -> Self {
-        let node = pat_node_from_parsed(pat);
+    fn from_parsed(pat: &::parser::Pattern,
+                   values: &mut Vec<SingleExpression>) -> Self {
+        let node = pat_node_from_parsed(pat, values);
         let mut bindings = Vec::new();
         node.collect_bindings(&mut bindings);
         Pattern {
@@ -151,6 +166,7 @@ impl SingleExpression {
                                     }
                                 ],
                             },
+                            values: vec![],
                             clauses: vec![
                                 // TODO
                             ],
@@ -159,17 +175,24 @@ impl SingleExpression {
                 }
             },
             PSE::Case { ref val, ref clauses } => {
+                //let cfg = pattern::match_from_parsed(val.0.len(), clauses.as_slice());
+                let mut values = Vec::new();
+
                 SingleExpressionKind::Case {
                     val: Expression::from_parsed(val),
                     clauses: clauses.iter()
                         .map(|c| {
                             ::ir::hir::Clause {
                                 patterns: c.0.patterns.iter()
-                                    .map(|p| Pattern::from_parsed(&p.0)).collect(),
+                                    .map(|p| {
+                                         Pattern::from_parsed(&p.0, &mut values)
+                                    }).collect(),
                                 guard: SingleExpression::from_parsed(&c.0.guard),
                                 body: SingleExpression::from_parsed(&c.0.body),
                             }
                         }).collect(),
+                    values: values,
+                    //cfg: cfg,
                 }
             },
             PSE::Tuple(ref items) => {
@@ -221,15 +244,19 @@ impl SingleExpression {
                 }
             },
             PSE::Receive { ref clauses, ref timeout_time, ref timeout_body } => {
+                let mut values = Vec::new();
                 SingleExpressionKind::Receive {
                     clauses: clauses.iter().map(|c| {
                         ::ir::hir::Clause {
                             patterns: c.0.patterns.iter()
-                                .map(|p| Pattern::from_parsed(&p.0)).collect(),
+                                .map(|p| {
+                                    Pattern::from_parsed(&p.0, &mut values)
+                                }).collect(),
                             guard: SingleExpression::from_parsed(&c.0.guard),
                             body: SingleExpression::from_parsed(&c.0.body),
                         }
                     }).collect(),
+                    pattern_values: values,
                     timeout_time: Box::new(SingleExpression::from_parsed(
                         timeout_time)),
                     timeout_body: Box::new(SingleExpression::from_parsed(
@@ -262,6 +289,14 @@ impl SingleExpression {
                     lambda_env: None,
                     env_ssa: SSAVariable(0),
                 }
+            },
+            PSE::Map(ref kv) => {
+                let kv_h = kv.iter()
+                    .map(|&(ref k, ref v)| {
+                        (SingleExpression::from_parsed(k),
+                         SingleExpression::from_parsed(v))
+                    }).collect();
+                SingleExpressionKind::Map(kv_h)
             },
             ref e => panic!("Unhandled: {:?}", e),
         };

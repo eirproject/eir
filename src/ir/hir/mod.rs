@@ -57,10 +57,16 @@ pub enum SingleExpressionKind {
     /// then and catch must have the same amount of items
     Try { body: Expression, then_vars: Vec<AVariable>, then: Box<SingleExpression>,
           catch_vars: Vec<AVariable>, catch: Box<SingleExpression> },
-    Case { val: Expression, clauses: Vec<Clause> },
+    Case { val: Expression, clauses: Vec<Clause>, values: Vec<SingleExpression> },
+    Test { tests: Vec<TestEntry> },
     Do(Expression, Box<SingleExpression>),
     Receive { clauses: Vec<Clause>, timeout_time: Box<SingleExpression>,
-              timeout_body: Box<SingleExpression> },
+              timeout_body: Box<SingleExpression>,
+              pattern_values: Vec<SingleExpression> },
+}
+
+#[derive(Debug, Clone)]
+pub enum TestEntry {
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +97,7 @@ pub enum PatternNode {
     Atomic(parser::AtomicLiteral),
     Tuple(Vec<PatternNode>),
     List(Vec<PatternNode>, Box<PatternNode>),
+    Map(Vec<(usize, Box<PatternNode>)>),
 }
 impl PatternNode {
     pub fn collect_bindings(&self, bindings: &mut Vec<Variable>) {
@@ -111,6 +118,11 @@ impl PatternNode {
                     pat.collect_bindings(bindings);
                 }
                 tail.collect_bindings(bindings);
+            }
+            PatternNode::Map(ref kvs) => {
+                for kv in kvs {
+                    kv.1.collect_bindings(bindings);
+                }
             }
         }
     }

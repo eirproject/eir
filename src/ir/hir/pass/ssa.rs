@@ -1,3 +1,12 @@
+//! Lowers the scoping semantics of core erlang into a permissive
+//! form of SSA. It is not strict in the way that it does allow a
+//! variable to be bound multiple times.
+//!
+//! While this might seem like a useless exercise at first, it is
+//! simpler to convert this into a stricter form of SSA in a later
+//! pass, since it dramatically simplifies some other compilation
+//! passes. (See pattern match compilation)
+
 use ::std::collections::{ HashSet, HashMap };
 use ::ir::{ AVariable, AFunctionName, SSAVariable };
 use ::{ Atom, Variable };
@@ -167,8 +176,17 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
 
             expr.ssa = env.new_ssa();
         },
-        SingleExpressionKind::Case { ref mut val, ref mut clauses } => {
+        // TODO
+        SingleExpressionKind::Case { ref mut val, ref mut clauses,
+                                     ref mut values } => {
             assign_ssa_expression(env, val);
+
+            // Pattern values are not bound to variables, they are not inserted
+            // into scope.
+            for value in values {
+                assign_ssa_single_expression(env, value);
+            }
+
             for clause in clauses {
                 let mut scope = HashMap::new();
                 for pattern in clause.patterns.iter_mut() {
@@ -210,6 +228,13 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             assign_ssa_single_expression(env, tail);
             expr.ssa = env.new_ssa();
         },
+        SingleExpressionKind::Map(ref mut kv) => {
+            for &mut (ref mut key, ref mut val) in kv.iter_mut() {
+                assign_ssa_single_expression(env, key);
+                assign_ssa_single_expression(env, val);
+            }
+            expr.ssa = env.new_ssa();
+        },
         SingleExpressionKind::PrimOp { ref mut args, .. } => {
             for arg in args {
                 assign_ssa_single_expression(env, arg);
@@ -221,8 +246,13 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             assign_ssa_single_expression(env, e2);
             expr.ssa = e2.ssa;
         },
-        SingleExpressionKind::Receive { ref mut clauses, ref mut timeout_time,
+        SingleExpressionKind::Receive { ref mut clauses, ref mut pattern_values,
+                                        ref mut timeout_time,
                                         ref mut timeout_body } => {
+            for value in pattern_values {
+                assign_ssa_single_expression(env, value);
+            }
+
             for clause in clauses {
                 let mut scope = HashMap::new();
                 for pattern in clause.patterns.iter_mut() {

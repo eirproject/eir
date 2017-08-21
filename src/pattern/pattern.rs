@@ -10,19 +10,22 @@ pub struct PatternVariable(pub usize);
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum PatternNodeKind {
+    Atomic(::parser::AtomicLiteral),
     ListCell,
     Sentinel,
     Tuple(usize),
-    Map(),
+    Map(PatternMapKeySetIndex),
     Wildcard,
 }
 impl PatternNodeKind {
 
     pub fn children(&self) -> usize {
         match *self {
+            PatternNodeKind::Atomic(_) => 0,
             PatternNodeKind::Wildcard => 0,
             PatternNodeKind::Sentinel => 0,
             PatternNodeKind::Tuple(arity) => arity,
+            PatternNodeKind::Map(map_index) => unimplemented!(),
             PatternNodeKind::ListCell => 2,
             _ => unimplemented!(),
         }
@@ -38,6 +41,19 @@ pub struct Pattern {
     variables_len: usize,
     clauses_len: usize,
     wildcard: PatternNodeIndex,
+
+    maps: Vec<PatternMapKeySet>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct PatternMapKey(usize);
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct PatternMapKeySetIndex(usize);
+
+#[derive(Debug)]
+pub struct PatternMapKeySet {
+    keys: Vec<usize>,
 }
 
 #[derive(Clone)]
@@ -66,6 +82,7 @@ impl Pattern {
             variables_len: variables,
             clauses_len: 0,
             wildcard: wildcard,
+            maps: Vec::new(),
         }
     }
 
@@ -96,6 +113,10 @@ impl Pattern {
             kind: node,
             bind: PatternVariable(self.curr_var),
         })
+    }
+
+    pub fn add_edge(&mut self, parent: PatternNodeIndex, child: PatternNodeIndex) {
+        self.graph.add_edge(parent, child, ());
     }
 
     pub fn add_child(&mut self, parent: PatternNodeIndex, child: PatternNodeKind) -> PatternNodeIndex {

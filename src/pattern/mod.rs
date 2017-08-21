@@ -3,8 +3,8 @@
 
 use ::std::collections::HashMap;
 
-mod pattern;
-mod cfg;
+pub mod pattern;
+pub mod cfg;
 mod matrix;
 
 #[cfg(test)]
@@ -104,9 +104,8 @@ impl<'a> MatchCompileContext<'a> {
 
 fn matrix_to_decision_tree(parent: cfg::CfgNodeIndex, ctx: &mut MatchCompileContext,
                            spec: &pattern::PatternNodeKind,
-                           spec_t: cfg::PatternCfgVariable,
                            matrix: &matrix::MatchMatrix,
-                           introduced_vars: Vec<cfg::PatternCfgVariable>, lvl: u32) {
+                           introduced_vars: Vec<cfg::PatternCfgVariable>) {
     //println!("{} - {:?}, {:?}:", lvl, spec_t, spec);
     //matrix.to_table(ctx.pattern).printstd();
 
@@ -115,6 +114,7 @@ fn matrix_to_decision_tree(parent: cfg::CfgNodeIndex, ctx: &mut MatchCompileCont
     let edge = cfg::CfgEdge {
         kind: spec.clone(),
         variable_binds: introduced_vars,
+        //pattern_node: unimplemented!(),
     };
 
     if matrix.is_empty() {
@@ -139,14 +139,16 @@ fn matrix_to_decision_tree(parent: cfg::CfgNodeIndex, ctx: &mut MatchCompileCont
     for specialization in specialization_types.iter() {
         let (introduced, specialized) = matrix.specialize(ctx, specialize_variable,
                                                           specialization);
-        matrix_to_decision_tree(cfg_node, ctx, *specialization,
-                                specialize_variable_t, &specialized,
-                                introduced, lvl+1);
+        matrix_to_decision_tree(
+            cfg_node, ctx, *specialization,
+            &specialized, introduced);
     }
 
     let (introduced, default) = matrix.default(ctx, specialize_variable);
-    matrix_to_decision_tree(cfg_node, ctx, &pattern::PatternNodeKind::Wildcard,
-                            specialize_variable_t, &default, introduced, lvl+1);
+    matrix_to_decision_tree(
+        cfg_node, ctx,
+        &pattern::PatternNodeKind::Wildcard,
+        &default, introduced);
 
 }
 
@@ -156,11 +158,11 @@ pub fn to_decision_tree(pattern: &pattern::Pattern) -> cfg::PatternCfg {
 
     let root = context.root_matrix();
 
-    let root_cfg = context.cfg.add_root();
+    let root_cfg = context.cfg.get_entry();
     matrix_to_decision_tree(root_cfg, &mut context,
                             &pattern::PatternNodeKind::Wildcard,
-                            cfg::PatternCfgVariable(0), &root,
-                            root.variables.clone(), 0);
+                            &root,
+                            root.variables.clone());
 
     //println!("{:#?}", context.pattern_var_bindings);
 
@@ -169,5 +171,7 @@ pub fn to_decision_tree(pattern: &pattern::Pattern) -> cfg::PatternCfg {
     //let mut dot_file = ::std::fs::File::create("pat_cfg.dot").unwrap();
     //write!(dot_file, "{:?}", dot).unwrap();
 
-    context.cfg
+    let cfg = context.cfg;
+    assert!(!::petgraph::algo::is_cyclic_directed(&cfg.graph));
+    cfg
 }

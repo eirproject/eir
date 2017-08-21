@@ -83,7 +83,7 @@ fn extract_lambdas_single_expression(expr: &mut SingleExpression,
             extract_lambdas_single_expression(then, lambdas);
             extract_lambdas_single_expression(catch, lambdas);
         },
-        SEK::Case { ref mut val, ref mut clauses } => {
+        SEK::Case { ref mut val, ref mut clauses, .. } => {
             extract_lambdas_expression(val, lambdas);
             for clause in clauses.iter_mut() {
                 extract_lambdas_single_expression(&mut clause.body, lambdas);
@@ -100,6 +100,12 @@ fn extract_lambdas_single_expression(expr: &mut SingleExpression,
             }
             extract_lambdas_single_expression(tail, lambdas);
         },
+        SEK::Map(ref mut kv) => {
+            for &mut (ref mut key, ref mut val) in kv.iter_mut() {
+                extract_lambdas_single_expression(key, lambdas);
+                extract_lambdas_single_expression(val, lambdas);
+            }
+        }
         SEK::PrimOp { ref mut args, .. } => {
             for arg in args.iter_mut() {
                 extract_lambdas_single_expression(arg, lambdas);
@@ -110,7 +116,12 @@ fn extract_lambdas_single_expression(expr: &mut SingleExpression,
             extract_lambdas_single_expression(d2, lambdas);
         },
         SEK::Receive { ref mut timeout_time, ref mut timeout_body,
-                       ref mut clauses } => {
+                       ref mut clauses, ref mut pattern_values } => {
+            // Pattern values should strictly not contain any advanced
+            // control flow, but support for uniformity.
+            for value in pattern_values {
+                extract_lambdas_single_expression(value, lambdas);
+            }
             extract_lambdas_single_expression(timeout_time, lambdas);
             extract_lambdas_single_expression(timeout_body, lambdas);
             for clause in clauses.iter_mut() {

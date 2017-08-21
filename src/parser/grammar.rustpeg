@@ -140,11 +140,14 @@ pattern -> Pattern =
         / t:patternTuple { Pattern::Tuple(t) }
         / l:patternList { Pattern::List(l, Box::new(Pattern::nil())) }
         / l:patternListTail { Pattern::List(l.0, Box::new(l.1)) }
+        / m:patternMap { Pattern::Map(m) }
 patternTuple -> Vec<Annotated<Pattern>> = __ "{" p:annotatedPattern ** (__ ",") __ "}" { p }
 patternList -> Vec<Annotated<Pattern>> = __ "[" p:annotatedPattern ++ (__ ",") __ "]" { p }
 patternListTail -> (Vec<Annotated<Pattern>>, Annotated<Pattern>) =
                 "[" p:annotatedPattern ++ (__ ",") __ "|" t:annotatedPattern __ "]"
                 { (p, t) }
+patternMap -> Vec<(SingleExpression, Annotated<Pattern>)> =
+           __ "~{" m:(k:singleExpression __ ":=" v:annotatedPattern { (k, v) }) ++ (__ ",") __ "}~" { m }
 patternBitstring = __ "#{" patternBitstringElem ** (__ ",") __ "}#"
 patternBitstringElem = __ "#<" annotatedPattern __ ">(" expression __ ")"
 

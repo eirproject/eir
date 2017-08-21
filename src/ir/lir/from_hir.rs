@@ -18,20 +18,84 @@ impl Module {
 
 impl FunctionDefinition {
     fn lower(&mut self) {
-        let mut builder = lir::FunctionCfg::new(
-            self.hir_fun.args.iter().map(|a| a.ssa).collect());
-        let ret = self.hir_fun.body.lower(&mut builder);
-        builder.basic_op(
-            lir::OpKind::ReturnOk,
-            vec![lir::Source::Variable(ret)], vec![]);
+        let mut cfg = lir::FunctionCfg::new();
 
-        self.lir_function = Some(builder);
+        {
+            let mut builder = lir::cfg::FunctionCfgBuilder::new(&mut cfg);
+            builder.basic_op(
+                lir::OpKind::Arguments, vec![],
+                self.hir_fun.args.iter().map(|a| a.ssa).collect());
+
+            let ret = self.hir_fun.body.lower(&mut builder);
+            builder.basic_op(
+                lir::OpKind::ReturnOk,
+                vec![lir::Source::Variable(ret)], vec![]);
+        }
+
+        self.lir_function = Some(cfg);
     }
+}
+
+use ::pattern::cfg as pat_cfg;
+fn lower_pattern_cfg(
+    graph: &pat_cfg::PatternCfg, node_id: pat_cfg::CfgNodeIndex,
+    leaves: &Vec<lir::cfg::LabelN>,
+    lir: &mut lir::cfg::FunctionCfgBuilder) -> lir::LabelN
+{
+    let mut children = graph.graph.neighbors_directed(
+        node_id, ::petgraph::Direction::Outgoing);
+    let node = &graph.graph[node_id];
+    match *node {
+        pat_cfg::CfgNodeKind::Root => {
+            let child_idx = children.next().unwrap();
+            assert!(children.next().is_none());
+            lower_pattern_cfg(graph, child_idx, leaves, lir)
+        },
+        pat_cfg::CfgNodeKind::Match(ref variable) => {
+            let curr = lir.add_block();
+            lir.set_block(curr);
+            lir.basic_op(lir::OpKind::Comment(format!("match on: {:?}", variable)),
+                         vec![], vec![]);
+
+            let mut types = Vec::new();
+            for edge in graph.graph.edges_directed(
+                node_id, ::petgraph::Direction::Outgoing) {
+                let edge_weight = edge.weight();
+                println!("{:?}", edge_weight);
+                types.push(edge_weight.kind.clone());
+
+                use ::petgraph::visit::EdgeRef;
+                let child_idx = lower_pattern_cfg(graph, edge.target(), leaves, lir);
+
+                lir.add_jump(curr, child_idx);
+            }
+            // Nodes are traversed in reverse added order
+            types.reverse();
+
+            lir.set_block(curr);
+            lir.basic_op(lir::OpKind::Match {
+                types: types,
+            }, vec![], vec![]);
+
+            curr
+        },
+        pat_cfg::CfgNodeKind::Fail => {
+            assert!(children.count() == 0);
+            unimplemented!()
+        },
+        pat_cfg::CfgNodeKind::Leaf(num) => {
+            assert!(children.count() == 0);
+            leaves[num]
+        },
+    }
+
+    //for child_idx in children {
+    //}
 }
 
 use self::hir::SingleExpressionKind as HSEK;
 impl hir::SingleExpression {
-    fn lower(&self, b: &mut lir::FunctionCfg) -> ::ir::SSAVariable {
+    fn lower(&self, b: &mut lir::cfg::FunctionCfgBuilder) -> ::ir::SSAVariable {
         match self.kind {
             HSEK::InterModuleCall { ref module, ref name, ref args } => {
                 let mut reads_r = vec![module.lower(b), name.lower(b)];
@@ -116,7 +180,8 @@ impl hir::SingleExpression {
                 then.lower(b);
                 then.ssa
             },
-            HSEK::Case { ref val, ref clauses } => {
+            // TODO
+            HSEK::Case { ref val, ref clauses, ref values } => {
 
                 //::pattern::to_decision_tree(clauses);
 
@@ -124,32 +189,42 @@ impl hir::SingleExpression {
                     v.lower(b);
                 }
 
-                b.basic_op(
-                    lir::OpKind::Case {
-                        vars: val.values.iter().map(|v| v.ssa).collect(),
-                        clauses: clauses.iter().map(|c| {
-                            lir::Clause {
-                                patterns: c.patterns.clone(),
-                            }
-                        }).collect(),
-                    },
-                    vec![], vec![]);
-                let from_label = b.get_block();
+                for value in values {
+                    value.lower(b);
+                }
+                let value_vars: Vec<_> = values.iter().map(|v| v.ssa).collect();
 
+                let from_label = b.get_block();
                 let done_label = b.add_block();
 
-                for clause in clauses.iter() {
-                    let clause_label = b.add_block();
-                    b.add_jump(from_label, clause_label);
-                    b.set_block(clause_label);
-                    let clause_ret = clause.body.lower(b);
+                let leaves: Vec<_> = clauses.iter()
+                    .map(|clause| {
+                        let clause_label = b.add_block();
+                        b.set_block(clause_label);
 
-                    b.basic_op(lir::OpKind::Jump, vec![], vec![]);
-                    let clause_done_label = b.get_block();
-                    b.add_jump(clause_done_label, done_label);
+                        let clause_ret = clause.body.lower(b);
+                        b.basic_op(lir::OpKind::Jump, vec![], vec![]);
+                        let clause_done_label = b.get_block();
+                        b.add_jump(clause_done_label, done_label);
+                        b.add_phi(clause_done_label, clause_ret,
+                                  done_label, self.ssa);
+                        clause_label
+                    }).collect();
 
-                    b.add_phi(clause_done_label, clause_ret,
-                              done_label, self.ssa);
+                //let entry = lower_pattern_cfg(&cfg, cfg.get_entry(), &leaves, b);
+                //b.add_jump(from_label, entry);
+
+                b.basic_op(lir::OpKind::Case {
+                    vars: val.values.iter().map(|v| v.ssa).collect(),
+                    clauses: clauses.iter().map(|c| {
+                        lir::Clause {
+                            patterns: c.patterns.clone(),
+                        }
+                    }).collect(),
+                    value_vars: value_vars,
+                }, vec![], vec![]);
+                for leaf in leaves.iter() {
+                    b.add_jump(from_label, *leaf);
                 }
 
                 b.set_block(done_label);
@@ -180,6 +255,21 @@ impl hir::SingleExpression {
                              .map(|v| lir::Source::Variable(v.ssa)));
 
                 b.basic_op(lir::OpKind::MakeList,
+                           reads, vec![self.ssa]);
+
+                self.ssa
+            },
+            HSEK::Map(ref kv) => {
+                let mut reads = Vec::new();
+                for &(ref key, ref value) in kv.iter() {
+                    key.lower(b);
+                    value.lower(b);
+
+                    reads.push(lir::Source::Variable(key.ssa));
+                    reads.push(lir::Source::Variable(value.ssa));
+                }
+
+                b.basic_op(lir::OpKind::MakeMap,
                            reads, vec![self.ssa]);
 
                 self.ssa

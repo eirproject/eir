@@ -6,18 +6,21 @@ pub type CfgNodeIndex = NodeIndex;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct PatternCfgVariable(pub usize);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PatternCfg {
     current_variable: usize,
+    entry: CfgNodeIndex,
     pub graph: Graph<CfgNodeKind, CfgEdge>,
 }
 
 impl PatternCfg {
 
     pub fn new() -> Self {
+        let mut graph = Graph::new();
         PatternCfg {
             current_variable: 0,
-            graph: Graph::new(),
+            entry: graph.add_node(CfgNodeKind::Root),
+            graph: graph,
         }
     }
 
@@ -34,8 +37,8 @@ impl PatternCfg {
         self.graph.add_node(CfgNodeKind::Leaf(num))
     }
 
-    pub fn add_root(&mut self) -> CfgNodeIndex {
-        self.graph.add_node(CfgNodeKind::Root)
+    pub fn get_entry(&self) -> CfgNodeIndex {
+        self.entry
     }
 
     pub fn add_node(&mut self, var: PatternCfgVariable) -> CfgNodeIndex {
@@ -56,9 +59,11 @@ impl PatternCfg {
 
 }
 
+#[derive(Clone)]
 pub struct CfgEdge {
     pub kind: super::pattern::PatternNodeKind,
     pub variable_binds: Vec<PatternCfgVariable>,
+    //pub pattern_node: super::pattern::PatternNodeIndex,
 }
 impl ::std::fmt::Debug for CfgEdge {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -66,7 +71,7 @@ impl ::std::fmt::Debug for CfgEdge {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CfgNodeKind {
     Root,
     Match(PatternCfgVariable),

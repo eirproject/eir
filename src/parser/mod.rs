@@ -22,7 +22,7 @@ pub struct FunctionName {
     pub arity: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Integer {
     sign: bool,
     digits: String,
@@ -34,7 +34,7 @@ impl Integer {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AtomicLiteral {
     Integer(Integer),
     Float,
@@ -59,25 +59,34 @@ pub struct FunctionDefinition {
 
 #[derive(Debug, Clone)]
 pub enum SingleExpression {
+    // Env reading
     FunctionName(FunctionName),
-    AtomicLiteral(AtomicLiteral),
     Variable(Variable),
-    Tuple(Vec<Expression>),
-    List { head: Vec<Expression>, tail: Box<Expression> },
-    Map(Vec<(Expression, Expression)>),
+
+    // Control flow
     Let { vars: Vec<Annotated<Variable>>, val: Box<Expression>, body: Box<Expression> },
-    InterModuleCall { module: Box<Expression>, name: Box<Expression>, args: Vec<Expression> },
     Catch(Box<Expression>),
     Case { val: Box<Expression>, clauses: Vec<Annotated<CaseClause>> },
-    PrimOpCall(PrimOpCall),
     Do(Box<Expression>, Box<Expression>),
-    ApplyCall { fun: Box<Expression>, args: Vec<Expression> },
     Try { body: Box<Expression>, then_vars: Vec<Annotated<Variable>>, then: Box<Expression>,
           catch_vars: Vec<Annotated<Variable>>, catch: Box<Expression> },
     Receive { clauses: Vec<Annotated<CaseClause>>, timeout_time: Box<Expression>,
               timeout_body: Box<Expression> },
+
+    // Calling
+    PrimOpCall(PrimOpCall),
+    ApplyCall { fun: Box<Expression>, args: Vec<Expression> },
+    InterModuleCall { module: Box<Expression>, name: Box<Expression>, args: Vec<Expression> },
+
+    // Lambda creation
     Fun(Box<Function>),
     LetRec { funs: Vec<(FunctionName, Function)>, body: Box<Expression> },
+
+    // Term constructors
+    AtomicLiteral(AtomicLiteral),
+    Tuple(Vec<Expression>),
+    List { head: Vec<Expression>, tail: Box<Expression> },
+    Map(Vec<(Expression, Expression)>),
 }
 
 #[derive(Debug, Clone)]
@@ -94,6 +103,7 @@ pub enum Pattern {
     Atomic(AtomicLiteral),
     Tuple(Vec<Annotated<Pattern>>),
     List(Vec<Annotated<Pattern>>, Box<Annotated<Pattern>>),
+    Map(Vec<(SingleExpression, Annotated<Pattern>)>),
 }
 impl Pattern {
     fn nil() -> Annotated<Pattern> {

@@ -20,10 +20,11 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
         .map(|a| (a.var.clone(), a.ssa)).collect();
     write!(w, "entry [ label=<entry|fun: {} free: {:?} write[{:?}]> ];\n",
            fun_name, function.visibility, args)?;
-    write!(w, "entry -> blk_{};\n\n", lir.entry().0)?;
+    write!(w, "entry -> blk_{};\n\n", lir.entry())?;
 
-    for block in lir.blocks_iter() {
-        let block_name = block.label.0;
+    for block_idx in lir.labels_iter() {
+        let block_name = block_idx;
+        let block = lir.block(block_idx);
 
         write!(w, "blk_{} [ label=<{}|", block_name, block_name)?;
 
@@ -77,8 +78,10 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
         //if let Some(label) = block.continuation {
         //    write!(w, "blk_{} -> blk_{} [ label=cont ];\n", block_name, label.name())?;
         //}
-        for (idx, arg) in block.jumps.iter().enumerate() {
-            write!(w, "blk_{} -> blk_{} [ label={} ];\n", block_name, arg.0, idx)?;
+
+        for (idx, edge) in lir.jumps_iter(block_idx).enumerate() {
+            use ::petgraph::visit::EdgeRef;
+            write!(w, "blk_{} -> blk_L{} [ label={} ];\n", block_name, edge.target().index(), idx)?;
         }
         write!(w, "\n")?;
     }
