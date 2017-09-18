@@ -36,62 +36,62 @@ impl FunctionDefinition {
     }
 }
 
-use ::pattern::cfg as pat_cfg;
-fn lower_pattern_cfg(
-    graph: &pat_cfg::PatternCfg, node_id: pat_cfg::CfgNodeIndex,
-    leaves: &Vec<lir::cfg::LabelN>,
-    lir: &mut lir::cfg::FunctionCfgBuilder) -> lir::LabelN
-{
-    let mut children = graph.graph.neighbors_directed(
-        node_id, ::petgraph::Direction::Outgoing);
-    let node = &graph.graph[node_id];
-    match *node {
-        pat_cfg::CfgNodeKind::Root => {
-            let child_idx = children.next().unwrap();
-            assert!(children.next().is_none());
-            lower_pattern_cfg(graph, child_idx, leaves, lir)
-        },
-        pat_cfg::CfgNodeKind::Match(ref variable) => {
-            let curr = lir.add_block();
-            lir.set_block(curr);
-            lir.basic_op(lir::OpKind::Comment(format!("match on: {:?}", variable)),
-                         vec![], vec![]);
-
-            let mut types = Vec::new();
-            for edge in graph.graph.edges_directed(
-                node_id, ::petgraph::Direction::Outgoing) {
-                let edge_weight = edge.weight();
-                println!("{:?}", edge_weight);
-                types.push(edge_weight.kind.clone());
-
-                use ::petgraph::visit::EdgeRef;
-                let child_idx = lower_pattern_cfg(graph, edge.target(), leaves, lir);
-
-                lir.add_jump(curr, child_idx);
-            }
-            // Nodes are traversed in reverse added order
-            types.reverse();
-
-            lir.set_block(curr);
-            lir.basic_op(lir::OpKind::Match {
-                types: types,
-            }, vec![], vec![]);
-
-            curr
-        },
-        pat_cfg::CfgNodeKind::Fail => {
-            assert!(children.count() == 0);
-            unimplemented!()
-        },
-        pat_cfg::CfgNodeKind::Leaf(num) => {
-            assert!(children.count() == 0);
-            leaves[num]
-        },
-    }
-
-    //for child_idx in children {
-    //}
-}
+//use ::pattern::cfg as pat_cfg;
+//fn lower_pattern_cfg(
+//    graph: &pat_cfg::PatternCfg, node_id: pat_cfg::CfgNodeIndex,
+//    leaves: &Vec<lir::cfg::LabelN>,
+//    lir: &mut lir::cfg::FunctionCfgBuilder) -> lir::LabelN
+//{
+//    let mut children = graph.graph.neighbors_directed(
+//        node_id, ::petgraph::Direction::Outgoing);
+//    let node = &graph.graph[node_id];
+//    match *node {
+//        pat_cfg::CfgNodeKind::Root => {
+//            let child_idx = children.next().unwrap();
+//            assert!(children.next().is_none());
+//            lower_pattern_cfg(graph, child_idx, leaves, lir)
+//        },
+//        pat_cfg::CfgNodeKind::Match(ref variable) => {
+//            let curr = lir.add_block();
+//            lir.set_block(curr);
+//            lir.basic_op(lir::OpKind::Comment(format!("match on: {:?}", variable)),
+//                         vec![], vec![]);
+//
+//            let mut types = Vec::new();
+//            for edge in graph.graph.edges_directed(
+//                node_id, ::petgraph::Direction::Outgoing) {
+//                let edge_weight = edge.weight();
+//                println!("{:?}", edge_weight);
+//                types.push(edge_weight.kind.clone());
+//
+//                use ::petgraph::visit::EdgeRef;
+//                let child_idx = lower_pattern_cfg(graph, edge.target(), leaves, lir);
+//
+//                lir.add_jump(curr, child_idx);
+//            }
+//            // Nodes are traversed in reverse added order
+//            types.reverse();
+//
+//            lir.set_block(curr);
+//            lir.basic_op(lir::OpKind::Match {
+//                types: types,
+//            }, vec![], vec![]);
+//
+//            curr
+//        },
+//        pat_cfg::CfgNodeKind::Fail => {
+//            assert!(children.count() == 0);
+//            unimplemented!()
+//        },
+//        pat_cfg::CfgNodeKind::Leaf(num) => {
+//            assert!(children.count() == 0);
+//            leaves[num]
+//        },
+//    }
+//
+//    //for child_idx in children {
+//    //}
+//}
 
 use self::hir::SingleExpressionKind as HSEK;
 impl hir::SingleExpression {

@@ -81,7 +81,7 @@ pub enum OpKind {
     },
     /// Used for pattern matching AFTER pattern compilation.
     Match {
-        types: Vec<::pattern::pattern::PatternNodeKind>,
+        //types: Vec<::pattern::pattern::PatternNodeKind>,
     },
 
     Jump,
@@ -107,7 +107,8 @@ impl OpKind {
             OpKind::Apply => Some(2),
             OpKind::Jump => Some(1),
             OpKind::Case { ref clauses, .. } => Some(clauses.len()),
-            OpKind::Match { ref types } => Some(types.len()),
+            // TODO
+            //OpKind::Match { ref types } => Some(types.len()),
             OpKind::ReturnOk => Some(0),
             OpKind::ReturnThrow => Some(0),
             _ => None,

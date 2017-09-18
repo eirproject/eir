@@ -1,17 +1,9 @@
 [package]
 authors = ["HansiHE <hansihe@hansihe.com>"]
-name = "core_erlang"
+name = "pattern-compiler"
 version = "0.1.0"
-
-[build-dependencies]
-peg = "0.5.4"
 
 [dependencies]
 either = "1.1.0"
 petgraph = "0.4.5"
 prettytable-rs = "0.6.7"
-string-intern = "0.1.6"
-
-pattern-compiler = { path = "pattern-compiler" } 
-
-[workspace]

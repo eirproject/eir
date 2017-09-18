@@ -3,13 +3,14 @@ extern crate petgraph;
 extern crate either;
 extern crate prettytable;
 
+extern crate pattern_compiler;
+
 mod intern;
 pub use self::intern::{ Atom, Variable };
 
 pub mod parser;
 pub mod ir;
 pub mod interpreter;
-pub mod pattern;
 pub mod util;
 
 #[cfg(test)]
