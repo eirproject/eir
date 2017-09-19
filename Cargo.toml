@@ -13,5 +13,6 @@ prettytable-rs = "0.6.7"
 string-intern = "0.1.6"
 
 pattern-compiler = { path = "pattern-compiler" } 
+util = { path = "util" }
 
 [workspace]

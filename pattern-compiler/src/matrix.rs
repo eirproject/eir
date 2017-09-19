@@ -2,6 +2,8 @@ use ::std::collections::HashSet;
 
 use ::prettytable::Table;
 
+use ::petgraph::graph::NodeIndex;
+
 use ::either::Either;
 
 use super::pattern::PatternProvider;
@@ -178,6 +180,13 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
         let new_mat = Self::new(new_nodes.as_slice(),
                                 new_clause_leaves, new_variables);
         (specialized.variables, new_mat)
+    }
+
+    pub fn iterate_clauses<'a>(&'a self) -> Box<Iterator<Item = (NodeIndex, &'a [MatchMatrixElement<P>])> + 'a> {
+        let iter = self.clause_leaves.iter().map(|l| *l)
+            .zip(chunks_len(&self.data, self.variables.len(), self.clause_leaves.len()));
+
+        Box::new(iter)
     }
 
     pub fn default(&self, ctx: &mut super::MatchCompileContext<P>,

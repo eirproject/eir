@@ -1,6 +1,7 @@
 use ::ir::lir;
 //use ::pattern::pattern::{ Pattern, PatternNodeIndex, PatternNodeKind };
-use ::pattern::cfg::PatternCfg;
+
+use ::pattern_compiler::{ PatternCfg, PatternProvider };
 
 pub fn compile_pattern(lir: &mut ::ir::lir::cfg::FunctionCfg) {
     for node_idx in lir.cfg.node_indices() {

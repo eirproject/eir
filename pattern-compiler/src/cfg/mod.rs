@@ -1,3 +1,5 @@
+use ::std::collections::HashMap;
+
 use ::petgraph::Graph;
 use ::petgraph::graph::NodeIndex;
 
@@ -7,14 +9,17 @@ use super::pattern::PatternProvider;
 
 pub type CfgNodeIndex = NodeIndex;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct PatternCfgVariable(pub usize);
+//#[derive(Debug, Clone)]
+//pub struct Leaf<P> where P: PatternProvider {
+//    bindings: HashMap<P::CfgVariable, P::PatternNodeKey>,
+//}
 
 #[derive(Debug, Clone)]
 pub struct PatternCfg<P> where P: PatternProvider {
-    current_variable: usize,
-    entry: CfgNodeIndex,
+    pub entry: CfgNodeIndex,
     pub graph: Graph<CfgNodeKind<P::CfgVariable>, CfgEdge<P>>,
+    pub leaves: HashMap<usize, NodeIndex>,
+    pub leaf_bindings: HashMap<NodeIndex, HashMap<P::CfgVariable, P::PatternNodeKey>>,
 }
 
 impl<P> PatternCfg<P> where P: PatternProvider {
@@ -22,15 +27,11 @@ impl<P> PatternCfg<P> where P: PatternProvider {
     pub fn new() -> Self {
         let mut graph = Graph::new();
         PatternCfg {
-            current_variable: 0,
             entry: graph.add_node(CfgNodeKind::Root),
             graph: graph,
+            leaves: HashMap::new(),
+            leaf_bindings: HashMap::new(),
         }
-    }
-
-    pub fn new_variable(&mut self) -> PatternCfgVariable {
-        self.current_variable += 1;
-        PatternCfgVariable(self.current_variable)
     }
 
     pub fn add_fail(&mut self) -> CfgNodeIndex {
@@ -38,7 +39,10 @@ impl<P> PatternCfg<P> where P: PatternProvider {
     }
 
     pub fn add_leaf(&mut self, num: usize) -> CfgNodeIndex {
-        self.graph.add_node(CfgNodeKind::Leaf(num))
+        assert!(!self.leaves.contains_key(&num));
+        let index = self.graph.add_node(CfgNodeKind::Leaf(num));
+        self.leaves.insert(num, index);
+        index
     }
 
     pub fn get_entry(&self) -> CfgNodeIndex {
