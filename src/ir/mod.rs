@@ -1,4 +1,6 @@
 use std::collections::{ HashMap, HashSet };
+use std::fmt::{ Debug, Formatter };
+use ::pretty::{ Doc, BoxDoc };
 
 pub mod hir;
 use ::ir::hir::pass::ssa::ScopeTracker;
@@ -15,18 +17,100 @@ impl ::std::fmt::Debug for SSAVariable {
     }
 }
 
-#[derive(Debug)]
 pub struct Module {
     pub name: Atom,
     pub attributes: Vec<(Atom, parser::Constant)>,
     pub functions: Vec<FunctionDefinition>,
 }
 
+use ::ToDoc;
+
+impl ::ToDoc for Module {
+    fn to_doc<'a>(&'a self) -> Doc<'a, BoxDoc> {
+        let head: Doc<BoxDoc> = Doc::text(format!("module {}:", self.name));
+        let attrs: Doc<BoxDoc> = Doc::newline()
+            .append(Doc::text(format!("attributes: {:?}", self.attributes)))
+            .nest(2);
+
+        let funs = self.functions.iter().map(|fun| {
+            let args = Doc::intersperse(
+                fun.hir_fun.args.iter().map(|arg| Doc::text(format!("{:?}", arg))),
+                Doc::text(",").append(Doc::space()));
+            let start_signature = Doc::concat(vec![
+                Doc::newline(),
+                Doc::text(format!("fun {:?} {}(", fun.visibility, fun.ident)),
+            ]).group();
+            let args_signature = Doc::concat(vec![
+                args,
+                Doc::text("):")
+            ]).nest(4);
+            let signature = Doc::concat(vec![
+                start_signature, args_signature
+            ]).group();
+
+            let hir = Doc::newline().append(fun.hir_fun.body.to_doc());
+
+            let lir = {
+                let lir = fun.lir_function.as_ref().unwrap();
+                let lir_blocks = lir.cfg.node_indices().map(|node_idx| {
+                    let head = Doc::newline()
+                        .append(Doc::text(format!("block #{}:", node_idx.index())));
+
+                    let phis = lir.cfg[node_idx].phi_nodes.iter().map(|phi| {
+                        Doc::newline().append(Doc::text(format!("{:?}", phi)))
+                    });
+
+                    let block_ops = lir.cfg[node_idx].ops.iter().map(|op| {
+                        Doc::newline().append(Doc::text(format!("{:?}", op)))
+                    });
+
+                    let branches_vec = lir.cfg
+                        .neighbors_directed(node_idx, ::petgraph::Direction::Outgoing)
+                        .map(|branch| Doc::text(format!("{:?}", branch)));
+                    let branches = Doc::newline()
+                        .append(Doc::text("branch ["))
+                        .append(Doc::intersperse(branches_vec, Doc::text(",").append(Doc::space()))
+                                .nest(2).group())
+                        .append(Doc::text("]"));
+
+                    Doc::concat(vec![
+                        head,
+                        Doc::concat(phis).nest(2),
+                        Doc::concat(block_ops).nest(2),
+                        branches.nest(2),
+                    ])
+                });
+
+                Doc::concat(lir_blocks)
+            };
+
+            Doc::concat(vec![
+                signature,
+                Doc::newline().append(Doc::text("hir:")).nest(2),
+                hir.nest(4),
+                Doc::newline().append(Doc::text("lir:")).nest(2),
+                lir.nest(4),
+            ])
+        });
+        let funs_doc = Doc::concat(funs).nest(2);
+
+        Doc::concat(vec![
+            head, attrs, funs_doc
+        ])
+    }
+}
+
+impl Debug for Module {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), ::std::fmt::Error> {
+        self.to_doc().render_fmt(80, f)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FunctionIdent {
-    name: Atom,
-    arity: u32,
-    lambda: Option<u32>,
+    pub name: Atom,
+    pub arity: u32,
+    pub lambda: Option<u32>,
 }
 impl ::std::fmt::Display for FunctionIdent {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -54,8 +138,8 @@ pub enum FunctionVisibility {
 
 #[derive(Debug, Clone)]
 pub struct AVariable {
-    var: Variable,
-    ssa: SSAVariable,
+    pub var: Variable,
+    pub ssa: SSAVariable,
 }
 impl AVariable {
     fn new(var: Variable) -> Self {
@@ -83,7 +167,7 @@ impl AFunctionName {
 pub fn from_parsed(parsed: &parser::Module) -> Module {
     let mut module = ::ir::hir::from_parsed::from_parsed(parsed);
 
-    let mut env =  ScopeTracker::new();
+    let mut env = ScopeTracker::new();
 
     // Assign SSA variables
     for func in &mut module.functions {
@@ -104,11 +188,17 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
     for fun in module.functions.iter_mut() {
         lambda_collector.set_ident(fun.ident.clone());
         ::ir::hir::pass::extract_lambda::extract_lambdas(
-            fun, &mut lambda_collector);
+            &mut fun.hir_fun, &mut lambda_collector);
     }
     let mut lambdas = lambda_collector.finish();
     module.functions.extend(lambdas.drain(0..));
 
+    // Compile patterns to decision tree
+    for fun in module.functions.iter_mut() {
+        ::ir::hir::pass::pattern::pattern_to_cfg(fun);
+    }
+
+    // Lower to LIR
     ::ir::lir::from_hir::do_lower(&mut module);
 
     for function in module.functions.iter_mut() {

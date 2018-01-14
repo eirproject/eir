@@ -7,7 +7,7 @@ fn idx_of(lbl: Label) -> usize {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct LabelN(::petgraph::graph::NodeIndex);
+pub struct LabelN(pub ::petgraph::graph::NodeIndex);
 impl ::std::fmt::Display for LabelN {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         write!(f, "L{}", self.0.index())
@@ -22,7 +22,7 @@ pub struct BasicBlock {
 
 #[derive(Debug)]
 pub struct FunctionCfg {
-    entry: LabelN,
+    pub entry: LabelN,
     pub cfg: Graph<BasicBlock, BasicBlockEdge>,
 }
 
@@ -76,6 +76,13 @@ impl FunctionCfg {
 
     pub fn jumps_iter<'a>(&'a self, lbl: LabelN) -> ::petgraph::graph::Edges<BasicBlockEdge, ::petgraph::Directed> {
         self.cfg.edges_directed(lbl.0, ::petgraph::Direction::Outgoing)
+    }
+
+    pub fn branch_slots(&self, lbl: LabelN) -> Vec<LabelN> {
+        self.cfg
+            .neighbors_directed(lbl.0, ::petgraph::Direction::Outgoing)
+            .map(|edge_id| LabelN(edge_id))
+            .collect()
     }
 
 }

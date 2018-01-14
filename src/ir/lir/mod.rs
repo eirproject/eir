@@ -40,9 +40,9 @@ pub struct Phi {
 
 #[derive(Debug, Clone)]
 pub struct Op {
-    kind: OpKind,
-    reads: Vec<Source>,
-    writes: Vec<SSAVariable>,
+    pub kind: OpKind,
+    pub reads: Vec<Source>,
+    pub writes: Vec<SSAVariable>,
 }
 
 #[derive(Debug, Clone)]

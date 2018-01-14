@@ -1,6 +1,8 @@
 use ::ir::{ FunctionDefinition, FunctionIdent, FunctionVisibility };
 use ::ir::hir::{ SingleExpression, Expression, SingleExpressionKind, Function };
 
+use ::ir::hir::EachSingleExpression;
+
 pub struct LambdaCollector {
     num: u32,
     base_ident: Option<FunctionIdent>,
@@ -27,7 +29,7 @@ impl LambdaCollector {
         ident.arity = fun.args.len() as u32;
         self.num += 1;
 
-        extract_lambdas_single_expression(&mut fun.body, self);
+        extract_lambdas(&mut fun.body, self);
         self.lambdas.push(FunctionDefinition {
             ident: ident.clone(),
             hir_fun: fun,
@@ -44,102 +46,26 @@ impl LambdaCollector {
 
 }
 
-pub fn extract_lambdas(func: &mut FunctionDefinition,
-                       lambdas: &mut LambdaCollector) {
-    extract_lambdas_single_expression(
-        &mut func.hir_fun.body, lambdas);
-}
+use ::ir::hir::SingleExpressionKind as SEK;
+pub fn extract_lambdas<T>(func: &mut T,
+                          lambdas: &mut LambdaCollector) where T: EachSingleExpression {
 
-fn extract_lambdas_expression(expr: &mut Expression,
-                              lambdas: &mut LambdaCollector) {
-    for value in expr.values.iter_mut() {
-        extract_lambdas_single_expression(value, lambdas);
-    }
-}
-
-use self::SingleExpressionKind as SEK;
-fn extract_lambdas_single_expression(expr: &mut SingleExpression,
-                                     lambdas: &mut LambdaCollector) {
-    match expr.kind {
-        SEK::Atomic(_) => (),
-        SEK::Variable(_) => (),
-        SEK::NamedFunction { .. } => (),
-        SEK::ApplyCall { ref mut args, .. } => {
-            for arg in args.iter_mut() {
-                extract_lambdas_single_expression(arg, lambdas);
-            }
-        },
-        SEK::InterModuleCall { ref mut args, .. } => {
-            for arg in args.iter_mut() {
-                extract_lambdas_single_expression(arg, lambdas);
-            }
-        },
-        SEK::Let { ref mut val, ref mut body, .. } => {
-            extract_lambdas_expression(val, lambdas);
-            extract_lambdas_single_expression(body, lambdas);
-        },
-        SEK::Try { ref mut body, ref mut then, ref mut catch, .. } => {
-            extract_lambdas_expression(body, lambdas);
-            extract_lambdas_single_expression(then, lambdas);
-            extract_lambdas_single_expression(catch, lambdas);
-        },
-        SEK::Case { ref mut val, ref mut clauses, .. } => {
-            extract_lambdas_expression(val, lambdas);
-            for clause in clauses.iter_mut() {
-                extract_lambdas_single_expression(&mut clause.body, lambdas);
-            }
-        },
-        SEK::Tuple(ref mut vals) => {
-            for val in vals.iter_mut() {
-                extract_lambdas_single_expression(val, lambdas);
-            }
-        },
-        SEK::List { ref mut head, ref mut tail } => {
-            for val in head.iter_mut() {
-                extract_lambdas_single_expression(val, lambdas);
-            }
-            extract_lambdas_single_expression(tail, lambdas);
-        },
-        SEK::Map(ref mut kv) => {
-            for &mut (ref mut key, ref mut val) in kv.iter_mut() {
-                extract_lambdas_single_expression(key, lambdas);
-                extract_lambdas_single_expression(val, lambdas);
-            }
-        }
-        SEK::PrimOp { ref mut args, .. } => {
-            for arg in args.iter_mut() {
-                extract_lambdas_single_expression(arg, lambdas);
-            }
-        },
-        SEK::Do(ref mut d1, ref mut d2) => {
-            extract_lambdas_expression(d1, lambdas);
-            extract_lambdas_single_expression(d2, lambdas);
-        },
-        SEK::Receive { ref mut timeout_time, ref mut timeout_body,
-                       ref mut clauses, ref mut pattern_values } => {
-            // Pattern values should strictly not contain any advanced
-            // control flow, but support for uniformity.
-            for value in pattern_values {
-                extract_lambdas_single_expression(value, lambdas);
-            }
-            extract_lambdas_single_expression(timeout_time, lambdas);
-            extract_lambdas_single_expression(timeout_body, lambdas);
-            for clause in clauses.iter_mut() {
-                extract_lambdas_single_expression(&mut clause.body, lambdas);
-            }
-        },
-        SEK::BindClosure { ref mut closure, .. } => {
-            let fun = closure.fun.take().unwrap();
-            let name = lambdas.collect(*fun);
-            closure.ident = Some(name);
-        },
-        SEK::BindClosures { ref mut closures, .. } => {
-            for closure in closures.iter_mut() {
+    func.each_single_expression_mut(&mut |expr| {
+        match expr.kind {
+            SEK::BindClosure { ref mut closure, .. } => {
                 let fun = closure.fun.take().unwrap();
                 let name = lambdas.collect(*fun);
                 closure.ident = Some(name);
+            },
+            SEK::BindClosures { ref mut closures, .. } => {
+                for closure in closures.iter_mut() {
+                    let fun = closure.fun.take().unwrap();
+                    let name = lambdas.collect(*fun);
+                    closure.ident = Some(name);
+                }
             }
+            _ => (),
         }
-        ref k => panic!("{:?}", k),
-    }
+    }, true);
+
 }

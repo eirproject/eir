@@ -11,8 +11,12 @@ either = "1.1.0"
 petgraph = "0.4.5"
 prettytable-rs = "0.6.7"
 string-intern = "0.1.6"
+pretty = "0.3.3"
 
 pattern-compiler = { path = "pattern-compiler" } 
 util = { path = "util" }
+
+[dev-dependencies]
+tempdir = "0.3"
 
 [workspace]

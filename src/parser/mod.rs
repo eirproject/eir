@@ -1,4 +1,5 @@
 pub use ::{ Variable, Atom };
+use ::std::fmt::{ Formatter, Display };
 
 #[derive(Debug, Clone)]
 pub struct Annotated<I>(pub I, pub Vec<()>);
@@ -43,12 +44,28 @@ pub enum AtomicLiteral {
     Char(char),
     String(String),
 }
+impl Display for AtomicLiteral {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), ::std::fmt::Error> {
+        match self {
+            &AtomicLiteral::Integer(ref int) => write!(f, "{}{}", int.sign, int.digits),
+            _ => write!(f, "unimpl"),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Constant {
     Atomic(AtomicLiteral),
     Tuple(Vec<Constant>),
     List(Vec<Constant>, Box<Constant>),
+}
+impl Display for Constant {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), ::std::fmt::Error> {
+        match self {
+            &Constant::Atomic(ref lit) => write!(f, "{}", lit),
+            _ => write!(f, "unimpl"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
