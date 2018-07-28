@@ -61,6 +61,16 @@ return_closure(I) ->
     fun(A) ->
             add(I, A)
     end.
+
+matching([], []) ->
+    one;
+matching([], _) ->
+    two;
+matching(_, []) ->
+    three;
+matching(A, B) ->
+    {A, B}.
+
     "##);
 
     use ::interpreter::{ ExecutionContext, Term };

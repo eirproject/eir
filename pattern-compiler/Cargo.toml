@@ -7,5 +7,6 @@ version = "0.1.0"
 either = "1.1.0"
 petgraph = "0.4.5"
 prettytable-rs = "0.6.7"
+derivative = "1.0.0"
 
 util = { path = "../util" }

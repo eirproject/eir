@@ -3,21 +3,24 @@ use ::ir::SSAVariable;
 use ::ir::hir;
 use ::ir::lir;
 use ::ir::lir::Source;
+use ::ir::hir::pass::ssa::ScopeTracker;
 
-pub fn do_lower(module: &mut Module) {
-    module.lower()
+mod pattern;
+
+pub fn do_lower(module: &mut Module, env: &mut ScopeTracker) {
+    module.lower(env)
 }
 
 impl Module {
-    fn lower(&mut self) {
+    fn lower(&mut self, env: &mut ScopeTracker) {
         for fun in &mut self.functions {
-            fun.lower();
+            fun.lower(env);
         }
     }
 }
 
 impl FunctionDefinition {
-    fn lower(&mut self) {
+    fn lower(&mut self, env: &mut ScopeTracker) {
         let mut cfg = lir::FunctionCfg::new();
 
         {
@@ -26,7 +29,7 @@ impl FunctionDefinition {
                 lir::OpKind::Arguments, vec![],
                 self.hir_fun.args.iter().map(|a| a.ssa).collect());
 
-            let ret = self.hir_fun.body.lower(&mut builder);
+            let ret = self.hir_fun.body.lower(&mut builder, env);
             builder.basic_op(
                 lir::OpKind::ReturnOk,
                 vec![lir::Source::Variable(ret)], vec![]);
@@ -95,11 +98,12 @@ impl FunctionDefinition {
 
 use self::hir::SingleExpressionKind as HSEK;
 impl hir::SingleExpression {
-    fn lower(&self, b: &mut lir::cfg::FunctionCfgBuilder) -> ::ir::SSAVariable {
+    fn lower(&self, b: &mut lir::cfg::FunctionCfgBuilder,
+             env: &mut ScopeTracker) -> ::ir::SSAVariable {
         match self.kind {
             HSEK::InterModuleCall { ref module, ref name, ref args } => {
-                let mut reads_r = vec![module.lower(b), name.lower(b)];
-                reads_r.extend(args.iter().map(|a| a.lower(b)));
+                let mut reads_r = vec![module.lower(b, env), name.lower(b, env)];
+                reads_r.extend(args.iter().map(|a| a.lower(b, env)));
                 let reads: Vec<_> = reads_r.iter()
                     .map(|r| lir::Source::Variable(*r))
                     .collect();
@@ -120,8 +124,8 @@ impl hir::SingleExpression {
                 self.ssa
             },
             HSEK::ApplyCall { ref fun, ref args } => {
-                let mut reads_r = vec![fun.lower(b)];
-                reads_r.extend(args.iter().map(|a| a.lower(b)));
+                let mut reads_r = vec![fun.lower(b, env)];
+                reads_r.extend(args.iter().map(|a| a.lower(b, env)));
                 let reads: Vec<_> = reads_r.iter()
                     .map(|r| lir::Source::Variable(*r))
                     .collect();
@@ -167,32 +171,41 @@ impl hir::SingleExpression {
             },
             HSEK::Let { ref val, ref body, .. } => {
                 for v in val.values.iter() {
-                    v.lower(b);
+                    v.lower(b, env);
                 }
-                body.lower(b);
+                body.lower(b, env);
                 self.ssa
             },
             HSEK::Try { ref body, ref then,
                         ref catch_vars, ref catch, .. } => {
                 for expr in body.values.iter() {
-                    expr.lower(b);
+                    expr.lower(b, env);
                 }
-                then.lower(b);
+                then.lower(b, env);
                 then.ssa
             },
             // TODO
             HSEK::Case { ref val, ref clauses, ref values } => {
 
+                //println!("aaaa: {:#?}", values);
+
                 //::pattern::to_decision_tree(clauses);
 
                 for v in &val.values {
-                    v.lower(b);
+                    v.lower(b, env);
                 }
 
                 for value in values {
-                    value.lower(b);
+                    value.lower(b, env);
                 }
                 let value_vars: Vec<_> = values.iter().map(|v| v.ssa).collect();
+
+                let a: Vec<_> = val.values.iter().map(|v| v.ssa).collect();
+
+                // TODO: This is currently called when lowering HIR to LIR. This means we 
+                // completely ignore any optimizations that can be done due to present type 
+                // information on inputs. This should be moved to a later pass on the LIR.
+                //pattern::compile(&a, clauses, &value_vars, env);
 
                 let from_label = b.get_block();
                 let done_label = b.add_block();
@@ -202,7 +215,7 @@ impl hir::SingleExpression {
                         let clause_label = b.add_block();
                         b.set_block(clause_label);
 
-                        let clause_ret = clause.body.lower(b);
+                        let clause_ret = clause.body.lower(b, env);
                         b.basic_op(lir::OpKind::Jump, vec![], vec![]);
                         let clause_done_label = b.get_block();
                         b.add_jump(clause_done_label, done_label);
@@ -214,6 +227,7 @@ impl hir::SingleExpression {
                 //let entry = lower_pattern_cfg(&cfg, cfg.get_entry(), &leaves, b);
                 //b.add_jump(from_label, entry);
 
+                b.set_block(from_label);
                 b.basic_op(lir::OpKind::Case {
                     vars: val.values.iter().map(|v| v.ssa).collect(),
                     clauses: clauses.iter().map(|c| {
@@ -233,7 +247,7 @@ impl hir::SingleExpression {
             },
             HSEK::Tuple(ref elems) => {
                 for elem in elems.iter() {
-                    elem.lower(b);
+                    elem.lower(b, env);
                 }
 
                 b.basic_op(lir::OpKind::MakeTuple,
@@ -245,9 +259,9 @@ impl hir::SingleExpression {
                 self.ssa
             },
             HSEK::List{ ref head, ref tail } => {
-                tail.lower(b);
+                tail.lower(b, env);
                 for elem in head.iter() {
-                    elem.lower(b);
+                    elem.lower(b, env);
                 }
 
                 let mut reads = vec![lir::Source::Variable(tail.ssa)];
@@ -262,8 +276,8 @@ impl hir::SingleExpression {
             HSEK::Map(ref kv) => {
                 let mut reads = Vec::new();
                 for &(ref key, ref value) in kv.iter() {
-                    key.lower(b);
-                    value.lower(b);
+                    key.lower(b, env);
+                    value.lower(b, env);
 
                     reads.push(lir::Source::Variable(key.ssa));
                     reads.push(lir::Source::Variable(value.ssa));
@@ -276,7 +290,7 @@ impl hir::SingleExpression {
             },
             HSEK::PrimOp { ref name, ref args } => {
                 for arg in args.iter() {
-                    arg.lower(b);
+                    arg.lower(b, env);
                 }
                 b.basic_op(
                     lir::OpKind::PrimOp(name.clone()),
@@ -286,9 +300,9 @@ impl hir::SingleExpression {
             },
             HSEK::Do(ref d1, ref d2) => {
                 for v in d1.values.iter() {
-                    v.lower(b);
+                    v.lower(b, env);
                 }
-                d2.lower(b);
+                d2.lower(b, env);
                 self.ssa
             },
             HSEK::Receive { .. } => {
@@ -317,7 +331,7 @@ impl hir::SingleExpression {
                         env_idx: lambda_env.unwrap()
                     },
                     vec![], vec![env_ssa]);
-                body.lower(b);
+                body.lower(b, env);
                 self.ssa
             },
             ref s => panic!("Unhandled: {:?}", s),

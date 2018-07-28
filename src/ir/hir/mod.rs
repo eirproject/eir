@@ -51,6 +51,12 @@ impl EachSingleExpression for SingleExpression {
 
         use self::SingleExpressionKind as SEK;
         match self.kind {
+            SEK::Case { .. } => {
+                println!("{:#?}", self.kind);
+            },
+            _  => (),
+        }
+        match self.kind {
             SEK::Atomic(_) => (),
             SEK::Variable(_) => (),
             SEK::NamedFunction { .. } => (),
@@ -73,8 +79,15 @@ impl EachSingleExpression for SingleExpression {
                 then.each_single_expression_mut(f, enter_lambdas);
                 catch.each_single_expression_mut(f, enter_lambdas);
             },
-            SEK::Case { ref mut val, ref mut clauses, .. } => {
+            SEK::Case { ref mut val, ref mut clauses, ref mut values } => {
                 val.each_single_expression_mut(f, enter_lambdas);
+
+                // Pattern values should strictly not contain any advanced
+                // control flow, but support for uniformity.
+                for value in values.iter_mut() {
+                    value.each_single_expression_mut(f, enter_lambdas);
+                }
+
                 for clause in clauses.iter_mut() {
                     clause.body.each_single_expression_mut(f, enter_lambdas);
                 }

@@ -9,7 +9,7 @@ pub struct ExpandedClauseNodes<V, K> {
     pub nodes: Vec<K>,
 }
 
-pub trait PatternProvider: Debug + Clone {
+pub trait PatternProvider: Debug {
 
     /// A reference to a unique node in the pattern graph.
     /// Every `PatternNodeKey` should belong to ONE and ONLY one

@@ -14,7 +14,7 @@ test6(Woo) ->
 test7(Woo) ->
     case Woo of
         #{ #{ foo => bar } := true } -> lpsdlas;
-        _ -> false
+        _ -> test7(Woo)
     end.
 
 foo() -> 12.

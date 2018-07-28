@@ -8,7 +8,8 @@ use ::either::Either;
 
 use super::pattern::PatternProvider;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Derivative)]
+#[derivative(Clone(bound=""))]
 pub struct MatchMatrix<P> where P: PatternProvider {
     pub data: Vec<MatchMatrixElement<P>>,
 
@@ -16,7 +17,8 @@ pub struct MatchMatrix<P> where P: PatternProvider {
     pub clause_leaves: Vec<super::cfg::CfgNodeIndex>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Derivative)]
+#[derivative(Clone(bound=""))]
 pub struct MatchMatrixElement<P> where P: PatternProvider {
     pub node: P::PatternNodeKey,
     pub variable_num: usize,

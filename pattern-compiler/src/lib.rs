@@ -5,6 +5,7 @@ extern crate petgraph;
 extern crate prettytable;
 extern crate either;
 extern crate util;
+#[macro_use] extern crate derivative;
 
 use ::std::collections::HashMap;
 
@@ -154,7 +155,7 @@ pub fn to_decision_tree<P>(pattern: &mut P) -> cfg::PatternCfg<P>
 {
     let mut context = MatchCompileContext::new(pattern);
 
-    let root = context.root_matrix().clone();
+    let root: matrix::MatchMatrix<P> = (*context.root_matrix()).clone();
 
     let root_cfg = context.cfg.get_entry();
     let wildcard = context.pattern.get_wildcard();
