@@ -7,5 +7,6 @@ Cargo.lock
 *.core
 
 !test_data/**/*.core
+test_data/**/.*.core
 
 otp/
