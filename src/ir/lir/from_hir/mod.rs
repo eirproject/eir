@@ -5,8 +5,6 @@ use ::ir::lir;
 use ::ir::lir::Source;
 use ::ir::hir::pass::ssa::ScopeTracker;
 
-mod pattern;
-
 pub fn do_lower(module: &mut Module, env: &mut ScopeTracker) {
     module.lower(env)
 }
@@ -165,7 +163,18 @@ impl hir::SingleExpression {
                         vec![], vec![self.ssa]);
                     self.ssa
                 }
-            }
+            },
+            HSEK::ExternalNamedFunction { ref module, ref name } => {
+                let n = ::ir::FunctionIdent {
+                    name: name.var.name.clone(),
+                    arity: name.var.arity,
+                    lambda: None,
+                };
+                b.basic_op(
+                    lir::OpKind::CaptureExternalNamedFunction(module.clone(), n),
+                    vec![], vec![self.ssa]);
+                self.ssa
+            },
             HSEK::Variable(_) => {
                 self.ssa
             },

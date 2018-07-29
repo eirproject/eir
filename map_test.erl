@@ -11,10 +11,10 @@ test6(Woo) ->
         _ -> false
     end.
 
-test7(Woo) ->
-    case Woo of
-        #{ #{ foo => bar } := true } -> lpsdlas;
-        _ -> test7(Woo)
+test7(Woo, Hoo) ->
+    case <Woo, Hoo> of
+        <#{ #{ foo => bar } := true }, _> -> lpsdlas;
+        <_, _> -> test7(Woo, Hoo)
     end.
 
 foo() -> 12.

@@ -68,11 +68,13 @@ valueList -> Vec<Annotated<SingleExpression>> = __ "<" v:annotatedSingleExpressi
 
 singleExpression -> SingleExpression =
                  __ e:(f:functionName { SingleExpression::FunctionName(f) }
+                 / __ "fun" m:atom __ ":" f:functionName
+                   { SingleExpression::ExternalFunctionName { module: m, name: f } }
                  / a:atomicLiteral { SingleExpression::AtomicLiteral(a) }
                  / v:variableName { SingleExpression::Variable(v) }
                  / t:tuple { SingleExpression::Tuple(t) }
                  / l:list { SingleExpression::List { head: l.0, tail: Box::new(l.1) } }
-                 / m:map { SingleExpression::Map(m) }
+                 / m:map { SingleExpression::Map(m.0, m.1) }
                  / l:let { SingleExpression::Let {vars: l.0, val: Box::new(l.1), body: Box::new(l.2) } }
                  / i:interModuleCall { SingleExpression::InterModuleCall {
                                      module: Box::new(i.0), name: Box::new(i.1), args: i.2 } }
@@ -89,10 +91,10 @@ singleExpression -> SingleExpression =
 tuple -> Vec<Expression> =
       __ "{" e:expression ** (__ ",") __ "}" { e }
 list -> (Vec<Expression>, Expression) =
-     __ "[" e:expression ** (__ ",") __ "]" { (e, Expression::nil()) }
-     / __ "[" e:expression ** (__ ",") __ "|" t:expression __ "]" { (e, t) }
-map -> Vec<(Expression, Expression)> =
-    __ "~{" v:(k:expression __ "=>" v:expression { (k, v) }) ** (__ ",") __ "}~" { v }
+     __ "[" e:expression ** (__ ",") __ "|" t:expression __ "]" { (e, t) }
+     / __ "[" e:expression ** (__ ",") __ "]" { (e, Expression::nil()) }
+map -> (Vec<(Expression, Expression)>, Option<Expression>) =
+    __ "~{" v:(k:expression __ "=>" v:expression { (k, v) }) ** (__ ",") __ merge:( "|" __ m:expression __ { m } )? "}~" { (v, merge) }
 let -> (Vec<Annotated<Variable>>, Expression, Expression) =
     __ "let" v:variables __ "=" e:expression __ "in" i:expression { (v, e, i) }
 catch -> Expression = __ "catch" e:expression { e }
@@ -131,7 +133,7 @@ letrec -> SingleExpression =
 
 patterns -> Vec<Annotated<Pattern>> =
          lineAnnotation? p:annotatedPattern { vec![p] }
-         / lineAnnotation? __ "<" p:annotatedPattern ** (__ ",") __ ">" { p }
+         / lineAnnotation? __ "<" p:(lineAnnotation? p:annotatedPattern lineAnnotation? { p }) ** (__ ",") __ ">" { p }
 annotatedPattern -> Annotated<Pattern> = p:annotated<pattern> { p }
 pattern -> Pattern =
         v:variableName __ "=" p:annotatedPattern { Pattern::Bind(v, Box::new(p)) }

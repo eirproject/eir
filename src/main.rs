@@ -1,10 +1,13 @@
 extern crate core_erlang;
 
+use core_erlang::parser::Atom;
+
 use std::io::Read;
+use std::str::FromStr;
 
 fn main() {
     let mut text = String::new();
-    std::fs::File::open("map_test.core").unwrap()
+    std::fs::File::open("application_controller.core").unwrap()
         .read_to_string(&mut text).unwrap();
 
     let res = core_erlang::parser::annotated_module(&text).unwrap();
@@ -14,8 +17,13 @@ fn main() {
         println!("{}", fun.ident);
     }
 
+    let name_sym: Atom = FromStr::from_str("do_config_change").unwrap();
+    let fun = hir.functions.iter().find(|f| {
+        f.ident.name == name_sym && f.ident.arity == 3 && f.ident.lambda == None
+    }).unwrap();
+
     let mut out = ::std::fs::File::create("cfg.dot").unwrap();
     core_erlang::ir::lir::to_dot::function_to_dot(
-        &hir.functions[2], &mut out).unwrap();
+        fun, &mut out).unwrap();
 
 }

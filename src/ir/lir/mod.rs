@@ -59,6 +59,7 @@ pub enum OpKind {
     /// Calls r[0] with args r[1..]
     Apply,
     CaptureNamedFunction(::ir::FunctionIdent),
+    CaptureExternalNamedFunction(Atom, ::ir::FunctionIdent),
 
     MakeTuple,
     MakeList,

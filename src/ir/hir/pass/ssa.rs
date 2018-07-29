@@ -11,11 +11,12 @@ use ::std::collections::{ HashSet, HashMap };
 use ::ir::{ AVariable, AFunctionName, SSAVariable };
 use ::{ Atom, Variable };
 use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind, LambdaEnvIdx };
+use ::util::ssa_variable::SSAVariableGenerator;
 
 #[derive(Debug)]
 pub struct ScopeTracker {
     scopes: Vec<Scope>,
-    current_ssa_var: SSAVariable,
+    ssa_var_generator: SSAVariableGenerator,
     lambda_envs: Vec<Vec<(ScopeDefinition, SSAVariable, SSAVariable)>>,
 }
 #[derive(Debug)]
@@ -38,7 +39,7 @@ impl ScopeTracker {
     pub fn new() -> Self {
         ScopeTracker {
             scopes: vec![],
-            current_ssa_var: SSAVariable(1),
+            ssa_var_generator: SSAVariableGenerator::initial(),
             lambda_envs: Vec::new(),
         }
     }
@@ -65,8 +66,7 @@ impl ScopeTracker {
     }
 
     pub fn new_ssa(&mut self) -> SSAVariable {
-        self.current_ssa_var.0 += 1;
-        self.current_ssa_var
+        self.ssa_var_generator.next()
     }
 
     fn get(&mut self, var: &ScopeDefinition) -> Option<SSAVariable> {
@@ -92,8 +92,7 @@ impl ScopeTracker {
                         assert!(ssa_var == outer_ssa);
                         ssa_var = inner_ssa;
                     } else {
-                        self.current_ssa_var.0 += 1;
-                        let inner_ssa = self.current_ssa_var;
+                        let inner_ssa = self.ssa_var_generator.next();
                         escapes.insert(var.clone(), (ssa_var, inner_ssa));
                         ssa_var = inner_ssa;
                     }
@@ -214,6 +213,9 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 *is_lambda = false;
                 expr.ssa = env.new_ssa();
             }
+        },
+        SingleExpressionKind::ExternalNamedFunction { .. } => {
+            expr.ssa = env.new_ssa();
         },
         SingleExpressionKind::Tuple(ref mut vals) => {
             for val in vals {

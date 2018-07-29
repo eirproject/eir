@@ -4,7 +4,7 @@ use ::ir::lir::Source;
 const DOT_BREAK: &str = "<br align=\"left\" />";
 
 fn format_label(label: &str) -> String {
-label.replace("{", "\\{").replace("}", "\\}").replace("\n", DOT_BREAK)
+    label.replace("{", "\\{").replace("}", "\\}").replace("\n", DOT_BREAK)
 }
 
 use std::io::Write;
@@ -40,7 +40,7 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
         for op in block.ops.iter() {
             if op.writes.len() > 0 {
                 for write in &op.writes {
-                    write!(w, "%{}, ", write.0)?;
+                    write!(w, "{:?}, ", write)?;
                 }
                 write!(w, "= ")?;
             }
@@ -52,10 +52,12 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
                 write!(w, "read[")?;
                 for read in op.reads.iter() {
                     match *read {
-                        Source::Variable(reg) => write!(w, "%{}, ", reg.0)?,
+                        Source::Variable(reg) =>
+                            write!(w, "{}", format_label(&format!("{:?}, ", reg)))?,
                         //Source::Literal(ref lit) => write!(w, "{}, ", format_label(
                         //    &format!("{:?}", lit)))?,
-                        Source::Constant(ref lit) => write!(w, "{:?}, ", lit)?,
+                        Source::Constant(ref lit) =>
+                            write!(w, "{}", format_label(&format!("{:?}, ", lit)))?,
                     }
                 }
                 write!(w, "] ")?;

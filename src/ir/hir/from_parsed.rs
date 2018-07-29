@@ -1,10 +1,11 @@
 use ::std::collections::HashSet;
 
 use ::{ Atom, Variable };
-use ::ir::{ AVariable, AFunctionName, SSAVariable, Module, FunctionDefinition,
+use ::ir::{ AVariable, AFunctionName, Module, FunctionDefinition,
             FunctionVisibility, FunctionIdent };
 use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind,
                  Function, Pattern, PatternNode, Closure };
+use ::util::ssa_variable::{ SSAVariable, INVALID_SSA };
 
 impl Module {
     fn from_parsed(module: &::parser::Module) -> Self {
@@ -95,7 +96,7 @@ impl Pattern {
         let mut bindings = Vec::new();
         node.collect_bindings(&mut bindings);
         Pattern {
-            bindings: bindings.iter().map(|v| (v.clone(), SSAVariable(0))).collect(),
+            bindings: bindings.iter().map(|v| (v.clone(), INVALID_SSA)).collect(),
             node: node,
         }
     }
@@ -108,11 +109,17 @@ impl SingleExpression {
             PSE::Variable(ref v) =>
                 SingleExpressionKind::Variable(AVariable::new(v.clone())),
             PSE::FunctionName(ref f) => {
-                SingleExpressionKind::NamedFunction{
+                SingleExpressionKind::NamedFunction {
                     name: AFunctionName::new(f.clone()),
                     is_lambda: false,
                 }
             },
+            PSE::ExternalFunctionName { ref module, ref name } => {
+                SingleExpressionKind::ExternalNamedFunction {
+                    module: module.clone(),
+                    name: AFunctionName::new(name.clone()),
+                }
+            }
 
             PSE::AtomicLiteral(ref a) => SingleExpressionKind::Atomic(a.clone()),
             PSE::InterModuleCall { ref module, ref name, ref args } =>
@@ -138,30 +145,30 @@ impl SingleExpression {
                 },
             PSE::Catch(ref body) => {
                 let r = AVariable { var: Variable::from("_r"),
-                                    ssa: SSAVariable(0) };
+                                    ssa: INVALID_SSA };
 
                 let typ = AVariable { var: Variable::from("_t"),
-                                      ssa: SSAVariable(0) };
+                                      ssa: INVALID_SSA };
                 let kind = AVariable { var: Variable::from("_k"),
-                                       ssa: SSAVariable(0) };
+                                       ssa: INVALID_SSA };
                 let extra = AVariable { var: Variable::from("_e"),
-                                        ssa: SSAVariable(0) };
+                                        ssa: INVALID_SSA };
 
                 SingleExpressionKind::Try {
                     body: Expression::from_parsed(body),
                     then_vars: vec![r.clone()],
                     then: Box::new(SingleExpression {
-                        ssa: SSAVariable(0),
+                        ssa: INVALID_SSA,
                         kind: SingleExpressionKind::Variable(r),
                     }),
                     catch_vars: vec![typ.clone(), kind.clone(), extra.clone()],
                     catch: Box::new(SingleExpression {
-                        ssa: SSAVariable(0),
+                        ssa: INVALID_SSA,
                         kind: SingleExpressionKind::Case {
                             val: Expression {
                                 values: vec![
                                     SingleExpression {
-                                        ssa: SSAVariable(0),
+                                        ssa: INVALID_SSA,
                                         kind: SingleExpressionKind::Variable(typ.clone()),
                                     }
                                 ],
@@ -229,14 +236,14 @@ impl SingleExpression {
                     body: Expression::from_parsed(body),
                     then_vars: then_vars.iter().map(|v| {
                         AVariable {
-                            ssa: SSAVariable(0),
+                            ssa: INVALID_SSA,
                             var: v.0.clone(),
                         }
                     }).collect(),
                     then: Box::new(SingleExpression::from_parsed(then)),
                     catch_vars: catch_vars.iter().map(|v| {
                         AVariable {
-                            ssa: SSAVariable(0),
+                            ssa: INVALID_SSA,
                             var: v.0.clone(),
                         }
                     }).collect(),
@@ -272,7 +279,7 @@ impl SingleExpression {
                         env: None,
                     },
                     lambda_env: None,
-                    env_ssa: SSAVariable(0),
+                    env_ssa: INVALID_SSA,
                 }
             },
             PSE::LetRec { ref funs, ref body } => {
@@ -287,10 +294,10 @@ impl SingleExpression {
                     }).collect(),
                     body: Box::new(SingleExpression::from_parsed(body)),
                     lambda_env: None,
-                    env_ssa: SSAVariable(0),
+                    env_ssa: INVALID_SSA,
                 }
             },
-            PSE::Map(ref kv) => {
+            PSE::Map(ref kv, ref merge) => { // TODO TODO TODO
                 let kv_h = kv.iter()
                     .map(|&(ref k, ref v)| {
                         (SingleExpression::from_parsed(k),
@@ -301,7 +308,7 @@ impl SingleExpression {
             ref e => panic!("Unhandled: {:?}", e),
         };
         SingleExpression {
-            ssa: SSAVariable(0),
+            ssa: INVALID_SSA,
             kind,
         }
     }

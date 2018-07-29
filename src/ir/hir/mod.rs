@@ -51,15 +51,10 @@ impl EachSingleExpression for SingleExpression {
 
         use self::SingleExpressionKind as SEK;
         match self.kind {
-            SEK::Case { .. } => {
-                println!("{:#?}", self.kind);
-            },
-            _  => (),
-        }
-        match self.kind {
             SEK::Atomic(_) => (),
             SEK::Variable(_) => (),
             SEK::NamedFunction { .. } => (),
+            SEK::ExternalNamedFunction { .. } => (),
             SEK::ApplyCall { ref mut args, .. } => {
                 for arg in args.iter_mut() {
                     arg.each_single_expression_mut(f, enter_lambdas);
@@ -163,6 +158,8 @@ impl ::ToDoc for SingleExpression {
             SEK::Variable(ref var) => Doc::text(format!("{:?}", var)),
             SEK::NamedFunction { ref name, ref is_lambda } =>
                 Doc::text(format!("{:?} lambda: {}", name, is_lambda)),
+            SEK::ExternalNamedFunction { ref module, ref name } =>
+                Doc::text(format!("{:?}:{:?}", module, name)),
             SEK::InterModuleCall { ref module, ref name, ref args } => {
                 let args_doc = Doc::intersperse(
                     args.iter().map(|arg| Doc::newline().append(arg.to_doc())), 
@@ -193,9 +190,13 @@ pub struct LambdaEnvIdx(pub usize);
 #[derive(Debug, Clone)]
 pub enum SingleExpressionKind {
     Variable(AVariable),
-    NamedFunction{
+    NamedFunction {
         name: AFunctionName,
         is_lambda: bool,
+    },
+    ExternalNamedFunction {
+        module: Atom,
+        name: AFunctionName,
     },
 
     // Functions

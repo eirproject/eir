@@ -5,3 +5,5 @@ Cargo.lock
 *.dot
 *.dot.pdf
 *.core
+
+otp/

@@ -9,13 +9,7 @@ pub mod lir;
 use ::intern::{ Atom, Variable };
 use ::parser;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
-pub struct SSAVariable(u32);
-impl ::std::fmt::Debug for SSAVariable {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        write!(f, "%{}", self.0)
-    }
-}
+pub use ::util::ssa_variable::{ SSAVariable, INVALID_SSA };
 
 pub struct Module {
     pub name: Atom,
@@ -145,7 +139,7 @@ impl AVariable {
     fn new(var: Variable) -> Self {
         AVariable {
             var: var,
-            ssa: SSAVariable(0),
+            ssa: INVALID_SSA,
         }
     }
 }
@@ -159,7 +153,7 @@ impl AFunctionName {
     fn new(var: ::parser::FunctionName) -> Self {
         AFunctionName {
             var: var,
-            ssa: SSAVariable(0),
+            ssa: INVALID_SSA,
         }
     }
 }

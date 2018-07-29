@@ -78,6 +78,7 @@ pub struct FunctionDefinition {
 pub enum SingleExpression {
     // Env reading
     FunctionName(FunctionName),
+    ExternalFunctionName { module: Atom, name: FunctionName },
     Variable(Variable),
 
     // Control flow
@@ -103,7 +104,7 @@ pub enum SingleExpression {
     AtomicLiteral(AtomicLiteral),
     Tuple(Vec<Expression>),
     List { head: Vec<Expression>, tail: Box<Expression> },
-    Map(Vec<(Expression, Expression)>),
+    Map(Vec<(Expression, Expression)>, Option<Expression>),
 }
 
 #[derive(Debug, Clone)]
