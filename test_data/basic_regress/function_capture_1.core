@@ -1,0 +1,7 @@
+module 'test' ['test'/0] attributes []
+
+'test'/0 =
+    fun () ->
+    fun 'logger':'format_otp_report'/1
+
+end

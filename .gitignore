@@ -6,4 +6,6 @@ Cargo.lock
 *.dot.pdf
 *.core
 
+!test_data/**/*.core
+
 otp/

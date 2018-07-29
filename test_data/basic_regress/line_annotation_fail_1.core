@@ -1,0 +1,14 @@
+module 'test' ['test'/3] attributes []
+
+'test'/3 =
+    fun (_2,_1,_0) ->
+    case <_2,_1,_0> of
+	    <{'ok',{ApplData,Env,IncApps,Descr,Id,Vsn,Apps}},%% Line 1573
+							   OldAppl,%% Line 1573
+								   Config> when 'true' ->
+            'false'
+        <_w,_t,_f> when 'true' ->
+            'true'
+    end
+
+end
