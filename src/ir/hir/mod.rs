@@ -98,11 +98,12 @@ impl EachSingleExpression for SingleExpression {
                 }
                 tail.each_single_expression_mut(f, enter_lambdas);
             },
-            SEK::Map(ref mut kv) => {
-                for &mut (ref mut key, ref mut val) in kv.iter_mut() {
+            SEK::Map { ref mut values, ref mut merge } => {
+                for &mut (ref mut key, ref mut val) in values.iter_mut() {
                     key.each_single_expression_mut(f, enter_lambdas);
                     val.each_single_expression_mut(f, enter_lambdas);
                 }
+                merge.as_mut().map(|m| m.each_single_expression_mut(f, enter_lambdas));
             },
             SEK::PrimOp { ref mut args, .. } => {
                 for arg in args.iter_mut() {
@@ -209,7 +210,8 @@ pub enum SingleExpressionKind {
     Atomic(parser::AtomicLiteral),
     Tuple(Vec<SingleExpression>),
     List { head: Vec<SingleExpression>, tail: Box<SingleExpression> },
-    Map(Vec<(SingleExpression, SingleExpression)>),
+    Map { values: Vec<(SingleExpression, SingleExpression)>,
+          merge: Option<Box<SingleExpression>> },
 
     // Calls
     PrimOp { name: Atom, args: Vec<SingleExpression> },

@@ -17,9 +17,11 @@ fn main() {
         println!("{}", fun.ident);
     }
 
-    let name_sym: Atom = FromStr::from_str("do_config_change").unwrap();
+    // do_config_change/3
+
+    let name_sym: Atom = FromStr::from_str("start").unwrap();
     let fun = hir.functions.iter().find(|f| {
-        f.ident.name == name_sym && f.ident.arity == 3 && f.ident.lambda == None
+        f.ident.name == name_sym && f.ident.arity == 1 && f.ident.lambda == None
     }).unwrap();
 
     let mut out = ::std::fs::File::create("cfg.dot").unwrap();

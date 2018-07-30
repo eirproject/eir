@@ -230,11 +230,12 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             assign_ssa_single_expression(env, tail);
             expr.ssa = env.new_ssa();
         },
-        SingleExpressionKind::Map(ref mut kv) => {
-            for &mut (ref mut key, ref mut val) in kv.iter_mut() {
+        SingleExpressionKind::Map { ref mut values, ref mut merge } => {
+            for &mut (ref mut key, ref mut val) in values.iter_mut() {
                 assign_ssa_single_expression(env, key);
                 assign_ssa_single_expression(env, val);
             }
+            merge.as_mut().map(|mut v| assign_ssa_single_expression(env, v));
             expr.ssa = env.new_ssa();
         },
         SingleExpressionKind::PrimOp { ref mut args, .. } => {

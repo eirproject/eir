@@ -196,10 +196,6 @@ impl hir::SingleExpression {
             // TODO
             HSEK::Case { ref val, ref clauses, ref values } => {
 
-                //println!("aaaa: {:#?}", values);
-
-                //::pattern::to_decision_tree(clauses);
-
                 for v in &val.values {
                     v.lower(b, env);
                 }
@@ -209,12 +205,7 @@ impl hir::SingleExpression {
                 }
                 let value_vars: Vec<_> = values.iter().map(|v| v.ssa).collect();
 
-                let a: Vec<_> = val.values.iter().map(|v| v.ssa).collect();
-
-                // TODO: This is currently called when lowering HIR to LIR. This means we 
-                // completely ignore any optimizations that can be done due to present type 
-                // information on inputs. This should be moved to a later pass on the LIR.
-                //pattern::compile(&a, clauses, &value_vars, env);
+                //let a: Vec<_> = val.values.iter().map(|v| v.ssa).collect();
 
                 let from_label = b.get_block();
                 let done_label = b.add_block();
@@ -223,6 +214,7 @@ impl hir::SingleExpression {
                     .map(|clause| {
                         let clause_label = b.add_block();
                         b.set_block(clause_label);
+                        // TODO: CaseValues
 
                         let clause_ret = clause.body.lower(b, env);
                         b.basic_op(lir::OpKind::Jump, vec![], vec![]);
@@ -232,9 +224,6 @@ impl hir::SingleExpression {
                                   done_label, self.ssa);
                         clause_label
                     }).collect();
-
-                //let entry = lower_pattern_cfg(&cfg, cfg.get_entry(), &leaves, b);
-                //b.add_jump(from_label, entry);
 
                 b.set_block(from_label);
                 b.basic_op(lir::OpKind::Case {
@@ -282,15 +271,18 @@ impl hir::SingleExpression {
 
                 self.ssa
             },
-            HSEK::Map(ref kv) => {
+            HSEK::Map { ref values, ref merge } => {
                 let mut reads = Vec::new();
-                for &(ref key, ref value) in kv.iter() {
+                for &(ref key, ref value) in values.iter() {
                     key.lower(b, env);
                     value.lower(b, env);
 
                     reads.push(lir::Source::Variable(key.ssa));
                     reads.push(lir::Source::Variable(value.ssa));
                 }
+
+                merge.as_ref().map(|m| m.lower(b, env));
+                // TODO INCORRECT CONTROL FLOW: Merge!
 
                 b.basic_op(lir::OpKind::MakeMap,
                            reads, vec![self.ssa]);
@@ -314,8 +306,106 @@ impl hir::SingleExpression {
                 d2.lower(b, env);
                 self.ssa
             },
-            HSEK::Receive { .. } => {
-                // TODO
+            HSEK::Receive { ref clauses, ref timeout_time, ref timeout_body,
+                            ref pattern_values } => {
+                // See lir::OpKind for more detailed documentation
+                // (Many comments refer to the documentation over there)
+
+                // Lower match values
+                for value in pattern_values {
+                    value.lower(b, env);
+                }
+                let value_vars: Vec<_> = pattern_values.iter().map(|v| v.ssa)
+                    .collect();
+
+                let timeout_time_var = timeout_time.lower(b, env);
+
+                let start_label = b.get_block(); // #start
+                let receive_loop_label = b.add_block(); // #receive_loop
+                let match_body_label = b.add_block(); // #match_body
+                let timeout_body_label = b.add_block(); // #timeout_body
+                let expression_exit_label = b.add_block(); // Exit block of match
+
+                let match_structure_ssa = env.new_ssa();
+
+                // Entry to receive structure (#start)
+                b.set_block(start_label);
+                b.basic_op(lir::OpKind::ReceiveStart,
+                           vec![lir::Source::Variable(timeout_time_var)],
+                           vec![match_structure_ssa]);
+                b.add_jump(start_label, receive_loop_label);
+
+                // Receive loop block (#receive_loop)
+                b.set_block(receive_loop_label);
+                b.basic_op(lir::OpKind::ReceiveWait,
+                           vec![lir::Source::Variable(match_structure_ssa)],
+                           vec![]);
+                b.add_jump(receive_loop_label, match_body_label);
+                b.add_jump(receive_loop_label, timeout_body_label);
+
+                // Timeout branch
+                b.set_block(timeout_body_label);
+                let clause_ret = timeout_body.lower(b, env);
+                let clause_done_label = b.get_block();
+                b.basic_op(lir::OpKind::Jump, vec![], vec![]);
+                b.add_jump(clause_done_label, expression_exit_label);
+                b.add_phi(clause_done_label, clause_ret,
+                          expression_exit_label, self.ssa);
+
+                // Match leaves (#message_?_match)
+                let leaves: Vec<_> = clauses.iter()
+                    .map(|clause| {
+                        let clause_label = b.add_block();
+                        b.set_block(clause_label);
+                        b.basic_op(
+                            lir::OpKind::CaseValues,
+                            vec![],
+                            clause.patterns.iter()
+                                .flat_map(|pattern| {
+                                    pattern.bindings.iter()
+                                        .map(|binding| binding.1)
+                                }).collect(),
+                        );
+                        b.basic_op(lir::OpKind::ReceiveFinish,
+                                   vec![lir::Source::Variable(match_structure_ssa)],
+                                   vec![]);
+
+                        let clause_ret = clause.body.lower(b, env);
+
+                        b.basic_op(lir::OpKind::Jump, vec![], vec![]);
+                        let clause_done_label = b.get_block();
+                        b.add_jump(clause_done_label, expression_exit_label);
+                        b.add_phi(clause_done_label, clause_ret,
+                                  expression_exit_label, self.ssa);
+
+                        clause_label
+                    }).collect();
+
+                // Match body (#match_body)
+                let message_ssa = env.new_ssa();
+                b.set_block(match_body_label);
+                b.basic_op(lir::OpKind::ReceiveGetMessage,
+                           vec![lir::Source::Variable(match_structure_ssa)],
+                           vec![message_ssa]);
+                b.basic_op(
+                    lir::OpKind::Case {
+                        vars: vec![message_ssa],
+                        clauses: clauses.iter().map(|c| {
+                            lir::Clause { // TODO: Ensure single pattern?
+                                patterns: c.patterns.clone(),
+                            }
+                        }).collect(),
+                        value_vars: value_vars,
+                    },
+                    vec![lir::Source::Variable(match_structure_ssa)],
+                    vec![]
+                );
+                for leaf in leaves.iter() {
+                    b.add_jump(match_body_label, *leaf);
+                }
+
+                b.set_block(expression_exit_label);
+
                 self.ssa
             },
             HSEK::BindClosure { ref closure, lambda_env, env_ssa } => {

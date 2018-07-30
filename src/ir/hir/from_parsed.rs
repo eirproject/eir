@@ -93,8 +93,10 @@ impl Pattern {
     fn from_parsed(pat: &::parser::Pattern,
                    values: &mut Vec<SingleExpression>) -> Self {
         let node = pat_node_from_parsed(pat, values);
+
         let mut bindings = Vec::new();
         node.collect_bindings(&mut bindings);
+
         Pattern {
             bindings: bindings.iter().map(|v| (v.clone(), INVALID_SSA)).collect(),
             node: node,
@@ -297,13 +299,18 @@ impl SingleExpression {
                     env_ssa: INVALID_SSA,
                 }
             },
-            PSE::Map(ref kv, ref merge) => { // TODO TODO TODO
+            PSE::Map(ref kv, ref merge) => {
                 let kv_h = kv.iter()
                     .map(|&(ref k, ref v)| {
                         (SingleExpression::from_parsed(k),
                          SingleExpression::from_parsed(v))
                     }).collect();
-                SingleExpressionKind::Map(kv_h)
+                let merge = merge.as_ref().map(
+                    |v| Box::new(SingleExpression::from_parsed(&v)));
+                SingleExpressionKind::Map {
+                    values: kv_h,
+                    merge: merge,
+                }
             },
             ref e => panic!("Unhandled: {:?}", e),
         };

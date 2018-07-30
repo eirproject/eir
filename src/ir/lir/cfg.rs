@@ -14,10 +14,14 @@ impl ::std::fmt::Display for LabelN {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct EdgeN(pub ::petgraph::graph::EdgeIndex);
+
 #[derive(Debug)]
 pub struct BasicBlock {
     pub phi_nodes: Vec<Phi>,
     pub ops: Vec<Op>,
+    pub outgoing_edges: Vec<EdgeN>,
 }
 
 #[derive(Debug)]
@@ -45,6 +49,7 @@ impl FunctionCfg {
         let entry = cfg.add_node(BasicBlock {
             phi_nodes: vec![],
             ops: vec![],
+            outgoing_edges: vec![],
         });
 
         FunctionCfg {
@@ -74,8 +79,9 @@ impl FunctionCfg {
         self.cfg.node_weight(lbl.0).unwrap()
     }
 
-    pub fn jumps_iter<'a>(&'a self, lbl: LabelN) -> ::petgraph::graph::Edges<BasicBlockEdge, ::petgraph::Directed> {
-        self.cfg.edges_directed(lbl.0, ::petgraph::Direction::Outgoing)
+    pub fn jumps_iter<'a>(&'a self, lbl: LabelN) -> impl Iterator<Item = EdgeN> + 'a {
+        let node = self.cfg.node_weight(lbl.0).unwrap();
+        node.outgoing_edges.iter().map(|e| *e)
     }
 
     pub fn branch_slots(&self, lbl: LabelN) -> Vec<LabelN> {
@@ -83,6 +89,10 @@ impl FunctionCfg {
             .neighbors_directed(lbl.0, ::petgraph::Direction::Outgoing)
             .map(|edge_id| LabelN(edge_id))
             .collect()
+    }
+
+    pub fn edge_target(&self, lbl: EdgeN) -> LabelN {
+        LabelN(self.cfg.edge_endpoints(lbl.0).unwrap().1)
     }
 
 }
@@ -130,15 +140,18 @@ impl<'a> FunctionCfgBuilder<'a> {
     }
 
     pub fn add_jump(&mut self, source: LabelN, dest: LabelN) {
-        self.target.cfg.add_edge(source.0, dest.0, BasicBlockEdge {
+        let edge_id = self.target.cfg.add_edge(source.0, dest.0, BasicBlockEdge {
             writes: vec![],
         });
+        let node = self.target.cfg.node_weight_mut(source.0).unwrap();
+        node.outgoing_edges.push(EdgeN(edge_id));
     }
 
     pub fn add_block(&mut self) -> LabelN {
         let idx = self.target.cfg.add_node(BasicBlock {
             ops: vec![],
             phi_nodes: vec![],
+            outgoing_edges: vec![],
         });
         LabelN(idx)
     }

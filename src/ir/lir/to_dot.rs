@@ -81,9 +81,10 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
         //    write!(w, "blk_{} -> blk_{} [ label=cont ];\n", block_name, label.name())?;
         //}
 
-        for (idx, edge) in lir.jumps_iter(block_idx).enumerate() {
+        for (idx, edge_id) in lir.jumps_iter(block_idx).enumerate() {
+            let edge = lir.edge_target(edge_id);
             use ::petgraph::visit::EdgeRef;
-            write!(w, "blk_{} -> blk_L{} [ label={} ];\n", block_name, edge.target().index(), idx)?;
+            write!(w, "blk_{} -> blk_L{} [ label={} ];\n", block_name, edge.0.index(), idx)?;
         }
         write!(w, "\n")?;
     }

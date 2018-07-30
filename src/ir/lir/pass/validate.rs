@@ -1,7 +1,13 @@
 use ::std::collections::HashSet;
 use ::ir::lir::{ FunctionCfg, Source };
 
-pub fn validate(cfg: &mut FunctionCfg) {
+pub fn validate(cfg: &FunctionCfg) {
+
+    validate_proper_ssa(cfg);
+
+}
+
+fn validate_proper_ssa(cfg: &FunctionCfg) {
 
     let mut assigns = HashSet::new();
 
