@@ -136,8 +136,8 @@ patterns -> Vec<Annotated<Pattern>> =
          / lineAnnotation? __ "<" p:(lineAnnotation? p:annotatedPattern lineAnnotation? { p }) ** (__ ",") __ ">" { p }
 annotatedPattern -> Annotated<Pattern> = p:annotated<pattern> { p }
 pattern -> Pattern =
-        v:variableName __ "=" p:annotatedPattern { Pattern::Bind(v, Box::new(p)) }
-        / v:variableName { Pattern::Variable(v) }
+        v:variableName __ "=" p:annotatedPattern { Pattern::BindVar(v, Box::new(p)) }
+        / v:variableName { Pattern::BindVar(v, Box::new(Annotated::empty(Pattern::Wildcard))) }
         / a:atomicLiteral { Pattern::Atomic(a) }
         / t:patternTuple { Pattern::Tuple(t) }
         / l:patternList { Pattern::List(l, Box::new(Pattern::nil())) }

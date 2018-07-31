@@ -116,8 +116,8 @@ pub struct CaseClause {
 
 #[derive(Debug, Clone)]
 pub enum Pattern {
-    Variable(Variable),
-    Bind(Variable, Box<Annotated<Pattern>>),
+    Wildcard,
+    BindVar(Variable, Box<Annotated<Pattern>>),
     Atomic(AtomicLiteral),
     Tuple(Vec<Annotated<Pattern>>),
     List(Vec<Annotated<Pattern>>, Box<Annotated<Pattern>>),

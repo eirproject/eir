@@ -12,6 +12,7 @@ petgraph = "0.4.5"
 prettytable-rs = "0.6.7"
 string-intern = "0.1.6"
 pretty = "0.3.3"
+itertools = "0.7.8"
 
 pattern-compiler = { path = "pattern-compiler" } 
 util = { path = "util" }

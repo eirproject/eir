@@ -45,8 +45,28 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
                 write!(w, "= ")?;
             }
 
-            let body = format_label(&format!("{:?} ", op.kind));
-            write!(w, "{}", body)?;
+            match &op.kind {
+                ::ir::lir::OpKind::Case { ref vars, ref clauses, ref value_vars } => {
+                    write!(w, "Case \\{{{}", DOT_BREAK)?;
+
+                    let vars_fmt = format_label(&format!("{:?} ", vars));
+                    write!(w, "    match on: {}{}", vars_fmt, DOT_BREAK)?;
+
+                    let value_vars_fmt = format_label(&format!("{:?} ", value_vars));
+                    write!(w, "    value literals: {}{}", value_vars_fmt, DOT_BREAK)?;
+
+                    for clause in clauses {
+                        let clause_fmt = format_label(&format!("{:?} ", clause));
+                        write!(w, "    {}{}", clause_fmt, DOT_BREAK)?;
+                    }
+
+                    write!(w, "\\}} ")?;
+                },
+                kind => {
+                    let body = format_label(&format!("{:?} ", kind));
+                    write!(w, "{}", body)?;
+                },
+            }
 
             if op.reads.len() > 0 {
                 write!(w, "read[")?;

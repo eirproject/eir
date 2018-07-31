@@ -79,7 +79,7 @@ fn pattern_node_to_node(pat: &mut ErlPatternProvider, node: &PatternNode)
                         -> NodeIndex {
     match *node {
         PatternNode::Atomic(AtomicLiteral::Nil) => pat.add_node(NodeKind::Nil),
-        PatternNode::Variable(_) => pat.add_node(NodeKind::Wildcard), // TODO
+        //PatternNode::Variable(_) => pat.add_node(NodeKind::Wildcard), // TODO
         PatternNode::Map(ref entries) => {
             let node = pat.add_node(NodeKind::Map);
             node

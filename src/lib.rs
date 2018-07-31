@@ -1,3 +1,4 @@
+extern crate itertools;
 extern crate string_intern;
 extern crate petgraph;
 extern crate either;

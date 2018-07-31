@@ -186,15 +186,18 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 assign_ssa_single_expression(env, value);
             }
 
+            // Assume that all matches in a pattern can see all variables here.
+            // This should be validated later when compiling the pattern.
             for clause in clauses {
                 let mut scope = HashMap::new();
                 for pattern in clause.patterns.iter_mut() {
-                    for &mut (ref var, ref mut ssa) in &mut pattern.bindings {
+                    for &mut (ref var, ref mut ssa) in &mut pattern.binds {
                         *ssa = env.new_ssa();
                         scope.insert(ScopeDefinition::Variable(var.clone()), *ssa);
                     }
                 }
-                env.push_scope(scope);
+
+                env.push_scope(scope.clone());
                 assign_ssa_single_expression(env, &mut clause.guard);
                 assign_ssa_single_expression(env, &mut clause.body);
                 env.pop_scope();
@@ -259,7 +262,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             for clause in clauses {
                 let mut scope = HashMap::new();
                 for pattern in clause.patterns.iter_mut() {
-                    for &mut (ref var, ref mut ssa) in &mut pattern.bindings {
+                    for &mut (ref var, ref mut ssa) in &mut pattern.binds {
                         *ssa = env.new_ssa();
                         scope.insert(ScopeDefinition::Variable(var.clone()), *ssa);
                     }

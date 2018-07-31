@@ -253,45 +253,66 @@ pub struct Clause {
 
 #[derive(Debug, Clone)]
 pub struct Pattern {
-    pub bindings: Vec<(Variable, SSAVariable)>,
+    pub binds: Vec<(Variable, SSAVariable)>,
     pub node: PatternNode,
+}
+impl Pattern {
+    pub fn wildcard() -> Self {
+        Pattern {
+            binds: vec![],
+            node: PatternNode::Wildcard,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub enum PatternNode {
-    Variable(Variable),
-    Bind(Variable, Box<PatternNode>),
+    Wildcard,
+    BindVar(Variable, Box<PatternNode>),
     Atomic(parser::AtomicLiteral),
     Tuple(Vec<PatternNode>),
     List(Vec<PatternNode>, Box<PatternNode>),
     Map(Vec<(usize, Box<PatternNode>)>),
 }
 impl PatternNode {
-    pub fn collect_bindings(&self, bindings: &mut Vec<Variable>) {
+
+    pub fn get_bind_vars(&self) -> Vec<Variable> {
+        let mut matches = Vec::new();
+        self.traverse_pattern(&mut |node| {
+            match *node {
+                PatternNode::BindVar(ref v, _) =>
+                    matches.push(v.clone()),
+                _ => (),
+            }
+        });
+        matches
+    }
+
+    pub fn traverse_pattern<F>(&self, fun: &mut F) where F: FnMut(&PatternNode) {
+        fun(self);
         match *self {
-            PatternNode::Variable(ref v) => bindings.push(v.clone()),
-            PatternNode::Bind(ref v, ref p) => {
-                bindings.push(v.clone());
-                p.collect_bindings(bindings);
-            },
+            PatternNode::Wildcard => (),
+            PatternNode::BindVar(ref v, ref p) =>
+                p.traverse_pattern(fun),
             PatternNode::Atomic(_) => (),
             PatternNode::Tuple(ref pats) => {
                 for pat in pats {
-                    pat.collect_bindings(bindings);
+                    pat.traverse_pattern(fun);
                 }
             }
             PatternNode::List(ref pats, ref tail) => {
                 for pat in pats {
-                    pat.collect_bindings(bindings);
+                    pat.traverse_pattern(fun);
                 }
-                tail.collect_bindings(bindings);
+                tail.traverse_pattern(fun);
             }
             PatternNode::Map(ref kvs) => {
                 for kv in kvs {
-                    kv.1.collect_bindings(bindings);
+                    kv.1.traverse_pattern(fun);
                 }
             }
         }
     }
+
 }
 

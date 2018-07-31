@@ -79,21 +79,35 @@ pub enum OpKind {
     ReturnOk,
     ReturnThrow,
 
+    IfTruthy,
+
     // High level matching construct, lowered to explicit control flow
     // in a LIR compiler pass.
     // This OP indicates the start of a case structure.
     // The number of outgoing edges must be equal to the number of
     // clauses.
     // All outgoing edges must start with a CaseValues OP.
+    // Once going through a CaseValues, control flow must either return
+    // to the case through a GuardFail, or leave the structure through
+    // a GuardOk.
+    // Returns a pseudo-value which is used to fetch the matched values
+    // in any subsequent blocks.
     Case {
         vars: Vec<SSAVariable>,
         clauses: Vec<Clause>,
         value_vars: Vec<SSAVariable>,
     },
     // Must have one incoming edge, which must end with a Case OP.
-    // The number of returns are the same as the number of bindings
+    // The number of writes are the same as the number of bindings
     // in the clause just matched in the case block.
+    // Takes the pseudo-value from the preceeding case block.
     CaseValues,
+    // After exiting control flow from a Case OP and going through a
+    // CaseValues, control flow must always exit the structure through
+    // a GuardOk or GuardFail. Returning while inside the structure is
+    // a hard error!
+    CaseGuardOk,
+    CaseGuardFail,
 
 
     // Indicates the start of a receive structure, must jump to a block
@@ -119,8 +133,7 @@ pub enum OpKind {
     //
     // #start:
     //   ...
-    //   %receive_context = ReceiveStart(%timeout)
-    //   Jump(#receive_loop)
+    //   %receive_context = ReceiveStart(%timeout, #receive_loop)
     // #receive_loop:
     //   ReceiveWait(%receive_context, #match_body, #timeout_body)
     // #match_body:
@@ -158,7 +171,7 @@ pub enum OpKind {
     // Assists with CFG validation.
     // Has a single read, indicates that the read variable should never be
     // used after this point in the CFG.
-    TombstoneSSA,
+    TombstoneSSA(SSAVariable),
 }
 
 #[derive(Debug, Clone)]

@@ -58,12 +58,18 @@ impl Expression {
 
 fn pat_node_from_parsed(node: &::parser::Pattern,
                         values: &mut Vec<SingleExpression>) -> PatternNode {
+
+    use std::str::FromStr;
+    let wildcard: ::parser::Variable = FromStr::from_str("_").unwrap();
+
     use ::parser::Pattern as PP;
     match *node {
-        PP::Variable(ref v) => PatternNode::Variable(v.clone()),
         PP::Atomic(ref a) => PatternNode::Atomic(a.clone()),
-        PP::Bind(ref var, ref pat) =>
-            PatternNode::Bind(var.clone(), Box::new(
+        PP::Wildcard => PatternNode::Wildcard,
+        PP::BindVar(ref var, ref pat) if *var == wildcard =>
+            pat_node_from_parsed(&pat.0, values),
+        PP::BindVar(ref var, ref pat) =>
+            PatternNode::BindVar(var.clone(), Box::new(
                 pat_node_from_parsed(&pat.0, values))),
         PP::Tuple(ref pats) =>
             PatternNode::Tuple(
@@ -94,11 +100,10 @@ impl Pattern {
                    values: &mut Vec<SingleExpression>) -> Self {
         let node = pat_node_from_parsed(pat, values);
 
-        let mut bindings = Vec::new();
-        node.collect_bindings(&mut bindings);
+        let binds = node.get_bind_vars();
 
         Pattern {
-            bindings: bindings.iter().map(|v| (v.clone(), INVALID_SSA)).collect(),
+            binds: binds.iter().map(|v| (v.clone(), INVALID_SSA)).collect(),
             node: node,
         }
     }

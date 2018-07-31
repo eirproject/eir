@@ -326,25 +326,32 @@ impl hir::SingleExpression {
                 let timeout_body_label = b.add_block(); // #timeout_body
                 let expression_exit_label = b.add_block(); // Exit block of match
 
-                let match_structure_ssa = env.new_ssa();
+                let receive_structure_ssa = env.new_ssa();
+                let case_structure_ssa = env.new_ssa();
 
                 // Entry to receive structure (#start)
                 b.set_block(start_label);
                 b.basic_op(lir::OpKind::ReceiveStart,
                            vec![lir::Source::Variable(timeout_time_var)],
-                           vec![match_structure_ssa]);
+                           vec![receive_structure_ssa]);
                 b.add_jump(start_label, receive_loop_label);
 
                 // Receive loop block (#receive_loop)
                 b.set_block(receive_loop_label);
                 b.basic_op(lir::OpKind::ReceiveWait,
-                           vec![lir::Source::Variable(match_structure_ssa)],
+                           vec![lir::Source::Variable(receive_structure_ssa)],
                            vec![]);
                 b.add_jump(receive_loop_label, match_body_label);
                 b.add_jump(receive_loop_label, timeout_body_label);
 
                 // Timeout branch
                 b.set_block(timeout_body_label);
+                b.basic_op(lir::OpKind::CaseValues,
+                           vec![lir::Source::Variable(case_structure_ssa)], vec![]);
+                b.basic_op(lir::OpKind::TombstoneSSA(case_structure_ssa),
+                           vec![], vec![]);
+                b.basic_op(lir::OpKind::TombstoneSSA(receive_structure_ssa),
+                           vec![], vec![]);
                 let clause_ret = timeout_body.lower(b, env);
                 let clause_done_label = b.get_block();
                 b.basic_op(lir::OpKind::Jump, vec![], vec![]);
@@ -353,23 +360,49 @@ impl hir::SingleExpression {
                           expression_exit_label, self.ssa);
 
                 // Match leaves (#message_?_match)
-                let leaves: Vec<_> = clauses.iter()
+                let mut leaves: Vec<_> = clauses.iter()
                     .map(|clause| {
                         let clause_label = b.add_block();
                         b.set_block(clause_label);
                         b.basic_op(
                             lir::OpKind::CaseValues,
-                            vec![],
+                            vec![lir::Source::Variable(case_structure_ssa)],
                             clause.patterns.iter()
                                 .flat_map(|pattern| {
-                                    pattern.bindings.iter()
+                                    pattern.binds.iter()
                                         .map(|binding| binding.1)
                                 }).collect(),
                         );
-                        b.basic_op(lir::OpKind::ReceiveFinish,
-                                   vec![lir::Source::Variable(match_structure_ssa)],
-                                   vec![]);
+                        let guard_ret = clause.guard.lower(b, env);
+                        b.basic_op(
+                            lir::OpKind::IfTruthy,
+                            vec![lir::Source::Variable(guard_ret)],
+                            vec![]
+                        );
+                        let guard_ret_label = b.get_block();
+                        let guard_fail_label = b.add_block();
+                        let leaf_body_label = b.add_block();
+                        b.add_jump(guard_ret_label, leaf_body_label);
+                        b.add_jump(guard_ret_label, guard_fail_label);
 
+                        b.set_block(guard_fail_label);
+                        b.basic_op(lir::OpKind::CaseGuardFail,
+                                   vec![lir::Source::Variable(case_structure_ssa)],
+                                   vec![]);
+                        b.add_jump(guard_fail_label, match_body_label);
+
+                        b.set_block(leaf_body_label);
+                        b.basic_op(lir::OpKind::CaseGuardOk,
+                                   vec![lir::Source::Variable(case_structure_ssa)],
+                                   vec![]);
+                        b.basic_op(lir::OpKind::TombstoneSSA(case_structure_ssa),
+                                   vec![], vec![]);
+
+                        b.basic_op(lir::OpKind::ReceiveFinish,
+                                   vec![lir::Source::Variable(receive_structure_ssa)],
+                                   vec![]);
+                        b.basic_op(lir::OpKind::TombstoneSSA(receive_structure_ssa),
+                                   vec![], vec![]);
                         let clause_ret = clause.body.lower(b, env);
 
                         b.basic_op(lir::OpKind::Jump, vec![], vec![]);
@@ -380,25 +413,28 @@ impl hir::SingleExpression {
 
                         clause_label
                     }).collect();
+                leaves.insert(0, receive_loop_label);
 
                 // Match body (#match_body)
                 let message_ssa = env.new_ssa();
                 b.set_block(match_body_label);
                 b.basic_op(lir::OpKind::ReceiveGetMessage,
-                           vec![lir::Source::Variable(match_structure_ssa)],
+                           vec![lir::Source::Variable(receive_structure_ssa)],
                            vec![message_ssa]);
+                let mut clauses: Vec<_> = clauses.iter().map(|c| {
+                    assert!(c.patterns.len() == 1);
+                    lir::Clause {
+                        patterns: c.patterns.clone(),
+                    }
+                }).collect();
                 b.basic_op(
                     lir::OpKind::Case {
                         vars: vec![message_ssa],
-                        clauses: clauses.iter().map(|c| {
-                            lir::Clause { // TODO: Ensure single pattern?
-                                patterns: c.patterns.clone(),
-                            }
-                        }).collect(),
+                        clauses: clauses,
                         value_vars: value_vars,
                     },
-                    vec![lir::Source::Variable(match_structure_ssa)],
-                    vec![]
+                    vec![lir::Source::Variable(message_ssa)],
+                    vec![case_structure_ssa]
                 );
                 for leaf in leaves.iter() {
                     b.add_jump(match_body_label, *leaf);
