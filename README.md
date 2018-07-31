@@ -3,6 +3,8 @@ Core Erlang compiler implemented in Rust
 
 Currently compiles a Core Erlang to a (relatively) low level IR.
 
+Current area of work: *Correctly lowering all Core Erlang features to a sane IR*
+
 Current features:
 * Parses .core file to parse tree
 * Converts parse tree into hierarchical HIR (High-level IR)
