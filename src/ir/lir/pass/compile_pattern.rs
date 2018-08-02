@@ -25,12 +25,12 @@ pub fn compile_pattern(lir: &mut ::ir::lir::cfg::FunctionCfg) {
         let last_op = node.ops.last().unwrap();
         if let lir::OpKind::Case { ref vars, ref clauses,
                                    ref value_vars } = last_op.kind {
-            println!("============ Compile pattern ============");
-            println!("Vars: {:?}", vars);
-            println!("ValueVars: {:?}", value_vars);
-            for clause in clauses {
-                println!("Clause: {:?}", clause);
-            }
+            //println!("============ Compile pattern ============");
+            //println!("Vars: {:?}", vars);
+            //println!("ValueVars: {:?}", value_vars);
+            //for clause in clauses {
+            //    println!("Clause: {:?}", clause);
+            //}
 
 
 
@@ -41,7 +41,7 @@ pub fn compile_pattern(lir: &mut ::ir::lir::cfg::FunctionCfg) {
 
 
             //match_from_parsed(vars.len(), clauses.as_slice());
-            println!("============ End pattern ============");
+            //println!("============ End pattern ============");
         }
     }
 }

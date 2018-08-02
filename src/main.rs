@@ -19,9 +19,9 @@ fn main() {
 
     // do_config_change/3
 
-    let name_sym: Atom = FromStr::from_str("start").unwrap();
+    let name_sym: Atom = FromStr::from_str("init_starter").unwrap();
     let fun = hir.functions.iter().find(|f| {
-        f.ident.name == name_sym && f.ident.arity == 1 && f.ident.lambda == None
+        f.ident.name == name_sym && f.ident.arity == 4 && f.ident.lambda == None
     }).unwrap();
 
     let mut out = ::std::fs::File::create("cfg.dot").unwrap();

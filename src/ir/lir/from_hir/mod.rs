@@ -193,50 +193,100 @@ impl hir::SingleExpression {
                 then.lower(b, env);
                 then.ssa
             },
-            // TODO
             HSEK::Case { ref val, ref clauses, ref values } => {
 
+                // Lower values in the expression we match on
                 for v in &val.values {
                     v.lower(b, env);
                 }
 
+                // Lower match values
                 for value in values {
                     value.lower(b, env);
                 }
                 let value_vars: Vec<_> = values.iter().map(|v| v.ssa).collect();
 
-                //let a: Vec<_> = val.values.iter().map(|v| v.ssa).collect();
-
                 let from_label = b.get_block();
+                let match_body_label = b.add_block();
                 let done_label = b.add_block();
+                let case_fail_label = b.add_block();
 
-                let leaves: Vec<_> = clauses.iter()
+                let case_structure_ssa = env.new_ssa();
+
+                // Jump to match body
+                b.set_block(from_label);
+                b.basic_op(lir::OpKind::Jump,
+                           vec![], vec![]);
+                b.add_jump(from_label, match_body_label);
+
+                // Fail leaf
+                b.set_block(case_fail_label);
+                b.basic_op(lir::OpKind::ReturnThrow, vec![], vec![]);
+
+                let mut leaves: Vec<_> = clauses.iter()
                     .map(|clause| {
                         let clause_label = b.add_block();
                         b.set_block(clause_label);
-                        // TODO: CaseValues
+                        b.basic_op(
+                            lir::OpKind::CaseValues,
+                            vec![lir::Source::Variable(case_structure_ssa)],
+                            clause.patterns.iter()
+                                .flat_map(|pattern| {
+                                    pattern.binds.iter()
+                                        .map(|binding| binding.1)
+                                }).collect(),
+                        );
+                        let guard_ret = clause.guard.lower(b, env);
+                        b.basic_op(
+                            lir::OpKind::IfTruthy,
+                            vec![lir::Source::Variable(guard_ret)],
+                            vec![]
+                        );
+                        let guard_ret_label = b.get_block();
+                        let guard_fail_label = b.add_block();
+                        let leaf_body_label = b.add_block();
+                        b.add_jump(guard_ret_label, leaf_body_label);
+                        b.add_jump(guard_ret_label, guard_fail_label);
+
+                        b.set_block(guard_fail_label);
+                        b.basic_op(lir::OpKind::CaseGuardFail,
+                                   vec![lir::Source::Variable(case_structure_ssa)],
+                                   vec![]);
+                        b.add_jump(guard_fail_label, match_body_label);
+
+                        b.set_block(leaf_body_label);
+                        b.basic_op(lir::OpKind::CaseGuardOk,
+                                   vec![lir::Source::Variable(case_structure_ssa)],
+                                   vec![]);
+                        b.basic_op(lir::OpKind::TombstoneSSA(case_structure_ssa),
+                                   vec![], vec![]);
 
                         let clause_ret = clause.body.lower(b, env);
+
                         b.basic_op(lir::OpKind::Jump, vec![], vec![]);
                         let clause_done_label = b.get_block();
                         b.add_jump(clause_done_label, done_label);
                         b.add_phi(clause_done_label, clause_ret,
                                   done_label, self.ssa);
+
                         clause_label
                     }).collect();
+                leaves.insert(0, case_fail_label);
 
-                b.set_block(from_label);
+                // Match body
+                b.set_block(match_body_label);
+                let mut clauses: Vec<_> = clauses.iter().map(|c| {
+                    lir::Clause {
+                        patterns: c.patterns.clone(),
+                    }
+                }).collect();
                 b.basic_op(lir::OpKind::Case {
                     vars: val.values.iter().map(|v| v.ssa).collect(),
-                    clauses: clauses.iter().map(|c| {
-                        lir::Clause {
-                            patterns: c.patterns.clone(),
-                        }
-                    }).collect(),
+                    clauses: clauses,
                     value_vars: value_vars,
-                }, vec![], vec![]);
+                }, vec![], vec![case_structure_ssa]);
                 for leaf in leaves.iter() {
-                    b.add_jump(from_label, *leaf);
+                    b.add_jump(match_body_label, *leaf);
                 }
 
                 b.set_block(done_label);
@@ -296,7 +346,7 @@ impl hir::SingleExpression {
                 b.basic_op(
                     lir::OpKind::PrimOp(name.clone()),
                     args.iter().map(|a| lir::Source::Variable(a.ssa)).collect(),
-                    vec![]);
+                    vec![self.ssa]);
                 self.ssa
             },
             HSEK::Do(ref d1, ref d2) => {

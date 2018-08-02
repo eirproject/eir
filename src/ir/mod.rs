@@ -200,7 +200,7 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
         println!("Function: {}", function.ident);
         ::ir::lir::pass::compile_pattern(lir_mut);
         //::ir::lir::pass::propagate_atomics(lir_mut);
-        //::ir::lir::pass::validate(lir_mut);
+        ::ir::lir::pass::validate(lir_mut);
     }
 
 

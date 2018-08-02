@@ -1,4 +1,5 @@
 use ::std::collections::HashMap;
+use ::std::fmt;
 use super::{ AVariable, AFunctionName, SSAVariable, FunctionIdent };
 use ::parser;
 use ::{ Atom, Variable };
@@ -273,6 +274,41 @@ pub enum PatternNode {
     Tuple(Vec<PatternNode>),
     List(Vec<PatternNode>, Box<PatternNode>),
     Map(Vec<(usize, Box<PatternNode>)>),
+}
+impl fmt::Display for PatternNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PatternNode::Wildcard =>
+                write!(f, "_")?,
+            PatternNode::BindVar(var, pat) =>
+                write!(f, "({} = {})", var, pat)?,
+            PatternNode::Atomic(lit) =>
+                write!(f, "{:?}", lit)?,
+            PatternNode::Tuple(nodes) => {
+                write!(f, "{{")?;
+                for node in nodes {
+                    write!(f, "{}, ", node)?;
+                }
+                write!(f, "}}")?;
+            },
+            PatternNode::List(head_values, tail) => {
+                write!(f, "[")?;
+                for val in head_values {
+                    write!(f, "{}, ", val)?;
+                }
+                write!(f, " | {}", tail)?;
+                write!(f, "]")?;
+            },
+            PatternNode::Map(values) => {
+                write!(f, "~{{")?;
+                for (key_num, val) in values {
+                    write!(f, "{}; {}, ", key_num, val)?;
+                }
+                write!(f, "}}~")?;
+            }
+        }
+        Ok(())
+    }
 }
 impl PatternNode {
 

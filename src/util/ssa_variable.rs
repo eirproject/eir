@@ -22,6 +22,9 @@ impl SSAVariableGenerator {
 
     pub fn next(&mut self) -> SSAVariable {
         let ret = self.0;
+        //if ret.0 == 5251 {
+        //    panic!()
+        //}
         (self.0).0 += 1;
         ret
     }

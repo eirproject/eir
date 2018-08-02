@@ -50,14 +50,20 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
                     write!(w, "Case \\{{{}", DOT_BREAK)?;
 
                     let vars_fmt = format_label(&format!("{:?} ", vars));
-                    write!(w, "    match on: {}{}", vars_fmt, DOT_BREAK)?;
+                    write!(w, "  match on: {}{}", vars_fmt, DOT_BREAK)?;
 
                     let value_vars_fmt = format_label(&format!("{:?} ", value_vars));
-                    write!(w, "    value literals: {}{}", value_vars_fmt, DOT_BREAK)?;
+                    write!(w, "  value literals: {}{}", value_vars_fmt, DOT_BREAK)?;
 
                     for clause in clauses {
-                        let clause_fmt = format_label(&format!("{:?} ", clause));
-                        write!(w, "    {}{}", clause_fmt, DOT_BREAK)?;
+                        write!(w, "  clauses:{}", DOT_BREAK)?;
+                        for pattern in &clause.patterns {
+                            let binds_fmt = format_label(&format!("{:?}", pattern.binds));
+                            let clause_fmt = format_label(&format!("{} ", pattern.node));
+                            write!(w, "    pattern:{}", DOT_BREAK)?;
+                            write!(w, "      {}{}", binds_fmt, DOT_BREAK)?;
+                            write!(w, "      {}{}", clause_fmt, DOT_BREAK)?;
+                        }
                     }
 
                     write!(w, "\\}} ")?;
