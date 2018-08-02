@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 fn main() {
     let mut text = String::new();
-    std::fs::File::open("application_controller.core").unwrap()
+    std::fs::File::open("language_test.core").unwrap()
         .read_to_string(&mut text).unwrap();
 
     let res = core_erlang::parser::annotated_module(&text).unwrap();

@@ -105,6 +105,7 @@ pub enum SingleExpression {
     Tuple(Vec<Expression>),
     List { head: Vec<Expression>, tail: Box<Expression> },
     Map(Vec<(Expression, Expression)>, Option<Expression>),
+    Binary(Vec<(Expression, Vec<Expression>)>),
 }
 
 #[derive(Debug, Clone)]
@@ -119,6 +120,7 @@ pub enum Pattern {
     Wildcard,
     BindVar(Variable, Box<Annotated<Pattern>>),
     Atomic(AtomicLiteral),
+    Binary(Vec<(Annotated<Pattern>, Vec<Annotated<SingleExpression>>)>),
     Tuple(Vec<Annotated<Pattern>>),
     List(Vec<Annotated<Pattern>>, Box<Annotated<Pattern>>),
     Map(Vec<(SingleExpression, Annotated<Pattern>)>),

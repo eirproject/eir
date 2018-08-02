@@ -238,7 +238,16 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 assign_ssa_single_expression(env, key);
                 assign_ssa_single_expression(env, val);
             }
-            merge.as_mut().map(|mut v| assign_ssa_single_expression(env, v));
+            merge.as_mut().map(|v| assign_ssa_single_expression(env, v));
+            expr.ssa = env.new_ssa();
+        },
+        SingleExpressionKind::Binary(ref mut elems) => {
+            for (ref mut val, ref mut opts) in elems {
+                assign_ssa_single_expression(env, val);
+                for ref mut opt in opts {
+                    assign_ssa_single_expression(env, opt);
+                }
+            }
             expr.ssa = env.new_ssa();
         },
         SingleExpressionKind::PrimOp { ref mut args, .. } => {

@@ -71,6 +71,18 @@ fn pat_node_from_parsed(node: &::parser::Pattern,
         PP::BindVar(ref var, ref pat) =>
             PatternNode::BindVar(var.clone(), Box::new(
                 pat_node_from_parsed(&pat.0, values))),
+        PP::Binary(ref elems) => {
+            PatternNode::Binary(
+                elems.iter().map(|(pat, opts)| {
+                    let opts_ids: Vec<_> = opts.iter().map(|o| {
+                        let curr_val_num = values.len();
+                        values.push(SingleExpression::from_parsed_single(&o.0));
+                        curr_val_num
+                    }).collect();
+                    (pat_node_from_parsed(&pat.0, values), opts_ids)
+                }).collect(),
+            )
+        },
         PP::Tuple(ref pats) =>
             PatternNode::Tuple(
                 pats.iter().map(|p| pat_node_from_parsed(&p.0, values)).collect()
@@ -316,6 +328,14 @@ impl SingleExpression {
                     values: kv_h,
                     merge: merge,
                 }
+            },
+            PSE::Binary(ref elems) => {
+                SingleExpressionKind::Binary(
+                    elems.iter().map(|(ref value, ref opts)| {
+                        (SingleExpression::from_parsed(value),
+                         opts.iter().map(|o| SingleExpression::from_parsed(o)).collect())
+                    }).collect()
+                )
             },
             ref e => panic!("Unhandled: {:?}", e),
         };

@@ -106,6 +106,14 @@ impl EachSingleExpression for SingleExpression {
                 }
                 merge.as_mut().map(|m| m.each_single_expression_mut(f, enter_lambdas));
             },
+            SEK::Binary(ref mut elems) => {
+                for (ref mut value, ref mut opts) in elems.iter_mut() {
+                    value.each_single_expression_mut(f, enter_lambdas);
+                    for mut opt in opts.iter_mut() {
+                        opt.each_single_expression_mut(f, enter_lambdas);
+                    }
+                }
+            }
             SEK::PrimOp { ref mut args, .. } => {
                 for arg in args.iter_mut() {
                     arg.each_single_expression_mut(f, enter_lambdas);
@@ -213,6 +221,7 @@ pub enum SingleExpressionKind {
     List { head: Vec<SingleExpression>, tail: Box<SingleExpression> },
     Map { values: Vec<(SingleExpression, SingleExpression)>,
           merge: Option<Box<SingleExpression>> },
+    Binary(Vec<(SingleExpression, Vec<SingleExpression>)>),
 
     // Calls
     PrimOp { name: Atom, args: Vec<SingleExpression> },
@@ -271,6 +280,7 @@ pub enum PatternNode {
     Wildcard,
     BindVar(Variable, Box<PatternNode>),
     Atomic(parser::AtomicLiteral),
+    Binary(Vec<(PatternNode, Vec<usize>)>),
     Tuple(Vec<PatternNode>),
     List(Vec<PatternNode>, Box<PatternNode>),
     Map(Vec<(usize, Box<PatternNode>)>),
@@ -305,7 +315,20 @@ impl fmt::Display for PatternNode {
                     write!(f, "{}; {}, ", key_num, val)?;
                 }
                 write!(f, "}}~")?;
-            }
+            },
+            PatternNode::Binary(elems) => {
+                write!(f, "#<")?;
+
+                for elem in elems {
+                    write!(f, "#<{}>(", elem.0)?;
+                    for attr in &elem.1 {
+                        write!(f, "{}, ", attr);
+                    }
+                    write!(f, ")#")?;
+                }
+
+                write!(f, ">#")?;
+            },
         }
         Ok(())
     }
@@ -345,6 +368,11 @@ impl PatternNode {
             PatternNode::Map(ref kvs) => {
                 for kv in kvs {
                     kv.1.traverse_pattern(fun);
+                }
+            }
+            PatternNode::Binary(ref elems) => {
+                for elem in elems {
+                    elem.0.traverse_pattern(fun);
                 }
             }
         }

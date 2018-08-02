@@ -339,7 +339,24 @@ impl hir::SingleExpression {
 
                 self.ssa
             },
+            HSEK::Binary(ref elems) => {
+                let reads: Vec<_> = elems.iter().flat_map(|(val, opts)| {
+                    assert!(opts.len() == 4);
+                    let val_ssa = val.lower(b, env);
+                    let mut opts_ssa: Vec<_> =
+                        opts.iter().map(|o| o.lower(b, env)).collect();
+                    opts_ssa.insert(0, val_ssa);
+                    opts_ssa
+                }).map(|var| lir::Source::Variable(var)).collect();
+                b.basic_op(
+                    lir::OpKind::MakeBinary,
+                    reads,
+                    vec![self.ssa]
+                );
+                self.ssa
+            },
             HSEK::PrimOp { ref name, ref args } => {
+                println!("PrimOp: {}", name);
                 for arg in args.iter() {
                     arg.lower(b, env);
                 }

@@ -4,7 +4,10 @@ Function, FunctionDefinition, Variable, Expression, SingleExpression, Pattern,
 CaseClause, PrimOpCall };
 use std::str::FromStr;
 
-// Classes
+// ===================================
+// ======== Character classes ========
+// ===================================
+
 sign -> bool = s:$([+-]) { s == "+" }
 digit = [0-9]
 uppercase = [A-Z\u{00c0}-\u{00d6}\u{00d8}-\u{00de}]
@@ -15,7 +18,10 @@ space = [\u{0020}]
 namechar = [A-Z\u{00c0}-\u{00d6}\u{00d8}-\u{00de}a-z\u{00df}-\u{00f6}\u{00f8}-\u{00ff}0-9@_]
 escape = "\\"
 
-// Terminals
+// ===========================
+// ======== Terminals ========
+// ===========================
+
 integer -> Integer = s:sign? d:$(digit+)
         { Integer { sign: s != Some(false), digits: d.to_string() } }
 float = sign? digit+ "." digit+ ([eE] sign? digit+)?
@@ -25,8 +31,12 @@ char = __ "$" [^\u{0000}-\u{001f}\"\\ ]
 string -> String = __ "\"" s:$([^\u{0000}-\u{001f}\"\\]*) "\"" { s.to_string() }
 variableName -> Variable = __ n:$((uppercase / ("_" namechar)) namechar*) { FromStr::from_str(n).unwrap() }
 nil = __ "[" __ "]"
+annotatedVariable -> Annotated<Variable> = annotated<variableName>
 
-// Nonterminals
+// =========================
+// ======== Modules ========
+// =========================
+
 pub annotatedModule -> Annotated<Module> = annotated<module>
 module -> Module = __ "module" module_name:atom
                  functions:moduleFunctions __
@@ -45,7 +55,9 @@ moduleAttributes -> Vec<(Atom, Constant)> =
                  __ "]"
                  { ma }
 
-lineAnnotation = __ "%%" [^\n]*
+// ===========================
+// ======== Functions ========
+// ===========================
 
 functionName -> FunctionName = a:atom "/" i:integer { FunctionName { name: a, arity: i.as_u32() } }
 functionDefinition -> FunctionDefinition =
@@ -56,7 +68,9 @@ annotatedFun -> Annotated<Function> = annotated<fun>
 fun -> Function = __ "fun" __ "(" a:annotatedVariable ** (__ ",") __ ")" __ "->" e:expression
                 { Function { vars: a, body: e } }
 
-annotatedVariable -> Annotated<Variable> = annotated<variableName>
+// =============================
+// ======== Expressions ========
+// =============================
 
 expression -> Expression = lineAnnotation? l:annotatedValueList
                          { l }
@@ -72,6 +86,7 @@ singleExpression -> SingleExpression =
                    { SingleExpression::ExternalFunctionName { module: m, name: f } }
                  / a:atomicLiteral { SingleExpression::AtomicLiteral(a) }
                  / v:variableName { SingleExpression::Variable(v) }
+                 / b:binary { SingleExpression::Binary(b) }
                  / t:tuple { SingleExpression::Tuple(t) }
                  / l:list { SingleExpression::List { head: l.0, tail: Box::new(l.1) } }
                  / m:map { SingleExpression::Map(m.0, m.1) }
@@ -131,6 +146,10 @@ letrec -> SingleExpression =
        __ "letrec" f:(n:functionName __ "=" f:fun { (n, f) })+ __ "in" e:expression
        { SingleExpression::LetRec { funs: f, body: Box::new(e) } }
 
+// ==========================
+// ======== Patterns ========
+// ==========================
+
 patterns -> Vec<Annotated<Pattern>> =
          lineAnnotation? p:annotatedPattern { vec![p] }
          / lineAnnotation? __ "<" p:(lineAnnotation? p:annotatedPattern lineAnnotation? { p }) ** (__ ",") __ ">" { p }
@@ -139,6 +158,7 @@ pattern -> Pattern =
         v:variableName __ "=" p:annotatedPattern { Pattern::BindVar(v, Box::new(p)) }
         / v:variableName { Pattern::BindVar(v, Box::new(Annotated::empty(Pattern::Wildcard))) }
         / a:atomicLiteral { Pattern::Atomic(a) }
+        / b:patternBinary { Pattern::Binary(b) }
         / t:patternTuple { Pattern::Tuple(t) }
         / l:patternList { Pattern::List(l, Box::new(Pattern::nil())) }
         / l:patternListTail { Pattern::List(l.0, Box::new(l.1)) }
@@ -150,8 +170,22 @@ patternListTail -> (Vec<Annotated<Pattern>>, Annotated<Pattern>) =
                 { (p, t) }
 patternMap -> Vec<(SingleExpression, Annotated<Pattern>)> =
            __ "~{" m:(k:singleExpression __ ":=" v:annotatedPattern { (k, v) }) ++ (__ ",") __ "}~" { m }
-patternBitstring = __ "#{" patternBitstringElem ** (__ ",") __ "}#"
-patternBitstringElem = __ "#<" annotatedPattern __ ">(" expression __ ")"
+
+// ==========================
+// ======== Binaries ========
+// ==========================
+patternBinary -> Vec<(Annotated<Pattern>, Vec<Annotated<SingleExpression>>)> =
+              __ "#{" pb:patternBinaryElem ** (__ ",") __ "}#" { pb }
+patternBinaryElem -> (Annotated<Pattern>, Vec<Annotated<SingleExpression>>) =
+                  __ "#<" p:annotatedPattern __ ">(" a:annotatedSingleExpression ** (__ ",") __ ")" { (p, a) }
+
+binary -> Vec<(Expression, Vec<Expression>)> = __
+       "#{" b:binaryElem ** (__ ",") __ "}#" { b }
+binaryElem -> (Expression, Vec<Expression>) = __ "#<" b:expression __ ">(" a:expression ** (__ ",") __ ")" { (b, a) }
+
+// ===========================
+// ======== Constants ========
+// ===========================
 
 constant -> Constant = __ (a:atomicLiteral { Constant::Atomic(a) }
                      / constantTuple { Constant::Tuple(vec![]) }
@@ -167,11 +201,18 @@ constantTuple = __ "{" (constant ** (__ ",")) __ "}"
 constantList = __ "[" (constant ++ (__ ",")) __ "]"
 constantListTail = __ "[" (constant ++ (__ ",")) __ "|" constant "]"
 
+// =============================
+// ======== Annotations ========
+// =============================
+
 annotated<I> = i:I { Annotated(i, vec![]) }
              / __ "(" i:I annotations __ ")" { Annotated(i, vec![]) }
 annotations = __ "-|" __ "[" constant ** (__ ",") __ "]"
+lineAnnotation = __ "%%" [^\n]*
 
-// Tokens
+// ========================
+// ======== Tokens ========
+// ========================
 
 //__ = #quiet<" "*>
 __ = #quiet<([ \n\r\t] / ("%" &[^%] [^\n]*))*>

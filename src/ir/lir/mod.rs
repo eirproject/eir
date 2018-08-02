@@ -64,6 +64,7 @@ pub enum OpKind {
     MakeTuple,
     MakeList,
     MakeMap,
+    MakeBinary,
 
     MakeClosureEnv {
         env_idx: LambdaEnvIdx,
