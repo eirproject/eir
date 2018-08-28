@@ -10,3 +10,5 @@ Cargo.lock
 test_data/**/.*.core
 
 otp/
+
+*.swp
