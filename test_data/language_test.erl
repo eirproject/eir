@@ -12,8 +12,15 @@ do_error() ->
 do_exit() ->
     erlang:exit(something).
 
-try_catch_finally() ->
-    try something of
+try_catch(A) ->
+    try A() of
+        _ -> woo
+    catch
+        throw:hoo -> a_throw
+    end.
+
+try_catch_finally(A) ->
+    try A() of
         _ -> woo
     catch
         throw:hoo -> a_throw

@@ -1,0 +1,48 @@
+module 'match' ['hoo'/1,
+		'module_info'/0,
+		'module_info'/1,
+		'woo'/0]
+    attributes [%% Line 1
+		'file' =
+		    %% Line 1
+		    [{[109|[97|[116|[99|[104|[46|[101|[114|[108]]]]]]]]],1}]]
+'woo'/0 =
+    %% Line 4
+    fun () ->
+	%% Line 5
+	receive
+	  %% Line 6
+	  <{'send',Woo,_0 = {_X_Something,_X_Else}}>
+	      when call 'erlang':'=:='
+		    (_0,
+		     Woo) ->
+	      %% Line 7
+	      Woo
+	  %% Line 8
+	  <{'woo',Hoo}> when 'true' ->
+	      %% Line 9
+	      Hoo
+	after 'infinity' ->
+	  'true'
+'hoo'/1 =
+    %% Line 12
+    fun (_0) ->
+	%% Line 13
+	receive
+	  %% Line 14
+	  <{'send',_2}>
+	      when call 'erlang':'=:='
+		    (_2,
+		     _0) ->
+	      _0
+	after 'infinity' ->
+	  'true'
+'module_info'/0 =
+    fun () ->
+	call 'erlang':'get_module_info'
+	    ('match')
+'module_info'/1 =
+    fun (_0) ->
+	call 'erlang':'get_module_info'
+	    ('match', _0)
+end

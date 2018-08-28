@@ -2,21 +2,30 @@
 //! Made as an experiment to narrow down relevant implementation
 //! details.
 
-use ::intern::Atom;
-use ::ir::{ Module, FunctionIdent, SSAVariable };
-use ::ir::lir::{ BasicBlock, LabelN, OpKind, Source };
-use ::parser::{ Constant, AtomicLiteral };
 use std::str::FromStr;
 use std::collections::HashMap;
 
-pub mod lib;
+extern crate core_erlang_compiler;
+use core_erlang_compiler::intern::Atom;
+use core_erlang_compiler::ir::{ Module, FunctionIdent, SSAVariable };
+use core_erlang_compiler::ir::lir::{ BasicBlock, LabelN, OpKind, Source };
+use core_erlang_compiler::parser::{ Constant, AtomicLiteral };
+
+extern crate num_bigint;
+use num_bigint::BigInt;
+
+mod term;
+pub use term::{ TermType, Term };
+
+pub mod erl_lib;
+#[cfg(test)] pub mod erl_tests;
 
 pub struct NativeModule {
     name: String,
     functions: HashMap<(String, u32), Box<Fn(&[Term]) -> CallReturn>>,
 }
 impl NativeModule {
-    
+
     fn new(name: String) -> Self {
         NativeModule {
             name: name,
@@ -36,23 +45,6 @@ enum ModuleType {
 }
 
 #[derive(Debug, Clone)]
-pub enum Term {
-    Nil,
-    Atom(Atom),
-}
-impl Term {
-    
-    fn atom_str<'a>(&'a self) -> &'a str {
-        if let Term::Atom(ref atom) = *self {
-            *&atom
-        } else {
-            panic!();
-        }
-    }
-
-}
-
-#[derive(Debug)]
 pub enum CallReturn {
     Return { term: Term },
     Throw,
@@ -109,7 +101,7 @@ impl ExecutionContext {
         self.modules.insert(module.name.clone(), ModuleType::Native(module));
     }
 
-    fn exec_block(&self, module: &Module, block: &BasicBlock, 
+    fn exec_block(&self, module: &Module, block: &BasicBlock,
                   prev: Option<LabelN>, frame: &mut StackFrame) -> BlockResult {
 
         // Apply phi nodes
@@ -137,7 +129,7 @@ impl ExecutionContext {
                     let fun_term = frame.read(&op.reads[1]);
                     let args: Vec<Term> = op.reads[2..].iter()
                         .map(|arg| frame.read(arg)).collect();
-                    
+
                     let ret = self.call(module_term.atom_str(), fun_term.atom_str(), &args);
                     match ret {
                         CallReturn::Return { term } => {
@@ -152,8 +144,47 @@ impl ExecutionContext {
                     assert!(op.writes.len() == 0);
                     block_ret = Some(BlockResult::Return { term: frame.read(&op.reads[0]) });
                 }
+                OpKind::CaptureNamedFunction(ref ident) => {
+                    assert!(op.reads.len() == 0);
+                    assert!(op.writes.len() == 1);
+                    assert!(ident.lambda.is_none());
+                    let res = Term::CapturedFunction {
+                        module: module.name.clone(),
+                        fun_name: ident.name.clone(),
+                        arity: ident.arity,
+                    };
+                    frame.variables.insert(op.writes[0], res);
+                }
+                OpKind::Apply => {
+                    assert!(op.writes.len() == 1);
+                    assert!(op.reads.len() >= 1);
+
+                    let fun_var = frame.read(&op.reads[0]);
+                    let args: Vec<Term> = op.reads[1..].iter()
+                        .map(|arg| frame.read(arg)).collect();
+
+                    if let Term::CapturedFunction { module: ref module_a, ref fun_name,
+                                                    ref arity } = fun_var {
+                        assert!(args.len() == *arity as usize);
+
+                        let module_str: &str = &*module_a;
+                        let fun_str: &str = &*fun_name;
+
+                        let ret = self.call(module_str, fun_str, &args);
+                        match ret {
+                            CallReturn::Return { term } => {
+                                frame.variables.insert(op.writes[0], term);
+                                block_ret = Some(BlockResult::Branch { slot: 1 });
+                            }
+                            CallReturn::Throw => unimplemented!(),
+                        }
+                    } else {
+                        panic!("Var is not CapturedFunction");
+                    }
+                }
                 _ => {
                     println!("Unimpl: {:?}", op);
+                    println!("Variables: {:?}", frame.variables);
                     unimplemented!()
                 }
             }

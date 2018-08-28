@@ -1,0 +1,21 @@
+module 'function_capture' ['module_info'/0,
+			   'module_info'/1,
+			   'woo'/0]
+    attributes [%% Line 1
+		'file' =
+		    %% Line 1
+		    [{[102|[117|[110|[99|[116|[105|[111|[110|[95|[99|[97|[112|[116|[117|[114|[101|[46|[101|[114|[108]]]]]]]]]]]]]]]]]]]],1}]]
+'woo'/0 =
+    %% Line 4
+    fun () ->
+	%% Line 5
+	fun 'woohoo':'hoo'/2
+'module_info'/0 =
+    fun () ->
+	call 'erlang':'get_module_info'
+	    ('function_capture')
+'module_info'/1 =
+    fun (_0) ->
+	call 'erlang':'get_module_info'
+	    ('function_capture', _0)
+end

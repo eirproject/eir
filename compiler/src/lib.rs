@@ -4,19 +4,20 @@ extern crate petgraph;
 extern crate either;
 extern crate prettytable;
 extern crate pretty;
+#[macro_use]
+extern crate lazy_static;
 
 extern crate pattern_compiler;
 
-mod intern;
+pub mod intern;
 pub use self::intern::{ Atom, Variable };
 
 pub mod parser;
 pub mod ir;
-pub mod interpreter;
 pub mod util;
 
-#[cfg(test)]
-mod erl_tests;
+//#[cfg(test)]
+//mod erl_tests;
 
 use pretty::{ BoxDoc, Doc };
 use std::ops::Deref;
@@ -34,7 +35,7 @@ mod tests {
     fn basic_regress() {
         use std::fs;
         use std::io::Read;
-        let paths = fs::read_dir("test_data/basic_regress").unwrap();
+        let paths = fs::read_dir("../test_data/basic_regress").unwrap();
 
         for path in paths {
             let path = path.unwrap();

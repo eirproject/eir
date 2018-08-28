@@ -1,6 +1,6 @@
-extern crate core_erlang;
+extern crate core_erlang_compiler;
 
-use core_erlang::parser::Atom;
+use core_erlang_compiler::parser::Atom;
 
 use std::io::Read;
 use std::str::FromStr;
@@ -10,8 +10,8 @@ fn main() {
     std::fs::File::open("language_test.core").unwrap()
         .read_to_string(&mut text).unwrap();
 
-    let res = core_erlang::parser::annotated_module(&text).unwrap();
-    let hir = core_erlang::ir::from_parsed(&res.0);
+    let res = core_erlang_compiler::parser::annotated_module(&text).unwrap();
+    let hir = core_erlang_compiler::ir::from_parsed(&res.0);
 
     for fun in hir.functions.iter() {
         println!("{}", fun.ident);
@@ -19,13 +19,13 @@ fn main() {
 
     // do_config_change/3
 
-    let name_sym: Atom = FromStr::from_str("init_starter").unwrap();
+    let name_sym: Atom = FromStr::from_str("try_catch").unwrap();
     let fun = hir.functions.iter().find(|f| {
-        f.ident.name == name_sym && f.ident.arity == 4 && f.ident.lambda == None
+        f.ident.name == name_sym && f.ident.arity == 1 && f.ident.lambda == None
     }).unwrap();
 
     let mut out = ::std::fs::File::create("cfg.dot").unwrap();
-    core_erlang::ir::lir::to_dot::function_to_dot(
+    core_erlang_compiler::ir::lir::to_dot::function_to_dot(
         fun, &mut out).unwrap();
 
 }

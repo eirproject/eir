@@ -153,6 +153,8 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
         },
         SingleExpressionKind::Try { ref mut body, ref mut then_vars, ref mut then,
                                     ref mut catch_vars, ref mut catch } => {
+            assert!(body.values.len() == then_vars.len());
+
             assign_ssa_expression(env, body);
 
             let mut scope = HashMap::new();

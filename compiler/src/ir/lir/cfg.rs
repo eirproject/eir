@@ -19,6 +19,7 @@ pub struct EdgeN(pub ::petgraph::graph::EdgeIndex);
 
 #[derive(Debug)]
 pub struct BasicBlock {
+    pub label: Option<LabelN>,
     pub phi_nodes: Vec<Phi>,
     pub ops: Vec<Op>,
     pub outgoing_edges: Vec<EdgeN>,
@@ -47,10 +48,12 @@ impl FunctionCfg {
         let mut cfg = Graph::new();
 
         let entry = cfg.add_node(BasicBlock {
+            label: None,
             phi_nodes: vec![],
             ops: vec![],
             outgoing_edges: vec![],
         });
+        cfg[entry].label = Some(LabelN(entry));
 
         FunctionCfg {
             entry: LabelN(entry),
@@ -149,10 +152,13 @@ impl<'a> FunctionCfgBuilder<'a> {
 
     pub fn add_block(&mut self) -> LabelN {
         let idx = self.target.cfg.add_node(BasicBlock {
+            label: None,
             ops: vec![],
             phi_nodes: vec![],
             outgoing_edges: vec![],
         });
+        self.target.cfg[idx].label = Some(LabelN(idx));
+
         LabelN(idx)
     }
 
@@ -162,6 +168,15 @@ impl<'a> FunctionCfgBuilder<'a> {
 
     pub fn get_block(&self) -> LabelN {
         self.current
+    }
+
+    pub fn op_tombstone(&mut self, ssa: SSAVariable) {
+        self.basic_op(OpKind::TombstoneSSA(ssa), vec![], vec![]);
+    }
+    pub fn op_jump(&mut self, target: LabelN) {
+        self.basic_op(OpKind::Jump, vec![], vec![]);
+        let source = self.get_block();
+        self.add_jump(source, target);
     }
 
 }

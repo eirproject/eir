@@ -1,7 +1,7 @@
 extern crate tempdir;
 
 use ::std::io::{ Read, Write };
-use ::ir::Module;
+use ::core_erlang_compiler::ir::Module;
 
 fn erl_to_core(erlang_code: &str) -> String {
     let temp = tempdir::TempDir::new("core_erlang_crate_tests").unwrap();
@@ -36,17 +36,15 @@ fn erl_to_core(erlang_code: &str) -> String {
 fn erl_to_ir(erlang_code: &str) -> Module {
     let core = erl_to_core(erlang_code);
 
-    let parsed = ::parser::annotated_module(&core).unwrap();
-    let ir = ::ir::from_parsed(&parsed.0);
+    let parsed = ::core_erlang_compiler::parser::annotated_module(&core).unwrap();
+    let ir = ::core_erlang_compiler::ir::from_parsed(&parsed.0);
 
     println!("Ir:\n{:?}", ir);
 
     ir
 }
 
-#[test]
-fn simple_add() {
-    let module = erl_to_ir(r##"
+const TEST_ERL_1: &str = r##"
 -module(test).
 -export([add/2, add_two/3, return_closure/1]).
 
@@ -71,15 +69,36 @@ matching(_, []) ->
 matching(A, B) ->
     {A, B}.
 
-    "##);
+    "##;
 
-    use ::interpreter::{ ExecutionContext, Term };
+#[test]
+fn simple_add() {
+    let module = erl_to_ir(TEST_ERL_1);
+
+    use ::{ ExecutionContext, Term };
     let mut ctx = ExecutionContext::new();
 
-    ctx.add_native_module(::interpreter::lib::make_erlang());
+    ctx.add_native_module(::erl_lib::make_erlang());
     ctx.add_erlang_module(module);
 
-    let args = vec![Term::Nil, Term::Nil];
+    let args = vec![Term::new_i64(1), Term::new_i64(2)];
     let result = ctx.call("test", "add", &args);
-    println!("{:?}", result);
+
+    //assert!(result == CallReturn::Return { term: Term::Integer(3.into()) })
+}
+
+#[test]
+fn simple_function_call() {
+    let module = erl_to_ir(TEST_ERL_1);
+
+    use ::{ ExecutionContext, Term };
+    let mut ctx = ExecutionContext::new();
+
+    ctx.add_native_module(::erl_lib::make_erlang());
+    ctx.add_erlang_module(module);
+
+    let args = vec![Term::new_i64(1), Term::new_i64(2), Term::new_i64(3)];
+    let result = ctx.call("test", "add_two", &args);
+
+    //assert!(result == CallReturn::Return { term: Term::Integer(6.into()) })
 }

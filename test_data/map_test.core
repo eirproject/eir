@@ -1,0 +1,52 @@
+module 'maptest' ['module_info'/0,
+		  'module_info'/1,
+		  'test'/0,
+		  'test6'/1,
+		  'test7'/1]
+    attributes [%% Line 1
+		'file' =
+		    %% Line 1
+		    [{[109|[97|[112|[95|[116|[101|[115|[116|[46|[101|[114|[108]]]]]]]]]]]],1}]]
+'test'/0 =
+    %% Line 5
+    fun () ->
+	%% Line 6
+	~{'foo'=>'bar','woo'=>[104|[111|[111]]]}~
+'test6'/1 =
+    %% Line 8
+    fun (_0) ->
+	%% Line 9
+	case _0 of
+	  %% Line 10
+	  <~{{'hoo'}:='true','foo':='bar'}~> when 'true' ->
+	      'lsdlla'
+	  %% Line 11
+	  <_3> when 'true' ->
+	      'false'
+	end
+'test7'/2 =
+    %% Line 14
+    fun (_0, _1) ->
+	%% Line 15
+	case <_0, _1> of
+	  %% Line 16
+	  <~{~{'foo'=>'bar'}~:='true'}~, _something> when 'true' ->
+	      'lpsdlas'
+	  %% Line 17
+	  <_3, _somethingelse> when 'true' ->
+	      apply 'test7'/1
+		  (_0)
+	end
+'foo'/0 =
+    %% Line 20
+    fun () ->
+	12
+'module_info'/0 =
+    fun () ->
+	call 'erlang':'get_module_info'
+	    ('maptest')
+'module_info'/1 =
+    fun (_0) ->
+	call 'erlang':'get_module_info'
+	    ('maptest', _0)
+end

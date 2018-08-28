@@ -1,0 +1,6487 @@
+module 'application_controller' ['change_application_data'/2,
+				 'code_change'/3,
+				 'config_change'/1,
+				 'control_application'/1,
+				 'do_config_diff'/2,
+				 'get_all_env'/1,
+				 'get_all_key'/1,
+				 'get_application'/1,
+				 'get_application_module'/1,
+				 'get_env'/2,
+				 'get_key'/2,
+				 'get_loaded'/1,
+				 'get_master'/1,
+				 'get_pid_all_env'/1,
+				 'get_pid_all_key'/1,
+				 'get_pid_env'/2,
+				 'get_pid_key'/2,
+				 'handle_call'/3,
+				 'handle_cast'/2,
+				 'handle_info'/2,
+				 'info'/0,
+				 'init_starter'/4,
+				 'load_application'/1,
+				 'loaded_applications'/0,
+				 'module_info'/0,
+				 'module_info'/1,
+				 'permit_application'/2,
+				 'prep_config_change'/0,
+				 'set_env'/3,
+				 'set_env'/4,
+				 'start'/1,
+				 'start_application'/2,
+				 'start_boot_application'/2,
+				 'start_type'/1,
+				 'stop_application'/1,
+				 'terminate'/2,
+				 'test_change_apps'/2,
+				 'unload_application'/1,
+				 'unset_env'/2,
+				 'unset_env'/3,
+				 'which_applications'/0,
+				 'which_applications'/1]
+    attributes [%% Line 1
+		'file' =
+		    %% Line 1
+		    [{[97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[95|[99|[111|[110|[116|[114|[111|[108|[108|[101|[114|[46|[101|[114|[108]]]]]]]]]]]]]]]]]]]]]]]]]],1}],
+		%% Line 1
+		'file' =
+		    %% Line 1
+		    [{[97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[95|[109|[97|[115|[116|[101|[114|[46|[104|[114|[108]]]]]]]]]]]]]]]]]]]]]],1}],
+		%% Line 20
+		'record' =
+		    %% Line 20
+		    [{'appl_data',[{'record_field',20,{'atom',20,'name'}}|[{'record_field',20,{'atom',20,'regs'},{'nil',20}}|[{'record_field',20,{'atom',20,'phases'}}|[{'record_field',20,{'atom',20,'mod'}}|[{'record_field',20,{'atom',20,'mods'},{'nil',20}}|[{'record_field',21,{'atom',21,'inc_apps'}}|[{'record_field',21,{'atom',21,'maxP'},{'atom',21,'infinity'}}|[{'record_field',21,{'atom',21,'maxT'},{'atom',21,'infinity'}}]]]]]]]]}],
+		%% Line 47
+		'file' =
+		    %% Line 47
+		    [{[97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[95|[99|[111|[110|[116|[114|[111|[108|[108|[101|[114|[46|[101|[114|[108]]]]]]]]]]]]]]]]]]]]]]]]]],47}],
+		%% Line 1
+		'file' =
+		    %% Line 1
+		    [{[47|[104|[111|[109|[101|[47|[104|[97|[110|[115|[105|[104|[101|[47|[103|[105|[116|[47|[99|[111|[114|[101|[95|[101|[114|[108|[97|[110|[103|[47|[111|[116|[112|[47|[108|[105|[98|[47|[107|[101|[114|[110|[101|[108|[47|[115|[114|[99|[47|[46|[46|[47|[105|[110|[99|[108|[117|[100|[101|[47|[108|[111|[103|[103|[101|[114|[46|[104|[114|[108]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]],1}],
+		%% Line 48
+		'file' =
+		    %% Line 48
+		    [{[97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[95|[99|[111|[110|[116|[114|[111|[108|[108|[101|[114|[46|[101|[114|[108]]]]]]]]]]]]]]]]]]]]]]]]]],48}],
+		%% Line 134
+		'type' =
+		    %% Line 134
+		    [{'appname',{'type',134,'atom',[]},[]}],
+		%% Line 136
+		'record' =
+		    %% Line 136
+		    [{'state',[{'record_field',136,{'atom',136,'loading'},{'nil',136}}|[{'record_field',136,{'atom',136,'starting'},{'nil',136}}|[{'record_field',136,{'atom',136,'start_p_false'},{'nil',136}}|[{'record_field',136,{'atom',136,'running'},{'nil',136}}|[{'record_field',137,{'atom',137,'control'},{'nil',137}}|[{'record_field',137,{'atom',137,'started'},{'nil',137}}|[{'record_field',137,{'atom',137,'start_req'},{'nil',137}}|[{'record_field',137,{'atom',137,'conf_data'}}]]]]]]]]}],
+		%% Line 138
+		'type' =
+		    %% Line 138
+		    [{'state',{'type',138,'record',[{'atom',138,'state'}]},[]}],
+		%% Line 158
+		'record' =
+		    %% Line 158
+		    [{'appl',[{'record_field',158,{'atom',158,'name'}}|[{'record_field',158,{'atom',158,'appl_data'}}|[{'record_field',158,{'atom',158,'descr'}}|[{'record_field',158,{'atom',158,'id'}}|[{'record_field',158,{'atom',158,'vsn'}}|[{'record_field',158,{'atom',158,'restart_type'}}|[{'record_field',158,{'atom',158,'inc_apps'}}|[{'record_field',158,{'atom',158,'apps'}}]]]]]]]]}],
+		%% Line 610
+		'type' =
+		    %% Line 610
+		    [{'calls',{'type',610,'union',[{'atom',610,'info'}|[{'atom',610,'prep_config_change'}|[{'atom',610,'which_applications'}|[{'type',611,'tuple',[{'type',611,'union',[{'atom',611,'config_change'}|[{'atom',611,'control_application'}|[{'atom',612,'load_application'}|[{'atom',612,'start_type'}|[{'atom',612,'stop_application'}|[{'atom',613,'unload_application'}]]]]]]}|[{'type',613,'term',[]}]]}|[{'type',614,'tuple',[{'atom',614,'change_application_data'}|[{'var',614,'_'}|[{'var',614,'_'}]]]}|[{'type',615,'tuple',[{'atom',615,'permit_application'}|[{'type',615,'union',[{'type',615,'atom',[]}|[{'type',615,'tuple',[{'atom',615,'application'}|[{'type',615,'atom',[]}|[{'var',615,'_'}]]]}]]}|[{'var',615,'_'}]]]}|[{'type',616,'tuple',[{'atom',616,'start_application'}|[{'var',616,'_'}|[{'var',616,'_'}]]]}|[{'type',617,'tuple',[{'atom',617,'unset_env'}|[{'var',617,'_'}|[{'var',617,'_'}|[{'var',617,'_'}]]]]}|[{'type',618,'tuple',[{'atom',618,'set_env'}|[{'var',618,'_'}|[{'var',618,'_'}|[{'var',618,'_'}|[{'var',618,'_'}]]]]]}]]]]]]]]]},[]}],
+		%% Line 620
+		'spec' =
+		    %% Line 620
+		    [{{'handle_call',3},[{'type',620,'fun',[{'type',620,'product',[{'user_type',620,'calls',[]}|[{'type',620,'tuple',[{'type',620,'pid',[]}|[{'type',620,'term',[]}]]}|[{'user_type',620,'state',[]}]]]}|[{'type',621,'union',[{'type',621,'tuple',[{'atom',621,'noreply'}|[{'user_type',621,'state',[]}]]}|[{'type',621,'tuple',[{'atom',621,'reply'}|[{'type',621,'term',[]}|[{'user_type',621,'state',[]}]]]}]]}]]}]}],
+		%% Line 915
+		'spec' =
+		    %% Line 915
+		    [{{'handle_cast',2},[{'type',915,'fun',[{'type',915,'product',[{'type',915,'tuple',[{'atom',915,'application_started'}|[{'user_type',915,'appname',[]}|[{'var',915,'_'}]]]}|[{'user_type',915,'state',[]}]]}|[{'type',916,'union',[{'type',916,'tuple',[{'atom',916,'noreply'}|[{'user_type',916,'state',[]}]]}|[{'type',916,'tuple',[{'atom',916,'stop'}|[{'type',916,'string',[]}|[{'user_type',916,'state',[]}]]]}]]}]]}]}],
+		%% Line 1005
+		'spec' =
+		    %% Line 1005
+		    [{{'handle_info',2},[{'type',1005,'fun',[{'type',1005,'product',[{'type',1005,'term',[]}|[{'user_type',1005,'state',[]}]]}|[{'type',1006,'union',[{'type',1006,'tuple',[{'atom',1006,'noreply'}|[{'user_type',1006,'state',[]}]]}|[{'type',1006,'tuple',[{'atom',1006,'stop'}|[{'type',1006,'string',[]}|[{'user_type',1006,'state',[]}]]]}]]}]]}]}],
+		%% Line 1182
+		'spec' =
+		    %% Line 1182
+		    [{{'terminate',2},[{'type',1182,'fun',[{'type',1182,'product',[{'type',1182,'term',[]}|[{'user_type',1182,'state',[]}]]}|[{'atom',1182,'ok'}]]}]}],
+		%% Line 1219
+		'spec' =
+		    %% Line 1219
+		    [{{'code_change',3},[{'type',1219,'fun',[{'type',1219,'product',[{'type',1219,'term',[]}|[{'user_type',1219,'state',[]}|[{'type',1219,'term',[]}]]]}|[{'type',1219,'tuple',[{'atom',1219,'ok'}|[{'user_type',1219,'state',[]}]]}]]}]}],
+		%% Line 2021
+		'spec' =
+		    %% Line 2021
+		    [{{'to_string',1},[{'type',2021,'fun',[{'type',2021,'product',[{'type',2021,'term',[]}]}|[{'type',2021,'string',[]}]]}]}]]
+'start'/1 =
+    %% Line 186
+    fun (_0) ->
+	let <Init> =
+	    call %% Line 189
+		 'erlang':%% Line 189
+			  'self'
+		()
+	in  let <_2> =
+		fun () ->
+		    %% Line 190
+		    apply 'init'/2
+			(Init, _0)
+	    in  let <AC> =
+		    call %% Line 190
+			 'erlang':%% Line 190
+				  'spawn_link'
+			(_2)
+		in  %% Line 191
+		    receive
+		      %% Line 192
+		      <{'ack',_5,'ok'}>
+			  when call 'erlang':'=:='
+				(_5,
+				 AC) ->
+			  %% Line 193
+			  {'ok',AC}
+		      %% Line 194
+		      <{'ack',_6,{'error',Reason}}>
+			  when call 'erlang':'=:='
+				(_6,
+				 AC) ->
+			  %% Line 195
+			  apply 'to_string'/1
+			      (Reason)
+		      %% Line 196
+		      <{'EXIT',_X_Pid,Reason}> when 'true' ->
+			  %% Line 197
+			  apply 'to_string'/1
+			      (Reason)
+		    after 'infinity' ->
+		      'true'
+'load_application'/1 =
+    %% Line 207
+    fun (_0) ->
+	%% Line 208
+	call 'gen_server':'call'
+	    ('application_controller', {'load_application',_0}, 'infinity')
+'unload_application'/1 =
+    %% Line 210
+    fun (_0) ->
+	%% Line 211
+	call 'gen_server':'call'
+	    ('application_controller', {'unload_application',_0}, 'infinity')
+'start_application'/2 =
+    %% Line 234
+    fun (_1,_0) ->
+	%% Line 235
+	call 'gen_server':'call'
+	    ('application_controller', {'start_application',_1,_0}, 'infinity')
+'start_boot_application'/2 =
+    %% Line 244
+    fun (_1,_0) ->
+	let <_2> =
+	    call %% Line 245
+		 'application':%% Line 245
+			       'load'
+		(_1)
+	in  %% Line 245
+	    case <_2,_0> of
+	      %% Line 246
+	      <( 'ok'
+		 -| ['compiler_generated'] ),_10> when 'true' ->
+		  let <AppName> =
+		      apply %% Line 247
+			    'get_appl_name'/1
+			  (_1)
+		  in  %% Line 248
+		      call 'gen_server':'call'
+			  ('application_controller', {'start_application',AppName,_0}, 'infinity')
+	      %% Line 249
+	      <( {( 'error'
+		    -| ['compiler_generated'] ),( {( 'already_loaded'
+						     -| ['compiler_generated'] ),AppName}
+						  -| ['compiler_generated'] )}
+		 -| ['compiler_generated'] ),_11> when 'true' ->
+		  %% Line 250
+		  call 'gen_server':'call'
+		      ('application_controller', {'start_application',AppName,_0}, 'infinity')
+	      %% Line 251
+	      <( {( 'error'
+		    -| ['compiler_generated'] ),( {( 'bad_environment_value'
+						     -| ['compiler_generated'] ),Env}
+						  -| ['compiler_generated'] )}
+		 -| ['compiler_generated'] ),( 'permanent'
+					       -| ['compiler_generated'] )> when 'true' ->
+		  let <Txt> =
+		      call %% Line 252
+			   'io_lib':%% Line 252
+				    'format'
+			  (%% Line 252
+			   [66|[97|[100|[32|[101|[110|[118|[105|[114|[111|[110|[109|[101|[110|[116|[32|[118|[97|[114|[105|[97|[98|[108|[101|[58|[32|[126|[116|[112|[32|[32|[65|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[58|[32|[126|[112]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]], %% Line 253
+																																				[Env|[_1|[]]])
+		  in  let <_5> =
+			  call %% Line 254
+			       'lists':%% Line 254
+				       'flatten'
+			      (%% Line 254
+			       Txt)
+		      in  let <_6> =
+			      call %% Line 254
+				   'erlang':%% Line 254
+					    'list_to_atom'
+				  (_5)
+			  in  %% Line 254
+			      call 'erlang':'exit'
+				  ({'error',_6})
+	      %% Line 255
+	      <Error,_12> when 'true' ->
+		  %% Line 256
+		  Error
+	    end
+'stop_application'/1 =
+    %% Line 259
+    fun (_0) ->
+	%% Line 260
+	call 'gen_server':'call'
+	    ('application_controller', {'stop_application',_0}, 'infinity')
+'which_applications'/0 =
+    %% Line 265
+    fun () ->
+	%% Line 266
+	call 'gen_server':'call'
+	    ('application_controller', 'which_applications')
+'which_applications'/1 =
+    %% Line 267
+    fun (_0) ->
+	%% Line 268
+	call 'gen_server':'call'
+	    ('application_controller', 'which_applications', _0)
+'loaded_applications'/0 =
+    %% Line 270
+    fun () ->
+	let <_2> =
+	    fun (_0) ->
+		%% Line 272
+		case _0 of
+		  <[{{'loaded',AppName},{'appl',_3,_4,Descr,_5,Vsn,_6,_7,_8}}|[]]> when 'true' ->
+		      %% Line 273
+		      {'true',{AppName,Descr,Vsn}}
+		  %% Line 274
+		  <_9> when 'true' ->
+		      %% Line 275
+		      'false'
+		end
+	in  %% Line 271
+	    call 'ets':'filter'
+		('ac_tab', _2, %% Line 277
+			       [])
+'info'/0 =
+    %% Line 280
+    fun () ->
+	%% Line 281
+	call 'gen_server':'call'
+	    ('application_controller', 'info')
+'control_application'/1 =
+    %% Line 283
+    fun (_0) ->
+	%% Line 284
+	call 'gen_server':'call'
+	    ('application_controller', {'control_application',_0}, 'infinity')
+'change_application_data'/2 =
+    %% Line 308
+    fun (_1,_0) ->
+	%% Line 309
+	call 'gen_server':'call'
+	    ('application_controller', %% Line 310
+				       {'change_application_data',_1,_0}, %% Line 311
+									  'infinity')
+'prep_config_change'/0 =
+    %% Line 313
+    fun () ->
+	%% Line 314
+	call 'gen_server':'call'
+	    ('application_controller', %% Line 315
+				       'prep_config_change', %% Line 316
+							     'infinity')
+'config_change'/1 =
+    %% Line 319
+    fun (_0) ->
+	%% Line 320
+	call 'gen_server':'call'
+	    ('application_controller', %% Line 321
+				       {'config_change',_0}, %% Line 322
+							     'infinity')
+'get_pid_env'/2 =
+    %% Line 326
+    fun (_1,_0) ->
+	%% Line 327
+	case call 'ets':'match'
+		 ('ac_tab', {{'application_master','$1'},_1}) of
+	  %% Line 328
+	  <[[AppName|[]]|[]]> when 'true' ->
+	      apply 'get_env'/2
+		  (AppName, _0)
+	  %% Line 329
+	  <_5> when 'true' ->
+	      'undefined'
+	end
+'get_env'/2 =
+    %% Line 332
+    fun (_1,_0) ->
+	%% Line 333
+	case call 'ets':'lookup'
+		 ('ac_tab', {'env',_1,_0}) of
+	  %% Line 334
+	  <[{_5,Val}|[]]> when 'true' ->
+	      {'ok',Val}
+	  %% Line 335
+	  <_6> when 'true' ->
+	      'undefined'
+	end
+'get_pid_all_env'/1 =
+    %% Line 338
+    fun (_0) ->
+	%% Line 339
+	case call 'ets':'match'
+		 ('ac_tab', {{'application_master','$1'},_0}) of
+	  %% Line 340
+	  <[[AppName|[]]|[]]> when 'true' ->
+	      apply 'get_all_env'/1
+		  (AppName)
+	  %% Line 341
+	  <_3> when 'true' ->
+	      []
+	end
+'get_all_env'/1 =
+    %% Line 344
+    fun (_0) ->
+	let <_4> =
+	    fun (_2) ->
+		%% Line 345
+		case _2 of
+		  <[Key|[Val|[]]]> when 'true' ->
+		      {Key,Val}
+		  ( <_3> when 'true' ->
+			( primop 'match_fail'
+			      ({'function_clause',_3})
+			  -| [{'function_name',{'-get_all_env/1-fun-0-',1}}] )
+		    -| ['compiler_generated'] )
+		end
+	in  let <_1> =
+		call %% Line 346
+		     'ets':%% Line 346
+			   'match'
+		    (%% Line 346
+		     'ac_tab', %% Line 346
+			       {{'env',_0,'$1'},'$2'})
+	    in  %% Line 345
+		call 'lists':'map'
+		    (_4, _1)
+'get_pid_key'/2 =
+    %% Line 351
+    fun (_1,_0) ->
+	%% Line 352
+	case call 'ets':'match'
+		 ('ac_tab', {{'application_master','$1'},_1}) of
+	  %% Line 353
+	  <[[AppName|[]]|[]]> when 'true' ->
+	      apply 'get_key'/2
+		  (AppName, _0)
+	  %% Line 354
+	  <_5> when 'true' ->
+	      'undefined'
+	end
+'get_key'/2 =
+    %% Line 357
+    fun (_1,_0) ->
+	%% Line 358
+	case call 'ets':'lookup'
+		 ('ac_tab', {'loaded',_1}) of
+	  %% Line 359
+	  <[{_41,Appl}|[]]> when 'true' ->
+	      %% Line 360
+	      case _0 of
+		%% Line 361
+		<'description'> when 'true' ->
+		    %% Line 362
+		    ( case Appl of
+			( <( {'appl',_42,_43,_rec0,_44,_45,_46,_47,_48}
+			     -| ['compiler_generated'] )> when 'true' ->
+			      {'ok',_rec0}
+			  -| ['compiler_generated'] )
+			( <_49> when 'true' ->
+			      ( call ( 'erlang'
+				       -| ['compiler_generated'] ):( 'error'
+								     -| ['compiler_generated'] )
+				    (( {'badrecord','appl'}
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+		      end
+		      -| ['compiler_generated'] )
+		%% Line 363
+		<'id'> when 'true' ->
+		    %% Line 364
+		    ( case Appl of
+			( <( {'appl',_50,_51,_52,_rec1,_53,_54,_55,_56}
+			     -| ['compiler_generated'] )> when 'true' ->
+			      {'ok',_rec1}
+			  -| ['compiler_generated'] )
+			( <_57> when 'true' ->
+			      ( call ( 'erlang'
+				       -| ['compiler_generated'] ):( 'error'
+								     -| ['compiler_generated'] )
+				    (( {'badrecord','appl'}
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+		      end
+		      -| ['compiler_generated'] )
+		%% Line 365
+		<'vsn'> when 'true' ->
+		    %% Line 366
+		    ( case Appl of
+			( <( {'appl',_58,_59,_60,_61,_rec2,_62,_63,_64}
+			     -| ['compiler_generated'] )> when 'true' ->
+			      {'ok',_rec2}
+			  -| ['compiler_generated'] )
+			( <_65> when 'true' ->
+			      ( call ( 'erlang'
+				       -| ['compiler_generated'] ):( 'error'
+								     -| ['compiler_generated'] )
+				    (( {'badrecord','appl'}
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+		      end
+		      -| ['compiler_generated'] )
+		%% Line 367
+		<'modules'> when 'true' ->
+		    %% Line 368
+		    ( case Appl of
+			( <( {'appl',_66,_rec4,_67,_68,_69,_70,_71,_72}
+			     -| ['compiler_generated'] )> when 'true' ->
+			      ( case _rec4 of
+				  ( <( {'appl_data',_74,_75,_76,_77,_rec3,_78,_79,_80}
+				       -| ['compiler_generated'] )> when 'true' ->
+					{'ok',_rec3}
+				    -| ['compiler_generated'] )
+				  ( <_81> when 'true' ->
+					( call ( 'erlang'
+						 -| ['compiler_generated'] ):( 'error'
+									       -| ['compiler_generated'] )
+					      (( {'badrecord','appl_data'}
+						 -| ['compiler_generated'] ))
+					  -| ['compiler_generated'] )
+				    -| ['compiler_generated'] )
+				end
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+			( <_73> when 'true' ->
+			      ( call ( 'erlang'
+				       -| ['compiler_generated'] ):( 'error'
+								     -| ['compiler_generated'] )
+				    (( {'badrecord','appl'}
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+		      end
+		      -| ['compiler_generated'] )
+		%% Line 369
+		<'maxP'> when 'true' ->
+		    %% Line 370
+		    ( case Appl of
+			( <( {'appl',_82,_rec6,_83,_84,_85,_86,_87,_88}
+			     -| ['compiler_generated'] )> when 'true' ->
+			      ( case _rec6 of
+				  ( <( {'appl_data',_90,_91,_92,_93,_94,_95,_rec5,_96}
+				       -| ['compiler_generated'] )> when 'true' ->
+					{'ok',_rec5}
+				    -| ['compiler_generated'] )
+				  ( <_97> when 'true' ->
+					( call ( 'erlang'
+						 -| ['compiler_generated'] ):( 'error'
+									       -| ['compiler_generated'] )
+					      (( {'badrecord','appl_data'}
+						 -| ['compiler_generated'] ))
+					  -| ['compiler_generated'] )
+				    -| ['compiler_generated'] )
+				end
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+			( <_89> when 'true' ->
+			      ( call ( 'erlang'
+				       -| ['compiler_generated'] ):( 'error'
+								     -| ['compiler_generated'] )
+				    (( {'badrecord','appl'}
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+		      end
+		      -| ['compiler_generated'] )
+		%% Line 371
+		<'maxT'> when 'true' ->
+		    %% Line 372
+		    ( case Appl of
+			( <( {'appl',_98,_rec8,_99,_100,_101,_102,_103,_104}
+			     -| ['compiler_generated'] )> when 'true' ->
+			      ( case _rec8 of
+				  ( <( {'appl_data',_106,_107,_108,_109,_110,_111,_112,_rec7}
+				       -| ['compiler_generated'] )> when 'true' ->
+					{'ok',_rec7}
+				    -| ['compiler_generated'] )
+				  ( <_113> when 'true' ->
+					( call ( 'erlang'
+						 -| ['compiler_generated'] ):( 'error'
+									       -| ['compiler_generated'] )
+					      (( {'badrecord','appl_data'}
+						 -| ['compiler_generated'] ))
+					  -| ['compiler_generated'] )
+				    -| ['compiler_generated'] )
+				end
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+			( <_105> when 'true' ->
+			      ( call ( 'erlang'
+				       -| ['compiler_generated'] ):( 'error'
+								     -| ['compiler_generated'] )
+				    (( {'badrecord','appl'}
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+		      end
+		      -| ['compiler_generated'] )
+		%% Line 373
+		<'registered'> when 'true' ->
+		    %% Line 374
+		    ( case Appl of
+			( <( {'appl',_114,_rec10,_115,_116,_117,_118,_119,_120}
+			     -| ['compiler_generated'] )> when 'true' ->
+			      ( case _rec10 of
+				  ( <( {'appl_data',_122,_rec9,_123,_124,_125,_126,_127,_128}
+				       -| ['compiler_generated'] )> when 'true' ->
+					{'ok',_rec9}
+				    -| ['compiler_generated'] )
+				  ( <_129> when 'true' ->
+					( call ( 'erlang'
+						 -| ['compiler_generated'] ):( 'error'
+									       -| ['compiler_generated'] )
+					      (( {'badrecord','appl_data'}
+						 -| ['compiler_generated'] ))
+					  -| ['compiler_generated'] )
+				    -| ['compiler_generated'] )
+				end
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+			( <_121> when 'true' ->
+			      ( call ( 'erlang'
+				       -| ['compiler_generated'] ):( 'error'
+								     -| ['compiler_generated'] )
+				    (( {'badrecord','appl'}
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+		      end
+		      -| ['compiler_generated'] )
+		%% Line 375
+		<'included_applications'> when 'true' ->
+		    %% Line 376
+		    ( case Appl of
+			( <( {'appl',_130,_131,_132,_133,_134,_135,_rec11,_136}
+			     -| ['compiler_generated'] )> when 'true' ->
+			      {'ok',_rec11}
+			  -| ['compiler_generated'] )
+			( <_137> when 'true' ->
+			      ( call ( 'erlang'
+				       -| ['compiler_generated'] ):( 'error'
+								     -| ['compiler_generated'] )
+				    (( {'badrecord','appl'}
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+		      end
+		      -| ['compiler_generated'] )
+		%% Line 377
+		<'applications'> when 'true' ->
+		    %% Line 378
+		    ( case Appl of
+			( <( {'appl',_138,_139,_140,_141,_142,_143,_144,_rec12}
+			     -| ['compiler_generated'] )> when 'true' ->
+			      {'ok',_rec12}
+			  -| ['compiler_generated'] )
+			( <_145> when 'true' ->
+			      ( call ( 'erlang'
+				       -| ['compiler_generated'] ):( 'error'
+								     -| ['compiler_generated'] )
+				    (( {'badrecord','appl'}
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+		      end
+		      -| ['compiler_generated'] )
+		%% Line 379
+		<'env'> when 'true' ->
+		    let <_28> =
+			apply %% Line 380
+			      'get_all_env'/1
+			    (_1)
+		    in  %% Line 380
+			{'ok',_28}
+		%% Line 381
+		<'mod'> when 'true' ->
+		    %% Line 382
+		    ( case Appl of
+			( <( {'appl',_146,_rec14,_147,_148,_149,_150,_151,_152}
+			     -| ['compiler_generated'] )> when 'true' ->
+			      ( case _rec14 of
+				  ( <( {'appl_data',_154,_155,_156,_rec13,_157,_158,_159,_160}
+				       -| ['compiler_generated'] )> when 'true' ->
+					{'ok',_rec13}
+				    -| ['compiler_generated'] )
+				  ( <_161> when 'true' ->
+					( call ( 'erlang'
+						 -| ['compiler_generated'] ):( 'error'
+									       -| ['compiler_generated'] )
+					      (( {'badrecord','appl_data'}
+						 -| ['compiler_generated'] ))
+					  -| ['compiler_generated'] )
+				    -| ['compiler_generated'] )
+				end
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+			( <_153> when 'true' ->
+			      ( call ( 'erlang'
+				       -| ['compiler_generated'] ):( 'error'
+								     -| ['compiler_generated'] )
+				    (( {'badrecord','appl'}
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+		      end
+		      -| ['compiler_generated'] )
+		%% Line 383
+		<'start_phases'> when 'true' ->
+		    %% Line 384
+		    ( case Appl of
+			( <( {'appl',_162,_rec16,_163,_164,_165,_166,_167,_168}
+			     -| ['compiler_generated'] )> when 'true' ->
+			      ( case _rec16 of
+				  ( <( {'appl_data',_170,_171,_rec15,_172,_173,_174,_175,_176}
+				       -| ['compiler_generated'] )> when 'true' ->
+					{'ok',_rec15}
+				    -| ['compiler_generated'] )
+				  ( <_177> when 'true' ->
+					( call ( 'erlang'
+						 -| ['compiler_generated'] ):( 'error'
+									       -| ['compiler_generated'] )
+					      (( {'badrecord','appl_data'}
+						 -| ['compiler_generated'] ))
+					  -| ['compiler_generated'] )
+				    -| ['compiler_generated'] )
+				end
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+			( <_169> when 'true' ->
+			      ( call ( 'erlang'
+				       -| ['compiler_generated'] ):( 'error'
+								     -| ['compiler_generated'] )
+				    (( {'badrecord','appl'}
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+		      end
+		      -| ['compiler_generated'] )
+		%% Line 385
+		<_178> when 'true' ->
+		    'undefined'
+	      end
+	  %% Line 387
+	  <_179> when 'true' ->
+	      %% Line 388
+	      'undefined'
+	end
+'get_pid_all_key'/1 =
+    %% Line 391
+    fun (_0) ->
+	%% Line 392
+	case call 'ets':'match'
+		 ('ac_tab', {{'application_master','$1'},_0}) of
+	  %% Line 393
+	  <[[AppName|[]]|[]]> when 'true' ->
+	      apply 'get_all_key'/1
+		  (AppName)
+	  %% Line 394
+	  <_3> when 'true' ->
+	      []
+	end
+'get_all_key'/1 =
+    %% Line 397
+    fun (_0) ->
+	%% Line 398
+	case call 'ets':'lookup'
+		 ('ac_tab', {'loaded',_0}) of
+	  %% Line 399
+	  <[{_38,Appl}|[]]> when 'true' ->
+	      %% Line 400
+	      ( case Appl of
+		  ( <( {'appl',_39,_40,_rec17,_41,_42,_43,_44,_45}
+		       -| ['compiler_generated'] )> when 'true' ->
+			%% Line 403
+			( case _40 of
+			    ( <( {'appl_data',_71,_72,_73,_74,_rec20,_75,_76,_77}
+				 -| ['compiler_generated'] )> when 'true' ->
+				  let <_27> =
+				      apply %% Line 409
+					    'get_all_env'/1
+					  (_0)
+				  in  {'ok',[{'description',_rec17}|[{'id',_41}|[{'vsn',_42}|[{'modules',_rec20}|%% Line 404
+														 [{'maxP',_76}|%% Line 405
+															       [{'maxT',_77}|%% Line 406
+																	     [{'registered',_72}|%% Line 407
+																				 [{'included_applications',_44}|%% Line 408
+																								[{'applications',_45}|%% Line 409
+																										      [{'env',_27}|%% Line 410
+																												   [{'mod',_74}|%% Line 411
+																														[{'start_phases',_73}|%% Line 412
+																																      []]]]]]]]]]]]]}
+			      -| ['compiler_generated'] )
+			    ( <_78> when 'true' ->
+				  ( call ( 'erlang'
+					   -| ['compiler_generated'] ):( 'error'
+									 -| ['compiler_generated'] )
+					(( {'badrecord','appl_data'}
+					   -| ['compiler_generated'] ))
+				    -| ['compiler_generated'] )
+			      -| ['compiler_generated'] )
+			  end
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		  ( <_46> when 'true' ->
+			( call ( 'erlang'
+				 -| ['compiler_generated'] ):( 'error'
+							       -| ['compiler_generated'] )
+			      (( {'badrecord','appl'}
+				 -| ['compiler_generated'] ))
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		end
+		-| ['compiler_generated'] )
+	  %% Line 413
+	  <_175> when 'true' ->
+	      %% Line 414
+	      'undefined'
+	end
+'start_type'/1 =
+    %% Line 418
+    fun (_0) ->
+	%% Line 419
+	case call 'ets':'match'
+		 ('ac_tab', {{'application_master','$1'},_0}) of
+	  %% Line 420
+	  <[[AppName|[]]|[]]> when 'true' ->
+	      %% Line 421
+	      call 'gen_server':'call'
+		  ('application_controller', {'start_type',AppName}, 'infinity')
+	  %% Line 422
+	  <_X_X> when 'true' ->
+	      %% Line 423
+	      'undefined'
+	end
+'get_master'/1 =
+    %% Line 431
+    fun (_0) ->
+	%% Line 432
+	case call 'ets':'lookup'
+		 ('ac_tab', {'application_master',_0}) of
+	  %% Line 433
+	  <[{_3,Pid}|[]]> when 'true' ->
+	      Pid
+	  %% Line 434
+	  <_4> when 'true' ->
+	      'undefined'
+	end
+'get_application'/1 =
+    %% Line 437
+    fun (_0) ->
+	%% Line 438
+	case call 'ets':'match'
+		 ('ac_tab', {{'application_master','$1'},_0}) of
+	  %% Line 439
+	  <[[AppName|[]]|[]]> when 'true' ->
+	      {'ok',AppName}
+	  %% Line 440
+	  <_3> when 'true' ->
+	      'undefined'
+	end
+'get_application_module'/1 =
+    %% Line 443
+    fun (_0) ->
+	let <AppModules> =
+	    call %% Line 446
+		 'ets':%% Line 446
+		       'match'
+		(%% Line 446
+		 'ac_tab', %% Line 446
+			   {{'loaded','$1'},{'appl','_',{'appl_data','_','_','_','_','$2','_','_','_'},'_','_','_','_','_','_'}})
+	in  %% Line 447
+	    apply 'get_application_module'/2
+		(_0, AppModules)
+'get_application_module'/2 =
+    %% Line 449
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <Module,[[AppName|[Modules|[]]]|AppModules]> when 'true' ->
+	      %% Line 450
+	      case call 'lists':'member'
+		       (Module, Modules) of
+		%% Line 451
+		<'true'> when 'true' ->
+		    %% Line 452
+		    {'ok',AppName}
+		%% Line 453
+		<'false'> when 'true' ->
+		    %% Line 454
+		    apply 'get_application_module'/2
+			(Module, AppModules)
+		( <_2> when 'true' ->
+		      primop 'match_fail'
+			  ({'case_clause',_2})
+		  -| ['compiler_generated'] )
+	      end
+	  %% Line 456
+	  <_X_Module,[]> when 'true' ->
+	      %% Line 457
+	      'undefined'
+	  ( <_4,_3> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_4,_3})
+		  -| [{'function_name',{'get_application_module',2}}] )
+	    -| ['compiler_generated'] )
+	end
+'permit_application'/2 =
+    %% Line 459
+    fun (_1,_0) ->
+	%% Line 460
+	call 'gen_server':'call'
+	    ('application_controller', %% Line 461
+				       {'permit_application',_1,_0}, %% Line 462
+								     'infinity')
+'set_env'/3 =
+    %% Line 465
+    fun (_2,_1,_0) ->
+	%% Line 466
+	call 'gen_server':'call'
+	    ('application_controller', {'set_env',_2,_1,_0,[]})
+'set_env'/4 =
+    %% Line 467
+    fun (_3,_2,_1,_0) ->
+	let <Timeout> =
+	    call %% Line 468
+		 'proplists':%% Line 468
+			     'get_value'
+		(%% Line 468
+		 'timeout', _0, %% Line 468
+				5000)
+	in  %% Line 469
+	    call 'gen_server':'call'
+		('application_controller', {'set_env',_3,_2,_1,_0}, Timeout)
+'unset_env'/2 =
+    %% Line 471
+    fun (_1,_0) ->
+	%% Line 472
+	call 'gen_server':'call'
+	    ('application_controller', {'unset_env',_1,_0,[]})
+'unset_env'/3 =
+    %% Line 473
+    fun (_2,_1,_0) ->
+	let <Timeout> =
+	    call %% Line 474
+		 'proplists':%% Line 474
+			     'get_value'
+		(%% Line 474
+		 'timeout', _0, %% Line 474
+				5000)
+	in  %% Line 475
+	    call 'gen_server':'call'
+		('application_controller', {'unset_env',_2,_1,_0}, Timeout)
+'init'/2 =
+    %% Line 480
+    fun (_1,_0) ->
+	let <_2> =
+	    call %% Line 481
+		 'erlang':%% Line 481
+			  'self'
+		()
+	in  do  %% Line 481
+		call 'erlang':'register'
+		    ('application_controller', _2)
+		do  %% Line 482
+		    call 'erlang':'process_flag'
+			('trap_exit', 'true')
+		    do  %% Line 483
+			call 'erlang':'put'
+			    ('$ancestors', [_1|[]])
+			do  %% Line 484
+			    call 'erlang':'put'
+				('$initial_call', {'application_controller','start',1})
+			    let <_3> =
+				catch
+				    %% Line 486
+				    apply 'check_conf'/0
+					()
+			    in  %% Line 486
+				case _3 of
+				  %% Line 487
+				  <{'ok',ConfData}> when 'true' ->
+				      %% Line 493
+				      case apply 'check_conf_data'/1
+					       (ConfData) of
+					%% Line 494
+					<'ok'> when 'true' ->
+					    do  %% Line 495
+						( call ( 'ets'
+							 -| ['result_not_wanted'] ):( 'new'
+										      -| ['result_not_wanted'] )
+						      (( 'ac_tab'
+							 -| ['result_not_wanted'] ), ( ['set'|['public'|['named_table'|[{'read_concurrency','true'}]]]]
+										       -| ['result_not_wanted'] ))
+						  -| ['result_not_wanted'] )
+						let <S> =
+						    {%% Line 497
+						     'state',[],[],[],[],[],[],[],%% Line 497
+										  ConfData}
+						in  %% Line 498
+						    case apply 'make_appl'/1
+							     (_0) of
+						      <{'ok',KAppl}> when 'true' ->
+							  let <_7> =
+							      catch
+								  %% Line 499
+								  apply 'load'/2
+								      (S, KAppl)
+							  in  %% Line 499
+							      case _7 of
+								%% Line 500
+								<{'EXIT',LoadError}> when 'true' ->
+								    let <Reason> = {%% Line 501
+									 'load error',%% Line 501
+										      LoadError}
+								    in  let <_10> =
+									    call %% Line 502
+										 'erlang':%% Line 502
+											  'self'
+										()
+									in  let <_9> =
+										apply %% Line 502
+										      'to_string'/1
+										    (%% Line 502
+										     Reason)
+									    in  %% Line 502
+										call 'erlang':'!'
+										    (_1, {'ack',_10,{'error',_9}})
+								%% Line 503
+								<{'error',Error}> when 'true' ->
+								    let <_12> =
+									call %% Line 504
+									     'erlang':%% Line 504
+										      'self'
+									    ()
+								    in  let <_11> =
+									    apply %% Line 504
+										  'to_string'/1
+										(%% Line 504
+										 Error)
+									in  %% Line 504
+									    call 'erlang':'!'
+										(_1, {'ack',_12,{'error',_11}})
+								%% Line 505
+								<{'ok',NewS}> when 'true' ->
+								    let <_13> =
+									call %% Line 506
+									     'erlang':%% Line 506
+										      'self'
+									    ()
+								    in  do  %% Line 506
+									    call 'erlang':'!'
+										(_1, {'ack',_13,'ok'})
+									    %% Line 507
+									    call 'gen_server':'enter_loop'
+										('application_controller', [], NewS, %% Line 508
+														     {'local','application_controller'})
+								( <_14> when 'true' ->
+								      primop 'match_fail'
+									  ({'case_clause',_14})
+								  -| ['compiler_generated'] )
+							      end
+						      ( <_6> when 'true' ->
+							    primop 'match_fail'
+								({'badmatch',_6})
+							-| ['compiler_generated'] )
+						    end
+					%% Line 510
+					<{'error',ErrorStr}> when 'true' ->
+					    let <_15> =
+						call %% Line 511
+						     'io_lib':%% Line 511
+							      'format'
+						    (%% Line 511
+						     [105|[110|[118|[97|[108|[105|[100|[32|[99|[111|[110|[102|[105|[103|[32|[100|[97|[116|[97|[58|[32|[126|[116|[115]]]]]]]]]]]]]]]]]]]]]]]], %% Line 511
+																							      [ErrorStr|[]])
+					    in  let <Str> =
+						    call %% Line 511
+							 'lists':%% Line 511
+								 'flatten'
+							(_15)
+						in  let <_18> =
+							call %% Line 512
+							     'erlang':%% Line 512
+								      'self'
+							    ()
+						    in  let <_17> =
+							    apply %% Line 512
+								  'to_string'/1
+								(%% Line 512
+								 Str)
+							in  %% Line 512
+							    call 'erlang':'!'
+								(_1, {'ack',_18,{'error',_17}})
+					( <_19> when 'true' ->
+					      primop 'match_fail'
+						  ({'case_clause',_19})
+					  -| ['compiler_generated'] )
+				      end
+				  %% Line 514
+				  <{'error',{File,Line,Str}}> when 'true' ->
+				      let <_20> =
+					  call %% Line 516
+					       'io_lib':%% Line 516
+							'format'
+					      (%% Line 516
+					       [101|[114|[114|[111|[114|[32|[105|[110|[32|[99|[111|[110|[102|[105|[103|[32|[102|[105|[108|[101|[32|[126|[116|[112|[32|[40|[126|[119|[41|[58|[32|[126|[116|[115]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]], %% Line 518
+																														  [File|[Line|[Str|[]]]])
+				      in  let <ReasonStr> =
+					      call %% Line 516
+						   'lists':%% Line 516
+							   'flatten'
+						  (_20)
+					  in  let <_23> =
+						  call %% Line 519
+						       'erlang':%% Line 519
+								'self'
+						      ()
+					      in  let <_22> =
+						      apply %% Line 519
+							    'to_string'/1
+							  (%% Line 519
+							   ReasonStr)
+						  in  %% Line 519
+						      call 'erlang':'!'
+							  (_1, {'ack',_23,{'error',_22}})
+				  ( <_24> when 'true' ->
+					primop 'match_fail'
+					    ({'case_clause',_24})
+				    -| ['compiler_generated'] )
+				end
+'check_conf_data'/1 =
+    %% Line 526
+    fun (_0) ->
+	case _0 of
+	  <[]> when 'true' ->
+	      %% Line 527
+	      'ok'
+	  %% Line 528
+	  <ConfData>
+	      when call 'erlang':'is_list'
+		    (_0) ->
+	      %% Line 529
+	      case ConfData of
+		<[Application|ConfDataRem]> when 'true' ->
+		    %% Line 530
+		    case Application of
+		      %% Line 531
+		      <{'kernel',List}>
+			  when call 'erlang':'is_list'
+				(List) ->
+			  %% Line 532
+			  case apply 'check_para_kernel'/1
+				   (List) of
+			    %% Line 533
+			    <'ok'> when 'true' ->
+				%% Line 534
+				apply 'check_conf_data'/1
+				    (ConfDataRem)
+			    %% Line 535
+			    <Error1> when 'true' ->
+				%% Line 536
+				Error1
+			  end
+		      %% Line 538
+		      <{AppName,List}>
+			  when let <_3> =
+				call 'erlang':'is_atom'
+				    (AppName)
+			    in  let <_4> =
+				    call 'erlang':'is_list'
+					(List)
+				in  call 'erlang':'and'
+					(_3, _4) ->
+			  let <_5> =
+			      call %% Line 539
+				   'erlang':%% Line 539
+					    'atom_to_list'
+				  (%% Line 539
+				   AppName)
+			  in  %% Line 539
+			      case apply 'check_para'/2
+				       (List, _5) of
+				%% Line 540
+				<'ok'> when 'true' ->
+				    %% Line 541
+				    apply 'check_conf_data'/1
+					(ConfDataRem)
+				%% Line 542
+				<Error2> when 'true' ->
+				    %% Line 543
+				    Error2
+			      end
+		      %% Line 545
+		      <{AppName,List}>
+			  when call 'erlang':'is_list'
+				(List) ->
+			  let <_7> =
+			      call %% Line 547
+				   'io_lib':%% Line 547
+					    'format'
+				  (%% Line 547
+				   [126|[116|[112]]], %% Line 547
+						      [AppName|[]])
+			  in  let <_8> =
+				  call %% Line 547
+				       'lists':%% Line 547
+					       'flatten'
+				      (_7)
+			      in  let <_9> =
+				      call %% Line 548
+					   'erlang':%% Line 548
+						    '++'
+					  (_8, %% Line 548
+					       [59|[32|[97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[32|[110|[97|[109|[101|[32|[109|[117|[115|[116|[32|[98|[101|[32|[97|[110|[32|[97|[116|[111|[109]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]])
+				  in  let <ErrMsg> =
+					  call %% Line 547
+					       'erlang':%% Line 547
+							'++'
+					      (%% Line 546
+					       [97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[58|[32]]]]]]]]]]]]], _9)
+				      in  %% Line 549
+					  {'error',ErrMsg}
+		      %% Line 550
+		      <{AppName,_X_List}> when 'true' ->
+			  let <_11> =
+			      call %% Line 552
+				   'io_lib':%% Line 552
+					    'format'
+				  (%% Line 552
+				   [126|[116|[112]]], %% Line 552
+						      [AppName|[]])
+			  in  let <_12> =
+				  call %% Line 552
+				       'lists':%% Line 552
+					       'flatten'
+				      (_11)
+			      in  let <_13> =
+				      call %% Line 553
+					   'erlang':%% Line 553
+						    '++'
+					  (_12, %% Line 553
+						[59|[32|[112|[97|[114|[97|[109|[101|[116|[101|[114|[115|[32|[109|[117|[115|[116|[32|[98|[101|[32|[97|[32|[108|[105|[115|[116]]]]]]]]]]]]]]]]]]]]]]]]]]])
+				  in  let <ErrMsg> =
+					  call %% Line 552
+					       'erlang':%% Line 552
+							'++'
+					      (%% Line 551
+					       [97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[58|[32]]]]]]]]]]]]], _13)
+				      in  %% Line 554
+					  {'error',ErrMsg}
+		      %% Line 555
+		      <Else> when 'true' ->
+			  let <_15> =
+			      call %% Line 557
+				   'io_lib':%% Line 557
+					    'format'
+				  (%% Line 557
+				   [32|[126|[116|[112]]]], %% Line 557
+							   [Else|[]])
+			  in  let <_16> =
+				  call %% Line 557
+				       'lists':%% Line 557
+					       'flatten'
+				      (_15)
+			      in  let <ErrMsg> =
+				      call %% Line 556
+					   'erlang':%% Line 556
+						    '++'
+					  (%% Line 556
+					   [105|[110|[118|[97|[108|[105|[100|[32|[97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[32|[110|[97|[109|[101|[58|[32]]]]]]]]]]]]]]]]]]]]]]]]]], _16)
+				  in  %% Line 558
+				      {'error',ErrMsg}
+		    end
+		( <_1> when 'true' ->
+		      primop 'match_fail'
+			  ({'badmatch',_1})
+		  -| ['compiler_generated'] )
+	      end
+	  %% Line 560
+	  <_X_ConfData> when 'true' ->
+	      %% Line 561
+	      {'error','configuration must be a list ended by <dot><whitespace>'}
+	end
+'check_para_kernel'/1 =
+    %% Line 565
+    fun (_0) ->
+	case _0 of
+	  <[]> when 'true' ->
+	      %% Line 566
+	      'ok'
+	  %% Line 567
+	  <[{'distributed',Apps}|ParaList]>
+	      when call 'erlang':'is_list'
+		    (Apps) ->
+	      %% Line 568
+	      case apply 'check_distributed'/1
+		       (Apps) of
+		%% Line 569
+		<Error = {'error',_X_ErrorMsg}> when 'true' ->
+		    %% Line 570
+		    Error
+		%% Line 571
+		<_9> when 'true' ->
+		    %% Line 572
+		    apply 'check_para_kernel'/1
+			(ParaList)
+	      end
+	  %% Line 574
+	  <[{'distributed',_X_Apps}|_X_ParaList]> when 'true' ->
+	      %% Line 575
+	      {'error',[97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[58|[32|[107|[101|[114|[110|[101|[108|[59|[32|[101|[114|[114|[111|[110|[101|[111|[117|[115|[32|[112|[97|[114|[97|[109|[101|[116|[101|[114|[58|[32|[100|[105|[115|[116|[114|[105|[98|[117|[116|[101|[100]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}
+	  %% Line 576
+	  <[{Para,_X_Val}|ParaList]>
+	      when call 'erlang':'is_atom'
+		    (Para) ->
+	      %% Line 577
+	      apply 'check_para_kernel'/1
+		  (ParaList)
+	  %% Line 578
+	  <[{Para,_X_Val}|_X_ParaList]> when 'true' ->
+	      let <_2> =
+		  call %% Line 580
+		       'io_lib':%% Line 580
+				'format'
+		      (%% Line 580
+		       [126|[116|[112]]], %% Line 580
+					  [Para|[]])
+	      in  let <_3> =
+		      call %% Line 580
+			   'lists':%% Line 580
+				   'flatten'
+			  (_2)
+		  in  let <_4> =
+			  call %% Line 579
+			       'erlang':%% Line 579
+					'++'
+			      (%% Line 579
+			       [97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[58|[32|[107|[101|[114|[110|[101|[108|[59|[32|[105|[110|[118|[97|[108|[105|[100|[32|[112|[97|[114|[97|[109|[101|[116|[101|[114|[58|[32]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]], _3)
+		      in  %% Line 579
+			  {'error',_4}
+	  %% Line 581
+	  <Else> when 'true' ->
+	      let <_5> =
+		  call %% Line 583
+		       'io_lib':%% Line 583
+				'format'
+		      (%% Line 583
+		       [126|[116|[112]]], %% Line 583
+					  [Else|[]])
+	      in  let <_6> =
+		      call %% Line 583
+			   'lists':%% Line 583
+				   'flatten'
+			  (_5)
+		  in  let <_7> =
+			  call %% Line 582
+			       'erlang':%% Line 582
+					'++'
+			      (%% Line 582
+			       [97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[58|[32|[107|[101|[114|[110|[101|[108|[59|[32|[105|[110|[118|[97|[108|[105|[100|[32|[112|[97|[114|[97|[109|[101|[116|[101|[114|[32|[108|[105|[115|[116|[58|[32]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]], _6)
+		      in  %% Line 582
+			  {'error',_7}
+	end
+'check_distributed'/1 =
+    %% Line 586
+    fun (_0) ->
+	case _0 of
+	  <[]> when 'true' ->
+	      %% Line 587
+	      'ok'
+	  %% Line 588
+	  <[{App,List}|Apps]>
+	      when let <_1> =
+		    call 'erlang':'is_atom'
+			(App)
+		in  let <_2> =
+			call 'erlang':'is_list'
+			    (List)
+		    in  call 'erlang':'and'
+			    (_1, _2) ->
+	      %% Line 589
+	      apply 'check_distributed'/1
+		  (Apps)
+	  %% Line 590
+	  <[{App,'infinity',List}|Apps]>
+	      when let <_3> =
+		    call 'erlang':'is_atom'
+			(App)
+		in  let <_4> =
+			call 'erlang':'is_list'
+			    (List)
+		    in  call 'erlang':'and'
+			    (_3, _4) ->
+	      %% Line 591
+	      apply 'check_distributed'/1
+		  (Apps)
+	  %% Line 592
+	  <[{App,Time,List}|Apps]>
+	      when try
+		    let <_5> =
+			call 'erlang':'is_atom'
+			    (App)
+		    in  let <_6> =
+			    call 'erlang':'is_integer'
+				(Time)
+			in  let <_7> =
+				call 'erlang':'is_list'
+				    (List)
+			    in  let <_8> =
+				    call 'erlang':'and'
+					(_6, _7)
+				in  call 'erlang':'and'
+					(_5, _8)
+		of <Try> ->
+		    Try
+		catch <T,R> ->
+		    'false' ->
+	      %% Line 593
+	      apply 'check_distributed'/1
+		  (Apps)
+	  %% Line 594
+	  <_X_Else> when 'true' ->
+	      %% Line 595
+	      {'error',[97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[58|[32|[107|[101|[114|[110|[101|[108|[59|[32|[101|[114|[114|[111|[110|[101|[111|[117|[115|[32|[112|[97|[114|[97|[109|[101|[116|[101|[114|[58|[32|[100|[105|[115|[116|[114|[105|[98|[117|[116|[101|[100]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}
+	end
+'check_para'/2 =
+    %% Line 598
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <[],_X_AppName> when 'true' ->
+	      %% Line 599
+	      'ok'
+	  %% Line 600
+	  <[{Para,_X_Val}|ParaList],AppName>
+	      when call 'erlang':'is_atom'
+		    (Para) ->
+	      %% Line 601
+	      apply 'check_para'/2
+		  (ParaList, AppName)
+	  %% Line 602
+	  <[{Para,_X_Val}|_X_ParaList],AppName> when 'true' ->
+	      let <_2> =
+		  call %% Line 604
+		       'io_lib':%% Line 604
+				'format'
+		      (%% Line 604
+		       [126|[116|[112]]], %% Line 604
+					  [Para|[]])
+	      in  let <_3> =
+		      call %% Line 604
+			   'lists':%% Line 604
+				   'flatten'
+			  (_2)
+		  in  let <_4> =
+			  call %% Line 603
+			       'erlang':%% Line 603
+					'++'
+			      (%% Line 603
+			       [59|[32|[105|[110|[118|[97|[108|[105|[100|[32|[112|[97|[114|[97|[109|[101|[116|[101|[114|[58|[32]]]]]]]]]]]]]]]]]]]]], _3)
+		      in  let <_5> =
+			      call %% Line 603
+				   'erlang':%% Line 603
+					    '++'
+				  (%% Line 603
+				   AppName, _4)
+			  in  let <_6> =
+				  call %% Line 603
+				       'erlang':%% Line 603
+						'++'
+				      (%% Line 603
+				       [97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[58|[32]]]]]]]]]]]]], _5)
+			      in  %% Line 603
+				  {'error',_6}
+	  %% Line 605
+	  <[Else|_X_ParaList],AppName> when 'true' ->
+	      let <_7> =
+		  call %% Line 607
+		       'io_lib':%% Line 607
+				'format'
+		      (%% Line 607
+		       [126|[116|[112]]], %% Line 607
+					  [Else|[]])
+	      in  let <_8> =
+		      call %% Line 607
+			   'lists':%% Line 607
+				   'flatten'
+			  (_7)
+		  in  let <_9> =
+			  call %% Line 606
+			       'erlang':%% Line 606
+					'++'
+			      (%% Line 606
+			       [59|[32|[105|[110|[118|[97|[108|[105|[100|[32|[112|[97|[114|[97|[109|[101|[116|[101|[114|[58|[32]]]]]]]]]]]]]]]]]]]]], _8)
+		      in  let <_10> =
+			      call %% Line 606
+				   'erlang':%% Line 606
+					    '++'
+				  (%% Line 606
+				   AppName, _9)
+			  in  let <_11> =
+				  call %% Line 606
+				       'erlang':%% Line 606
+						'++'
+				      (%% Line 606
+				       [97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[58|[32]]]]]]]]]]]]], _10)
+			      in  %% Line 606
+				  {'error',_11}
+	  ( <_13,_12> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_13,_12})
+		  -| [{'function_name',{'check_para',2}}] )
+	    -| ['compiler_generated'] )
+	end
+'handle_call'/3 =
+    %% Line 623
+    fun (_2,_1,_0) ->
+	case <_2,_1,_0> of
+	  <{'load_application',Application},From,S> when 'true' ->
+	      let <_3> =
+		  catch
+		      %% Line 624
+		      apply 'do_load_application'/2
+			  (Application, S)
+	      in  %% Line 624
+		  case _3 of
+		    %% Line 625
+		    <{'ok',NewS}> when 'true' ->
+			let <AppName> =
+			    apply %% Line 626
+				  'get_appl_name'/1
+				(%% Line 626
+				 Application)
+			in  %% Line 627
+			    case apply 'cntrl'/3
+				     (AppName, S, {'ac_load_application_req',AppName}) of
+			      %% Line 628
+			      <'true'> when 'true' ->
+				  %% Line 630
+				  ( case S of
+				      ( <( {'state',_rec36,_203,_204,_205,_206,_207,_208,_209}
+					   -| ['compiler_generated'] )> when 'true' ->
+					    let <_rec34> =
+						[{AppName,From}|_rec36]
+					    in  let <_10> =
+						    call 'erlang':'setelement'
+							(2, S, _rec34)
+						in  {'noreply',_10}
+					-| ['compiler_generated'] )
+				      ( <_210> when 'true' ->
+					    ( call ( 'erlang'
+						     -| ['compiler_generated'] ):( 'error'
+										   -| ['compiler_generated'] )
+						  (( {'badrecord','state'}
+						     -| ['compiler_generated'] ))
+					      -| ['compiler_generated'] )
+					-| ['compiler_generated'] )
+				    end
+				    -| ['compiler_generated'] )
+			      %% Line 631
+			      <'false'> when 'true' ->
+				  %% Line 632
+				  {'reply','ok',NewS}
+			      ( <_11> when 'true' ->
+				    primop 'match_fail'
+					({'case_clause',_11})
+				-| ['compiler_generated'] )
+			    end
+		    %% Line 634
+		    <Error = {'error',_220}> when 'true' ->
+			%% Line 635
+			{'reply',Error,S}
+		    %% Line 636
+		    <{'EXIT',R}> when 'true' ->
+			%% Line 637
+			{'reply',{'error',R},S}
+		    ( <_12> when 'true' ->
+			  primop 'match_fail'
+			      ({'case_clause',_12})
+		      -| ['compiler_generated'] )
+		  end
+	  %% Line 640
+	  <{'unload_application',AppName},_X_From,S> when 'true' ->
+	      %% Line 641
+	      ( case S of
+		  ( <( {'state',_221,_222,_223,_rec37,_224,_225,_226,_227}
+		       -| ['compiler_generated'] )> when 'true' ->
+			case call 'lists':'keymember'
+				 (AppName, 1, _rec37) of
+			  %% Line 642
+			  <'true'> when 'true' ->
+			      {'reply',{'error',{'running',AppName}},S}
+			  %% Line 643
+			  <'false'> when 'true' ->
+			      %% Line 644
+			      case apply 'get_loaded'/1
+				       (AppName) of
+				%% Line 645
+				<{'true',_229}> when 'true' ->
+				    let <NewS> =
+					apply %% Line 646
+					      'unload'/2
+					    (%% Line 646
+					     AppName, %% Line 646
+						      S)
+				    in  do  %% Line 647
+					    apply 'cntrl'/3
+						(AppName, S, {'ac_application_unloaded',AppName})
+					    %% Line 648
+					    {'reply','ok',NewS}
+				%% Line 649
+				<'false'> when 'true' ->
+				    %% Line 650
+				    {'reply',{'error',{'not_loaded',AppName}},S}
+				( <_16> when 'true' ->
+				      primop 'match_fail'
+					  ({'case_clause',_16})
+				  -| ['compiler_generated'] )
+			      end
+			  ( <_17> when 'true' ->
+				primop 'match_fail'
+				    ({'case_clause',_17})
+			    -| ['compiler_generated'] )
+			end
+		    -| ['compiler_generated'] )
+		  ( <_228> when 'true' ->
+			( call ( 'erlang'
+				 -| ['compiler_generated'] ):( 'error'
+							       -| ['compiler_generated'] )
+			      (( {'badrecord','state'}
+				 -| ['compiler_generated'] ))
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		end
+		-| ['compiler_generated'] )
+	  %% Line 654
+	  <{'start_application',AppName,RestartType},From,S> when 'true' ->
+	      %% Line 656
+	      case S of
+		<{'state',_230,Starting,SPF,Running,_231,Started,Start_req,_232}> when 'true' ->
+		    %% Line 661
+		    case call 'lists':'keyfind'
+			     (AppName, 1, Start_req) of
+		      %% Line 662
+		      <'false'> when 'true' ->
+			  let <_19> =
+			      catch
+				  %% Line 663
+				  apply 'check_start_cond'/4
+				      (AppName, RestartType, Started, Running)
+			  in  %% Line 663
+			      case _19 of
+				%% Line 664
+				<{'ok',Appl}> when 'true' ->
+				    let <Cntrl> =
+					apply %% Line 665
+					      'cntrl'/3
+					    (%% Line 665
+					     AppName, %% Line 665
+						      S, %% Line 665
+							 {'ac_start_application_req',AppName})
+				    in  let <Perm> =
+					    call %% Line 666
+						 'application':%% Line 666
+							       'get_env'
+						(%% Line 666
+						 'kernel', %% Line 666
+							   'permissions')
+					in  %% Line 667
+					    case <Cntrl,Perm> of
+					      %% Line 668
+					      <( 'true'
+						 -| ['compiler_generated'] ),_233> when 'true' ->
+						  let <_rec38> =
+						      [%% Line 669
+						       {AppName,RestartType,'normal',From}|%% Line 670
+											   Starting]
+						  in  let <_rec39> =
+							  [%% Line 671
+							   {AppName,From}|%% Line 671
+									  Start_req]
+						      in  let <_25> =
+							      call %% Line 671
+								   'erlang':%% Line 671
+									    'setelement'
+								  (%% Line 671
+								   8, %% Line 669
+								      S, %% Line 671
+									 _rec39)
+							  in  let <_27> =
+								  call %% Line 669
+								       'erlang':%% Line 669
+										'setelement'
+								      (%% Line 669
+								       3, _25, %% Line 669
+									       _rec38)
+							      in  %% Line 669
+								  {'noreply',_27}
+					      %% Line 672
+					      <'false','undefined'> when 'true' ->
+						  do  %% Line 673
+						      apply 'spawn_starter'/4
+							  (From, Appl, S, 'normal')
+						      let <_rec41> =
+							  [%% Line 674
+							   {AppName,RestartType,'normal',From}|%% Line 675
+											       Starting]
+						      in  let <_rec42> =
+							      [%% Line 676
+							       {AppName,From}|%% Line 676
+									      Start_req]
+							  in  let <_31> =
+								  call %% Line 676
+								       'erlang':%% Line 676
+										'setelement'
+								      (%% Line 676
+								       8, %% Line 674
+									  S, %% Line 676
+									     _rec42)
+							      in  let <_33> =
+								      call %% Line 674
+									   'erlang':%% Line 674
+										    'setelement'
+									  (%% Line 674
+									   3, _31, %% Line 674
+										   _rec41)
+								  in  %% Line 674
+								      {'noreply',_33}
+					      %% Line 677
+					      <( 'false'
+						 -| ['compiler_generated'] ),( {( 'ok'
+										  -| ['compiler_generated'] ),Perms}
+									       -| ['compiler_generated'] )> when 'true' ->
+						  %% Line 678
+						  case call 'lists':'member'
+							   ({AppName,'false'}, Perms) of
+						    %% Line 679
+						    <'false'> when 'true' ->
+							do  %% Line 680
+							    apply 'spawn_starter'/4
+								(From, Appl, S, 'normal')
+							    let <_rec44> =
+								[%% Line 681
+								 {AppName,RestartType,'normal',From}|%% Line 682
+												     Starting]
+							    in  let <_rec45> =
+								    [%% Line 683
+								     {AppName,From}|%% Line 683
+										    Start_req]
+								in  let <_37> =
+									call %% Line 683
+									     'erlang':%% Line 683
+										      'setelement'
+									    (%% Line 683
+									     8, %% Line 681
+										S, %% Line 683
+										   _rec45)
+								    in  let <_39> =
+									    call %% Line 681
+										 'erlang':%% Line 681
+											  'setelement'
+										(%% Line 681
+										 3, _37, %% Line 681
+											 _rec44)
+									in  %% Line 681
+									    {'noreply',_39}
+						    %% Line 684
+						    <'true'> when 'true' ->
+							let <_rec47> =
+							    [%% Line 685
+							     {AppName,RestartType,'normal',From}|%% Line 686
+												 SPF]
+							in  let <_43> =
+								call %% Line 685
+								     'erlang':%% Line 685
+									      'setelement'
+								    (%% Line 685
+								     4, %% Line 685
+									S, %% Line 685
+									   _rec47)
+							    in  %% Line 687
+								{'reply','ok',_43}
+						    ( <_45> when 'true' ->
+							  primop 'match_fail'
+							      ({'case_clause',_45})
+						      -| ['compiler_generated'] )
+						  end
+					      ( <( _561
+						   -| ['compiler_generated'] ),( _562
+										 -| ['compiler_generated'] )> when 'true' ->
+						    let <_46> = {( _561
+							   -| ['compiler_generated'] ),( _562
+											 -| ['compiler_generated'] )}
+						    in  primop 'match_fail'
+							    ({'case_clause',_46})
+						-| ['compiler_generated'] )
+					    end
+				%% Line 690
+				<Error = {'error',_X_R}> when 'true' ->
+				    %% Line 691
+				    {'reply',Error,S}
+				( <_47> when 'true' ->
+				      primop 'match_fail'
+					  ({'case_clause',_47})
+				  -| ['compiler_generated'] )
+			      end
+		      %% Line 693
+		      <{_270,_X_FromX}>
+			  when call 'erlang':'=:='
+				(_270,
+				 AppName) ->
+			  let <_rec49> =
+			      [%% Line 694
+			       {AppName,From}|%% Line 694
+					      Start_req]
+			  in  let <_51> =
+				  call %% Line 694
+				       'erlang':%% Line 694
+						'setelement'
+				      (%% Line 694
+				       8, %% Line 694
+					  S, %% Line 694
+					     _rec49)
+			      in  %% Line 695
+				  {'noreply',_51}
+		      ( <_53> when 'true' ->
+			    primop 'match_fail'
+				({'case_clause',_53})
+			-| ['compiler_generated'] )
+		    end
+		( <_18> when 'true' ->
+		      primop 'match_fail'
+			  ({'badmatch',_18})
+		  -| ['compiler_generated'] )
+	      end
+	  %% Line 698
+	  <{'permit_application',AppName,Bool},From,S> when 'true' ->
+	      %% Line 699
+	      ( case S of
+		  ( <( {'state',_280,_281,_282,_283,_rec51,_284,_285,_286}
+		       -| ['compiler_generated'] )> when 'true' ->
+			let <IsLoaded> =
+			    apply %% Line 705
+				  'get_loaded'/1
+				(%% Line 705
+				 AppName)
+			in  let <IsStarting> =
+				call %% Line 706
+				     'lists':%% Line 706
+					     'keysearch'
+				    (%% Line 706
+				     AppName, %% Line 706
+					      1, _281)
+			    in  let <IsSPF> =
+				    call %% Line 707
+					 'lists':%% Line 707
+						 'keysearch'
+					(%% Line 707
+					 AppName, %% Line 707
+						  1, _282)
+				in  let <IsStarted> =
+					call %% Line 708
+					     'lists':%% Line 708
+						     'keysearch'
+					    (%% Line 708
+					     AppName, %% Line 708
+						      1, _284)
+				    in  let <IsRunning> =
+					    call %% Line 709
+						 'lists':%% Line 709
+							 'keysearch'
+						(%% Line 709
+						 AppName, %% Line 709
+							  1, _283)
+					in  %% Line 711
+					    case call 'lists':'keymember'
+						     (AppName, 1, _rec51) of
+					      %% Line 715
+					      <'true'> when 'true' ->
+						  %% Line 716
+						  case <IsLoaded,IsStarting,IsStarted> of
+						    %% Line 718
+						    <( 'false'
+						       -| ['compiler_generated'] ),_328,_329> when 'true' ->
+							%% Line 719
+							{'reply',{'error',{'not_loaded',AppName}},S}
+						    %% Line 721
+						    <( {( 'true'
+							  -| ['compiler_generated'] ),_X_Appl}
+						       -| ['compiler_generated'] ),( 'false'
+										     -| ['compiler_generated'] ),( 'false'
+														   -| ['compiler_generated'] )> when 'true' ->
+							do  %% Line 722
+							    apply 'update_permissions'/2
+								(AppName, Bool)
+							    %% Line 723
+							    {'reply',{'distributed_application','only_loaded'},S}
+						    %% Line 724
+						    <( _563
+						       -| ['compiler_generated'] ),( _564
+										     -| ['compiler_generated'] ),( _565
+														   -| ['compiler_generated'] )> when 'true' ->
+							do  %% Line 725
+							    apply 'update_permissions'/2
+								(AppName, Bool)
+							    %% Line 726
+							    {'reply','distributed_application',S}
+						  end
+					      %% Line 731
+					      <'false'> when 'true' ->
+						  %% Line 732
+						  case <Bool,IsLoaded,IsStarting,IsSPF,IsStarted,IsRunning> of
+						    %% Line 737
+						    <( 'true'
+						       -| ['compiler_generated'] ),_331,_332,_333,_334,( {( 'value'
+													    -| ['compiler_generated'] ),_X_Tuple}
+													 -| ['compiler_generated'] )> when 'true' ->
+							%% Line 738
+							{'reply','ok',S}
+						    %% Line 740
+						    <( 'true'
+						       -| ['compiler_generated'] ),( 'false'
+										     -| ['compiler_generated'] ),_335,_336,_337,_338> when 'true' ->
+							%% Line 741
+							{'reply',{'error',{'not_loaded',AppName}},S}
+						    %% Line 743
+						    <( 'true'
+						       -| ['compiler_generated'] ),( {( 'true'
+											-| ['compiler_generated'] ),_X_Appl}
+										     -| ['compiler_generated'] ),( 'false'
+														   -| ['compiler_generated'] ),( 'false'
+																		 -| ['compiler_generated'] ),( 'false'
+																					       -| ['compiler_generated'] ),( 'false'
+																									     -| ['compiler_generated'] )> when 'true' ->
+							do  %% Line 744
+							    apply 'update_permissions'/2
+								(AppName, Bool)
+							    %% Line 745
+							    {'reply','ok',S}
+						    %% Line 747
+						    <( 'true'
+						       -| ['compiler_generated'] ),( {( 'true'
+											-| ['compiler_generated'] ),_X_Appl}
+										     -| ['compiler_generated'] ),( {( 'value'
+														      -| ['compiler_generated'] ),_X_Tuple}
+														   -| ['compiler_generated'] ),( 'false'
+																		 -| ['compiler_generated'] ),( 'false'
+																					       -| ['compiler_generated'] ),( 'false'
+																									     -| ['compiler_generated'] )> when 'true' ->
+							do  %% Line 748
+							    apply 'update_permissions'/2
+								(AppName, Bool)
+							    %% Line 749
+							    {'reply','ok',S}
+						    %% Line 751
+						    <( 'true'
+						       -| ['compiler_generated'] ),( {( 'true'
+											-| ['compiler_generated'] ),Appl}
+										     -| ['compiler_generated'] ),( 'false'
+														   -| ['compiler_generated'] ),( {( 'value'
+																		    -| ['compiler_generated'] ),Tuple}
+																		 -| ['compiler_generated'] ),( 'false'
+																					       -| ['compiler_generated'] ),( 'false'
+																									     -| ['compiler_generated'] )> when 'true' ->
+							do  %% Line 752
+							    apply 'update_permissions'/2
+								(AppName, Bool)
+							    %% Line 753
+							    case Tuple of
+							      <{_X_AppName2,RestartType,'normal',_X_From}> when 'true' ->
+								  do  %% Line 754
+								      apply 'spawn_starter'/4
+									  (From, Appl, S, 'normal')
+								      let <_rec57> =
+									  [%% Line 755
+									   {AppName,RestartType,'normal',From}|_281]
+								      in  let <_rec58> =
+									      call %% Line 756
+										   'lists':%% Line 756
+											   'keydelete'
+										  (%% Line 756
+										   AppName, %% Line 756
+											    1, _282)
+									  in  let <_rec59> =
+										  [%% Line 757
+										   {AppName,From}|_285]
+									      in  let <_83> =
+										      call %% Line 757
+											   'erlang':%% Line 757
+												    'setelement'
+											  (%% Line 757
+											   8, %% Line 755
+											      S, %% Line 757
+												 _rec59)
+										  in  let <_84> =
+											  call %% Line 756
+											       'erlang':%% Line 756
+													'setelement'
+											      (%% Line 756
+											       4, _83, %% Line 756
+												       _rec58)
+										      in  let <_86> =
+											      call %% Line 755
+												   'erlang':%% Line 755
+													    'setelement'
+												  (%% Line 755
+												   3, _84, %% Line 755
+													   _rec57)
+											  in  %% Line 758
+											      {'noreply',_86}
+							      ( <_78> when 'true' ->
+								    primop 'match_fail'
+									({'badmatch',_78})
+								-| ['compiler_generated'] )
+							    end
+						    %% Line 760
+						    <( 'true'
+						       -| ['compiler_generated'] ),( {( 'true'
+											-| ['compiler_generated'] ),Appl}
+										     -| ['compiler_generated'] ),_348,_349,( {( 'value'
+																-| ['compiler_generated'] ),( {_350,RestartType}
+																			      -| ['compiler_generated'] )}
+															     -| ['compiler_generated'] ),( 'false'
+																			   -| ['compiler_generated'] )>
+							when call 'erlang':'=:='
+							      (_350,
+							       AppName) ->
+							do  %% Line 761
+							    apply 'update_permissions'/2
+								(AppName, Bool)
+							    do  %% Line 762
+								apply 'spawn_starter'/4
+								    (From, Appl, S, 'normal')
+								let <_rec61> =
+								    [%% Line 763
+								     {AppName,RestartType,'normal',From}|_281]
+								in  let <_rec62> =
+									call %% Line 764
+									     'lists':%% Line 764
+										     'keydelete'
+									    (%% Line 764
+									     AppName, %% Line 764
+										      1, _284)
+								    in  let <_rec63> =
+									    [%% Line 765
+									     {AppName,From}|_285]
+									in  let <_92> =
+										call %% Line 765
+										     'erlang':%% Line 765
+											      'setelement'
+										    (%% Line 765
+										     8, %% Line 763
+											S, %% Line 765
+											   _rec63)
+									    in  let <_93> =
+										    call %% Line 764
+											 'erlang':%% Line 764
+												  'setelement'
+											(%% Line 764
+											 7, _92, %% Line 764
+												 _rec62)
+										in  let <_95> =
+											call %% Line 763
+											     'erlang':%% Line 763
+												      'setelement'
+											    (%% Line 763
+											     3, _93, %% Line 763
+												     _rec61)
+										    in  %% Line 766
+											{'noreply',_95}
+						    %% Line 772
+						    <( 'false'
+						       -| ['compiler_generated'] ),_360,_361,_362,_363,( {( 'value'
+													    -| ['compiler_generated'] ),( {_X_AppName,Id}
+																	  -| ['compiler_generated'] )}
+													 -| ['compiler_generated'] )> when 'true' ->
+							%% Line 773
+							case call 'lists':'keyfind'
+								 (AppName, 1, _284) of
+							  <{_X_AppName2,Type}> when 'true' ->
+							      do  %% Line 774
+								  apply 'stop_appl'/3
+								      (AppName, Id, Type)
+								  let <NRunning> =
+								      call %% Line 775
+									   'lists':%% Line 775
+										   'keydelete'
+									  (%% Line 775
+									   AppName, %% Line 775
+										    1, _283)
+								  in  let <_101> =
+									  call %% Line 776
+									       'erlang':%% Line 776
+											'setelement'
+									      (%% Line 776
+									       5, %% Line 776
+										  S, %% Line 776
+										     NRunning)
+								      in  %% Line 776
+									  {'reply','ok',_101}
+							  ( <_97> when 'true' ->
+								primop 'match_fail'
+								    ({'badmatch',_97})
+							    -| ['compiler_generated'] )
+							end
+						    %% Line 778
+						    <( 'false'
+						       -| ['compiler_generated'] ),( 'false'
+										     -| ['compiler_generated'] ),_373,_374,_375,_376> when 'true' ->
+							%% Line 779
+							{'reply',{'error',{'not_loaded',AppName}},S}
+						    %% Line 781
+						    <( 'false'
+						       -| ['compiler_generated'] ),( {( 'true'
+											-| ['compiler_generated'] ),_X_Appl}
+										     -| ['compiler_generated'] ),( 'false'
+														   -| ['compiler_generated'] ),( 'false'
+																		 -| ['compiler_generated'] ),( 'false'
+																					       -| ['compiler_generated'] ),( 'false'
+																									     -| ['compiler_generated'] )> when 'true' ->
+							do  %% Line 782
+							    apply 'update_permissions'/2
+								(AppName, Bool)
+							    %% Line 783
+							    {'reply','ok',S}
+						    %% Line 785
+						    <( 'false'
+						       -| ['compiler_generated'] ),( {( 'true'
+											-| ['compiler_generated'] ),_X_Appl}
+										     -| ['compiler_generated'] ),( {( 'value'
+														      -| ['compiler_generated'] ),_X_Tuple}
+														   -| ['compiler_generated'] ),( 'false'
+																		 -| ['compiler_generated'] ),( 'false'
+																					       -| ['compiler_generated'] ),( 'false'
+																									     -| ['compiler_generated'] )> when 'true' ->
+							do  %% Line 786
+							    apply 'update_permissions'/2
+								(AppName, Bool)
+							    %% Line 787
+							    {'reply','ok',S}
+						    %% Line 789
+						    <( 'false'
+						       -| ['compiler_generated'] ),( {( 'true'
+											-| ['compiler_generated'] ),_X_Appl}
+										     -| ['compiler_generated'] ),( 'false'
+														   -| ['compiler_generated'] ),( {( 'value'
+																		    -| ['compiler_generated'] ),_X_Tuple}
+																		 -| ['compiler_generated'] ),( 'false'
+																					       -| ['compiler_generated'] ),( 'false'
+																									     -| ['compiler_generated'] )> when 'true' ->
+							do  %% Line 790
+							    apply 'update_permissions'/2
+								(AppName, Bool)
+							    let <_rec66> =
+								call %% Line 791
+								     'lists':%% Line 791
+									     'keydelete'
+								    (%% Line 791
+								     AppName, %% Line 791
+									      1, _282)
+							    in  let <_105> =
+								    call %% Line 791
+									 'erlang':%% Line 791
+										  'setelement'
+									(%% Line 791
+									 4, %% Line 791
+									    S, %% Line 791
+									       _rec66)
+								in  %% Line 792
+								    {'reply','ok',_105}
+						    %% Line 794
+						    <( 'false'
+						       -| ['compiler_generated'] ),( {( 'true'
+											-| ['compiler_generated'] ),_X_Appl}
+										     -| ['compiler_generated'] ),_386,_387,( {( 'value'
+																-| ['compiler_generated'] ),_X_Tuple}
+															     -| ['compiler_generated'] ),( 'false'
+																			   -| ['compiler_generated'] )> when 'true' ->
+							do  %% Line 795
+							    apply 'update_permissions'/2
+								(AppName, Bool)
+							    %% Line 796
+							    {'reply','ok',S}
+						    ( <( _569
+							 -| ['compiler_generated'] ),( _570
+										       -| ['compiler_generated'] ),( _571
+														     -| ['compiler_generated'] ),( _572
+																		   -| ['compiler_generated'] ),( _573
+																						 -| ['compiler_generated'] ),( _574
+																									       -| ['compiler_generated'] )> when 'true' ->
+							  let <_107> =
+							      {( _569
+								 -| ['compiler_generated'] ),( _570
+											       -| ['compiler_generated'] ),( _571
+															     -| ['compiler_generated'] ),( _572
+																			   -| ['compiler_generated'] ),( _573
+																							 -| ['compiler_generated'] ),( _574
+																										       -| ['compiler_generated'] )}
+							  in  primop 'match_fail'
+								  ({'case_clause',_107})
+						      -| ['compiler_generated'] )
+						  end
+					      ( <_108> when 'true' ->
+						    primop 'match_fail'
+							({'case_clause',_108})
+						-| ['compiler_generated'] )
+					    end
+		    -| ['compiler_generated'] )
+		  ( <_287> when 'true' ->
+			( call ( 'erlang'
+				 -| ['compiler_generated'] ):( 'error'
+							       -| ['compiler_generated'] )
+			      (( {'badrecord','state'}
+				 -| ['compiler_generated'] ))
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		end
+		-| ['compiler_generated'] )
+	  %% Line 801
+	  <{'stop_application',AppName},_X_From,S> when 'true' ->
+	      %% Line 802
+	      case S of
+		<{'state',_388,_389,_390,Running,_391,Started,_392,_393}> when 'true' ->
+		    %% Line 803
+		    case call 'lists':'keyfind'
+			     (AppName, 1, Running) of
+		      %% Line 804
+		      <{_X_AppName,Id}> when 'true' ->
+			  %% Line 805
+			  case call 'lists':'keyfind'
+				   (AppName, 1, Started) of
+			    <{_X_AppName2,Type}> when 'true' ->
+				do  %% Line 806
+				    apply 'stop_appl'/3
+					(AppName, Id, Type)
+				    let <NRunning> =
+					call %% Line 807
+					     'lists':%% Line 807
+						     'keydelete'
+					    (%% Line 807
+					     AppName, %% Line 807
+						      1, %% Line 807
+							 Running)
+				    in  let <NStarted> =
+					    call %% Line 808
+						 'lists':%% Line 808
+							 'keydelete'
+						(%% Line 808
+						 AppName, %% Line 808
+							  1, %% Line 808
+							     Started)
+					in  do  %% Line 809
+						apply 'cntrl'/3
+						    (AppName, S, {'ac_application_stopped',AppName})
+						let <_114> =
+						    call %% Line 810
+							 'erlang':%% Line 810
+								  'setelement'
+							(%% Line 810
+							 7, %% Line 810
+							    S, %% Line 810
+							       NStarted)
+						in  let <_116> =
+							call %% Line 810
+							     'erlang':%% Line 810
+								      'setelement'
+							    (%% Line 810
+							     5, _114, %% Line 810
+								      NRunning)
+						    in  %% Line 810
+							{'reply','ok',_116}
+			    ( <_110> when 'true' ->
+				  primop 'match_fail'
+				      ({'badmatch',_110})
+			      -| ['compiler_generated'] )
+			  end
+		      %% Line 811
+		      <'false'> when 'true' ->
+			  %% Line 812
+			  case call 'lists':'keymember'
+				   (AppName, 1, Started) of
+			    %% Line 813
+			    <'true'> when 'true' ->
+				let <NStarted> =
+				    call %% Line 814
+					 'lists':%% Line 814
+						 'keydelete'
+					(%% Line 814
+					 AppName, %% Line 814
+						  1, %% Line 814
+						     Started)
+				in  do  %% Line 815
+					apply 'cntrl'/3
+					    (AppName, S, {'ac_application_stopped',AppName})
+					let <_120> =
+					    call %% Line 816
+						 'erlang':%% Line 816
+							  'setelement'
+						(%% Line 816
+						 7, %% Line 816
+						    S, %% Line 816
+						       NStarted)
+					in  %% Line 816
+					    {'reply','ok',_120}
+			    %% Line 817
+			    <'false'> when 'true' ->
+				%% Line 818
+				{'reply',{'error',{'not_started',AppName}},S}
+			    ( <_121> when 'true' ->
+				  primop 'match_fail'
+				      ({'case_clause',_121})
+			      -| ['compiler_generated'] )
+			  end
+		      ( <_122> when 'true' ->
+			    primop 'match_fail'
+				({'case_clause',_122})
+			-| ['compiler_generated'] )
+		    end
+		( <_109> when 'true' ->
+		      primop 'match_fail'
+			  ({'badmatch',_109})
+		  -| ['compiler_generated'] )
+	      end
+	  %% Line 822
+	  <{'change_application_data',Applications,Config},_X_From,S> when 'true' ->
+	      let <_125> =
+		  fun (_123) ->
+		      %% Line 824
+		      case _123 of
+			<[{{'loaded',_X_AppName},Appl}|[]]> when 'true' ->
+			    %% Line 825
+			    {'true',Appl}
+			%% Line 826
+			<_412> when 'true' ->
+			    %% Line 827
+			    'false'
+		      end
+	      in  let <OldAppls> =
+		      call %% Line 823
+			   'ets':%% Line 823
+				 'filter'
+			  (%% Line 823
+			   'ac_tab', _125, %% Line 829
+					   [])
+		  in  let <_127> =
+			  catch
+			      %% Line 830
+			      apply 'do_change_apps'/3
+				  (Applications, Config, OldAppls)
+		      in  %% Line 830
+			  case _127 of
+			    %% Line 831
+			    <Error = {'error',_413}> when 'true' ->
+				%% Line 832
+				{'reply',Error,S}
+			    %% Line 833
+			    <{'EXIT',R}> when 'true' ->
+				%% Line 834
+				{'reply',{'error',R},S}
+			    %% Line 835
+			    <{NewAppls,NewConfig}> when 'true' ->
+				let <_132> =
+				    fun (_130) ->
+					%% Line 837
+					( case _130 of
+					    ( <( {'appl',_rec70,_414,_415,_416,_417,_418,_419,_420}
+						 -| ['compiler_generated'] )> when 'true' ->
+						  call 'ets':'insert'
+						      ('ac_tab', {{'loaded',_rec70},_130})
+					      -| ['compiler_generated'] )
+					    ( <_421> when 'true' ->
+						  ( call ( 'erlang'
+							   -| ['compiler_generated'] ):( 'error'
+											 -| ['compiler_generated'] )
+							(( {'badrecord','appl'}
+							   -| ['compiler_generated'] ))
+						    -| ['compiler_generated'] )
+					      -| ['compiler_generated'] )
+					  end
+					  -| ['compiler_generated'] )
+				in  do  %% Line 836
+					call 'lists':'foreach'
+					    (_132, %% Line 839
+						   NewAppls)
+					%% Line 840
+					case S of
+					  <{'state',_422,_423,_424,_425,_426,_427,_428,_429}> when 'true' ->
+					      let <_135> =
+						  call 'erlang':'setelement'
+						      (9, S, NewConfig)
+					      in  {'reply','ok',_135}
+					  ( <_430> when 'true' ->
+						( call ( 'erlang'
+							 -| ['compiler_generated'] ):( 'error'
+										       -| ['compiler_generated'] )
+						      (( {'badrecord','state'}
+							 -| ['compiler_generated'] ))
+						  -| ['compiler_generated'] )
+					    -| ['compiler_generated'] )
+					end
+			    ( <_136> when 'true' ->
+				  primop 'match_fail'
+				      ({'case_clause',_136})
+			      -| ['compiler_generated'] )
+			  end
+	  %% Line 843
+	  <'prep_config_change',_X_From,S> when 'true' ->
+	      %% Line 844
+	      ( case S of
+		  ( <( {'state',_431,_432,_433,_rec72,_434,_435,_436,_437}
+		       -| ['compiler_generated'] )> when 'true' ->
+			let <_140> =
+			    apply %% Line 845
+				  'do_prep_config_change'/1
+				(_rec72)
+			in  let <EnvBefore> =
+				call %% Line 845
+				     'lists':%% Line 845
+					     'reverse'
+				    (_140)
+			    in  %% Line 846
+				{'reply',EnvBefore,S}
+		    -| ['compiler_generated'] )
+		  ( <_438> when 'true' ->
+			( call ( 'erlang'
+				 -| ['compiler_generated'] ):( 'error'
+							       -| ['compiler_generated'] )
+			      (( {'badrecord','state'}
+				 -| ['compiler_generated'] ))
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		end
+		-| ['compiler_generated'] )
+	  %% Line 848
+	  <{'config_change',EnvBefore},_X_From,S> when 'true' ->
+	      %% Line 849
+	      ( case S of
+		  ( <( {'state',_439,_440,_441,_rec73,_442,_443,_444,_445}
+		       -| ['compiler_generated'] )> when 'true' ->
+			let <R> =
+			    apply %% Line 850
+				  'do_config_change'/2
+				(_rec73, %% Line 850
+					 EnvBefore)
+			in  %% Line 851
+			    {'reply',R,S}
+		    -| ['compiler_generated'] )
+		  ( <_446> when 'true' ->
+			( call ( 'erlang'
+				 -| ['compiler_generated'] ):( 'error'
+							       -| ['compiler_generated'] )
+			      (( {'badrecord','state'}
+				 -| ['compiler_generated'] ))
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		end
+		-| ['compiler_generated'] )
+	  %% Line 853
+	  <'which_applications',_X_From,S> when 'true' ->
+	      let <_152> =
+		  fun (_150) ->
+		      %% Line 854
+		      case _150 of
+			<{Name,Id}> when 'true' ->
+			    %% Line 855
+			    case Id of
+			      %% Line 856
+			      <{'distributed',_X_Node}> when 'true' ->
+				  %% Line 857
+				  'false'
+			      %% Line 858
+			      <_447> when 'true' ->
+				  %% Line 859
+				  case %% Line 860
+				       apply 'get_loaded'/1
+					   (Name) of
+				    <{'true',{'appl',_448,_449,Descr,_450,Vsn,_451,_452,_453}}> when 'true' ->
+					%% Line 861
+					{'true',{Name,Descr,Vsn}}
+				    ( <_148> when 'true' ->
+					  primop 'match_fail'
+					      ({'badmatch',_148})
+				      -| ['compiler_generated'] )
+				  end
+			    end
+			( <_151> when 'true' ->
+			      ( primop 'match_fail'
+				    ({'function_clause',_151})
+				-| [{'function_name',{'-handle_call/3-fun-2-',1}}] )
+			  -| ['compiler_generated'] )
+		      end
+	      in  %% Line 863
+		  ( case S of
+		      ( <( {'state',_454,_455,_456,_rec74,_457,_458,_459,_460}
+			   -| ['compiler_generated'] )> when 'true' ->
+			    let <Reply> =
+				call 'lists':'zf'
+				    (_152, _rec74)
+			    in  %% Line 864
+				{'reply',Reply,S}
+			-| ['compiler_generated'] )
+		      ( <_461> when 'true' ->
+			    ( call ( 'erlang'
+				     -| ['compiler_generated'] ):( 'error'
+								   -| ['compiler_generated'] )
+				  (( {'badrecord','state'}
+				     -| ['compiler_generated'] ))
+			      -| ['compiler_generated'] )
+			-| ['compiler_generated'] )
+		    end
+		    -| ['compiler_generated'] )
+	  %% Line 866
+	  <{'set_env',AppName,Key,Val,Opts},_X_From,S> when 'true' ->
+	      do  %% Line 867
+		  call 'ets':'insert'
+		      ('ac_tab', {{'env',AppName,Key},Val})
+		  %% Line 868
+		  case call 'proplists':'get_value'
+			   ('persistent', Opts, 'false') of
+		    %% Line 869
+		    <'true'> when 'true' ->
+			let <Fun> =
+			    fun (_154) ->
+				%% Line 870
+				call 'lists':'keystore'
+				    (Key, 1, _154, {Key,Val})
+			in  %% Line 871
+			    ( case S of
+				( <( {'state',_462,_463,_464,_465,_466,_467,_468,_rec77}
+				     -| ['compiler_generated'] )> when 'true' ->
+				      let <_rec75> =
+					  apply 'change_app_env'/3
+					      (_rec77, AppName, Fun)
+				      in  let <_162> =
+					      call 'erlang':'setelement'
+						  (9, S, _rec75)
+					  in  {'reply','ok',_162}
+				  -| ['compiler_generated'] )
+				( <_469> when 'true' ->
+				      ( call ( 'erlang'
+					       -| ['compiler_generated'] ):( 'error'
+									     -| ['compiler_generated'] )
+					    (( {'badrecord','state'}
+					       -| ['compiler_generated'] ))
+					-| ['compiler_generated'] )
+				  -| ['compiler_generated'] )
+			      end
+			      -| ['compiler_generated'] )
+		    %% Line 872
+		    <'false'> when 'true' ->
+			%% Line 873
+			{'reply','ok',S}
+		    ( <_163> when 'true' ->
+			  primop 'match_fail'
+			      ({'case_clause',_163})
+		      -| ['compiler_generated'] )
+		  end
+	  %% Line 876
+	  <{'unset_env',AppName,Key,Opts},_X_From,S> when 'true' ->
+	      do  %% Line 877
+		  call 'ets':'delete'
+		      ('ac_tab', {'env',AppName,Key})
+		  %% Line 878
+		  case call 'proplists':'get_value'
+			   ('persistent', Opts, 'false') of
+		    %% Line 879
+		    <'true'> when 'true' ->
+			let <Fun> =
+			    fun (_164) ->
+				%% Line 880
+				call 'lists':'keydelete'
+				    (Key, 1, _164)
+			in  %% Line 881
+			    ( case S of
+				( <( {'state',_479,_480,_481,_482,_483,_484,_485,_rec80}
+				     -| ['compiler_generated'] )> when 'true' ->
+				      let <_rec78> =
+					  apply 'change_app_env'/3
+					      (_rec80, AppName, Fun)
+				      in  let <_172> =
+					      call 'erlang':'setelement'
+						  (9, S, _rec78)
+					  in  {'reply','ok',_172}
+				  -| ['compiler_generated'] )
+				( <_486> when 'true' ->
+				      ( call ( 'erlang'
+					       -| ['compiler_generated'] ):( 'error'
+									     -| ['compiler_generated'] )
+					    (( {'badrecord','state'}
+					       -| ['compiler_generated'] ))
+					-| ['compiler_generated'] )
+				  -| ['compiler_generated'] )
+			      end
+			      -| ['compiler_generated'] )
+		    %% Line 882
+		    <'false'> when 'true' ->
+			%% Line 883
+			{'reply','ok',S}
+		    ( <_173> when 'true' ->
+			  primop 'match_fail'
+			      ({'case_clause',_173})
+		      -| ['compiler_generated'] )
+		  end
+	  %% Line 886
+	  <{'control_application',AppName},{Pid,_X_Tag},S> when 'true' ->
+	      %% Line 887
+	      ( case S of
+		  ( <( {'state',_496,_497,_498,_499,_rec81,_500,_501,_502}
+		       -| ['compiler_generated'] )> when 'true' ->
+			%% Line 888
+			case call 'lists':'keymember'
+				 (AppName, 1, _rec81) of
+			  %% Line 889
+			  <'false'> when 'true' ->
+			      do  %% Line 890
+				  call 'erlang':'link'
+				      (Pid)
+				  let <_rec82> =
+				      [%% Line 891
+				       {AppName,Pid}|_rec81]
+				  in  let <_180> =
+					  call %% Line 891
+					       'erlang':%% Line 891
+							'setelement'
+					      (%% Line 891
+					       6, %% Line 891
+						  S, %% Line 891
+						     _rec82)
+				      in  %% Line 891
+					  {'reply','true',_180}
+			  %% Line 892
+			  <'true'> when 'true' ->
+			      %% Line 893
+			      {'reply','false',S}
+			  ( <_181> when 'true' ->
+				primop 'match_fail'
+				    ({'case_clause',_181})
+			    -| ['compiler_generated'] )
+			end
+		    -| ['compiler_generated'] )
+		  ( <_503> when 'true' ->
+			( call ( 'erlang'
+				 -| ['compiler_generated'] ):( 'error'
+							       -| ['compiler_generated'] )
+			      (( {'badrecord','state'}
+				 -| ['compiler_generated'] ))
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		end
+		-| ['compiler_generated'] )
+	  %% Line 896
+	  <{'start_type',AppName},_X_From,S> when 'true' ->
+	      %% Line 897
+	      ( case S of
+		  ( <( {'state',_513,_rec84,_514,_515,_516,_517,_518,_519}
+		       -| ['compiler_generated'] )> when 'true' ->
+			let <_186> =
+			    case %% Line 898
+				 call 'lists':'keyfind'
+				     (AppName, 1, _rec84) of
+			      %% Line 899
+			      <'false'> when 'true' ->
+				  %% Line 900
+				  'local'
+			      %% Line 901
+			      <{_X_AppName,_X_RestartType,Type,_X_F}> when 'true' ->
+				  %% Line 902
+				  Type
+			      ( <_185> when 'true' ->
+				    %% Line 898
+				    primop 'match_fail'
+					({'case_clause',_185})
+				-| ['compiler_generated'] )
+			    end
+			in  %% Line 904
+			    {'reply',_186,S}
+		    -| ['compiler_generated'] )
+		  ( <_520> when 'true' ->
+			( call ( 'erlang'
+				 -| ['compiler_generated'] ):( 'error'
+							       -| ['compiler_generated'] )
+			      (( {'badrecord','state'}
+				 -| ['compiler_generated'] ))
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		end
+		-| ['compiler_generated'] )
+	  %% Line 906
+	  <'info',_X_From,S> when 'true' ->
+	      let <_188> =
+		  apply %% Line 907
+			'loaded_applications'/0
+		      ()
+	      in  %% Line 908
+		  ( case S of
+		      ( <( {'state',_rec85,_521,_522,_523,_524,_525,_526,_527}
+			   -| ['compiler_generated'] )> when 'true' ->
+			    let <Reply> =
+				[{'loaded',_188}|[{'loading',_rec85}|%% Line 909
+								     [{'started',_525}|%% Line 910
+										       [{'start_p_false',_522}|%% Line 911
+													       [{'running',_523}|%% Line 912
+																 [{'starting',_521}|[]]]]]]]
+			    in  %% Line 913
+				{'reply',Reply,S}
+			-| ['compiler_generated'] )
+		      ( <_528> when 'true' ->
+			    ( call ( 'erlang'
+				     -| ['compiler_generated'] ):( 'error'
+								   -| ['compiler_generated'] )
+				  (( {'badrecord','state'}
+				     -| ['compiler_generated'] ))
+			      -| ['compiler_generated'] )
+			-| ['compiler_generated'] )
+		    end
+		    -| ['compiler_generated'] )
+	  ( <_202,_201,_200> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_202,_201,_200})
+		  -| [{'function_name',{'handle_call',3}}] )
+	    -| ['compiler_generated'] )
+	end
+'handle_cast'/2 =
+    %% Line 918
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <{'application_started',AppName,Res},S> when 'true' ->
+	      %% Line 919
+	      apply 'handle_application_started'/3
+		  (AppName, Res, S)
+	  ( <_3,_2> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_3,_2})
+		  -| [{'function_name',{'handle_cast',2}}] )
+	    -| ['compiler_generated'] )
+	end
+'handle_application_started'/3 =
+    %% Line 921
+    fun (_2,_1,_0) ->
+	%% Line 923
+	case _0 of
+	  <{'state',_63,Starting,_64,Running,_65,Started,Start_req,_66}> when 'true' ->
+	      let <Start_reqN> =
+		  apply %% Line 924
+			'reply_to_requester'/3
+		      (_2, %% Line 924
+			   Start_req, _1)
+	      in  %% Line 925
+		  case call 'lists':'keyfind'
+			   (_2, 1, Starting) of
+		    <{_X_AppName,RestartType,_X_Type,_X_From}> when 'true' ->
+			%% Line 926
+			case _1 of
+			  %% Line 927
+			  <{'ok',Id}> when 'true' ->
+			      do  %% Line 928
+				  case _2 of
+				    %% Line 929
+				    <'kernel'> when 'true' ->
+					apply 'check_user'/0
+					    ()
+				    %% Line 930
+				    <_67> when 'true' ->
+					'ok'
+				  end
+				  let <_7> =
+				      apply %% Line 932
+					    'nd'/1
+					  (%% Line 932
+					   Id)
+				  in  do  %% Line 932
+					  apply 'info_started'/2
+					      (_2, _7)
+					  do  %% Line 933
+					      apply 'notify_cntrl_started'/4
+						  (_2, Id, _0, 'ok')
+					      let <NRunning> =
+						  apply %% Line 934
+							'keyreplaceadd'/4
+						      (_2, %% Line 934
+							   1, %% Line 934
+							      Running, %% Line 934
+								       {_2,Id})
+					      in  let <NStarted> =
+						      apply %% Line 935
+							    'keyreplaceadd'/4
+							  (_2, %% Line 935
+							       1, %% Line 935
+								  Started, %% Line 935
+									   {_2,RestartType})
+						  in  let <_rec90> =
+							  call %% Line 936
+							       'lists':%% Line 936
+								       'keydelete'
+							      (_2, %% Line 936
+								   1, %% Line 936
+								      Starting)
+						      in  let <_12> =
+							      call %% Line 939
+								   'erlang':%% Line 939
+									    'setelement'
+								  (%% Line 939
+								   8, _0, %% Line 939
+									  Start_reqN)
+							  in  let <_13> =
+								  call %% Line 938
+								       'erlang':%% Line 938
+										'setelement'
+								      (%% Line 938
+								       7, _12, %% Line 938
+									       NStarted)
+							      in  let <_14> =
+								      call %% Line 937
+									   'erlang':%% Line 937
+										    'setelement'
+									  (%% Line 937
+									   5, _13, %% Line 937
+										   NRunning)
+								  in  let <_16> =
+									  call %% Line 936
+									       'erlang':%% Line 936
+											'setelement'
+									      (%% Line 936
+									       3, _14, %% Line 936
+										       _rec90)
+								      in  let <Perm> =
+									      call %% Line 941
+										   'application':%% Line 941
+												 'get_env'
+										  (%% Line 941
+										   'kernel', %% Line 941
+											     'permissions')
+									  in  %% Line 942
+									      case <Perm,Id> of
+										%% Line 943
+										<( 'undefined'
+										   -| ['compiler_generated'] ),_77> when 'true' ->
+										    %% Line 944
+										    {'noreply',_16}
+										%% Line 946
+										<( {( 'ok'
+										      -| ['compiler_generated'] ),Perms}
+										   -| ['compiler_generated'] ),( {( 'distributed'
+														    -| ['compiler_generated'] ),StartNode}
+														 -| ['compiler_generated'] )>
+										    when try
+											  let <_19> =
+											      call 'erlang':'node'
+												  ()
+											  in  call 'erlang':'=:='
+												  (StartNode, _19)
+										      of <Try> ->
+											  Try
+										      catch <T,R> ->
+											  'false' ->
+										    %% Line 947
+										    case call 'lists':'member'
+											     ({_2,'false'}, Perms) of
+										      %% Line 948
+										      <'true'> when 'true' ->
+											  %% Line 949
+											  case _16 of
+											    <{'state',_78,_79,_80,StopRunning,_81,StopStarted,_82,_83}> when 'true' ->
+												%% Line 950
+												case call 'lists':'keyfind'
+													 (_2, 1, StopRunning) of
+												  %% Line 951
+												  <{_84,_85}>
+												      when let <_86> =
+													    call 'erlang':'=:='
+														(_84, _X_AppName)
+													in  let <_87> =
+														call 'erlang':'=:='
+														    (_85, Id)
+													    in  call 'erlang':'and'
+														    (_86, _87) ->
+												      %% Line 952
+												      case %% Line 953
+													   call 'lists':'keyfind'
+													       (_2, 1, StopStarted) of
+													<{_X_AppName2,Type}> when 'true' ->
+													    do  %% Line 954
+														apply 'stop_appl'/3
+														    (_2, Id, Type)
+														let <NStopRunning> =
+														    call %% Line 955
+															 'lists':%% Line 955
+																 'keydelete'
+															(_2, %% Line 955
+															     1, %% Line 955
+																StopRunning)
+														in  do  %% Line 956
+															apply 'cntrl'/3
+															    (_2, _16, {'ac_application_stopped',_2})
+															let <_24> =
+															    call %% Line 958
+																 'erlang':%% Line 958
+																	  'setelement'
+																(%% Line 958
+																 7, _16, %% Line 958
+																	 StopStarted)
+															in  let <_26> =
+																call %% Line 957
+																     'erlang':%% Line 957
+																	      'setelement'
+																    (%% Line 957
+																     5, _24, %% Line 957
+																	     NStopRunning)
+															    in  %% Line 957
+																{'noreply',_26}
+													( <_21> when 'true' ->
+													      primop 'match_fail'
+														  ({'badmatch',_21})
+													  -| ['compiler_generated'] )
+												      end
+												  %% Line 959
+												  <'false'> when 'true' ->
+												      %% Line 960
+												      {'noreply',_16}
+												  ( <_27> when 'true' ->
+													primop 'match_fail'
+													    ({'case_clause',_27})
+												    -| ['compiler_generated'] )
+												end
+											    ( <_20> when 'true' ->
+												  primop 'match_fail'
+												      ({'badmatch',_20})
+											      -| ['compiler_generated'] )
+											  end
+										      %% Line 962
+										      <'false'> when 'true' ->
+											  %% Line 963
+											  {'noreply',_16}
+										      ( <_28> when 'true' ->
+											    primop 'match_fail'
+												({'case_clause',_28})
+											-| ['compiler_generated'] )
+										    end
+										%% Line 965
+										<( _126
+										   -| ['compiler_generated'] ),( _127
+														 -| ['compiler_generated'] )> when 'true' ->
+										    %% Line 966
+										    {'noreply',_16}
+									      end
+			  %% Line 968
+			  <Error = {'error',R}>
+			      when call 'erlang':'=:='
+				    (RestartType,
+				     'temporary') ->
+			      do  %% Line 969
+				  apply 'notify_cntrl_started'/4
+				      (_2, 'undefined', _0, Error)
+				  do  %% Line 970
+				      apply 'info_exited'/3
+					  (_2, R, RestartType)
+				      let <_rec93> =
+					  call %% Line 971
+					       'lists':%% Line 971
+						       'keydelete'
+					      (_2, %% Line 971
+						   1, %% Line 971
+						      Starting)
+				      in  let <_32> =
+					      call %% Line 972
+						   'erlang':%% Line 972
+							    'setelement'
+						  (%% Line 972
+						   8, _0, %% Line 972
+							  Start_reqN)
+					  in  let <_34> =
+						  call %% Line 971
+						       'erlang':%% Line 971
+								'setelement'
+						      (%% Line 971
+						       3, _32, %% Line 971
+							       _rec93)
+					      in  %% Line 971
+						  {'noreply',_34}
+			  %% Line 973
+			  <{'info',R}>
+			      when call 'erlang':'=:='
+				    (RestartType,
+				     'temporary') ->
+			      do  %% Line 974
+				  apply 'notify_cntrl_started'/4
+				      (_2, 'undefined', _0, {'error',R})
+				  let <_rec95> =
+				      call %% Line 975
+					   'lists':%% Line 975
+						   'keydelete'
+					  (_2, %% Line 975
+					       1, %% Line 975
+						  Starting)
+				  in  let <_37> =
+					  call %% Line 976
+					       'erlang':%% Line 976
+							'setelement'
+					      (%% Line 976
+					       8, _0, %% Line 976
+						      Start_reqN)
+				      in  let <_39> =
+					      call %% Line 975
+						   'erlang':%% Line 975
+							    'setelement'
+						  (%% Line 975
+						   3, _37, %% Line 975
+							   _rec95)
+					  in  %% Line 975
+					      {'noreply',_39}
+			  %% Line 977
+			  <{ErrInf,R}>
+			      when let <_40> =
+				    call 'erlang':'=:='
+					(RestartType, 'transient')
+				in  let <_41> =
+					call 'erlang':'=:='
+					    (ErrInf, 'error')
+				    in  let <_42> =
+					    call 'erlang':'and'
+						(_40, _41)
+					in  let <_43> =
+						call %% Line 978
+						     'erlang':%% Line 978
+							      '=:='
+						    (%% Line 978
+						     RestartType, %% Line 978
+								  'transient')
+					    in  let <_44> =
+						    call %% Line 978
+							 'erlang':%% Line 978
+								  '=:='
+							(%% Line 978
+							 ErrInf, %% Line 978
+								 'info')
+						in  let <_45> =
+							call %% Line 978
+							     'erlang':%% Line 978
+								      'and'
+							    (_43, _44)
+						    in  call 'erlang':'or'
+							    (_42, _45) ->
+			      do  %% Line 979
+				  apply 'notify_cntrl_started'/4
+				      (_2, 'undefined', _0, {'error',R})
+				  do  %% Line 980
+				      case ErrInf of
+					%% Line 981
+					<'error'> when 'true' ->
+					    %% Line 982
+					    apply 'info_exited'/3
+						(_2, R, RestartType)
+					%% Line 983
+					<'info'> when 'true' ->
+					    'ok'
+					( <_46> when 'true' ->
+					      primop 'match_fail'
+						  ({'case_clause',_46})
+					  -| ['compiler_generated'] )
+				      end
+				      %% Line 986
+				      case R of
+					%% Line 987
+					<{{'EXIT','normal'},_X_Call}> when 'true' ->
+					    let <_rec97> =
+						call %% Line 988
+						     'lists':%% Line 988
+							     'keydelete'
+						    (_2, %% Line 988
+							 1, %% Line 988
+							    Starting)
+					    in  let <_49> =
+						    call %% Line 989
+							 'erlang':%% Line 989
+								  'setelement'
+							(%% Line 989
+							 8, _0, %% Line 989
+								Start_reqN)
+						in  let <_51> =
+							call %% Line 988
+							     'erlang':%% Line 988
+								      'setelement'
+							    (%% Line 988
+							     3, _49, %% Line 988
+								     _rec97)
+						    in  %% Line 988
+							{'noreply',_51}
+					%% Line 990
+					<_125> when 'true' ->
+					    let <Reason> = {%% Line 991
+						 'application_start_failure',_2,%% Line 991
+										R}
+					    in  let <_53> =
+						    apply %% Line 992
+							  'to_string'/1
+							(%% Line 992
+							 Reason)
+						in  %% Line 992
+						    {'stop',_53,_0}
+				      end
+			  %% Line 994
+			  <Error = {'error',R}> when 'true' ->
+			      do  %% Line 995
+				  apply 'notify_cntrl_started'/4
+				      (_2, 'undefined', _0, Error)
+				  do  %% Line 996
+				      apply 'info_exited'/3
+					  (_2, R, RestartType)
+				      let <Reason> = {%% Line 997
+					   'application_start_failure',_2,%% Line 997
+									  R}
+				      in  let <_56> =
+					      apply %% Line 998
+						    'to_string'/1
+						  (%% Line 998
+						   Reason)
+					  in  %% Line 998
+					      {'stop',_56,_0}
+			  %% Line 999
+			  <{'info',R}> when 'true' ->
+			      do  %% Line 1000
+				  apply 'notify_cntrl_started'/4
+				      (_2, 'undefined', _0, {'error',R})
+				  let <Reason> = {%% Line 1001
+				       'application_start_failure',_2,%% Line 1001
+								      R}
+				  in  let <_58> =
+					  apply %% Line 1002
+						'to_string'/1
+					      (%% Line 1002
+					       Reason)
+				      in  %% Line 1002
+					  {'stop',_58,_0}
+			  ( <_59> when 'true' ->
+				primop 'match_fail'
+				    ({'case_clause',_59})
+			    -| ['compiler_generated'] )
+			end
+		    ( <_5> when 'true' ->
+			  primop 'match_fail'
+			      ({'badmatch',_5})
+		      -| ['compiler_generated'] )
+		  end
+	  ( <_3> when 'true' ->
+		primop 'match_fail'
+		    ({'badmatch',_3})
+	    -| ['compiler_generated'] )
+	end
+'handle_info'/2 =
+    %% Line 1008
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <{'ac_load_application_reply',AppName,Res},S> when 'true' ->
+	      %% Line 1009
+	      ( case S of
+		  ( <( {'state',_rec99,_122,_123,_124,_125,_126,_127,_128}
+		       -| ['compiler_generated'] )> when 'true' ->
+			case apply 'keysearchdelete'/3
+				 (AppName, 1, _rec99) of
+			  %% Line 1010
+			  <{'value',{_X_AppName,From},Loading}> when 'true' ->
+			      do  %% Line 1011
+				  call 'gen_server':'reply'
+				      (From, Res)
+				  %% Line 1012
+				  case Res of
+				    %% Line 1013
+				    <'ok'> when 'true' ->
+					let <_6> =
+					    call %% Line 1014
+						 'erlang':%% Line 1014
+							  'setelement'
+						(%% Line 1014
+						 2, %% Line 1014
+						    S, %% Line 1014
+						       Loading)
+					in  %% Line 1014
+					    {'noreply',_6}
+				    %% Line 1015
+				    <{'error',_X_R}> when 'true' ->
+					let <NewS> =
+					    apply %% Line 1016
+						  'unload'/2
+						(%% Line 1016
+						 AppName, %% Line 1016
+							  S)
+					in  %% Line 1017
+					    case NewS of
+					      <{'state',_139,_140,_141,_142,_143,_144,_145,_146}> when 'true' ->
+						  let <_10> =
+						      call 'erlang':'setelement'
+							  (2, NewS, Loading)
+						  in  {'noreply',_10}
+					      ( <_147> when 'true' ->
+						    ( call ( 'erlang'
+							     -| ['compiler_generated'] ):( 'error'
+											   -| ['compiler_generated'] )
+							  (( {'badrecord','state'}
+							     -| ['compiler_generated'] ))
+						      -| ['compiler_generated'] )
+						-| ['compiler_generated'] )
+					    end
+				    ( <_11> when 'true' ->
+					  primop 'match_fail'
+					      ({'case_clause',_11})
+				      -| ['compiler_generated'] )
+				  end
+			  %% Line 1019
+			  <'false'> when 'true' ->
+			      %% Line 1020
+			      {'noreply',S}
+			  ( <_12> when 'true' ->
+				primop 'match_fail'
+				    ({'case_clause',_12})
+			    -| ['compiler_generated'] )
+			end
+		    -| ['compiler_generated'] )
+		  ( <_129> when 'true' ->
+			( call ( 'erlang'
+				 -| ['compiler_generated'] ):( 'error'
+							       -| ['compiler_generated'] )
+			      (( {'badrecord','state'}
+				 -| ['compiler_generated'] ))
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		end
+		-| ['compiler_generated'] )
+	  %% Line 1023
+	  <{'ac_start_application_reply',AppName,Res},S> when 'true' ->
+	      %% Line 1024
+	      ( case S of
+		  ( <( {'state',_148,_149,_150,_151,_152,_153,_rec102,_154}
+		       -| ['compiler_generated'] )> when 'true' ->
+			%% Line 1025
+			case call 'lists':'keyfind'
+				 (AppName, 1, _149) of
+			  %% Line 1026
+			  <{_X_AppName,RestartType,Type,From}> when 'true' ->
+			      %% Line 1027
+			      case Res of
+				%% Line 1028
+				<'start_it'> when 'true' ->
+				    %% Line 1029
+				    case apply 'get_loaded'/1
+					     (AppName) of
+				      <{'true',Appl}> when 'true' ->
+					  do  %% Line 1030
+					      apply 'spawn_starter'/4
+						  (From, Appl, S, Type)
+					      %% Line 1031
+					      {'noreply',S}
+				      ( <_19> when 'true' ->
+					    primop 'match_fail'
+						({'badmatch',_19})
+					-| ['compiler_generated'] )
+				    end
+				%% Line 1032
+				<{'started',Node}> when 'true' ->
+				    %% Line 1033
+				    apply 'handle_application_started'/3
+					(AppName, %% Line 1034
+						  {'ok',{'distributed',Node}}, %% Line 1035
+									       S)
+				%% Line 1036
+				<'not_started'> when 'true' ->
+				    let <Start_reqN> =
+					apply %% Line 1039
+					      'reply_to_requester'/3
+					    (%% Line 1039
+					     AppName, _rec102, %% Line 1039
+							       'ok')
+				    in  let <_rec105> =
+					    call %% Line 1041
+						 'lists':%% Line 1041
+							 'keydelete'
+						(%% Line 1041
+						 AppName, %% Line 1041
+							  1, _149)
+					in  let <_rec106> =
+						[%% Line 1042
+						 {AppName,RestartType}|_153]
+					    in  let <_27> =
+						    call %% Line 1043
+							 'erlang':%% Line 1043
+								  'setelement'
+							(%% Line 1043
+							 8, %% Line 1041
+							    S, %% Line 1043
+							       Start_reqN)
+						in  let <_28> =
+							call %% Line 1042
+							     'erlang':%% Line 1042
+								      'setelement'
+							    (%% Line 1042
+							     7, _27, %% Line 1042
+								     _rec106)
+						    in  let <_30> =
+							    call %% Line 1041
+								 'erlang':%% Line 1041
+									  'setelement'
+								(%% Line 1041
+								 3, _28, %% Line 1041
+									 _rec105)
+							in  %% Line 1040
+							    {'noreply',_30}
+				%% Line 1044
+				<Takeover = {'takeover',_X_Node}> when 'true' ->
+				    %% Line 1045
+				    case apply 'get_loaded'/1
+					     (AppName) of
+				      <{'true',Appl}> when 'true' ->
+					  do  %% Line 1046
+					      apply 'spawn_starter'/4
+						  (From, Appl, S, Takeover)
+					      let <NewStarting1> =
+						  call %% Line 1047
+						       'lists':%% Line 1047
+							       'keydelete'
+						      (%% Line 1047
+						       AppName, %% Line 1047
+								1, _149)
+					      in  let <NewStarting> =
+						      [%% Line 1048
+						       {AppName,RestartType,Takeover,From}|%% Line 1048
+											   NewStarting1]
+						  in  let <_36> =
+							  call %% Line 1049
+							       'erlang':%% Line 1049
+									'setelement'
+							      (%% Line 1049
+							       3, %% Line 1049
+								  S, %% Line 1049
+								     NewStarting)
+						      in  %% Line 1049
+							  {'noreply',_36}
+				      ( <_31> when 'true' ->
+					    primop 'match_fail'
+						({'badmatch',_31})
+					-| ['compiler_generated'] )
+				    end
+				%% Line 1050
+				<Error = {'error',Reason}>
+				    when call 'erlang':'=:='
+					  (RestartType,
+					   'permanent') ->
+				    let <Start_reqN> =
+					apply %% Line 1051
+					      'reply_to_requester'/3
+					    (%% Line 1051
+					     AppName, _rec102, %% Line 1051
+							       Error)
+				    in  let <_41> =
+					    apply %% Line 1052
+						  'to_string'/1
+						(%% Line 1052
+						 Reason)
+					in  let <_40> =
+						call %% Line 1052
+						     'erlang':%% Line 1052
+							      'setelement'
+						    (%% Line 1052
+						     8, %% Line 1052
+							S, %% Line 1052
+							   Start_reqN)
+					    in  %% Line 1052
+						{'stop',_41,_40}
+				%% Line 1053
+				<Error = {'error',_X_Reason}> when 'true' ->
+				    let <Start_reqN> =
+					apply %% Line 1054
+					      'reply_to_requester'/3
+					    (%% Line 1054
+					     AppName, _rec102, %% Line 1054
+							       Error)
+				    in  let <_rec110> =
+					    call %% Line 1056
+						 'lists':%% Line 1056
+							 'keydelete'
+						(%% Line 1056
+						 AppName, %% Line 1056
+							  1, _149)
+					in  let <_45> =
+						call %% Line 1057
+						     'erlang':%% Line 1057
+							      'setelement'
+						    (%% Line 1057
+						     8, %% Line 1055
+							S, %% Line 1057
+							   Start_reqN)
+					    in  let <_47> =
+						    call %% Line 1055
+							 'erlang':%% Line 1055
+								  'setelement'
+							(%% Line 1055
+							 3, _45, %% Line 1055
+								 _rec110)
+						in  %% Line 1055
+						    {'noreply',_47}
+				( <_48> when 'true' ->
+				      primop 'match_fail'
+					  ({'case_clause',_48})
+				  -| ['compiler_generated'] )
+			      end
+			  %% Line 1059
+			  <'false'> when 'true' ->
+			      %% Line 1060
+			      {'noreply',S}
+			  ( <_49> when 'true' ->
+				primop 'match_fail'
+				    ({'case_clause',_49})
+			    -| ['compiler_generated'] )
+			end
+		    -| ['compiler_generated'] )
+		  ( <_155> when 'true' ->
+			( call ( 'erlang'
+				 -| ['compiler_generated'] ):( 'error'
+							       -| ['compiler_generated'] )
+			      (( {'badrecord','state'}
+				 -| ['compiler_generated'] ))
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		end
+		-| ['compiler_generated'] )
+	  %% Line 1063
+	  <{'ac_change_application_req',AppName,Msg},S> when 'true' ->
+	      %% Line 1064
+	      ( case S of
+		  ( <( {'state',_208,_209,_210,_rec112,_211,_212,_213,_214}
+		       -| ['compiler_generated'] )> when 'true' ->
+			let <_60> =
+			    call %% Line 1067
+				 'lists':%% Line 1067
+					 'keyfind'
+				(%% Line 1067
+				 AppName, %% Line 1067
+					  1, _rec112)
+			in  let <_59> =
+				call %% Line 1067
+				     'lists':%% Line 1067
+					     'keyfind'
+				    (%% Line 1067
+				     AppName, %% Line 1067
+					      1, _212)
+			    in  %% Line 1067
+				case <_60,_59> of
+				  %% Line 1068
+				  <( {_232,Id}
+				     -| ['compiler_generated'] ),( {_X_AppName2,Type}
+								   -| ['compiler_generated'] )>
+				      when call 'erlang':'=:='
+					    (_232,
+					     AppName) ->
+				      %% Line 1069
+				      case Msg of
+					%% Line 1070
+					<{'started',Node}> when 'true' ->
+					    do  %% Line 1071
+						apply 'stop_appl'/3
+						    (AppName, Id, Type)
+						let <_61> =
+						    call %% Line 1073
+							 'lists':%% Line 1073
+								 'keydelete'
+							(%% Line 1073
+							 AppName, %% Line 1073
+								  1, _rec112)
+						in  let <NRunning> =
+							[%% Line 1072
+							 {AppName,{'distributed',Node}}|_61]
+						    in  let <_65> =
+							    call %% Line 1074
+								 'erlang':%% Line 1074
+									  'setelement'
+								(%% Line 1074
+								 5, %% Line 1074
+								    S, %% Line 1074
+								       NRunning)
+							in  %% Line 1074
+							    {'noreply',_65}
+					%% Line 1075
+					<{'takeover',_X_Node,_X_RT}>
+					    when call 'erlang':'is_pid'
+						  (Id) ->
+					    do  %% Line 1076
+						apply 'notify_cntrl_started'/4
+						    (AppName, Id, S, 'ok')
+						%% Line 1077
+						{'noreply',S}
+					%% Line 1078
+					<{'takeover',Node,RT}> when 'true' ->
+					    let <NewS> =
+						apply %% Line 1079
+						      'do_start'/5
+						    (%% Line 1079
+						     AppName, %% Line 1079
+							      RT, %% Line 1079
+								  {'takeover',Node}, %% Line 1079
+										     'undefined', %% Line 1079
+												  S)
+					    in  %% Line 1080
+						{'noreply',NewS}
+					%% Line 1081
+					<{'failover',_X_Node,_X_RT}>
+					    when call 'erlang':'is_pid'
+						  (Id) ->
+					    do  %% Line 1082
+						apply 'notify_cntrl_started'/4
+						    (AppName, Id, S, 'ok')
+						%% Line 1083
+						{'noreply',S}
+					%% Line 1084
+					<{'failover',Node,RT}> when 'true' ->
+					    %% Line 1085
+					    case call 'application':'get_key'
+						     (AppName, 'start_phases') of
+					      %% Line 1086
+					      <{'ok','undefined'}> when 'true' ->
+						  let <NewS> =
+						      apply %% Line 1090
+							    'do_start'/5
+							  (%% Line 1090
+							   AppName, %% Line 1090
+								    RT, %% Line 1090
+									'normal', %% Line 1090
+										  'undefined', %% Line 1090
+											       S)
+						  in  %% Line 1091
+						      {'noreply',NewS}
+					      %% Line 1092
+					      <{'ok',_X_StartPhases}> when 'true' ->
+						  let <NewS> =
+						      apply %% Line 1093
+							    'do_start'/5
+							  (%% Line 1093
+							   AppName, %% Line 1093
+								    RT, %% Line 1093
+									{'failover',Node}, %% Line 1093
+											   'undefined', %% Line 1093
+													S)
+						  in  %% Line 1094
+						      {'noreply',NewS}
+					      ( <_69> when 'true' ->
+						    primop 'match_fail'
+							({'case_clause',_69})
+						-| ['compiler_generated'] )
+					    end
+					%% Line 1096
+					<'stop_it'> when 'true' ->
+					    do  %% Line 1097
+						apply 'stop_appl'/3
+						    (AppName, Id, Type)
+						do  %% Line 1098
+						    apply 'cntrl'/3
+							(AppName, S, {'ac_application_not_run',AppName})
+						    let <NRunning> =
+							call %% Line 1099
+							     'lists':%% Line 1099
+								     'keyreplace'
+							    (%% Line 1099
+							     AppName, %% Line 1099
+								      1, _rec112, %% Line 1100
+										  {AppName,{'distributed',[]}})
+						    in  let <_73> =
+							    call %% Line 1101
+								 'erlang':%% Line 1101
+									  'setelement'
+								(%% Line 1101
+								 5, %% Line 1101
+								    S, %% Line 1101
+								       NRunning)
+							in  %% Line 1101
+							    {'noreply',_73}
+					%% Line 1103
+					<'start_it'>
+					    when call 'erlang':'is_pid'
+						  (Id) ->
+					    do  %% Line 1104
+						apply 'notify_cntrl_started'/4
+						    (AppName, Id, S, 'ok')
+						%% Line 1105
+						{'noreply',S}
+					%% Line 1106
+					<'start_it'> when 'true' ->
+					    let <NewS> =
+						apply %% Line 1107
+						      'do_start'/5
+						    (%% Line 1107
+						     AppName, %% Line 1107
+							      'undefined', %% Line 1107
+									   'normal', %% Line 1107
+										     'undefined', %% Line 1107
+												  S)
+					    in  %% Line 1108
+						{'noreply',NewS}
+					%% Line 1109
+					<'not_running'> when 'true' ->
+					    let <NRunning> =
+						call %% Line 1110
+						     'lists':%% Line 1110
+							     'keydelete'
+						    (%% Line 1110
+						     AppName, %% Line 1110
+							      1, _rec112)
+					    in  let <_78> =
+						    call %% Line 1111
+							 'erlang':%% Line 1111
+								  'setelement'
+							(%% Line 1111
+							 5, %% Line 1111
+							    S, %% Line 1111
+							       NRunning)
+						in  %% Line 1111
+						    {'noreply',_78}
+					%% Line 1112
+					<_260> when 'true' ->
+					    %% Line 1113
+					    {'noreply',S}
+				      end
+				  %% Line 1115
+				  <( _340
+				     -| ['compiler_generated'] ),( _341
+								   -| ['compiler_generated'] )> when 'true' ->
+				      let <IsLoaded> =
+					  apply %% Line 1116
+						'get_loaded'/1
+					      (%% Line 1116
+					       AppName)
+				      in  let <IsStarting> =
+					      call %% Line 1117
+						   'lists':%% Line 1117
+							   'keysearch'
+						  (%% Line 1117
+						   AppName, %% Line 1117
+							    1, _209)
+					  in  let <IsStarted> =
+						  call %% Line 1118
+						       'lists':%% Line 1118
+							       'keysearch'
+						      (%% Line 1118
+						       AppName, %% Line 1118
+								1, _212)
+					      in  let <IsRunning> =
+						      call %% Line 1119
+							   'lists':%% Line 1119
+								   'keysearch'
+							  (%% Line 1119
+							   AppName, %% Line 1119
+								    1, _rec112)
+						  in  %% Line 1121
+						      case Msg of
+							%% Line 1122
+							<'start_it'> when 'true' ->
+							    %% Line 1123
+							    case <IsLoaded,IsStarting,IsStarted,IsRunning> of
+							      %% Line 1125
+							      <_262,_263,_264,( {( 'value'
+										   -| ['compiler_generated'] ),_X_Tuple}
+										-| ['compiler_generated'] )> when 'true' ->
+								  %% Line 1126
+								  {'noreply',S}
+							      %% Line 1128
+							      <( 'false'
+								 -| ['compiler_generated'] ),_265,_266,_267> when 'true' ->
+								  %% Line 1129
+								  {'noreply',S}
+							      %% Line 1131
+							      <( {( 'true'
+								    -| ['compiler_generated'] ),_X_Appl}
+								 -| ['compiler_generated'] ),( 'false'
+											       -| ['compiler_generated'] ),( 'false'
+															     -| ['compiler_generated'] ),( 'false'
+																			   -| ['compiler_generated'] )> when 'true' ->
+								  %% Line 1132
+								  {'noreply',S}
+							      %% Line 1134
+							      <( {( 'true'
+								    -| ['compiler_generated'] ),_X_Appl}
+								 -| ['compiler_generated'] ),( {( 'value'
+												  -| ['compiler_generated'] ),Tuple}
+											       -| ['compiler_generated'] ),( 'false'
+															     -| ['compiler_generated'] ),( 'false'
+																			   -| ['compiler_generated'] )> when 'true' ->
+								  %% Line 1135
+								  case Tuple of
+								    <{_X_AppName,_X_RStype,_X_Type,From}> when 'true' ->
+									let <NewS> =
+									    apply %% Line 1136
+										  'do_start'/5
+										(%% Line 1136
+										 AppName, %% Line 1136
+											  'undefined', %% Line 1136
+												       'normal', %% Line 1136
+														 From, %% Line 1136
+														       S)
+									in  %% Line 1137
+									    {'noreply',NewS}
+								    ( <_84> when 'true' ->
+									  primop 'match_fail'
+									      ({'badmatch',_84})
+								      -| ['compiler_generated'] )
+								  end
+							      %% Line 1139
+							      <( {( 'true'
+								    -| ['compiler_generated'] ),_X_Appl}
+								 -| ['compiler_generated'] ),_268,( {( 'value'
+												       -| ['compiler_generated'] ),( {_269,_X_RestartType}
+																     -| ['compiler_generated'] )}
+												    -| ['compiler_generated'] ),( 'false'
+																  -| ['compiler_generated'] )>
+								  when call 'erlang':'=:='
+									(_269,
+									 AppName) ->
+								  let <NewS> =
+								      apply %% Line 1140
+									    'do_start'/5
+									  (%% Line 1140
+									   AppName, %% Line 1140
+										    'undefined', %% Line 1140
+												 'normal', %% Line 1140
+													   'undefined', %% Line 1140
+															S)
+								  in  let <_rec118> =
+									  call %% Line 1141
+									       'lists':%% Line 1141
+										       'keydelete'
+									      (%% Line 1141
+									       AppName, %% Line 1141
+											1, _212)
+								      in  %% Line 1141
+									  case NewS of
+									    <{'state',_270,_271,_272,_273,_274,_275,_276,_277}> when 'true' ->
+										let <_90> =
+										    call 'erlang':'setelement'
+											(7, NewS, _rec118)
+										in  %% Line 1142
+										    {'noreply',_90}
+									    ( <_278> when 'true' ->
+										  ( call ( 'erlang'
+											   -| ['compiler_generated'] ):( 'error'
+															 -| ['compiler_generated'] )
+											(( {'badrecord','state'}
+											   -| ['compiler_generated'] ))
+										    -| ['compiler_generated'] )
+									      -| ['compiler_generated'] )
+									  end
+							      ( <( _344
+								   -| ['compiler_generated'] ),( _345
+												 -| ['compiler_generated'] ),( _346
+															       -| ['compiler_generated'] ),( _347
+																			     -| ['compiler_generated'] )> when 'true' ->
+								    let <_92> =
+									{( _344
+									   -| ['compiler_generated'] ),( _345
+													 -| ['compiler_generated'] ),( _346
+																       -| ['compiler_generated'] ),( _347
+																				     -| ['compiler_generated'] )}
+								    in  primop 'match_fail'
+									    ({'case_clause',_92})
+								-| ['compiler_generated'] )
+							    end
+							%% Line 1144
+							<{'started',Node}> when 'true' ->
+							    let <_93> =
+								call %% Line 1146
+								     'lists':%% Line 1146
+									     'keydelete'
+								    (%% Line 1146
+								     AppName, %% Line 1146
+									      1, _rec112)
+							    in  let <NRunning> =
+								    [%% Line 1145
+								     {AppName,{'distributed',Node}}|_93]
+								in  let <_97> =
+									call %% Line 1147
+									     'erlang':%% Line 1147
+										      'setelement'
+									    (%% Line 1147
+									     5, %% Line 1147
+										S, %% Line 1147
+										   NRunning)
+								    in  %% Line 1147
+									{'noreply',_97}
+							%% Line 1148
+							<_288> when 'true' ->
+							    %% Line 1149
+							    {'noreply',S}
+						      end
+				end
+		    -| ['compiler_generated'] )
+		  ( <_215> when 'true' ->
+			( call ( 'erlang'
+				 -| ['compiler_generated'] ):( 'error'
+							       -| ['compiler_generated'] )
+			      (( {'badrecord','state'}
+				 -| ['compiler_generated'] ))
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		end
+		-| ['compiler_generated'] )
+	  %% Line 1157
+	  <{'EXIT',Pid,Reason},S> when 'true' ->
+	      do  %% Line 1158
+		  call 'ets':'match_delete'
+		      ('ac_tab', {{'application_master','_'},Pid})
+		  %% Line 1159
+		  ( case S of
+		      ( <( {'state',_289,_290,_291,_rec121,_292,_293,_294,_295}
+			   -| ['compiler_generated'] )> when 'true' ->
+			    let <NRunning> =
+				call 'lists':'keydelete'
+				    (Pid, 2, _rec121)
+			    in  let <_105> =
+				    call %% Line 1160
+					 'erlang':%% Line 1160
+						  'setelement'
+					(%% Line 1160
+					 5, %% Line 1160
+					    S, %% Line 1160
+					       NRunning)
+				in  %% Line 1161
+				    case call 'lists':'keyfind'
+					     (Pid, 2, _rec121) of
+				      %% Line 1162
+				      <{AppName,_X_AmPid}> when 'true' ->
+					  do  %% Line 1163
+					      apply 'cntrl'/3
+						  (AppName, S, {'ac_application_stopped',AppName})
+					      %% Line 1164
+					      case call 'lists':'keyfind'
+						       (AppName, 1, _293) of
+						%% Line 1165
+						<{_X_AppName,'temporary'}> when 'true' ->
+						    do  %% Line 1166
+							apply 'info_exited'/3
+							    (AppName, Reason, 'temporary')
+							%% Line 1167
+							{'noreply',_105}
+						%% Line 1168
+						<{_X_AppName,'transient'}>
+						    when call 'erlang':'=:='
+							  (Reason,
+							   'normal') ->
+						    do  %% Line 1169
+							apply 'info_exited'/3
+							    (AppName, Reason, 'transient')
+							%% Line 1170
+							{'noreply',_105}
+						%% Line 1171
+						<{_X_AppName,Type}> when 'true' ->
+						    do  %% Line 1172
+							apply 'info_exited'/3
+							    (AppName, Reason, Type)
+							let <_111> =
+							    apply %% Line 1173
+								  'to_string'/1
+								(%% Line 1173
+								 {'application_terminated',AppName,Reason})
+							in  %% Line 1173
+							    {'stop',_111,_105}
+						( <_112> when 'true' ->
+						      primop 'match_fail'
+							  ({'case_clause',_112})
+						  -| ['compiler_generated'] )
+					      end
+				      %% Line 1175
+				      <'false'> when 'true' ->
+					  let <_rec125> =
+					      apply %% Line 1176
+						    'del_cntrl'/2
+						  (_292, %% Line 1176
+							 Pid)
+					  in  let <_118> =
+						  call %% Line 1176
+						       'erlang':%% Line 1176
+								'setelement'
+						      (%% Line 1176
+						       6, %% Line 1176
+							  S, %% Line 1176
+							     _rec125)
+					      in  %% Line 1176
+						  {'noreply',_118}
+				      ( <_119> when 'true' ->
+					    primop 'match_fail'
+						({'case_clause',_119})
+					-| ['compiler_generated'] )
+				    end
+			-| ['compiler_generated'] )
+		      ( <_296> when 'true' ->
+			    ( call ( 'erlang'
+				     -| ['compiler_generated'] ):( 'error'
+								   -| ['compiler_generated'] )
+				  (( {'badrecord','state'}
+				     -| ['compiler_generated'] ))
+			      -| ['compiler_generated'] )
+			-| ['compiler_generated'] )
+		    end
+		    -| ['compiler_generated'] )
+	  %% Line 1179
+	  <_339,S> when 'true' ->
+	      %% Line 1180
+	      {'noreply',S}
+	end
+'terminate'/2 =
+    %% Line 1184
+    fun (_1,_0) ->
+	do  %% Line 1185
+	    case call 'application':'get_env'
+		     ('kernel', 'shutdown_func') of
+	      %% Line 1186
+	      <{'ok',{M,F}}> when 'true' ->
+		  try
+		      %% Line 1187
+		      call M:F
+			  (_1)
+		  of <_catch_value> ->
+		      _catch_value
+		  catch <Class,_37,Stk> ->
+		      'ok'
+	      %% Line 1188
+	      <_15> when 'true' ->
+		  'ok'
+	    end
+	    let <_4> =
+		case %% Line 1192
+		     call 'application':'get_env'
+			 ('kernel', 'shutdown_timeout') of
+		  %% Line 1193
+		  <'undefined'> when 'true' ->
+		      'infinity'
+		  %% Line 1194
+		  <{'ok',T}> when 'true' ->
+		      T
+		  ( <_3> when 'true' ->
+			%% Line 1192
+			primop 'match_fail'
+			    ({'case_clause',_3})
+		    -| ['compiler_generated'] )
+		end
+	    in  let <_11> =
+		    fun (_9) ->
+			%% Line 1196
+			case _9 of
+			  <{_X_AppName,Id}>
+			      when call 'erlang':'is_pid'
+				    (Id) ->
+			      let <Ref> =
+				  call %% Line 1197
+				       'erlang':%% Line 1197
+						'monitor'
+				      (%% Line 1197
+				       'process', %% Line 1197
+						  Id)
+			      in  do  %% Line 1198
+				      call 'erlang':'unlink'
+					  (Id)
+				      do  %% Line 1199
+					  call 'erlang':'exit'
+					      (Id, 'shutdown')
+					  %% Line 1200
+					  receive
+					    %% Line 1202
+					    <{'EXIT',_16,_17}>
+						when call 'erlang':'=:='
+						      (_16,
+						       Id) ->
+						'ok'
+					  after %% Line 1203
+						0 ->
+					    %% Line 1204
+					    receive
+					      %% Line 1205
+					      <{'DOWN',_18,'process',_19,_20}>
+						  when let <_21> =
+							call 'erlang':'=:='
+							    (_18, Ref)
+						    in  let <_22> =
+							    call 'erlang':'=:='
+								(_19, Id)
+							in  call 'erlang':'and'
+								(_21, _22) ->
+						  'ok'
+					    after _4 ->
+					      do  %% Line 1207
+						  call 'erlang':'exit'
+						      (Id, 'kill')
+						  %% Line 1208
+						  receive
+						    %% Line 1209
+						    <{'DOWN',_23,'process',_24,_25}>
+							when let <_26> =
+							      call 'erlang':'=:='
+								  (_23, Ref)
+							  in  let <_27> =
+								  call 'erlang':'=:='
+								      (_24, Id)
+							      in  call 'erlang':'and'
+								      (_26, _27) ->
+							'ok'
+						  after 'infinity' ->
+						    'true'
+			  %% Line 1213
+			  <_28> when 'true' ->
+			      'ok'
+			end
+		in  %% Line 1215
+		    ( case _0 of
+			( <( {'state',_29,_30,_31,_rec128,_32,_33,_34,_35}
+			     -| ['compiler_generated'] )> when 'true' ->
+			      do  call 'lists':'foreach'
+				      (_11, _rec128)
+				  %% Line 1216
+				  case call 'ets':'delete'
+					   ('ac_tab') of
+				    <'true'> when 'true' ->
+					%% Line 1217
+					'ok'
+				    ( <_12> when 'true' ->
+					  primop 'match_fail'
+					      ({'badmatch',_12})
+				      -| ['compiler_generated'] )
+				  end
+			  -| ['compiler_generated'] )
+			( <_36> when 'true' ->
+			      ( call ( 'erlang'
+				       -| ['compiler_generated'] ):( 'error'
+								     -| ['compiler_generated'] )
+				    (( {'badrecord','state'}
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] )
+			  -| ['compiler_generated'] )
+		      end
+		      -| ['compiler_generated'] )
+'code_change'/3 =
+    %% Line 1221
+    fun (_2,_1,_0) ->
+	%% Line 1222
+	{'ok',_1}
+'cntrl'/3 =
+    %% Line 1228
+    fun (_2,_1,_0) ->
+	case <_2,_1,_0> of
+	  <AppName,{'state',_7,_8,_9,_10,Control,_11,_12,_13},Msg> when 'true' ->
+	      %% Line 1229
+	      case call 'lists':'keyfind'
+		       (AppName, 1, Control) of
+		%% Line 1230
+		<{_X_AppName,Pid}> when 'true' ->
+		    do  %% Line 1231
+			call 'erlang':'!'
+			    (Pid, Msg)
+			%% Line 1232
+			'true'
+		%% Line 1233
+		<'false'> when 'true' ->
+		    %% Line 1234
+		    'false'
+		( <_3> when 'true' ->
+		      primop 'match_fail'
+			  ({'case_clause',_3})
+		  -| ['compiler_generated'] )
+	      end
+	  ( <_6,_5,_4> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_6,_5,_4})
+		  -| [{'function_name',{'cntrl',3}}] )
+	    -| ['compiler_generated'] )
+	end
+'notify_cntrl_started'/4 =
+    %% Line 1237
+    fun (_3,_2,_1,_0) ->
+	case <_3,_2,_1,_0> of
+	  <_X_AppName,{'distributed',_X_Node},_X_S,_X_Res> when 'true' ->
+	      %% Line 1238
+	      'ok'
+	  %% Line 1239
+	  <AppName,_X_Id,S,Res> when 'true' ->
+	      %% Line 1240
+	      apply 'cntrl'/3
+		  (AppName, S, {'ac_application_run',AppName,Res})
+	end
+'del_cntrl'/2 =
+    %% Line 1242
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <[{_5,Pid}|T],_6>
+	      when call 'erlang':'=:='
+		    (_6,
+		     Pid) ->
+	      %% Line 1243
+	      apply 'del_cntrl'/2
+		  (T, Pid)
+	  %% Line 1244
+	  <[H|T],Pid> when 'true' ->
+	      let <_2> =
+		  apply %% Line 1245
+			'del_cntrl'/2
+		      (%% Line 1245
+		       T, %% Line 1245
+			  Pid)
+	      in  %% Line 1245
+		  [H|_2]
+	  %% Line 1246
+	  <[],_X_Pid> when 'true' ->
+	      %% Line 1247
+	      []
+	  ( <_4,_3> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_4,_3})
+		  -| [{'function_name',{'del_cntrl',2}}] )
+	    -| ['compiler_generated'] )
+	end
+'get_loaded'/1 =
+    %% Line 1249
+    fun (_0) ->
+	let <AppName> =
+	    apply %% Line 1250
+		  'get_appl_name'/1
+		(_0)
+	in  %% Line 1251
+	    case call 'ets':'lookup'
+		     ('ac_tab', {'loaded',AppName}) of
+	      %% Line 1252
+	      <[{_X_Key,Appl}|[]]> when 'true' ->
+		  {'true',Appl}
+	      %% Line 1253
+	      <_4> when 'true' ->
+		  'false'
+	    end
+'do_load_application'/2 =
+    %% Line 1256
+    fun (_1,_0) ->
+	%% Line 1257
+	case apply 'get_loaded'/1
+		 (_1) of
+	  %% Line 1258
+	  <{'true',_6}> when 'true' ->
+	      %% Line 1259
+	      call 'erlang':'throw'
+		  ({'error',{'already_loaded',_1}})
+	  %% Line 1260
+	  <'false'> when 'true' ->
+	      %% Line 1261
+	      case apply 'make_appl'/1
+		       (_1) of
+		%% Line 1262
+		<{'ok',Appl}> when 'true' ->
+		    apply 'load'/2
+			(_0, Appl)
+		%% Line 1263
+		<Error> when 'true' ->
+		    Error
+	      end
+	  ( <_3> when 'true' ->
+		primop 'match_fail'
+		    ({'case_clause',_3})
+	    -| ['compiler_generated'] )
+	end
+'load'/2 =
+    %% Line 1269
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <S,{ApplData,ApplEnv,IncApps,Descr,Id,Vsn,Apps}> when 'true' ->
+	      %% Line 1270
+	      ( case ApplData of
+		  ( <( {'appl_data',_rec129,_20,_21,_22,_23,_24,_25,_26}
+		       -| ['compiler_generated'] )> when 'true' ->
+			let <ConfEnv> =
+			    apply %% Line 1271
+				  'get_env_i'/2
+				(_rec129, %% Line 1271
+					  S)
+			in  let <NewEnv> =
+				apply %% Line 1272
+				      'merge_app_env'/2
+				    (%% Line 1272
+				     ApplEnv, %% Line 1272
+					      ConfEnv)
+			    in  let <CmdLineEnv> =
+				    apply %% Line 1273
+					  'get_cmd_env'/1
+					(_rec129)
+				in  let <NewEnv2> =
+					apply %% Line 1274
+					      'merge_app_env'/2
+					    (%% Line 1274
+					     NewEnv, %% Line 1274
+						     CmdLineEnv)
+				    in  do  %% Line 1275
+					    apply 'add_env'/2
+						(_rec129, NewEnv2)
+					    let <Appl> =
+						{%% Line 1276
+						 'appl',_rec129,%% Line 1277
+								ApplData,%% Line 1276
+									 Descr,%% Line 1276
+									       Id,%% Line 1276
+										  Vsn,'undefined',%% Line 1277
+												  IncApps,%% Line 1277
+													  Apps}
+					    in  do  %% Line 1278
+						    call 'ets':'insert'
+							('ac_tab', {{'loaded',_rec129},Appl})
+						    let <_16> =
+							fun (_13,_12) ->
+							    %% Line 1281
+							    case apply 'get_loaded'/1
+								     (_13) of
+							      %% Line 1282
+							      <{'true',_28}> when 'true' ->
+								  _12
+							      %% Line 1283
+							      <'false'> when 'true' ->
+								  %% Line 1284
+								  case apply 'do_load_application'/2
+									   (_13, _12) of
+								    %% Line 1285
+								    <{'ok',S2}> when 'true' ->
+									S2
+								    %% Line 1286
+								    <Error> when 'true' ->
+									call 'erlang':'throw'
+									    (Error)
+								  end
+							      ( <_11> when 'true' ->
+								    primop 'match_fail'
+									({'case_clause',_11})
+								-| ['compiler_generated'] )
+							    end
+						    in  let <NewS> =
+							    call %% Line 1280
+								 'lists':%% Line 1280
+									 'foldl'
+								(_16, %% Line 1289
+								      S, %% Line 1289
+									 IncApps)
+							in  %% Line 1290
+							    {'ok',NewS}
+		    -| ['compiler_generated'] )
+		  ( <_27> when 'true' ->
+			( call ( 'erlang'
+				 -| ['compiler_generated'] ):( 'error'
+							       -| ['compiler_generated'] )
+			      (( {'badrecord','appl_data'}
+				 -| ['compiler_generated'] ))
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		end
+		-| ['compiler_generated'] )
+	  ( <_19,_18> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_19,_18})
+		  -| [{'function_name',{'load',2}}] )
+	    -| ['compiler_generated'] )
+	end
+'unload'/2 =
+    %% Line 1292
+    fun (_1,_0) ->
+	%% Line 1293
+	case apply 'get_key'/2
+		 (_1, 'included_applications') of
+	  <{'ok',IncApps}> when 'true' ->
+	      do  %% Line 1294
+		  apply 'del_env'/1
+		      (_1)
+		  do  %% Line 1295
+		      call 'ets':'delete'
+			  ('ac_tab', {'loaded',_1})
+		      let <_8> =
+			  fun (_5,_4) ->
+			      %% Line 1297
+			      case apply 'get_loaded'/1
+				       (_5) of
+				%% Line 1298
+				<'false'> when 'true' ->
+				    _4
+				%% Line 1299
+				<{'true',_11}> when 'true' ->
+				    apply 'unload'/2
+					(_5, _4)
+				( <_3> when 'true' ->
+				      primop 'match_fail'
+					  ({'case_clause',_3})
+				  -| ['compiler_generated'] )
+			      end
+		      in  %% Line 1296
+			  call 'lists':'foldl'
+			      (_8, _0, %% Line 1301
+				       IncApps)
+	  ( <_2> when 'true' ->
+		primop 'match_fail'
+		    ({'badmatch',_2})
+	    -| ['compiler_generated'] )
+	end
+'check_start_cond'/4 =
+    %% Line 1303
+    fun (_3,_2,_1,_0) ->
+	do  %% Line 1304
+	    apply 'validRestartType'/1
+		(_2)
+	    %% Line 1305
+	    case apply 'get_loaded'/1
+		     (_3) of
+	      %% Line 1306
+	      <{'true',Appl}> when 'true' ->
+		  %% Line 1309
+		  case call 'lists':'keymember'
+			   (_3, 1, _0) of
+		    %% Line 1310
+		    <'true'> when 'true' ->
+			%% Line 1311
+			{'error',{'already_started',_3}}
+		    %% Line 1312
+		    <'false'> when 'true' ->
+			let <_9> =
+			    fun (_7) ->
+				%% Line 1315
+				case call 'lists':'keymember'
+					 (_7, 1, _1) of
+				  %% Line 1316
+				  <'true'> when 'true' ->
+				      'ok'
+				  %% Line 1317
+				  <'false'> when 'true' ->
+				      %% Line 1318
+				      call 'erlang':'throw'
+					  ({'error',{'not_started',_7}})
+				  ( <_6> when 'true' ->
+					primop 'match_fail'
+					    ({'case_clause',_6})
+				    -| ['compiler_generated'] )
+				end
+			in  %% Line 1320
+			    ( case Appl of
+				( <( {'appl',_16,_17,_18,_19,_20,_21,_22,_rec130}
+				     -| ['compiler_generated'] )> when 'true' ->
+				      do  call 'lists':'foreach'
+					      (_9, _rec130)
+					  %% Line 1321
+					  {'ok',Appl}
+				  -| ['compiler_generated'] )
+				( <_23> when 'true' ->
+				      ( call ( 'erlang'
+					       -| ['compiler_generated'] ):( 'error'
+									     -| ['compiler_generated'] )
+					    (( {'badrecord','appl'}
+					       -| ['compiler_generated'] ))
+					-| ['compiler_generated'] )
+				  -| ['compiler_generated'] )
+			      end
+			      -| ['compiler_generated'] )
+		    ( <_10> when 'true' ->
+			  primop 'match_fail'
+			      ({'case_clause',_10})
+		      -| ['compiler_generated'] )
+		  end
+	      %% Line 1323
+	      <'false'> when 'true' ->
+		  %% Line 1324
+		  {'error',{'not_loaded',_3}}
+	      ( <_11> when 'true' ->
+		    primop 'match_fail'
+			({'case_clause',_11})
+		-| ['compiler_generated'] )
+	    end
+'do_start'/5 =
+    %% Line 1327
+    fun (_4,_3,_2,_1,_0) ->
+	%% Line 1328
+	( case _0 of
+	    ( <( {'state',_34,_35,_36,_37,_38,_rec131,_39,_40}
+		 -| ['compiler_generated'] )> when 'true' ->
+		  let <_8> =
+		      case call 'lists':'keyfind'
+			       (_4, 1, _rec131) of
+			%% Line 1329
+			<{_X_AppName2,OldRT}> when 'true' ->
+			    %% Line 1330
+			    apply 'get_restart_type'/2
+				(_3, OldRT)
+			%% Line 1331
+			<'false'> when 'true' ->
+			    _3
+			( <_7> when 'true' ->
+			      primop 'match_fail'
+				  ({'case_clause',_7})
+			  -| ['compiler_generated'] )
+		      end
+		  in  %% Line 1336
+		      case call 'lists':'keymember'
+			       (_4, 1, _39) of
+			%% Line 1337
+			<'false'> when 'true' ->
+			    %% Line 1338
+			    case apply 'get_loaded'/1
+				     (_4) of
+			      <{'true',Appl}> when 'true' ->
+				  do  %% Line 1340
+				      apply 'spawn_starter'/4
+					  ('undefined', Appl, _0, _2)
+				      let <_22> =
+					  case %% Line 1341
+					       call 'lists':'keymember'
+						   (_4, 1, _35) of
+					    %% Line 1342
+					    <'false'> when 'true' ->
+						%% Line 1344
+						[{_4,_8,_2,_1}|_35]
+					    %% Line 1346
+					    <'true'> when 'true' ->
+						_35
+					    ( <_21> when 'true' ->
+						  %% Line 1341
+						  primop 'match_fail'
+						      ({'case_clause',_21})
+					      -| ['compiler_generated'] )
+					  end
+				      in  let <_rec137> =
+					      [%% Line 1350
+					       {_4,_1}|_39]
+					  in  let <_26> =
+						  call %% Line 1350
+						       'erlang':%% Line 1350
+								'setelement'
+						      (%% Line 1350
+						       8, _0, %% Line 1350
+							      _rec137)
+					      in  %% Line 1349
+						  call 'erlang':'setelement'
+						      (3, _26, _22)
+			      ( <_12> when 'true' ->
+				    primop 'match_fail'
+					({'badmatch',_12})
+				-| ['compiler_generated'] )
+			    end
+			%% Line 1351
+			<'true'> when 'true' ->
+			    _0
+			( <_28> when 'true' ->
+			      primop 'match_fail'
+				  ({'case_clause',_28})
+			  -| ['compiler_generated'] )
+		      end
+	      -| ['compiler_generated'] )
+	    ( <_41> when 'true' ->
+		  ( call ( 'erlang'
+			   -| ['compiler_generated'] ):( 'error'
+							 -| ['compiler_generated'] )
+			(( {'badrecord','state'}
+			   -| ['compiler_generated'] ))
+		    -| ['compiler_generated'] )
+	      -| ['compiler_generated'] )
+	  end
+	  -| ['compiler_generated'] )
+'spawn_starter'/4 =
+    %% Line 1355
+    fun (_3,_2,_1,_0) ->
+	%% Line 1356
+	call 'erlang':'spawn_link'
+	    ('application_controller', 'init_starter', [_3|[_2|[_1|[_0|[]]]]])
+'init_starter'/4 =
+    %% Line 1358
+    fun (_3,_2,_1,_0) ->
+	do  %% Line 1359
+	    call 'erlang':'process_flag'
+		('trap_exit', 'true')
+	    %% Line 1360
+	    ( case _2 of
+		( <( {'appl',_rec139,_12,_13,_14,_15,_16,_17,_18}
+		     -| ['compiler_generated'] )> when 'true' ->
+		      let <_7> =
+			  catch
+			      %% Line 1362
+			      apply 'start_appl'/3
+				  (_2, _1, _0)
+		      in  %% Line 1361
+			  call 'gen_server':'cast'
+			      ('application_controller', {'application_started',_rec139,_7})
+		  -| ['compiler_generated'] )
+		( <_19> when 'true' ->
+		      ( call ( 'erlang'
+			       -| ['compiler_generated'] ):( 'error'
+							     -| ['compiler_generated'] )
+			    (( {'badrecord','appl'}
+			       -| ['compiler_generated'] ))
+			-| ['compiler_generated'] )
+		  -| ['compiler_generated'] )
+	      end
+	      -| ['compiler_generated'] )
+'reply'/2 =
+    %% Line 1364
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <'undefined',_X_Reply> when 'true' ->
+	      %% Line 1365
+	      'ok'
+	  %% Line 1366
+	  <From,Reply> when 'true' ->
+	      call 'gen_server':'reply'
+		  (From, Reply)
+	end
+'start_appl'/3 =
+    %% Line 1368
+    fun (_2,_1,_0) ->
+	%% Line 1369
+	( case _2 of
+	    ( <( {'appl',_22,_rec140,_23,_24,_25,_26,_27,_28}
+		 -| ['compiler_generated'] )> when 'true' ->
+		  %% Line 1370
+		  ( case _rec140 of
+		      ( <( {'appl_data',_30,_31,_32,_rec141,_33,_34,_35,_36}
+			   -| ['compiler_generated'] )> when 'true' ->
+			    case _rec141 of
+			      %% Line 1371
+			      <[]> when 'true' ->
+				  %% Line 1372
+				  {'ok','undefined'}
+			      %% Line 1373
+			      <_38> when 'true' ->
+				  %% Line 1375
+				  ( case _1 of
+				      ( <( {'state',_39,_40,_41,_rec142,_42,_43,_44,_45}
+					   -| ['compiler_generated'] )> when 'true' ->
+					    let <_16> =
+						fun (_14) ->
+						    %% Line 1378
+						    case call 'lists':'keymember'
+							     (_14, 1, _rec142) of
+						      %% Line 1379
+						      <'true'> when 'true' ->
+							  %% Line 1380
+							  'ok'
+						      %% Line 1381
+						      <'false'> when 'true' ->
+							  %% Line 1382
+							  call 'erlang':'throw'
+							      ({'info',{'not_running',_14}})
+						      ( <_13> when 'true' ->
+							    primop 'match_fail'
+								({'case_clause',_13})
+							-| ['compiler_generated'] )
+						    end
+					    in  do  %% Line 1376
+						    call 'lists':'foreach'
+							(_16, _28)
+						    %% Line 1385
+						    case call 'application_master':'start_link'
+							     (_rec140, _0) of
+						      %% Line 1386
+						      <Ok = {'ok',_X_Pid}> when 'true' ->
+							  %% Line 1387
+							  Ok
+						      %% Line 1388
+						      <Error = {'error',_X_Reason}> when 'true' ->
+							  %% Line 1389
+							  call 'erlang':'throw'
+							      (Error)
+						      ( <_17> when 'true' ->
+							    primop 'match_fail'
+								({'case_clause',_17})
+							-| ['compiler_generated'] )
+						    end
+					-| ['compiler_generated'] )
+				      ( <_46> when 'true' ->
+					    ( call ( 'erlang'
+						     -| ['compiler_generated'] ):( 'error'
+										   -| ['compiler_generated'] )
+						  (( {'badrecord','state'}
+						     -| ['compiler_generated'] ))
+					      -| ['compiler_generated'] )
+					-| ['compiler_generated'] )
+				    end
+				    -| ['compiler_generated'] )
+			    end
+			-| ['compiler_generated'] )
+		      ( <_37> when 'true' ->
+			    ( call ( 'erlang'
+				     -| ['compiler_generated'] ):( 'error'
+								   -| ['compiler_generated'] )
+				  (( {'badrecord','appl_data'}
+				     -| ['compiler_generated'] ))
+			      -| ['compiler_generated'] )
+			-| ['compiler_generated'] )
+		    end
+		    -| ['compiler_generated'] )
+	      -| ['compiler_generated'] )
+	    ( <_29> when 'true' ->
+		  ( call ( 'erlang'
+			   -| ['compiler_generated'] ):( 'error'
+							 -| ['compiler_generated'] )
+			(( {'badrecord','appl'}
+			   -| ['compiler_generated'] ))
+		    -| ['compiler_generated'] )
+	      -| ['compiler_generated'] )
+	  end
+	  -| ['compiler_generated'] )
+'stop_appl'/3 =
+    %% Line 1397
+    fun (_2,_1,_0) ->
+	case <_2,_1,_0> of
+	  <AppName,Id,Type>
+	      when call 'erlang':'is_pid'
+		    (Id) ->
+	      do  %% Line 1398
+		  call 'erlang':'unlink'
+		      (Id)
+		  do  %% Line 1399
+		      call 'application_master':'stop'
+			  (Id)
+		      do  %% Line 1400
+			  apply 'info_exited'/3
+			      (AppName, 'stopped', Type)
+			  %% Line 1401
+			  call 'ets':'delete'
+			      ('ac_tab', {'application_master',AppName})
+	  %% Line 1402
+	  <AppName,'undefined',Type> when 'true' ->
+	      %% Line 1404
+	      apply 'info_exited'/3
+		  (AppName, 'stopped', Type)
+	  %% Line 1405
+	  <_X_AppName,_X_Id,_X_Type> when 'true' ->
+	      %% Line 1407
+	      'ok'
+	end
+'keysearchdelete'/3 =
+    %% Line 1409
+    fun (_2,_1,_0) ->
+	%% Line 1410
+	apply 'ksd'/4
+	    (_2, _1, _0, [])
+'ksd'/4 =
+    %% Line 1412
+    fun (_3,_2,_1,_0) ->
+	case <_3,_2,_1,_0> of
+	  <Key,Pos,[H|T],Rest>
+	      when try
+		    let <_4> =
+			call 'erlang':'element'
+			    (Pos, H)
+		    in  call 'erlang':'=:='
+			    (_4, Key)
+		of <Try> ->
+		    Try
+		catch <T,R> ->
+		    'false' ->
+	      let <_5> =
+		  call %% Line 1413
+		       'erlang':%% Line 1413
+				'++'
+		      (%% Line 1413
+		       Rest, %% Line 1413
+			     T)
+	      in  %% Line 1413
+		  {'value',H,_5}
+	  %% Line 1414
+	  <Key,Pos,[H|T],Rest> when 'true' ->
+	      %% Line 1415
+	      apply 'ksd'/4
+		  (Key, Pos, T, [H|Rest])
+	  %% Line 1416
+	  <_X_Key,_X_Pos,[],_X_Rest> when 'true' ->
+	      %% Line 1417
+	      'false'
+	  ( <_9,_8,_7,_6> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_9,_8,_7,_6})
+		  -| [{'function_name',{'ksd',4}}] )
+	    -| ['compiler_generated'] )
+	end
+'keyreplaceadd'/4 =
+    %% Line 1419
+    fun (_3,_2,_1,_0) ->
+	%% Line 1421
+	case call 'lists':'keymember'
+		 (_3, _2, _1) of
+	  %% Line 1422
+	  <'true'> when 'true' ->
+	      call 'lists':'keyreplace'
+		  (_3, _2, _1, _0)
+	  %% Line 1423
+	  <'false'> when 'true' ->
+	      [_0|_1]
+	  ( <_4> when 'true' ->
+		primop 'match_fail'
+		    ({'case_clause',_4})
+	    -| ['compiler_generated'] )
+	end
+'validRestartType'/1 =
+    %% Line 1426
+    fun (_0) ->
+	case _0 of
+	  <'permanent'> when 'true' ->
+	      'true'
+	  %% Line 1427
+	  <'temporary'> when 'true' ->
+	      'true'
+	  %% Line 1428
+	  <'transient'> when 'true' ->
+	      'true'
+	  %% Line 1429
+	  <RestartType> when 'true' ->
+	      %% Line 1430
+	      call 'erlang':'throw'
+		  ({'error',{'invalid_restart_type',RestartType}})
+	end
+'nd'/1 =
+    %% Line 1432
+    fun (_0) ->
+	case _0 of
+	  <{'distributed',Node}> when 'true' ->
+	      Node
+	  %% Line 1433
+	  <_2> when 'true' ->
+	      call 'erlang':'node'
+		  ()
+	end
+'get_restart_type'/2 =
+    %% Line 1435
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <'undefined',OldRT> when 'true' ->
+	      %% Line 1436
+	      OldRT
+	  %% Line 1437
+	  <RT,_X_OldRT> when 'true' ->
+	      %% Line 1438
+	      RT
+	end
+'get_appl_name'/1 =
+    %% Line 1440
+    fun (_0) ->
+	case _0 of
+	  <Name>
+	      when call 'erlang':'is_atom'
+		    (_0) ->
+	      Name
+	  %% Line 1441
+	  <{'application',Name,_2}>
+	      when call 'erlang':'is_atom'
+		    (Name) ->
+	      Name
+	  %% Line 1442
+	  <Appl> when 'true' ->
+	      call 'erlang':'throw'
+		  ({'error',{'bad_application',Appl}})
+	end
+'make_appl'/1 =
+    %% Line 1444
+    fun (_0) ->
+	case _0 of
+	  <Name>
+	      when call 'erlang':'is_atom'
+		    (_0) ->
+	      let <_1> =
+		  call %% Line 1445
+		       'erlang':%% Line 1445
+				'atom_to_list'
+		      (%% Line 1445
+		       Name)
+	      in  let <FName> =
+		      call %% Line 1445
+			   'erlang':%% Line 1445
+				    '++'
+			  (_1, %% Line 1445
+			       [46|[97|[112|[112]]]])
+		  in  %% Line 1446
+		      case call 'code':'where_is_file'
+			       (FName) of
+			%% Line 1447
+			<'non_existing'> when 'true' ->
+			    let <_3> =
+				call %% Line 1448
+				     'file':%% Line 1448
+					    'format_error'
+				    (%% Line 1448
+				     'enoent')
+			    in  %% Line 1448
+				{'error',{_3,FName}}
+			%% Line 1449
+			<FullName> when 'true' ->
+			    %% Line 1450
+			    case apply 'prim_consult'/1
+				     (FullName) of
+			      %% Line 1451
+			      <{'ok',[Application|[]]}> when 'true' ->
+				  let <_4> =
+				      apply %% Line 1452
+					    'make_appl_i'/1
+					  (%% Line 1452
+					   Application)
+				  in  %% Line 1452
+				      {'ok',_4}
+			      %% Line 1453
+			      <{'error',Reason}> when 'true' ->
+				  let <_5> =
+				      call %% Line 1454
+					   'file':%% Line 1454
+						  'format_error'
+					  (%% Line 1454
+					   Reason)
+				  in  %% Line 1454
+				      {'error',{_5,FName}}
+			      %% Line 1455
+			      <'error'> when 'true' ->
+				  %% Line 1456
+				  {'error',[98|[97|[100|[32|[101|[110|[99|[111|[100|[105|[110|[103]]]]]]]]]]]]}
+			      ( <_6> when 'true' ->
+				    primop 'match_fail'
+					({'case_clause',_6})
+				-| ['compiler_generated'] )
+			    end
+		      end
+	  %% Line 1459
+	  <Application> when 'true' ->
+	      let <_8> =
+		  apply %% Line 1460
+			'make_appl_i'/1
+		      (%% Line 1460
+		       Application)
+	      in  %% Line 1460
+		  {'ok',_8}
+	end
+'prim_consult'/1 =
+    %% Line 1462
+    fun (_0) ->
+	%% Line 1463
+	case call 'erl_prim_loader':'get_file'
+		 (_0) of
+	  %% Line 1464
+	  <{'ok',Bin,_5}> when 'true' ->
+	      %% Line 1465
+	      case apply 'file_binary_to_list'/1
+		       (Bin) of
+		%% Line 1466
+		<{'ok',String}> when 'true' ->
+		    %% Line 1467
+		    case call 'erl_scan':'string'
+			     (String) of
+		      %% Line 1468
+		      <{'ok',Tokens,_X_EndLine}> when 'true' ->
+			  %% Line 1469
+			  apply 'prim_parse'/2
+			      (Tokens, [])
+		      %% Line 1470
+		      <{'error',Reason,_X_EndLine}> when 'true' ->
+			  %% Line 1471
+			  {'error',Reason}
+		      ( <_1> when 'true' ->
+			    primop 'match_fail'
+				({'case_clause',_1})
+			-| ['compiler_generated'] )
+		    end
+		%% Line 1473
+		<'error'> when 'true' ->
+		    %% Line 1474
+		    'error'
+		( <_2> when 'true' ->
+		      primop 'match_fail'
+			  ({'case_clause',_2})
+		  -| ['compiler_generated'] )
+	      end
+	  %% Line 1476
+	  <'error'> when 'true' ->
+	      %% Line 1477
+	      {'error','enoent'}
+	  ( <_3> when 'true' ->
+		primop 'match_fail'
+		    ({'case_clause',_3})
+	    -| ['compiler_generated'] )
+	end
+'prim_parse'/2 =
+    %% Line 1480
+    fun (_1,_0) ->
+	let <_5> =
+	    fun (_3) ->
+		let <_2> =
+		    call %% Line 1481
+			 'erlang':%% Line 1481
+				  'element'
+			(%% Line 1481
+			 1, %% Line 1481
+			    _3)
+		in  %% Line 1481
+		    call 'erlang':'=/='
+			(_2, 'dot')
+	in  %% Line 1481
+	    case call 'lists':'splitwith'
+		     (_5, _1) of
+	      %% Line 1482
+	      <{[],[]}> when 'true' ->
+		  let <_6> =
+		      call %% Line 1483
+			   'lists':%% Line 1483
+				   'reverse'
+			  (_0)
+		  in  %% Line 1483
+		      {'ok',_6}
+	      %% Line 1484
+	      <{Tokens2,[Dot = {'dot',_14}|Rest]}> when 'true' ->
+		  let <_7> =
+		      call %% Line 1485
+			   'erlang':%% Line 1485
+				    '++'
+			  (%% Line 1485
+			   Tokens2, %% Line 1485
+				    [Dot|[]])
+		  in  %% Line 1485
+		      case call 'erl_parse':'parse_term'
+			       (_7) of
+			%% Line 1486
+			<{'ok',Term}> when 'true' ->
+			    %% Line 1487
+			    apply 'prim_parse'/2
+				(Rest, [Term|_0])
+			%% Line 1488
+			<Error = {'error',_X_R}> when 'true' ->
+			    %% Line 1489
+			    Error
+			( <_8> when 'true' ->
+			      primop 'match_fail'
+				  ({'case_clause',_8})
+			  -| ['compiler_generated'] )
+		      end
+	      %% Line 1491
+	      <{Tokens2,[]}> when 'true' ->
+		  %% Line 1492
+		  case call 'erl_parse':'parse_term'
+			   (Tokens2) of
+		    %% Line 1493
+		    <{'ok',Term}> when 'true' ->
+			let <_9> =
+			    call %% Line 1494
+				 'lists':%% Line 1494
+					 'reverse'
+				(%% Line 1494
+				 [Term|_0])
+			in  %% Line 1494
+			    {'ok',_9}
+		    %% Line 1495
+		    <Error = {'error',_X_R}> when 'true' ->
+			%% Line 1496
+			Error
+		    ( <_10> when 'true' ->
+			  primop 'match_fail'
+			      ({'case_clause',_10})
+		      -| ['compiler_generated'] )
+		  end
+	      ( <_11> when 'true' ->
+		    primop 'match_fail'
+			({'case_clause',_11})
+		-| ['compiler_generated'] )
+	    end
+'make_appl_i'/1 =
+    %% Line 1500
+    fun (_0) ->
+	case _0 of
+	  <{'application',Name,Opts}>
+	      when let <_1> =
+		    call 'erlang':'is_atom'
+			(Name)
+		in  let <_2> =
+			call 'erlang':'is_list'
+			    (Opts)
+		    in  call 'erlang':'and'
+			    (_1, _2) ->
+	      let <Descr> =
+		  apply %% Line 1501
+			'get_opt'/3
+		      (%% Line 1501
+		       'description', %% Line 1501
+				      Opts, %% Line 1501
+					    [])
+	      in  let <Id> =
+		      apply %% Line 1502
+			    'get_opt'/3
+			  (%% Line 1502
+			   'id', %% Line 1502
+				 Opts, %% Line 1502
+				       [])
+		  in  let <Vsn> =
+			  apply %% Line 1503
+				'get_opt'/3
+			      (%% Line 1503
+			       'vsn', %% Line 1503
+				      Opts, %% Line 1503
+					    [])
+		      in  let <Mods> =
+			      apply %% Line 1504
+				    'get_opt'/3
+				  (%% Line 1504
+				   'modules', %% Line 1504
+					      Opts, %% Line 1504
+						    [])
+			  in  let <Regs> =
+				  apply %% Line 1505
+					'get_opt'/3
+				      (%% Line 1505
+				       'registered', %% Line 1505
+						     Opts, %% Line 1505
+							   [])
+			      in  let <Apps> =
+				      apply %% Line 1506
+					    'get_opt'/3
+					  (%% Line 1506
+					   'applications', %% Line 1506
+							   Opts, %% Line 1506
+								 [])
+				  in  let <_10> =
+					  case %% Line 1508
+					       apply 'get_opt'/3
+						   ('mod', Opts, []) of
+					    %% Line 1509
+					    <MA = {M,_X_A}>
+						when call 'erlang':'is_atom'
+						      (M) ->
+						MA
+					    %% Line 1510
+					    <[]> when 'true' ->
+						[]
+					    %% Line 1511
+					    <Other> when 'true' ->
+						call 'erlang':'throw'
+						    ({'error',{'badstartspec',Other}})
+					  end
+				      in  let <Phases> =
+					      apply %% Line 1513
+						    'get_opt'/3
+						  (%% Line 1513
+						   'start_phases', %% Line 1513
+								   Opts, %% Line 1513
+									 'undefined')
+					  in  let <Env> =
+						  apply %% Line 1514
+							'get_opt'/3
+						      (%% Line 1514
+						       'env', %% Line 1514
+							      Opts, %% Line 1514
+								    [])
+					      in  let <MaxP> =
+						      apply %% Line 1515
+							    'get_opt'/3
+							  (%% Line 1515
+							   'maxP', %% Line 1515
+								   Opts, %% Line 1515
+									 'infinity')
+						  in  let <MaxT> =
+							  apply %% Line 1516
+								'get_opt'/3
+							      (%% Line 1516
+							       'maxT', %% Line 1516
+								       Opts, %% Line 1516
+									     'infinity')
+						      in  let <IncApps> =
+							      apply %% Line 1517
+								    'get_opt'/3
+								  (%% Line 1517
+								   'included_applications', %% Line 1517
+											    Opts, %% Line 1517
+												  [])
+							  in  %% Line 1518
+							      {{'appl_data',Name,Regs,Phases,_10,%% Line 1519
+												 Mods,%% Line 1519
+												      IncApps,%% Line 1519
+													      MaxP,%% Line 1519
+														   MaxT},%% Line 1520
+															 Env,%% Line 1520
+															     IncApps,%% Line 1520
+																     Descr,%% Line 1520
+																	   Id,%% Line 1520
+																	      Vsn,%% Line 1520
+																		  Apps}
+	  %% Line 1521
+	  <{'application',Name,Opts}>
+	      when call 'erlang':'is_list'
+		    (Opts) ->
+	      %% Line 1522
+	      call 'erlang':'throw'
+		  ({'error',{'invalid_name',Name}})
+	  %% Line 1523
+	  <{'application',_X_Name,Opts}> when 'true' ->
+	      %% Line 1524
+	      call 'erlang':'throw'
+		  ({'error',{'invalid_options',Opts}})
+	  %% Line 1525
+	  <Appl> when 'true' ->
+	      call 'erlang':'throw'
+		  ({'error',{'bad_application',Appl}})
+	end
+'do_change_apps'/3 =
+    %% Line 1536
+    fun (_2,_1,_0) ->
+	%% Line 1543
+	case apply 'check_conf_sys'/1
+		 (_1) of
+	  <{'ok',SysConfig,Errors}> when 'true' ->
+	      let <_7> =
+		  fun (_5) ->
+		      %% Line 1547
+		      case _5 of
+			<{'error',{SysFName,Line,Str}}> when 'true' ->
+			    %% Line 1548
+			    case call 'logger':'allow'
+				     ('error', 'application_controller') of
+			      <'true'> when 'true' ->
+				  call 'logger':'macro_log'
+				      (~{'file'=>[97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[95|[99|[111|[110|[116|[114|[111|[108|[108|[101|[114|[46|[101|[114|[108]]]]]]]]]]]]]]]]]]]]]]]]]],'line'=>1548,'mfa'=>{'application_controller','do_change_apps',3}}~, 'error', [126|[116|[112|[58|[32|[126|[119|[58|[32|[126|[116|[115|[126|[110]]]]]]]]]]]]]], [SysFName|[Line|[Str|[]]]], ~{'error_logger'=>~{'tag'=>'error'}~}~)
+			      %% Line 1549
+			      <'false'> when 'true' ->
+				  'ok'
+			      ( <_4> when 'true' ->
+				    primop 'match_fail'
+					({'case_clause',_4})
+				-| ['compiler_generated'] )
+			    end
+			( <_6> when 'true' ->
+			      ( primop 'match_fail'
+				    ({'function_clause',_6})
+				-| [{'function_name',{'-do_change_apps/3-fun-0-',1}}] )
+			  -| ['compiler_generated'] )
+		      end
+	      in  do  %% Line 1547
+		      call 'lists':'foreach'
+			  (_7, %% Line 1551
+			       Errors)
+		      let <_15> =
+			  fun (_13) ->
+			      %% Line 1554
+			      ( case _13 of
+				  ( <( {'appl',_rec144,_20,_21,_22,_23,_24,_25,_26}
+				       -| ['compiler_generated'] )> when 'true' ->
+					%% Line 1555
+					case apply 'is_loaded_app'/2
+						 (_rec144, _2) of
+					  %% Line 1556
+					  <{'true',Application}> when 'true' ->
+					      let <_11> =
+						  apply %% Line 1557
+							'make_appl'/1
+						      (%% Line 1557
+						       Application)
+					      in  %% Line 1557
+						  apply 'do_change_appl'/3
+						      (_11, _13, %% Line 1558
+								 SysConfig)
+					  %% Line 1561
+					  <'false'> when 'true' ->
+					      _13
+					  ( <_12> when 'true' ->
+						primop 'match_fail'
+						    ({'case_clause',_12})
+					    -| ['compiler_generated'] )
+					end
+				    -| ['compiler_generated'] )
+				  ( <_27> when 'true' ->
+					( call ( 'erlang'
+						 -| ['compiler_generated'] ):( 'error'
+									       -| ['compiler_generated'] )
+					      (( {'badrecord','appl'}
+						 -| ['compiler_generated'] ))
+					  -| ['compiler_generated'] )
+				    -| ['compiler_generated'] )
+				end
+				-| ['compiler_generated'] )
+		      in  let <_16> =
+			      call %% Line 1553
+				   'lists':%% Line 1553
+					   'map'
+				  (_15, _0)
+			  in  %% Line 1553
+			      {_16,%% Line 1565
+				   SysConfig}
+	  ( <_3> when 'true' ->
+		primop 'match_fail'
+		    ({'badmatch',_3})
+	    -| ['compiler_generated'] )
+	end
+'is_loaded_app'/2 =
+    %% Line 1567
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <AppName,[{'application',_4,App}|_5]>
+	      when call 'erlang':'=:='
+		    (_4,
+		     AppName) ->
+	      %% Line 1568
+	      {'true',{'application',AppName,App}}
+	  %% Line 1569
+	  <AppName,[_6|T]> when 'true' ->
+	      apply 'is_loaded_app'/2
+		  (AppName, T)
+	  %% Line 1570
+	  <_X_AppName,[]> when 'true' ->
+	      'false'
+	  ( <_3,_2> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_3,_2})
+		  -| [{'function_name',{'is_loaded_app',2}}] )
+	    -| ['compiler_generated'] )
+	end
+'do_change_appl'/3 =
+    %% Line 1572
+    fun (_2,_1,_0) ->
+	case <_2,_1,_0> of
+	  <{'ok',{ApplData,Env,IncApps,Descr,Id,Vsn,Apps}},%% Line 1573
+							   OldAppl,%% Line 1573
+								   Config> when 'true' ->
+	      %% Line 1574
+	      ( case OldAppl of
+		  ( <( {'appl',_rec145,_15,_16,_17,_18,_19,_20,_21}
+		       -| ['compiler_generated'] )> when 'true' ->
+			let <ConfEnv> =
+			    apply %% Line 1577
+				  'get_opt'/3
+				(_rec145, %% Line 1577
+					  Config, %% Line 1577
+						  [])
+			in  let <NewEnv1> =
+				apply %% Line 1578
+				      'merge_app_env'/2
+				    (%% Line 1578
+				     Env, %% Line 1578
+					  ConfEnv)
+			    in  let <CmdLineEnv> =
+				    apply %% Line 1581
+					  'get_cmd_env'/1
+					(_rec145)
+				in  let <NewEnv2> =
+					apply %% Line 1582
+					      'merge_app_env'/2
+					    (%% Line 1582
+					     NewEnv1, %% Line 1582
+						      CmdLineEnv)
+				    in  do  %% Line 1585
+					    apply 'del_env'/1
+						(_rec145)
+					    do  %% Line 1586
+						apply 'add_env'/2
+						    (_rec145, NewEnv2)
+						%% Line 1593
+						{'appl',_rec145,ApplData,Descr,Id,Vsn,_19,IncApps,Apps}
+		    -| ['compiler_generated'] )
+		  ( <_22> when 'true' ->
+			( call ( 'erlang'
+				 -| ['compiler_generated'] ):( 'error'
+							       -| ['compiler_generated'] )
+			      (( {'badrecord','appl'}
+				 -| ['compiler_generated'] ))
+			  -| ['compiler_generated'] )
+		    -| ['compiler_generated'] )
+		end
+		-| ['compiler_generated'] )
+	  %% Line 1594
+	  <Error = {'error',_X_R},_X_Appl,_X_ConfData> when 'true' ->
+	      %% Line 1595
+	      call 'erlang':'throw'
+		  (Error)
+	  ( <_14,_13,_12> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_14,_13,_12})
+		  -| [{'function_name',{'do_change_appl',3}}] )
+	    -| ['compiler_generated'] )
+	end
+'get_opt'/3 =
+    %% Line 1597
+    fun (_2,_1,_0) ->
+	%% Line 1598
+	case call 'lists':'keyfind'
+		 (_2, 1, _1) of
+	  %% Line 1599
+	  <{_X_Key,Val}> when 'true' ->
+	      Val
+	  %% Line 1600
+	  <_7> when 'true' ->
+	      _0
+	end
+'get_cmd_env'/1 =
+    %% Line 1603
+    fun (_0) ->
+	%% Line 1604
+	case call 'init':'get_argument'
+		 (_0) of
+	  %% Line 1605
+	  <{'ok',Args}> when 'true' ->
+	      let <_6> =
+		  fun (_3,_2) ->
+		      let <_1> =
+			  apply %% Line 1606
+				'conv'/1
+			      (_3)
+		      in  %% Line 1606
+			  call 'erlang':'++'
+			      (_1, _2)
+	      in  %% Line 1606
+		  call 'lists':'foldl'
+		      (_6, [], Args)
+	  %% Line 1607
+	  <_9> when 'true' ->
+	      []
+	end
+'conv'/1 =
+    %% Line 1610
+    fun (_0) ->
+	case _0 of
+	  <[Key|[Val|T]]> when 'true' ->
+	      let <_2> =
+		  apply %% Line 1611
+			'make_term'/1
+		      (%% Line 1611
+		       Key)
+	      in  let <_1> =
+		      apply %% Line 1611
+			    'make_term'/1
+			  (%% Line 1611
+			   Val)
+		  in  let <_3> =
+			  apply %% Line 1611
+				'conv'/1
+			      (%% Line 1611
+			       T)
+		      in  %% Line 1611
+			  [{_2,_1}|_3]
+	  %% Line 1612
+	  <_5> when 'true' ->
+	      []
+	end
+'make_term'/1 =
+    %% Line 1614
+    fun (_0) ->
+	%% Line 1615
+	case call 'erl_scan':'string'
+		 (_0) of
+	  %% Line 1616
+	  <{'ok',Tokens,_6}> when 'true' ->
+	      let <_1> =
+		  call %% Line 1617
+		       'erl_anno':%% Line 1617
+				  'new'
+		      (%% Line 1617
+		       1)
+	      in  let <_2> =
+		      call %% Line 1617
+			   'erlang':%% Line 1617
+				    '++'
+			  (%% Line 1617
+			   Tokens, %% Line 1617
+				   [{'dot',_1}|[]])
+		  in  %% Line 1617
+		      case call 'erl_parse':'parse_term'
+			       (_2) of
+			%% Line 1618
+			<{'ok',Term}> when 'true' ->
+			    %% Line 1619
+			    Term
+			%% Line 1620
+			<{'error',{_7,M,Reason}}> when 'true' ->
+			    %% Line 1621
+			    apply 'handle_make_term_error'/3
+				(M, Reason, _0)
+			( <_3> when 'true' ->
+			      primop 'match_fail'
+				  ({'case_clause',_3})
+			  -| ['compiler_generated'] )
+		      end
+	  %% Line 1623
+	  <{'error',{_8,M,Reason},_9}> when 'true' ->
+	      %% Line 1624
+	      apply 'handle_make_term_error'/3
+		  (M, Reason, _0)
+	  ( <_4> when 'true' ->
+		primop 'match_fail'
+		    ({'case_clause',_4})
+	    -| ['compiler_generated'] )
+	end
+'handle_make_term_error'/3 =
+    %% Line 1627
+    fun (_2,_1,_0) ->
+	do  %% Line 1628
+	    case call 'logger':'allow'
+		     ('error', 'application_controller') of
+	      <'true'> when 'true' ->
+		  let <_3> =
+		      call _2:%% Line 1629
+			      'format_error'
+			  (_1)
+		  in  call 'logger':'macro_log'
+			  (~{'file'=>[97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[95|[99|[111|[110|[116|[114|[111|[108|[108|[101|[114|[46|[101|[114|[108]]]]]]]]]]]]]]]]]]]]]]]]]],'line'=>1628,'mfa'=>{'application_controller','handle_make_term_error',3}}~, 'error', [97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[95|[99|[111|[110|[116|[114|[111|[108|[108|[101|[114|[58|[32|[126|[116|[115|[58|[32|[126|[116|[115|[126|[110]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]], %% Line 1629
+																																																										     [_3|[_0|[]]], ~{'error_logger'=>~{'tag'=>'error'}~}~)
+	      %% Line 1630
+	      <'false'> when 'true' ->
+		  'ok'
+	      ( <_4> when 'true' ->
+		    primop 'match_fail'
+			({'case_clause',_4})
+		-| ['compiler_generated'] )
+	    end
+	    %% Line 1631
+	    call 'erlang':'throw'
+		({'error',{'bad_environment_value',_0}})
+'get_env_i'/2 =
+    %% Line 1633
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <Name,{'state',_5,_6,_7,_8,_9,_10,_11,ConfData}>
+	      when call 'erlang':'is_list'
+		    (ConfData) ->
+	      %% Line 1634
+	      case call 'lists':'keyfind'
+		       (Name, 1, ConfData) of
+		%% Line 1635
+		<{_X_Name,Env}> when 'true' ->
+		    Env
+		%% Line 1636
+		<_12> when 'true' ->
+		    []
+	      end
+	  %% Line 1638
+	  <_X_Name,_13> when 'true' ->
+	      []
+	end
+'merge_env'/2 =
+    %% Line 1641
+    fun (_1,_0) ->
+	%% Line 1642
+	apply 'merge_env'/3
+	    (_1, _0, [])
+'merge_env'/3 =
+    %% Line 1644
+    fun (_2,_1,_0) ->
+	case <_2,_1,_0> of
+	  <[_@r0 = {App,AppEnv1}|T],Env2,Res> when 'true' ->
+	      %% Line 1645
+	      case apply 'get_env_key'/2
+		       (App, Env2) of
+		%% Line 1646
+		<{'value',AppEnv2,RestEnv2}> when 'true' ->
+		    let <NewAppEnv> =
+			apply %% Line 1647
+			      'merge_app_env'/2
+			    (%% Line 1647
+			     AppEnv1, %% Line 1647
+				      AppEnv2)
+		    in  %% Line 1648
+			apply 'merge_env'/3
+			    (T, RestEnv2, [{App,NewAppEnv}|Res])
+		%% Line 1649
+		<_8> when 'true' ->
+		    %% Line 1650
+		    apply 'merge_env'/3
+			(T, Env2, [_@r0|Res])
+	      end
+	  %% Line 1652
+	  <[],Env2,Res> when 'true' ->
+	      %% Line 1653
+	      call 'erlang':'++'
+		  (Env2, Res)
+	  ( <_7,_6,_5> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_7,_6,_5})
+		  -| [{'function_name',{'merge_env',3}}] )
+	    -| ['compiler_generated'] )
+	end
+'change_app_env'/3 =
+    %% Line 1657
+    fun (_2,_1,_0) ->
+	%% Line 1658
+	case apply 'get_env_key'/2
+		 (_1, _2) of
+	  %% Line 1659
+	  <{'value',AppEnv,RestEnv}> when 'true' ->
+	      let <_3> =
+		  apply _0
+		      (%% Line 1660
+		       AppEnv)
+	      in  %% Line 1660
+		  [{_1,_3}|RestEnv]
+	  %% Line 1661
+	  <_9> when 'true' ->
+	      let <_4> =
+		  apply _0
+		      (%% Line 1662
+		       [])
+	      in  %% Line 1662
+		  [{_1,_4}|_2]
+	end
+'merge_app_env'/2 =
+    %% Line 1666
+    fun (_1,_0) ->
+	%% Line 1667
+	apply 'merge_app_env'/3
+	    (_1, _0, [])
+'merge_app_env'/3 =
+    %% Line 1669
+    fun (_2,_1,_0) ->
+	case <_2,_1,_0> of
+	  <[_@r0 = {Key,Val}|T],Env2,Res> when 'true' ->
+	      %% Line 1670
+	      case apply 'get_env_key'/2
+		       (Key, Env2) of
+		%% Line 1671
+		<{'value',NewVal,RestEnv}> when 'true' ->
+		    %% Line 1672
+		    apply 'merge_app_env'/3
+			(T, RestEnv, [{Key,NewVal}|Res])
+		%% Line 1673
+		<_7> when 'true' ->
+		    %% Line 1674
+		    apply 'merge_app_env'/3
+			(T, Env2, [_@r0|Res])
+	      end
+	  %% Line 1676
+	  <[],Env2,Res> when 'true' ->
+	      %% Line 1677
+	      call 'erlang':'++'
+		  (Env2, Res)
+	  ( <_6,_5,_4> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_6,_5,_4})
+		  -| [{'function_name',{'merge_app_env',3}}] )
+	    -| ['compiler_generated'] )
+	end
+'get_env_key'/2 =
+    %% Line 1679
+    fun (_1,_0) ->
+	apply 'get_env_key'/3
+	    (_0, _1, [])
+'get_env_key'/3 =
+    %% Line 1680
+    fun (_2,_1,_0) ->
+	case <_2,_1,_0> of
+	  <[{Key,Val}|T],_7,Res>
+	      when call 'erlang':'=:='
+		    (_7,
+		     Key) ->
+	      let <_3> =
+		  call %% Line 1681
+		       'erlang':%% Line 1681
+				'++'
+		      (%% Line 1681
+		       T, %% Line 1681
+			  Res)
+	      in  %% Line 1681
+		  {'value',Val,_3}
+	  %% Line 1682
+	  <[H|T],Key,Res> when 'true' ->
+	      %% Line 1683
+	      apply 'get_env_key'/3
+		  (T, Key, [H|Res])
+	  %% Line 1684
+	  <[],_X_Key,Res> when 'true' ->
+	      Res
+	  ( <_6,_5,_4> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_6,_5,_4})
+		  -| [{'function_name',{'get_env_key',3}}] )
+	    -| ['compiler_generated'] )
+	end
+'add_env'/2 =
+    %% Line 1686
+    fun (_1,_0) ->
+	let <_4> =
+	    fun (_2) ->
+		%% Line 1687
+		case _2 of
+		  <{Key,Value}> when 'true' ->
+		      %% Line 1688
+		      call 'ets':'insert'
+			  ('ac_tab', {{'env',_1,Key},Value})
+		  ( <_3> when 'true' ->
+			( primop 'match_fail'
+			      ({'function_clause',_3})
+			  -| [{'function_name',{'-add_env/2-fun-0-',1}}] )
+		    -| ['compiler_generated'] )
+		end
+	in  %% Line 1687
+	    call 'lists':'foreach'
+		(_4, _0)
+'del_env'/1 =
+    %% Line 1692
+    fun (_0) ->
+	%% Line 1693
+	call 'ets':'match_delete'
+	    ('ac_tab', {{'env',_0,'_'},'_'})
+'check_user'/0 =
+    %% Line 1695
+    fun () ->
+	%% Line 1696
+	case call 'erlang':'whereis'
+		 ('user') of
+	  %% Line 1697
+	  <User>
+	      when call 'erlang':'is_pid'
+		    (User) ->
+	      let <_0> =
+		  call 'erlang':'self'
+		      ()
+	      in  call 'erlang':'group_leader'
+		      (User, _0)
+	  %% Line 1698
+	  <_2> when 'true' ->
+	      'ok'
+	end
+'do_prep_config_change'/1 =
+    %% Line 1705
+    fun (_0) ->
+	%% Line 1706
+	apply 'do_prep_config_change'/2
+	    (_0, [])
+'do_prep_config_change'/2 =
+    %% Line 1708
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <[],EnvBefore> when 'true' ->
+	      %% Line 1709
+	      EnvBefore
+	  %% Line 1710
+	  <[{App,_X_Id}|Apps],EnvBefore> when 'true' ->
+	      let <Env> =
+		  call %% Line 1711
+		       'application':%% Line 1711
+				     'get_all_env'
+		      (%% Line 1711
+		       App)
+	      in  %% Line 1712
+		  apply 'do_prep_config_change'/2
+		      (Apps, [{App,Env}|EnvBefore])
+	  ( <_4,_3> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_4,_3})
+		  -| [{'function_name',{'do_prep_config_change',2}}] )
+	    -| ['compiler_generated'] )
+	end
+'do_config_change'/2 =
+    %% Line 1719
+    fun (_1,_0) ->
+	%% Line 1720
+	apply 'do_config_change'/3
+	    (_1, _0, [])
+'do_config_change'/3 =
+    %% Line 1722
+    fun (_2,_1,_0) ->
+	case <_2,_1,_0> of
+	  <[],_X_EnvBefore,[]> when 'true' ->
+	      %% Line 1723
+	      'ok'
+	  %% Line 1724
+	  <[],_X_EnvBefore,Errors> when 'true' ->
+	      %% Line 1725
+	      {'error',Errors}
+	  %% Line 1726
+	  <[{App,_X_Id}|Apps],EnvBefore,Errors> when 'true' ->
+	      let <_3> =
+		  call %% Line 1727
+		       'application':%% Line 1727
+				     'get_all_env'
+		      (%% Line 1727
+		       App)
+	      in  let <AppEnvNow> =
+		      call %% Line 1727
+			   'lists':%% Line 1727
+				   'sort'
+			  (_3)
+		  in  let <_6> =
+			  case %% Line 1728
+			       call 'lists':'keyfind'
+				   (App, 1, EnvBefore) of
+			    %% Line 1729
+			    <'false'> when 'true' ->
+				%% Line 1730
+				[]
+			    %% Line 1731
+			    <{_19,AppEnvBeforeT}>
+				when call 'erlang':'=:='
+				      (_19,
+				       App) ->
+				%% Line 1732
+				call 'lists':'sort'
+				    (AppEnvBeforeT)
+			    ( <_5> when 'true' ->
+				  %% Line 1728
+				  primop 'match_fail'
+				      ({'case_clause',_5})
+			      -| ['compiler_generated'] )
+			  end
+		      in  let <_13> =
+			      case %% Line 1735
+				   AppEnvNow of
+				%% Line 1736
+				<_20>
+				    when call 'erlang':'=:='
+					  (AppEnvNow,
+					   _6) ->
+				    %% Line 1737
+				    'ok'
+				%% Line 1738
+				<_21> when 'true' ->
+				    %% Line 1739
+				    case apply 'do_config_diff'/2
+					     (AppEnvNow, _6) of
+				      %% Line 1740
+				      <{[],[],[]}> when 'true' ->
+					  %% Line 1741
+					  'ok'
+				      %% Line 1742
+				      <{Changed,New,Removed}> when 'true' ->
+					  %% Line 1743
+					  case call 'application':'get_key'
+						   (App, 'mod') of
+					    %% Line 1744
+					    <{'ok',{Mod,_X_Para}}> when 'true' ->
+						let <_8> =
+						    catch
+							%% Line 1745
+							call Mod:'config_change'
+							    (Changed, New, %% Line 1746
+									   Removed)
+						in  %% Line 1745
+						    case _8 of
+						      %% Line 1747
+						      <'ok'> when 'true' ->
+							  %% Line 1748
+							  'ok'
+						      %% Line 1751
+						      <{'EXIT',{'undef',_22}}> when 'true' ->
+							  %% Line 1752
+							  'ok'
+						      %% Line 1753
+						      <Error = {'error',_23}> when 'true' ->
+							  %% Line 1754
+							  Error
+						      %% Line 1755
+						      <Else> when 'true' ->
+							  %% Line 1756
+							  {'error',Else}
+						    end
+					    %% Line 1758
+					    <{'ok',[]}> when 'true' ->
+						%% Line 1759
+						{'error',{'module_not_defined',App}}
+					    %% Line 1760
+					    <'undefined'> when 'true' ->
+						%% Line 1761
+						{'error',{'application_not_found',App}}
+					    ( <_10> when 'true' ->
+						  primop 'match_fail'
+						      ({'case_clause',_10})
+					      -| ['compiler_generated'] )
+					  end
+				      ( <_11> when 'true' ->
+					    primop 'match_fail'
+						({'case_clause',_11})
+					-| ['compiler_generated'] )
+				    end
+			      end
+			  in  %% Line 1766
+			      case _13 of
+				%% Line 1767
+				<'ok'> when 'true' ->
+				    %% Line 1768
+				    apply 'do_config_change'/3
+					(Apps, EnvBefore, Errors)
+				%% Line 1769
+				<{'error',NewError}> when 'true' ->
+				    %% Line 1770
+				    apply 'do_config_change'/3
+					(Apps, EnvBefore, [NewError|Errors])
+				( <_15> when 'true' ->
+				      primop 'match_fail'
+					  ({'case_clause',_15})
+				  -| ['compiler_generated'] )
+			      end
+	  ( <_18,_17,_16> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_18,_17,_16})
+		  -| [{'function_name',{'do_config_change',3}}] )
+	    -| ['compiler_generated'] )
+	end
+'do_config_diff'/2 =
+    %% Line 1777
+    fun (_1,_0) ->
+	%% Line 1778
+	apply 'do_config_diff'/3
+	    (_1, _0, {[],[]})
+'do_config_diff'/3 =
+    %% Line 1780
+    fun (_2,_1,_0) ->
+	case <_2,_1,_0> of
+	  <[],AppEnvBefore,{Changed,New}> when 'true' ->
+	      let <_7> =
+		  fun (_4,_3) ->
+		      %% Line 1781
+		      case <_4,_3> of
+			<{Env,_X_Value},Acc> when 'true' ->
+			    [Env|Acc]
+			( <_6,_5> when 'true' ->
+			      ( primop 'match_fail'
+				    ({'function_clause',_6,_5})
+				-| [{'function_name',{'-do_config_diff/3-fun-0-',2}}] )
+			  -| ['compiler_generated'] )
+		      end
+	      in  let <Removed> =
+		      call %% Line 1781
+			   'lists':%% Line 1781
+				   'foldl'
+			  (_7, %% Line 1781
+			       [], %% Line 1781
+				   AppEnvBefore)
+		  in  %% Line 1782
+		      {Changed,New,Removed}
+	  %% Line 1783
+	  <AppEnvNow,[],{Changed,New}> when 'true' ->
+	      let <_9> =
+		  call %% Line 1784
+		       'erlang':%% Line 1784
+				'++'
+		      (%% Line 1784
+		       AppEnvNow, %% Line 1784
+				  New)
+	      in  %% Line 1784
+		  {Changed,_9,[]}
+	  %% Line 1785
+	  <[_@r1 = {Env,Value}|AppEnvNow],AppEnvBefore,_@r0 = {Changed,New}> when 'true' ->
+	      %% Line 1786
+	      case call 'lists':'keyfind'
+		       (Env, 1, AppEnvBefore) of
+		%% Line 1787
+		<{_16,_17}>
+		    when let <_18> =
+			  call 'erlang':'=:='
+			      (_16, Env)
+		      in  let <_19> =
+			      call 'erlang':'=:='
+				  (_17, Value)
+			  in  call 'erlang':'and'
+				  (_18, _19) ->
+		    let <_10> =
+			call %% Line 1788
+			     'lists':%% Line 1788
+				     'keydelete'
+			    (%% Line 1788
+			     Env, %% Line 1788
+				  1, %% Line 1788
+				     AppEnvBefore)
+		    in  %% Line 1788
+			apply 'do_config_diff'/3
+			    (AppEnvNow, _10, _@r0)
+		%% Line 1789
+		<{_20,_X_OtherValue}>
+		    when call 'erlang':'=:='
+			  (_20,
+			   Env) ->
+		    let <_11> =
+			call %% Line 1790
+			     'lists':%% Line 1790
+				     'keydelete'
+			    (%% Line 1790
+			     Env, %% Line 1790
+				  1, %% Line 1790
+				     AppEnvBefore)
+		    in  %% Line 1790
+			apply 'do_config_diff'/3
+			    (AppEnvNow, _11, %% Line 1791
+					     {[_@r1|Changed],New})
+		%% Line 1792
+		<'false'> when 'true' ->
+		    %% Line 1793
+		    apply 'do_config_diff'/3
+			(AppEnvNow, AppEnvBefore, {Changed,[_@r1|New]})
+		( <_12> when 'true' ->
+		      primop 'match_fail'
+			  ({'case_clause',_12})
+		  -| ['compiler_generated'] )
+	      end
+	  ( <_15,_14,_13> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_15,_14,_13})
+		  -| [{'function_name',{'do_config_diff',3}}] )
+	    -| ['compiler_generated'] )
+	end
+'check_conf'/0 =
+    %% Line 1800
+    fun () ->
+	%% Line 1801
+	case call 'init':'get_argument'
+		 ('config') of
+	  %% Line 1802
+	  <{'ok',Files}> when 'true' ->
+	      let <_12> =
+		  fun (_9,_8) ->
+		      %% Line 1804
+		      case <_9,_8> of
+			<[File|[]],Env> when 'true' ->
+			    let <BFName> =
+				call %% Line 1805
+				     'filename':%% Line 1805
+						'basename'
+				    (%% Line 1805
+				     File, %% Line 1805
+					   [46|[99|[111|[110|[102|[105|[103]]]]]]])
+			    in  let <_2> =
+				    call %% Line 1806
+					 'filename':%% Line 1806
+						    'dirname'
+					(%% Line 1806
+					 File)
+				in  let <_1> =
+					call %% Line 1807
+					     'erlang':%% Line 1807
+						      '++'
+					    (%% Line 1807
+					     BFName, %% Line 1807
+						     [46|[99|[111|[110|[102|[105|[103]]]]]]])
+				    in  let <FName> =
+					    call %% Line 1806
+						 'filename':%% Line 1806
+							    'join'
+						(_2, _1)
+					in  %% Line 1808
+					    case apply 'load_file'/1
+						     (FName) of
+					      %% Line 1809
+					      <{'ok',NewEnv}> when 'true' ->
+						  %% Line 1815
+						  case <> of
+						    %% Line 1816
+						    <>
+							when call 'erlang':'=:='
+							      (BFName,
+							       [115|[121|[115]]]) ->
+							let <DName> =
+							    call %% Line 1817
+								 'filename':%% Line 1817
+									    'dirname'
+								(%% Line 1817
+								 FName)
+							in  %% Line 1818
+							    case %% Line 1819
+								 apply 'check_conf_sys'/4
+								     (NewEnv, [], [], DName) of
+							      <{'ok',SysEnv,Errors}> when 'true' ->
+								  %% Line 1824
+								  case Errors of
+								    %% Line 1825
+								    <[]> when 'true' ->
+									%% Line 1826
+									apply 'merge_env'/2
+									    (Env, SysEnv)
+								    %% Line 1827
+								    <[_@r0 = {'error',{SysFName,Line,Str}}|_15]> when 'true' ->
+									%% Line 1828
+									call 'erlang':'throw'
+									    (_@r0)
+								    ( <_6> when 'true' ->
+									  primop 'match_fail'
+									      ({'case_clause',_6})
+								      -| ['compiler_generated'] )
+								  end
+							      ( <_5> when 'true' ->
+								    primop 'match_fail'
+									({'badmatch',_5})
+								-| ['compiler_generated'] )
+							    end
+						    %% Line 1830
+						    <> when 'true' ->
+							%% Line 1831
+							apply 'merge_env'/2
+							    (Env, NewEnv)
+						  end
+					      %% Line 1833
+					      <{'error',{Line,_X_Mod,Str}}> when 'true' ->
+						  %% Line 1834
+						  call 'erlang':'throw'
+						      ({'error',{FName,Line,Str}})
+					      ( <_7> when 'true' ->
+						    primop 'match_fail'
+							({'case_clause',_7})
+						-| ['compiler_generated'] )
+					    end
+			( <_11,_10> when 'true' ->
+			      ( primop 'match_fail'
+				    ({'function_clause',_11,_10})
+				-| [{'function_name',{'-check_conf/0-fun-0-',2}}] )
+			  -| ['compiler_generated'] )
+		      end
+	      in  let <_13> =
+		      call %% Line 1803
+			   'lists':%% Line 1803
+				   'foldl'
+			  (_12, %% Line 1836
+				[], %% Line 1836
+				    Files)
+		  in  %% Line 1803
+		      {'ok',_13}
+	  %% Line 1837
+	  <_16> when 'true' ->
+	      {'ok',[]}
+	end
+'check_conf_sys'/1 =
+    %% Line 1840
+    fun (_0) ->
+	%% Line 1841
+	apply 'check_conf_sys'/4
+	    (_0, [], [], [])
+'check_conf_sys'/4 =
+    %% Line 1843
+    fun (_3,_2,_1,_0) ->
+	case <_3,_2,_1,_0> of
+	  <[File|T],SysEnv,Errors,DName>
+	      when let <_4> =
+		    call 'erlang':'is_list'
+			(File)
+		in  let <_5> =
+			call 'erlang':'is_list'
+			    (DName)
+		    in  call 'erlang':'and'
+			    (_4, _5) ->
+	      let <BFName> =
+		  call %% Line 1844
+		       'filename':%% Line 1844
+				  'basename'
+		      (%% Line 1844
+		       File, %% Line 1844
+			     [46|[99|[111|[110|[102|[105|[103]]]]]]])
+	      in  let <_8> =
+		      call %% Line 1845
+			   'filename':%% Line 1845
+				      'dirname'
+			  (%% Line 1845
+			   File)
+		  in  let <_7> =
+			  call %% Line 1845
+			       'erlang':%% Line 1845
+					'++'
+			      (%% Line 1845
+			       BFName, %% Line 1845
+				       [46|[99|[111|[110|[102|[105|[103]]]]]]])
+		      in  let <FName> =
+			      call %% Line 1845
+				   'filename':%% Line 1845
+					      'join'
+				  (_8, _7)
+			  in  let <_13> =
+				  case %% Line 1846
+				       call 'filename':'pathtype'
+					   (FName) of
+				    %% Line 1847
+				    <'relative'>
+					when call 'erlang':'=/='
+					      (DName,
+					       []) ->
+					let <RName> =
+					    call %% Line 1850
+						 'filename':%% Line 1850
+							    'join'
+						(%% Line 1850
+						 DName, %% Line 1850
+							FName)
+					in  %% Line 1851
+					    case call 'erl_prim_loader':'read_file_info'
+						     (RName) of
+					      %% Line 1852
+					      <{'ok',_23}> when 'true' ->
+						  RName
+					      %% Line 1853
+					      <'error'> when 'true' ->
+						  FName
+					      ( <_11> when 'true' ->
+						    primop 'match_fail'
+							({'case_clause',_11})
+						-| ['compiler_generated'] )
+					    end
+				    %% Line 1855
+				    <_24> when 'true' ->
+					FName
+				  end
+			      in  %% Line 1857
+				  case apply 'load_file'/1
+					   (_13) of
+				    %% Line 1858
+				    <{'ok',NewEnv}> when 'true' ->
+					let <_15> =
+					    apply %% Line 1859
+						  'merge_env'/2
+						(%% Line 1859
+						 SysEnv, %% Line 1859
+							 NewEnv)
+					in  %% Line 1859
+					    apply 'check_conf_sys'/4
+						(T, _15, Errors, DName)
+				    %% Line 1860
+				    <{'error',{Line,_X_Mod,Str}}> when 'true' ->
+					%% Line 1861
+					apply 'check_conf_sys'/4
+					    (T, SysEnv, [{'error',{_13,Line,Str}}|Errors], DName)
+				    ( <_16> when 'true' ->
+					  primop 'match_fail'
+					      ({'case_clause',_16})
+				      -| ['compiler_generated'] )
+				  end
+	  %% Line 1863
+	  <[Tuple|T],SysEnv,Errors,DName> when 'true' ->
+	      let <_17> =
+		  apply %% Line 1864
+			'merge_env'/2
+		      (%% Line 1864
+		       SysEnv, %% Line 1864
+			       [Tuple|[]])
+	      in  %% Line 1864
+		  apply 'check_conf_sys'/4
+		      (T, _17, Errors, DName)
+	  %% Line 1865
+	  <[],SysEnv,Errors,_25> when 'true' ->
+	      let <_18> =
+		  call %% Line 1866
+		       'lists':%% Line 1866
+			       'reverse'
+		      (%% Line 1866
+		       Errors)
+	      in  %% Line 1866
+		  {'ok',SysEnv,_18}
+	  ( <_22,_21,_20,_19> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_22,_21,_20,_19})
+		  -| [{'function_name',{'check_conf_sys',4}}] )
+	    -| ['compiler_generated'] )
+	end
+'load_file'/1 =
+    %% Line 1868
+    fun (_0) ->
+	%% Line 1870
+	case call 'erl_prim_loader':'get_file'
+		 (_0) of
+	  %% Line 1871
+	  <{'ok',Bin,_X_FileName}> when 'true' ->
+	      %% Line 1874
+	      case apply 'file_binary_to_list'/1
+		       (Bin) of
+		%% Line 1875
+		<{'ok',String}> when 'true' ->
+		    let <_1> =
+			call %% Line 1876
+			     'erlang':%% Line 1876
+				      '++'
+			    (%% Line 1876
+			     String, %% Line 1876
+				     [32])
+		    in  %% Line 1876
+			apply 'scan_file'/1
+			    (_1)
+		%% Line 1877
+		<'error'> when 'true' ->
+		    %% Line 1878
+		    {'error',{'none','scan_file',[98|[97|[100|[32|[101|[110|[99|[111|[100|[105|[110|[103]]]]]]]]]]]]}}
+		( <_2> when 'true' ->
+		      primop 'match_fail'
+			  ({'case_clause',_2})
+		  -| ['compiler_generated'] )
+	      end
+	  %% Line 1880
+	  <'error'> when 'true' ->
+	      %% Line 1881
+	      {'error',{'none','open_file',[99|[111|[110|[102|[105|[103|[117|[114|[97|[116|[105|[111|[110|[32|[102|[105|[108|[101|[32|[110|[111|[116|[32|[102|[111|[117|[110|[100]]]]]]]]]]]]]]]]]]]]]]]]]]]]}}
+	  ( <_3> when 'true' ->
+		primop 'match_fail'
+		    ({'case_clause',_3})
+	    -| ['compiler_generated'] )
+	end
+'scan_file'/1 =
+    %% Line 1884
+    fun (_0) ->
+	%% Line 1885
+	case call 'erl_scan':'tokens'
+		 ([], _0, 1) of
+	  %% Line 1886
+	  <{'done',{'ok',Tokens,_6},Left}> when 'true' ->
+	      %% Line 1887
+	      case call 'erl_parse':'parse_term'
+		       (Tokens) of
+		%% Line 1888
+		<Res = {'ok',L}>
+		    when call 'erlang':'is_list'
+			  (L) ->
+		    %% Line 1889
+		    case apply 'only_ws'/1
+			     (Left) of
+		      %% Line 1890
+		      <'true'> when 'true' ->
+			  %% Line 1891
+			  Res
+		      %% Line 1892
+		      <'false'> when 'true' ->
+			  %% Line 1894
+			  apply 'config_error'/0
+			      ()
+		      ( <_1> when 'true' ->
+			    primop 'match_fail'
+				({'case_clause',_1})
+			-| ['compiler_generated'] )
+		    end
+		%% Line 1896
+		<{'ok',_7}> when 'true' ->
+		    %% Line 1898
+		    apply 'config_error'/0
+			()
+		%% Line 1899
+		<Error> when 'true' ->
+		    %% Line 1900
+		    Error
+	      end
+	  %% Line 1902
+	  <{'done',Result,_8}> when 'true' ->
+	      let <_3> =
+		  call %% Line 1903
+		       'erlang':%% Line 1903
+				'tuple_to_list'
+		      (%% Line 1903
+		       Result)
+	      in  %% Line 1903
+		  {'error',{'none','parse_file',_3}}
+	  %% Line 1904
+	  <{'more',_9}> when 'true' ->
+	      %% Line 1905
+	      {'error',{'none','load_file',[110|[111|[32|[101|[110|[100|[105|[110|[103|[32|[60|[100|[111|[116|[62|[32|[102|[111|[117|[110|[100]]]]]]]]]]]]]]]]]]]]]}}
+	  ( <_4> when 'true' ->
+		primop 'match_fail'
+		    ({'case_clause',_4})
+	    -| ['compiler_generated'] )
+	end
+'only_ws'/1 =
+    %% Line 1908
+    fun (_0) ->
+	case _0 of
+	  <[C|Cs]>
+	      when call 'erlang':'=<'
+		    (C,
+		     32) ->
+	      apply 'only_ws'/1
+		  (Cs)
+	  %% Line 1909
+	  <[37|Cs]> when 'true' ->
+	      let <_1> =
+		  apply 'strip_comment'/1
+		      (Cs)
+	      in  apply 'only_ws'/1
+		      (_1)
+	  %% Line 1910
+	  <[_3|_4]> when 'true' ->
+	      'false'
+	  %% Line 1911
+	  <[]> when 'true' ->
+	      'true'
+	  ( <_2> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_2})
+		  -| [{'function_name',{'only_ws',1}}] )
+	    -| ['compiler_generated'] )
+	end
+'strip_comment'/1 =
+    %% Line 1913
+    fun (_0) ->
+	case _0 of
+	  <[10|Cs]> when 'true' ->
+	      Cs
+	  %% Line 1914
+	  <[_2|Cs]> when 'true' ->
+	      apply 'strip_comment'/1
+		  (Cs)
+	  %% Line 1915
+	  <[]> when 'true' ->
+	      []
+	  ( <_1> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_1})
+		  -| [{'function_name',{'strip_comment',1}}] )
+	    -| ['compiler_generated'] )
+	end
+'config_error'/0 =
+    %% Line 1917
+    fun () ->
+	%% Line 1918
+	{'error',{'none','load_file',[99|[111|[110|[102|[105|[103|[117|[114|[97|[116|[105|[111|[110|[32|[102|[105|[108|[101|[32|[109|[117|[115|[116|[32|[99|[111|[110|[116|[97|[105|[110|[32|[79|[78|[69|[32|[108|[105|[115|[116|[32|[101|[110|[100|[101|[100|[32|[98|[121|[32|[60|[100|[111|[116|[62]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}}
+'info_started'/2 =
+    %% Line 1925
+    fun (_1,_0) ->
+	%% Line 1926
+	case call 'logger':'allow'
+		 ('info', 'application_controller') of
+	  <'true'> when 'true' ->
+	      let <_2> =
+		  ~{%% Line 1927
+		   'report'=>[{'application',_1}|%% Line 1928
+					       [{'started_at',_0}|[]]]|~{'label'=>{'application_controller','progress'}}~}~
+	      in  call 'logger':'macro_log'
+		      (~{'file'=>[97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[95|[99|[111|[110|[116|[114|[111|[108|[108|[101|[114|[46|[101|[114|[108]]]]]]]]]]]]]]]]]]]]]]]]]],'line'=>1926,'mfa'=>{'application_controller','info_started',2}}~, 'info', _2, ~{'domain'=>['otp'|['sasl']],'error_logger'=>~{'tag'=>'info_report','type'=>'progress'}~,'logger_formatter'=>~{'title'=>[80|[82|[79|[71|[82|[69|[83|[83|[32|[82|[69|[80|[79|[82|[84]]]]]]]]]]]]]]]}~,'report_cb'=>fun 'logger':'format_otp_report'/1}~)
+	  %% Line 1932
+	  <'false'> when 'true' ->
+	      'ok'
+	  ( <_5> when 'true' ->
+		primop 'match_fail'
+		    ({'case_clause',_5})
+	    -| ['compiler_generated'] )
+	end
+'info_exited'/3 =
+    %% Line 1934
+    fun (_2,_1,_0) ->
+	%% Line 1935
+	case call 'logger':'allow'
+		 ('notice', 'application_controller') of
+	  <'true'> when 'true' ->
+	      let <_3> =
+		  ~{%% Line 1936
+		   'report'=>[{'application',_2}|%% Line 1937
+					       [{'exited',_1}|%% Line 1938
+							      [{'type',_0}|[]]]]|~{'label'=>{'application_controller','exit'}}~}~
+	      in  call 'logger':'macro_log'
+		      (~{'file'=>[97|[112|[112|[108|[105|[99|[97|[116|[105|[111|[110|[95|[99|[111|[110|[116|[114|[111|[108|[108|[101|[114|[46|[101|[114|[108]]]]]]]]]]]]]]]]]]]]]]]]]],'line'=>1935,'mfa'=>{'application_controller','info_exited',3}}~, 'notice', _3, ~{'domain'=>['otp'],'error_logger'=>~{'tag'=>'info_report','type'=>'std_info'}~,'report_cb'=>fun 'logger':'format_otp_report'/1}~)
+	  %% Line 1941
+	  <'false'> when 'true' ->
+	      'ok'
+	  ( <_6> when 'true' ->
+		primop 'match_fail'
+		    ({'case_clause',_6})
+	    -| ['compiler_generated'] )
+	end
+'reply_to_requester'/3 =
+    %% Line 1946
+    fun (_2,_1,_0) ->
+	let <_4> =
+	    case _0 of
+	      %% Line 1948
+	      <{'ok',_X_Id}> when 'true' ->
+		  %% Line 1949
+		  'ok'
+	      %% Line 1950
+	      <{'info',Reason}> when 'true' ->
+		  %% Line 1951
+		  {'error',Reason}
+	      %% Line 1952
+	      <Error> when 'true' ->
+		  %% Line 1953
+		  Error
+	    end
+	in  let <_11> =
+		fun (_8,_7) ->
+		    %% Line 1957
+		    case _8 of
+		      %% Line 1958
+		      <{_15,From}>
+			  when call 'erlang':'=:='
+				(_15,
+				 _2) ->
+			  do  %% Line 1959
+			      apply 'reply'/2
+				  (From, _4)
+			      _7
+		      %% Line 1961
+		      <_16> when 'true' ->
+			  %% Line 1962
+			  [_8|_7]
+		    end
+	    in  %% Line 1956
+		call 'lists':'foldl'
+		    (_11, %% Line 1965
+			  [], _1)
+'update_permissions'/2 =
+    %% Line 1972
+    fun (_1,_0) ->
+	%% Line 1974
+	case call 'ets':'lookup'
+		 ('ac_tab', {'env','kernel','permissions'}) of
+	  %% Line 1975
+	  <[]> when 'true' ->
+	      %% Line 1976
+	      call 'ets':'insert'
+		  ('ac_tab', {{'env','kernel','permissions'},[{_1,_0}|[]]})
+	  %% Line 1977
+	  <[{_7,Perm}|[]]> when 'true' ->
+	      let <Perm2> =
+		  call %% Line 1978
+		       'lists':%% Line 1978
+			       'keydelete'
+		      (_1, %% Line 1978
+			   1, %% Line 1978
+			      Perm)
+	      in  %% Line 1979
+		  call 'ets':'insert'
+		      ('ac_tab', {{'env','kernel','permissions'},[{_1,_0}|Perm2]})
+	  ( <_4> when 'true' ->
+		primop 'match_fail'
+		    ({'case_clause',_4})
+	    -| ['compiler_generated'] )
+	end
+'test_change_apps'/2 =
+    %% Line 1985
+    fun (_1,_0) ->
+	let <Res> =
+	    apply %% Line 1986
+		  'test_make_apps'/2
+		(_1, %% Line 1986
+		     [])
+	in  %% Line 1987
+	    apply 'test_do_change_appl'/3
+		(_1, _0, Res)
+'test_do_change_appl'/3 =
+    %% Line 1989
+    fun (_2,_1,_0) ->
+	case <_2,_1,_0> of
+	  <[],_8,_9> when 'true' ->
+	      %% Line 1990
+	      'ok'
+	  %% Line 1991
+	  <[A|Apps],[],[R|Res]> when 'true' ->
+	      do  %% Line 1992
+		  apply 'do_change_appl'/3
+		      (R, ( {( 'appl'
+			       -| ['result_not_wanted'] ),A,( 'undefined'
+							      -| ['result_not_wanted'] ),( 'undefined'
+											   -| ['result_not_wanted'] ),( 'undefined'
+															-| ['result_not_wanted'] ),( 'undefined'
+																		     -| ['result_not_wanted'] ),( 'undefined'
+																						  -| ['result_not_wanted'] ),( 'undefined'
+																									       -| ['result_not_wanted'] ),( 'undefined'
+																													    -| ['result_not_wanted'] )}
+			    -| ['result_not_wanted'] ), ( []
+							  -| ['result_not_wanted'] ))
+		  %% Line 1993
+		  apply 'test_do_change_appl'/3
+		      (Apps, [], Res)
+	  %% Line 1994
+	  <[A|Apps],[C|Conf],[R|Res]> when 'true' ->
+	      do  %% Line 1995
+		  apply 'do_change_appl'/3
+		      (R, ( {( 'appl'
+			       -| ['result_not_wanted'] ),A,( 'undefined'
+							      -| ['result_not_wanted'] ),( 'undefined'
+											   -| ['result_not_wanted'] ),( 'undefined'
+															-| ['result_not_wanted'] ),( 'undefined'
+																		     -| ['result_not_wanted'] ),( 'undefined'
+																						  -| ['result_not_wanted'] ),( 'undefined'
+																									       -| ['result_not_wanted'] ),( 'undefined'
+																													    -| ['result_not_wanted'] )}
+			    -| ['result_not_wanted'] ), C)
+		  %% Line 1996
+		  apply 'test_do_change_appl'/3
+		      (Apps, Conf, Res)
+	  ( <_7,_6,_5> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_7,_6,_5})
+		  -| [{'function_name',{'test_do_change_appl',3}}] )
+	    -| ['compiler_generated'] )
+	end
+'test_make_apps'/2 =
+    %% Line 1998
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <[],Res> when 'true' ->
+	      %% Line 1999
+	      call 'lists':'reverse'
+		  (Res)
+	  %% Line 2000
+	  <[A|Apps],Res> when 'true' ->
+	      let <_2> =
+		  apply %% Line 2001
+			'make_appl'/1
+		      (%% Line 2001
+		       A)
+	      in  %% Line 2001
+		  apply 'test_make_apps'/2
+		      (Apps, [_2|Res])
+	  ( <_4,_3> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_4,_3})
+		  -| [{'function_name',{'test_make_apps',2}}] )
+	    -| ['compiler_generated'] )
+	end
+'file_binary_to_list'/1 =
+    %% Line 2003
+    fun (_0) ->
+	let <_2> =
+	    case %% Line 2004
+		 call 'epp':'read_encoding_from_binary'
+		     (_0) of
+	      %% Line 2005
+	      <'none'> when 'true' ->
+		  call 'epp':'default_encoding'
+		      ()
+	      %% Line 2006
+	      <Encoding> when 'true' ->
+		  Encoding
+	    end
+	in  let <_4> =
+		catch
+		    %% Line 2008
+		    call 'unicode':'characters_to_list'
+			(_0, _2)
+	    in  %% Line 2008
+		case _4 of
+		  %% Line 2009
+		  <String>
+		      when call 'erlang':'is_list'
+			    (_4) ->
+		      %% Line 2010
+		      {'ok',String}
+		  %% Line 2011
+		  <_7> when 'true' ->
+		      %% Line 2012
+		      'error'
+		end
+'to_string'/1 =
+    %% Line 2023
+    fun (_0) ->
+	%% Line 2024
+	case call 'io_lib':'printable_list'
+		 (_0) of
+	  %% Line 2025
+	  <'true'> when 'true' ->
+	      _0
+	  %% Line 2027
+	  <'false'> when 'true' ->
+	      let <_1> =
+		  call %% Line 2028
+		       'io_lib':%% Line 2028
+				'format'
+		      (%% Line 2028
+		       [126|[48|[112]]], %% Line 2028
+					 [_0|[]])
+	      in  %% Line 2028
+		  call 'lists':'flatten'
+		      (_1)
+	  ( <_2> when 'true' ->
+		primop 'match_fail'
+		    ({'case_clause',_2})
+	    -| ['compiler_generated'] )
+	end
+'module_info'/0 =
+    fun () ->
+	call 'erlang':'get_module_info'
+	    ('application_controller')
+'module_info'/1 =
+    fun (_0) ->
+	call 'erlang':'get_module_info'
+	    ('application_controller', _0)
+end

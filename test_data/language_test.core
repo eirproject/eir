@@ -1,0 +1,181 @@
+module 'language_test' ['module_info'/0,
+			'module_info'/1]
+    attributes [%% Line 1
+		'file' =
+		    %% Line 1
+		    [{[108|[97|[110|[103|[117|[97|[103|[101|[95|[116|[101|[115|[116|[46|[101|[114|[108]]]]]]]]]]]]]]]]],1}]]
+'module_function_capture'/0 =
+    %% Line 5
+    fun () ->
+	%% Line 6
+	fun 'woohoo':'hoo'/2
+'do_throw'/0 =
+    %% Line 8
+    fun () ->
+	%% Line 9
+	call 'erlang':'throw'
+	    ('something')
+'do_error'/0 =
+    %% Line 10
+    fun () ->
+	%% Line 11
+	call 'erlang':'error'
+	    ('something')
+'do_exit'/0 =
+    %% Line 12
+    fun () ->
+	%% Line 13
+	call 'erlang':'exit'
+	    ('something')
+'try_catch'/1 =
+    %% Line 15
+    fun (_0) ->
+	%% Line 16
+	try
+	    apply _0
+		()
+	of <_1> ->
+	    %% Line 17
+	    'woo'
+	catch <_5,_4,_3> ->
+	    %% Line 19
+	    case <_5,_4,_3> of
+	      <( 'throw'
+		 -| ['compiler_generated'] ),( 'hoo'
+					       -| ['compiler_generated'] ),_8> when 'true' ->
+		  'a_throw'
+	      ( <_10,_11,_12> when 'true' ->
+		    primop 'raise'
+			(_12, _11)
+		-| ['compiler_generated'] )
+	    end
+'try_catch_finally'/1 =
+    %% Line 22
+    fun (_0) ->
+	%% Line 23
+	letrec
+	    'after$^0'/0 =
+		fun () ->
+		    %% Line 28
+		    'some_after_clause'
+	in  try
+		try
+		    apply _0
+			()
+		of <_1> ->
+		    %% Line 24
+		    'woo'
+		catch <_5,_4,_3> ->
+		    %% Line 26
+		    case <_5,_4,_3> of
+		      <( 'throw'
+			 -| ['compiler_generated'] ),( 'hoo'
+						       -| ['compiler_generated'] ),_12> when 'true' ->
+			  'a_throw'
+		      ( <_14,_15,_16> when 'true' ->
+			    primop 'raise'
+				(_16, _15)
+			-| ['compiler_generated'] )
+		    end
+	    of <_6> ->
+		do  ( apply 'after$^0'/0
+			  ()
+		      -| ['compiler_generated'] )
+		    _6
+	    catch <_9,_8,_7> ->
+		do  ( apply 'after$^0'/0
+			  ()
+		      -| ['compiler_generated'] )
+		    primop 'raise'
+			(_7, _8)
+'self_tail_call'/1 =
+    %% Line 31
+    fun (_0) ->
+	%% Line 32
+	case _0 of
+	  %% Line 33
+	  <0> when 'true' ->
+	      %% Line 34
+	      'reached_end'
+	  %% Line 35
+	  <_4> when 'true' ->
+	      let <_1> =
+		  call %% Line 36
+		       'erlang':%% Line 36
+				'-'
+		      (_0, %% Line 36
+			   1)
+	      in  %% Line 36
+		  apply 'self_tail_call'/1
+		      (_1)
+	end
+'binary_construct_1'/1 =
+    %% Line 39
+    fun (_0) ->
+	%% Line 40
+	#{#<_0>(8,1,'integer',['unsigned'|['big']])}#
+'binary_pattern_match_1'/1 =
+    %% Line 42
+    fun (_0) ->
+	case _0 of
+	  <#{#<_X_A>(4,8,'integer',['signed'|['little']]),
+	     #<_X_B>('all',8,'binary',['unsigned'|['big']])}#> when 'true' ->
+	      %% Line 43
+	      'matched'
+	  ( <_1> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_1})
+		  -| [{'function_name',{'binary_pattern_match_1',1}}] )
+	    -| ['compiler_generated'] )
+	end
+'binary_pattern_match_2'/1 =
+    %% Line 44
+    fun (_0) ->
+	case _0 of
+	  <#{#<_X_A>(4,8,'integer',['signed'|['little']]),
+	     #<_X_B>(8,1,'integer',['unsigned'|['big']])}#> when 'true' ->
+	      %% Line 45
+	      'matched'
+	  ( <_1> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_1})
+		  -| [{'function_name',{'binary_pattern_match_2',1}}] )
+	    -| ['compiler_generated'] )
+	end
+'binary_pattern_match_3'/1 =
+    %% Line 46
+    fun (_0) ->
+	case _0 of
+	  <#{#<_X_A>(2,2,'integer',['signed'|['little']]),
+	     #<_X_B>('all',8,'binary',['unsigned'|['big']])}#> when 'true' ->
+	      %% Line 47
+	      'matched'
+	  ( <_1> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_1})
+		  -| [{'function_name',{'binary_pattern_match_3',1}}] )
+	    -| ['compiler_generated'] )
+	end
+'binary_pattern_match_4'/1 =
+    %% Line 48
+    fun (_0) ->
+	case _0 of
+	  <#{#<_X_A>(4,8,'float',['unsigned'|['big']]),
+	     #<_X_B>('all',8,'binary',['unsigned'|['big']])}#> when 'true' ->
+	      %% Line 49
+	      'matched'
+	  ( <_1> when 'true' ->
+		( primop 'match_fail'
+		      ({'function_clause',_1})
+		  -| [{'function_name',{'binary_pattern_match_4',1}}] )
+	    -| ['compiler_generated'] )
+	end
+'module_info'/0 =
+    fun () ->
+	call 'erlang':'get_module_info'
+	    ('language_test')
+'module_info'/1 =
+    fun (_0) ->
+	call 'erlang':'get_module_info'
+	    ('language_test', _0)
+end

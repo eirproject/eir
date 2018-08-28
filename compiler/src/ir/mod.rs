@@ -198,8 +198,9 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
     for function in module.functions.iter_mut() {
         let lir_mut = function.lir_function.as_mut().unwrap();
         println!("Function: {}", function.ident);
-        ::ir::lir::pass::compile_pattern(lir_mut);
-        //::ir::lir::pass::propagate_atomics(lir_mut);
+        //::ir::lir::pass::compile_pattern(lir_mut);
+        ::ir::lir::pass::propagate_atomics(lir_mut);
+        ::ir::lir::pass::simplify_branches(lir_mut);
         ::ir::lir::pass::validate(lir_mut);
     }
 

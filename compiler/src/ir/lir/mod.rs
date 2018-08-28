@@ -108,7 +108,7 @@ pub enum OpKind {
     // a GuardOk or GuardFail. Returning while inside the structure is
     // a hard error!
     CaseGuardOk,
-    CaseGuardFail,
+    CaseGuardFail { clause_num: usize },
 
 
     // Indicates the start of a receive structure, must jump to a block
@@ -187,13 +187,16 @@ impl OpKind {
             OpKind::Call => Some(2),
             OpKind::Apply => Some(2),
             OpKind::Jump => Some(1),
-            OpKind::Case { ref clauses, .. } => Some(clauses.len()),
+            // One for each clause + failure leaf
+            OpKind::Case { ref clauses, .. } => Some(clauses.len() + 1),
             // TODO
             //OpKind::Match { ref types } => Some(types.len()),
             OpKind::ReturnOk => Some(0),
             OpKind::ReturnThrow => Some(0),
             OpKind::ReceiveStart { .. } => Some(1),
             OpKind::ReceiveGetMessage => Some(2),
+            OpKind::IfTruthy => Some(2),
+            OpKind::CaseGuardFail { .. } => Some(1),
             _ => None,
         }
     }
