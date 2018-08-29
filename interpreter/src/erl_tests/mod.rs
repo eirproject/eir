@@ -120,4 +120,6 @@ fn simple_lambda() {
 
     let args = vec![Term::new_i64(1), Term::new_i64(2)];
     let result = ctx.call("test", "add_with_closure", &args);
+
+    assert!(result.unwrap_return().erl_eq(&Term::Integer(3.into())));
 }

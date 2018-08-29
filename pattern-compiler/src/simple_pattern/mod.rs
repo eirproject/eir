@@ -7,7 +7,7 @@ use ::petgraph::{ Graph, Direction };
 use ::petgraph::graph::NodeIndex;
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
-struct CfgVar(usize);
+pub struct CfgVar(usize);
 
 use ::std::fmt;
 impl fmt::Debug for CfgVar {
@@ -17,7 +17,7 @@ impl fmt::Debug for CfgVar {
 }
 
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
-enum NodeKind {
+pub enum NodeKind {
     Tuple,
     ListCell,
     Terminal,
@@ -26,7 +26,7 @@ enum NodeKind {
 }
 
 #[derive(Debug, Clone)]
-struct SimplePatternProvider {
+pub struct SimplePatternProvider {
     pattern: Graph<NodeKind, ()>,
     roots: Vec<NodeIndex>,
     root_var: CfgVar,
@@ -35,7 +35,7 @@ struct SimplePatternProvider {
 
 impl SimplePatternProvider {
 
-    fn new() -> Self {
+    pub fn new() -> Self {
         SimplePatternProvider {
             pattern: Graph::new(),
             roots: Vec::new(),
@@ -44,13 +44,13 @@ impl SimplePatternProvider {
         }
     }
 
-    fn add_child(&mut self, node: NodeIndex, kind: NodeKind) -> NodeIndex {
+    pub fn add_child(&mut self, node: NodeIndex, kind: NodeKind) -> NodeIndex {
         let res = self.pattern.add_node(kind);
         self.pattern.add_edge(node, res, ());
         res
     }
 
-    fn add_clause(&mut self, kind: NodeKind) -> NodeIndex {
+    pub fn add_clause(&mut self, kind: NodeKind) -> NodeIndex {
         let res = self.pattern.add_node(kind);
         self.roots.push(res);
         res

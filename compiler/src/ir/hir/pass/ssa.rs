@@ -7,9 +7,9 @@
 //! pass, since it dramatically simplifies some other compilation
 //! passes. (See pattern match compilation)
 
-use ::std::collections::{ HashSet, HashMap };
-use ::ir::{ AVariable, AFunctionName, SSAVariable };
-use ::{ Atom, Variable };
+use ::std::collections::HashMap;
+use ::ir::SSAVariable;
+use ::Variable;
 use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind, LambdaEnvIdx };
 use ::util::ssa_variable::SSAVariableGenerator;
 

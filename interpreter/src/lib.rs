@@ -9,11 +9,9 @@ extern crate core_erlang_compiler;
 use core_erlang_compiler::intern::Atom;
 use core_erlang_compiler::ir::{ Module, FunctionIdent, SSAVariable };
 use core_erlang_compiler::ir::lir::{ BasicBlock, LabelN, OpKind, Source };
-use core_erlang_compiler::ir::hir::LambdaEnvIdx;
-use core_erlang_compiler::parser::{ Constant, AtomicLiteral };
+use core_erlang_compiler::parser::AtomicLiteral;
 
 extern crate num_bigint;
-use num_bigint::BigInt;
 
 mod term;
 pub use term::{ TermType, Term, BoundLambdaEnv };
@@ -52,7 +50,7 @@ pub enum CallReturn {
 }
 impl CallReturn {
 
-    fn unwrap_return<'a>(&'a self) -> &'a Term {
+    pub fn unwrap_return<'a>(&'a self) -> &'a Term {
         match self {
             CallReturn::Return { ref term } => term,
             _ => panic!("Expected return"),
@@ -119,7 +117,7 @@ impl ExecutionContext {
     }
 
     fn exec_block(&self, module: &Module, block: &BasicBlock,
-                  prev: Option<LabelN>, frame: &mut StackFrame) -> BlockResult {
+                  _prev: Option<LabelN>, frame: &mut StackFrame) -> BlockResult {
 
         // Apply phi nodes
         assert!(block.phi_nodes.len() == 0);

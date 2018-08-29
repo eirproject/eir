@@ -109,7 +109,6 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
 
         for (idx, edge_id) in lir.jumps_iter(block_idx).enumerate() {
             let edge = lir.edge_target(edge_id);
-            use ::petgraph::visit::EdgeRef;
             write!(w, "blk_{} -> blk_L{} [ label={} ];\n", block_name, edge.0.index(), idx)?;
         }
         write!(w, "\n")?;

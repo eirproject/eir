@@ -1,4 +1,4 @@
-use ::{ NativeModule, Term, TermType, CallReturn };
+use ::{ NativeModule, Term, CallReturn };
 use ::num_bigint::{ BigInt, Sign };
 
 fn bignum_to_f64(n: &BigInt) -> Option<f64> {
@@ -19,7 +19,7 @@ fn bignum_to_f64(n: &BigInt) -> Option<f64> {
     if exp < (64 - 12) {
         exp = 0;
     } else {
-        exp -= (64 - 12);
+        exp -= 64 - 12;
     }
     exp += 1023;
     if exp >= 2048 {

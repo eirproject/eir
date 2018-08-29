@@ -1,6 +1,6 @@
 use ::parser::AtomicLiteral;
 use ::ir::SSAVariable;
-use ::ir::lir::{ BasicBlock, OpKind, Source, FunctionCfg };
+use ::ir::lir::{ OpKind, Source, FunctionCfg };
 use ::std::collections::HashMap;
 
 pub fn propagate_atomics(cfg: &mut FunctionCfg) {

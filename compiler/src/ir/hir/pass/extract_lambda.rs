@@ -1,5 +1,5 @@
 use ::ir::{ FunctionDefinition, FunctionIdent, FunctionVisibility };
-use ::ir::hir::{ SingleExpression, Expression, SingleExpressionKind, Function };
+use ::ir::hir::Function;
 use ::ir::hir::EachSingleExpression;
 use ::ir::hir::LambdaEnvIdx;
 

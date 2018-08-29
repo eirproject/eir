@@ -5,7 +5,7 @@ use ::ir::{ AVariable, AFunctionName, Module, FunctionDefinition,
             FunctionVisibility, FunctionIdent };
 use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind,
                  Function, Pattern, PatternNode, Closure };
-use ::util::ssa_variable::{ SSAVariable, INVALID_SSA };
+use ::util::ssa_variable::INVALID_SSA;
 
 impl Module {
     fn from_parsed(module: &::parser::Module) -> Self {
@@ -339,7 +339,7 @@ impl SingleExpression {
                     }).collect()
                 )
             },
-            ref e => panic!("Unhandled: {:?}", e),
+            //ref e => panic!("Unhandled: {:?}", e),
         };
         SingleExpression {
             ssa: INVALID_SSA,

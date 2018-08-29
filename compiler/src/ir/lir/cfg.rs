@@ -1,10 +1,6 @@
 use ::ir::SSAVariable;
-use super::{ Label, Phi, OpKind, Source, Op };
+use super::{ Phi, OpKind, Source, Op };
 use ::petgraph::Graph;
-
-fn idx_of(lbl: Label) -> usize {
-    (lbl.0 - 1) as usize
-}
 
 #[derive(Debug, Copy, Clone)]
 pub struct LabelN(pub ::petgraph::graph::NodeIndex);

@@ -1,4 +1,3 @@
-use ::std::collections::HashMap;
 use ::std::fmt;
 use super::{ AVariable, AFunctionName, SSAVariable, FunctionIdent };
 use ::parser;
@@ -156,7 +155,6 @@ impl EachSingleExpression for SingleExpression {
 }
 
 use ::pretty::{ BoxDoc, Doc };
-use ::std::ops::Deref;
 impl ::ToDoc for SingleExpression {
     fn to_doc<'a>(&'a self) -> Doc<'a, BoxDoc> {
         use self::SingleExpressionKind as SEK;
@@ -172,13 +170,13 @@ impl ::ToDoc for SingleExpression {
                 Doc::text(format!("{:?}:{:?}", module, name)),
             SEK::InterModuleCall { ref module, ref name, ref args } => {
                 let args_doc = Doc::intersperse(
-                    args.iter().map(|arg| Doc::newline().append(arg.to_doc())), 
+                    args.iter().map(|arg| Doc::newline().append(arg.to_doc())),
                     comma_space()).group();
 
                 Doc::concat(vec![
                     Doc::text("InterModuleCall("), Doc::space(),
                     Doc::intersperse(vec![
-                        module.to_doc(), name.to_doc(), 
+                        module.to_doc(), name.to_doc(),
                         Doc::text("[").append(args_doc).append(Doc::text("]")),
                     ], comma_space()).nest(2),
                     Doc::text(")")
@@ -322,7 +320,7 @@ impl fmt::Display for PatternNode {
                 for elem in elems {
                     write!(f, "#<{}>(", elem.0)?;
                     for attr in &elem.1 {
-                        write!(f, "{}, ", attr);
+                        write!(f, "{}, ", attr)?;
                     }
                     write!(f, ")#")?;
                 }
@@ -351,7 +349,7 @@ impl PatternNode {
         fun(self);
         match *self {
             PatternNode::Wildcard => (),
-            PatternNode::BindVar(ref v, ref p) =>
+            PatternNode::BindVar(_, ref p) =>
                 p.traverse_pattern(fun),
             PatternNode::Atomic(_) => (),
             PatternNode::Tuple(ref pats) => {

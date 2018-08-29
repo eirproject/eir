@@ -695,7 +695,7 @@ impl hir::SingleExpression {
                     vec![self.ssa]);
                 Some(self.ssa)
             },
-            HSEK::BindClosures { ref closures, lambda_env, ref body, env_ssa } => {
+            HSEK::BindClosures { closures: ref _closures, lambda_env, ref body, env_ssa } => {
                 // TODO
                 let env_read_vars: Vec<_> = {
                     let lenv = env.get_lambda_env(lambda_env.unwrap());

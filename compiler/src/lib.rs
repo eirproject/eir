@@ -20,7 +20,6 @@ pub mod util;
 //mod erl_tests;
 
 use pretty::{ BoxDoc, Doc };
-use std::ops::Deref;
 pub trait ToDoc {
     fn to_doc<'a>(&'a self) -> Doc<'a, BoxDoc>;
 }
@@ -51,7 +50,7 @@ mod tests {
             f.read_to_string(&mut contents).unwrap();
 
             let res = ::parser::annotated_module(&contents).unwrap();
-            let hir = ::ir::from_parsed(&res.0);
+            let _hir = ::ir::from_parsed(&res.0);
 
         }
     }

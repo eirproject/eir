@@ -21,8 +21,6 @@ pub mod simple_pattern;
 
 use ::petgraph::graph::NodeIndex;
 
-use ::util::hashmap_stack::HashMapStack;
-
 #[derive(Debug)]
 pub struct MatchCompileContext<'a, P> where P: pattern::PatternProvider + 'a {
     pattern: &'a mut P,
