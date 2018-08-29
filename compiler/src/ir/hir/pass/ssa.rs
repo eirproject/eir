@@ -14,10 +14,16 @@ use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind, LambdaEnvId
 use ::util::ssa_variable::SSAVariableGenerator;
 
 #[derive(Debug)]
+pub struct LambdaEnv {
+    pub captures: Vec<(ScopeDefinition, SSAVariable, SSAVariable)>,
+    pub meta_binds: Vec<::parser::FunctionName>,
+}
+
+#[derive(Debug)]
 pub struct ScopeTracker {
     scopes: Vec<Scope>,
     ssa_var_generator: SSAVariableGenerator,
-    lambda_envs: Vec<Vec<(ScopeDefinition, SSAVariable, SSAVariable)>>,
+    lambda_envs: Vec<LambdaEnv>,
 }
 #[derive(Debug)]
 enum Scope {
@@ -102,6 +108,11 @@ impl ScopeTracker {
         } else {
             None
         }
+    }
+
+    pub fn get_lambda_env<'a>(&'a self, env_idx: LambdaEnvIdx)
+                          -> &'a LambdaEnv {
+        &self.lambda_envs[env_idx.0]
     }
 
 }
@@ -308,7 +319,10 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 .collect();
 
             let env_idx = env.lambda_envs.len();
-            env.lambda_envs.push(captures);
+            env.lambda_envs.push(LambdaEnv {
+                captures: captures,
+                meta_binds: vec![], // TODO
+            });
 
             *lambda_env = Some(LambdaEnvIdx(env_idx));
             closure.env = *lambda_env;
@@ -348,7 +362,10 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 .collect();
 
             let env_idx = env.lambda_envs.len();
-            env.lambda_envs.push(captures);
+            env.lambda_envs.push(LambdaEnv {
+                captures: captures,
+                meta_binds: vec![], // TODO: Meta binds
+            });
 
             *lambda_env = Some(LambdaEnvIdx(env_idx));
             for closure in closures.iter_mut() {

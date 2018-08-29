@@ -675,11 +675,18 @@ impl hir::SingleExpression {
             },
             HSEK::BindClosure { ref closure, lambda_env, env_ssa } => {
                 // TODO
+                let env_read_vars: Vec<_> = {
+                    let lenv = env.get_lambda_env(lambda_env.unwrap());
+                    lenv.captures.iter()
+                        .map(|(_, r, _)| lir::Source::Variable(*r))
+                        .collect()
+                };
+
                 b.basic_op(
                     lir::OpKind::MakeClosureEnv {
                         env_idx: lambda_env.unwrap()
                     },
-                    vec![], vec![env_ssa]);
+                    env_read_vars, vec![env_ssa]);
                 b.basic_op(
                     lir::OpKind::BindClosure {
                         ident: closure.ident.clone().unwrap(),
@@ -690,11 +697,18 @@ impl hir::SingleExpression {
             },
             HSEK::BindClosures { ref closures, lambda_env, ref body, env_ssa } => {
                 // TODO
+                let env_read_vars: Vec<_> = {
+                    let lenv = env.get_lambda_env(lambda_env.unwrap());
+                    lenv.captures.iter()
+                        .map(|(_, r, _)| lir::Source::Variable(*r))
+                        .collect()
+                };
+
                 b.basic_op(
                     lir::OpKind::MakeClosureEnv {
                         env_idx: lambda_env.unwrap()
                     },
-                    vec![], vec![env_ssa]);
+                    env_read_vars, vec![env_ssa]);
                 body.lower(b, env, exc_stack);
                 Some(self.ssa)
             },

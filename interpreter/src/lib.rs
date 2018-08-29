@@ -15,7 +15,7 @@ extern crate num_bigint;
 use num_bigint::BigInt;
 
 mod term;
-pub use term::{ TermType, Term };
+pub use term::{ TermType, Term, BoundLambdaEnv };
 
 pub mod erl_lib;
 #[cfg(test)] pub mod erl_tests;
@@ -48,6 +48,16 @@ enum ModuleType {
 pub enum CallReturn {
     Return { term: Term },
     Throw,
+}
+impl CallReturn {
+
+    fn unwrap_return<'a>(&'a self) -> &'a Term {
+        match self {
+            CallReturn::Return { ref term } => term,
+            _ => panic!("Expected return"),
+        }
+    }
+
 }
 
 struct StackFrame {
@@ -163,24 +173,62 @@ impl ExecutionContext {
                     let args: Vec<Term> = op.reads[1..].iter()
                         .map(|arg| frame.read(arg)).collect();
 
-                    if let Term::CapturedFunction { module: ref module_a, ref fun_name,
-                                                    ref arity } = fun_var {
-                        assert!(args.len() == *arity as usize);
+                    match fun_var {
+                        Term::CapturedFunction { module: ref module_a,
+                                                 ref fun_name, ref arity } => {
+                            assert!(args.len() == *arity as usize);
 
-                        let module_str: &str = &*module_a;
-                        let fun_str: &str = &*fun_name;
+                            let module_str: &str = &*module_a;
+                            let fun_str: &str = &*fun_name;
 
-                        let ret = self.call(module_str, fun_str, &args);
-                        match ret {
-                            CallReturn::Return { term } => {
-                                frame.variables.insert(op.writes[0], term);
-                                block_ret = Some(BlockResult::Branch { slot: 1 });
+                            let ret = self.call(module_str, fun_str, &args);
+                            match ret {
+                                CallReturn::Return { term } => {
+                                    frame.variables.insert(op.writes[0], term);
+                                    block_ret = Some(BlockResult::Branch { slot: 1 });
+                                }
+                                CallReturn::Throw => unimplemented!(),
                             }
-                            CallReturn::Throw => unimplemented!(),
                         }
-                    } else {
-                        panic!("Var is not CapturedFunction");
+                        Term::BoundLambda {
+                            module: ref module_a, ref fun_name, arity,
+                            lambda, ref bound_env } => {
+                            unimplemented!();
+                        }
+                        _ => panic!("Var is not callable"),
                     }
+                }
+                OpKind::MakeClosureEnv { ref env_idx } => {
+                    assert!(op.reads.len() > 0);
+                    assert!(op.writes.len() == 1);
+
+                    let env_vars: Vec<Term> = op.reads.iter()
+                        .map(|r| frame.read(r))
+                        .collect();
+
+                    frame.variables.insert(op.writes[0], Term::LambdaEnv(BoundLambdaEnv {
+                        env: *env_idx,
+                        vars: env_vars,
+                    }));
+                }
+                OpKind::BindClosure { ref ident } => {
+                    assert!(op.reads.len() == 1);
+                    assert!(op.writes.len() == 1);
+
+                    let lenv = if let Term::LambdaEnv(bound_env)
+                        = frame.read(&op.reads[0]) {
+                        bound_env
+                    } else {
+                        panic!();
+                    };
+
+                    frame.variables.insert(op.writes[0], Term::BoundLambda {
+                        module: module.name.clone(),
+                        fun_name: ident.name.clone(),
+                        arity: ident.arity,
+                        lambda: ident.lambda.unwrap(),
+                        bound_env: lenv.clone(),
+                    });
                 }
                 _ => {
                     println!("Unimpl: {:?}", op);
@@ -193,7 +241,7 @@ impl ExecutionContext {
         return block_ret.unwrap();
     }
 
-    fn call_erlang_module(&self, module: &Module, fun_ident: &FunctionIdent, 
+    fn call_erlang_module(&self, module: &Module, fun_ident: &FunctionIdent,
                           args: &[Term]) -> CallReturn {
         let fun_opt = module.functions.iter().find(|fun| &fun.ident == fun_ident);
         if fun_opt.is_none() {

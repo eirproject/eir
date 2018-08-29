@@ -2,6 +2,7 @@ extern crate tempdir;
 
 use ::std::io::{ Read, Write };
 use ::core_erlang_compiler::ir::Module;
+use ::term::ErlEq;
 
 fn erl_to_core(erlang_code: &str) -> String {
     let temp = tempdir::TempDir::new("core_erlang_crate_tests").unwrap();
@@ -60,6 +61,10 @@ return_closure(I) ->
             add(I, A)
     end.
 
+add_with_closure(A, B) ->
+    F = return_closure(A),
+    F(B).
+
 matching([], []) ->
     one;
 matching([], _) ->
@@ -84,7 +89,7 @@ fn simple_add() {
     let args = vec![Term::new_i64(1), Term::new_i64(2)];
     let result = ctx.call("test", "add", &args);
 
-    //assert!(result == CallReturn::Return { term: Term::Integer(3.into()) })
+    assert!(result.unwrap_return().erl_eq(&Term::Integer(3.into())));
 }
 
 #[test]
@@ -100,5 +105,19 @@ fn simple_function_call() {
     let args = vec![Term::new_i64(1), Term::new_i64(2), Term::new_i64(3)];
     let result = ctx.call("test", "add_two", &args);
 
-    //assert!(result == CallReturn::Return { term: Term::Integer(6.into()) })
+    assert!(result.unwrap_return().erl_eq(&Term::Integer(6.into())));
+}
+
+#[test]
+fn simple_lambda() {
+    let module = erl_to_ir(TEST_ERL_1);
+
+    use ::{ ExecutionContext, Term };
+    let mut ctx = ExecutionContext::new();
+
+    ctx.add_native_module(::erl_lib::make_erlang());
+    ctx.add_erlang_module(module);
+
+    let args = vec![Term::new_i64(1), Term::new_i64(2)];
+    let result = ctx.call("test", "add_with_closure", &args);
 }
