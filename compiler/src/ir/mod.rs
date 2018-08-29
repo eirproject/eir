@@ -3,6 +3,8 @@ use std::fmt::{ Debug, Formatter };
 use ::pretty::{ Doc, BoxDoc };
 
 pub mod hir;
+use ::ir::hir::LambdaEnvIdx;
+use ::ir::hir::pass::ssa::LambdaEnv;
 use ::ir::hir::pass::ssa::ScopeTracker;
 pub mod lir;
 
@@ -15,6 +17,15 @@ pub struct Module {
     pub name: Atom,
     pub attributes: Vec<(Atom, parser::Constant)>,
     pub functions: Vec<FunctionDefinition>,
+    pub lambda_envs: Option<Vec<LambdaEnv>>,
+}
+
+impl Module {
+
+    pub fn get_env<'a>(&'a self, idx: LambdaEnvIdx) -> &'a LambdaEnv {
+        &self.lambda_envs.as_ref().unwrap()[idx.0]
+    }
+
 }
 
 use ::ToDoc;
@@ -122,6 +133,7 @@ pub struct FunctionDefinition {
     pub visibility: FunctionVisibility,
     pub hir_fun: hir::Function,
     pub lir_function: Option<lir::FunctionCfg>,
+    pub lambda_env_idx: Option<LambdaEnvIdx>,
 }
 #[derive(Debug)]
 pub enum FunctionVisibility {
@@ -194,6 +206,8 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
 
     // Lower to LIR
     ::ir::lir::from_hir::do_lower(&mut module, &mut env);
+
+    module.lambda_envs = Some(env.finish());
 
     for function in module.functions.iter_mut() {
         let lir_mut = function.lir_function.as_mut().unwrap();

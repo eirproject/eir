@@ -1,7 +1,7 @@
 use ::ir::{ FunctionDefinition, FunctionIdent, FunctionVisibility };
 use ::ir::hir::{ SingleExpression, Expression, SingleExpressionKind, Function };
-
 use ::ir::hir::EachSingleExpression;
+use ::ir::hir::LambdaEnvIdx;
 
 pub struct LambdaCollector {
     num: u32,
@@ -23,7 +23,8 @@ impl LambdaCollector {
         self.base_ident = Some(ident);
     }
 
-    pub fn collect(&mut self, mut fun: Function) -> FunctionIdent {
+    pub fn collect(&mut self, env_idx: LambdaEnvIdx, mut fun: Function)
+                   -> FunctionIdent {
         let mut ident = self.base_ident.clone().unwrap();
         ident.lambda = Some(self.num);
         ident.arity = fun.args.len() as u32;
@@ -35,6 +36,7 @@ impl LambdaCollector {
             hir_fun: fun,
             lir_function: None,
             visibility: FunctionVisibility::Lambda,
+            lambda_env_idx: Some(env_idx),
         });
 
         ident
@@ -52,15 +54,15 @@ pub fn extract_lambdas<T>(func: &mut T,
 
     func.each_single_expression_mut(&mut |expr| {
         match expr.kind {
-            SEK::BindClosure { ref mut closure, .. } => {
+            SEK::BindClosure { ref mut closure, lambda_env, .. } => {
                 let fun = closure.fun.take().unwrap();
-                let name = lambdas.collect(*fun);
+                let name = lambdas.collect(lambda_env.unwrap(), *fun);
                 closure.ident = Some(name);
             },
-            SEK::BindClosures { ref mut closures, .. } => {
+            SEK::BindClosures { ref mut closures, lambda_env, .. } => {
                 for closure in closures.iter_mut() {
                     let fun = closure.fun.take().unwrap();
-                    let name = lambdas.collect(*fun);
+                    let name = lambdas.collect(lambda_env.unwrap(), *fun);
                     closure.ident = Some(name);
                 }
             }

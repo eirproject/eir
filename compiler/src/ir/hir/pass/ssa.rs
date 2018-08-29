@@ -115,6 +115,10 @@ impl ScopeTracker {
         &self.lambda_envs[env_idx.0]
     }
 
+    pub fn finish(self) -> Vec<LambdaEnv> {
+        self.lambda_envs
+    }
+
 }
 
 pub fn assign_ssa_expression(env: &mut ScopeTracker, expr: &mut Expression) {

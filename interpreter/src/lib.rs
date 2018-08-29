@@ -9,6 +9,7 @@ extern crate core_erlang_compiler;
 use core_erlang_compiler::intern::Atom;
 use core_erlang_compiler::ir::{ Module, FunctionIdent, SSAVariable };
 use core_erlang_compiler::ir::lir::{ BasicBlock, LabelN, OpKind, Source };
+use core_erlang_compiler::ir::hir::LambdaEnvIdx;
 use core_erlang_compiler::parser::{ Constant, AtomicLiteral };
 
 extern crate num_bigint;
@@ -73,7 +74,13 @@ impl StackFrame {
 
     fn read(&self, src: &Source) -> Term {
         match *src {
-            Source::Variable(ref var) => self.variables[var].clone(),
+            Source::Variable(ref var) => {
+                if let Some(term) = self.variables.get(var) {
+                    term.clone()
+                } else {
+                    panic!("var {:?} not found in frame", var);
+                }
+            }
             Source::Constant(ref literal) => {
                 match *literal {
                     AtomicLiteral::Atom(ref atom) => Term::Atom(atom.clone()),
@@ -179,9 +186,9 @@ impl ExecutionContext {
                             assert!(args.len() == *arity as usize);
 
                             let module_str: &str = &*module_a;
-                            let fun_str: &str = &*fun_name;
+                            let ret = self.call_base(module_str, fun_name,
+                                                     &args, None);
 
-                            let ret = self.call(module_str, fun_str, &args);
                             match ret {
                                 CallReturn::Return { term } => {
                                     frame.variables.insert(op.writes[0], term);
@@ -193,7 +200,21 @@ impl ExecutionContext {
                         Term::BoundLambda {
                             module: ref module_a, ref fun_name, arity,
                             lambda, ref bound_env } => {
-                            unimplemented!();
+
+                            assert!(args.len() == (arity as usize));
+
+                            let module_str: &str = &*module_a;
+                            let ret = self.call_base(
+                                module_str, fun_name, &args,
+                                Some((lambda, bound_env.clone())));
+
+                            match ret {
+                                CallReturn::Return { term } => {
+                                    frame.variables.insert(op.writes[0], term);
+                                    block_ret = Some(BlockResult::Branch { slot: 1 });
+                                },
+                                CallReturn::Throw => unimplemented!(),
+                            }
                         }
                         _ => panic!("Var is not callable"),
                     }
@@ -242,7 +263,10 @@ impl ExecutionContext {
     }
 
     fn call_erlang_module(&self, module: &Module, fun_ident: &FunctionIdent,
-                          args: &[Term]) -> CallReturn {
+                          args: &[Term],
+                          env: Option<BoundLambdaEnv>)
+                          -> CallReturn {
+
         let fun_opt = module.functions.iter().find(|fun| &fun.ident == fun_ident);
         if fun_opt.is_none() {
             panic!("function {} not found in module {:?}", fun_ident, module.name);
@@ -254,6 +278,19 @@ impl ExecutionContext {
         let mut frame = StackFrame::new();
 
         // Insert arguments into frame
+        if let Some(ref ienv) = env {
+            assert!(ienv.env == fun.lambda_env_idx.unwrap());
+            let env_def = module.get_env(fun.lambda_env_idx.unwrap());
+
+            println!("Insert lambda env into frame {:?}, {:?}", env_def, ienv.vars);
+
+            for ((_, _, ssa), term) in env_def.captures.iter().zip(ienv.vars.iter()) {
+                frame.variables.insert(*ssa, term.clone());
+            }
+        } else {
+            assert!(fun_ident.lambda.is_none());
+        }
+
         for (var_def, term) in fun.hir_fun.args.iter().zip(args) {
             frame.variables.insert(var_def.ssa, term.clone());
         }
@@ -292,11 +329,18 @@ impl ExecutionContext {
         module.functions[&(fun_name_str.to_string(), fun_ident.arity)](args)
     }
 
-    pub fn call(&self, module_name: &str, fun_name: &str, args: &[Term]) -> CallReturn {
+    pub fn call(&self, module_name: &str, fun_name: &str, args: &[Term])
+                -> CallReturn {
+        self.call_base(module_name, &Atom::from_str(fun_name).unwrap(), args, None)
+    }
+
+    pub fn call_base(&self, module_name: &str, fun_name: &Atom, args: &[Term],
+                     lambda: Option<(u32, BoundLambdaEnv)>) -> CallReturn {
+
         let fun_ident = FunctionIdent {
-            name: Atom::from_str(fun_name).unwrap(),
+            name: fun_name.clone(),
             arity: args.len() as u32,
-            lambda: None,
+            lambda: lambda.as_ref().map(|l| l.0),
         };
 
         if !self.modules.contains_key(module_name) {
@@ -305,10 +349,14 @@ impl ExecutionContext {
         let module = &self.modules[module_name];
 
         match module {
-            &ModuleType::Erlang(ref erl_module) => 
-                self.call_erlang_module(erl_module, &fun_ident, args),
-            &ModuleType::Native(ref native_module) => 
-                self.call_native_module(native_module, &fun_ident, args),
+            ModuleType::Erlang(ref erl_module) => {
+                self.call_erlang_module(erl_module, &fun_ident, args,
+                                        lambda.map(|l| l.1))
+            }
+            ModuleType::Native(ref native_module) => {
+                assert!(lambda.is_none()); // No lambdas in native modules
+                self.call_native_module(native_module, &fun_ident, args)
+            }
         }
     }
 

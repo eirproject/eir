@@ -31,8 +31,10 @@ impl Module {
                         },
                         hir_fun: ::ir::hir::Function::from_parsed(&f.fun.0),
                         lir_function: None,
+                        lambda_env_idx: None,
                     }
                 }).collect(),
+            lambda_envs: None,
         }
     }
 }
