@@ -1,0 +1,73 @@
+module 'test' ['add'/2,
+	       'add_two'/3,
+	       'module_info'/0,
+	       'module_info'/1,
+	       'return_closure'/1]
+    attributes [%% Line 1
+		'file' =
+		    %% Line 1
+		    [{[116|[101|[115|[116|[105|[110|[103|[46|[101|[114|[108]]]]]]]]]]],1}]]
+'add'/2 =
+    %% Line 4
+    fun (_1,_0) ->
+	%% Line 5
+	call 'erlang':'+'
+	    (_1, _0)
+'add_two'/3 =
+    %% Line 7
+    fun (_2,_1,_0) ->
+	let <I> =
+	    apply %% Line 8
+		  'add'/2
+		(_2, _1)
+	in  %% Line 9
+	    apply 'add'/2
+		(I, _0)
+'return_closure'/1 =
+    %% Line 11
+    fun (_0) ->
+	%% Line 12
+	( fun (_1) ->
+	      %% Line 13
+	      apply 'add'/2
+		  (_0, _1)
+	  -| [{'id',{0,0,'-return_closure/1-fun-0-'}}] )
+'add_with_closure'/2 =
+    %% Line 16
+    fun (_1,_0) ->
+	let <F> =
+	    apply %% Line 17
+		  'return_closure'/1
+		(_1)
+	in  %% Line 18
+	    apply F
+		(_0)
+'matching'/2 =
+    %% Line 20
+    fun (_1,_0) ->
+	case <_1,_0> of
+	  <[],[]> when 'true' ->
+	      %% Line 21
+	      'one'
+	  %% Line 22
+	  <[],_4> when 'true' ->
+	      %% Line 23
+	      'two'
+	  %% Line 24
+	  <_5,[]> when 'true' ->
+	      %% Line 25
+	      'three'
+	  %% Line 26
+	  <A,B> when 'true' ->
+	      %% Line 27
+	      {A,B}
+	end
+'module_info'/0 =
+    fun () ->
+	call 'erlang':'get_module_info'
+	    ('test')
+'module_info'/1 =
+    fun (_0) ->
+	call 'erlang':'get_module_info'
+	    ('test', _0)
+end

@@ -14,6 +14,7 @@ use core_erlang_compiler::parser::AtomicLiteral;
 extern crate num_bigint;
 
 mod term;
+mod pattern;
 pub use term::{ TermType, Term, BoundLambdaEnv };
 
 pub mod erl_lib;
@@ -149,7 +150,7 @@ impl ExecutionContext {
                     match ret {
                         CallReturn::Return { term } => {
                             frame.variables.insert(op.writes[0], term);
-                            block_ret = Some(BlockResult::Branch { slot: 1 });
+                            block_ret = Some(BlockResult::Branch { slot: 0 });
                         }
                         CallReturn::Throw => unimplemented!(),
                     }
@@ -190,7 +191,7 @@ impl ExecutionContext {
                             match ret {
                                 CallReturn::Return { term } => {
                                     frame.variables.insert(op.writes[0], term);
-                                    block_ret = Some(BlockResult::Branch { slot: 1 });
+                                    block_ret = Some(BlockResult::Branch { slot: 0 });
                                 }
                                 CallReturn::Throw => unimplemented!(),
                             }
@@ -209,7 +210,7 @@ impl ExecutionContext {
                             match ret {
                                 CallReturn::Return { term } => {
                                     frame.variables.insert(op.writes[0], term);
-                                    block_ret = Some(BlockResult::Branch { slot: 1 });
+                                    block_ret = Some(BlockResult::Branch { slot: 0 });
                                 },
                                 CallReturn::Throw => unimplemented!(),
                             }
@@ -248,6 +249,9 @@ impl ExecutionContext {
                         lambda: ident.lambda.unwrap(),
                         bound_env: lenv.clone(),
                     });
+                }
+                OpKind::Jump => {
+                    block_ret = Some(BlockResult::Branch { slot: 0 });
                 }
                 _ => {
                     println!("Unimpl: {:?}", op);
@@ -297,17 +301,20 @@ impl ExecutionContext {
         let mut prev_block_id: Option<LabelN> = None;
         let mut curr_block_id = lir.entry();
         loop {
+            println!("Executing {}", curr_block_id);
+
             let block = lir.block(curr_block_id);
             let slots = lir.branch_slots(curr_block_id);
-            for slot in &slots {
-                let edge = lir.cfg.find_edge(curr_block_id.0, slot.0).unwrap();
-                println!("{:?}", lir.cfg.edge_weight(edge));
-            }
+            //for slot in &slots {
+            //    let edge = lir.cfg.find_edge(curr_block_id.0, slot.0).unwrap();
+            //    println!("{:?}", lir.cfg.edge_weight(edge));
+            //}
             let ret = self.exec_block(module, block, prev_block_id, &mut frame);
             match ret {
                 BlockResult::Branch { slot } => {
                     prev_block_id = Some(curr_block_id);
                     curr_block_id = slots[slot];
+                    println!("Branching to slot {}", slot);
                 }
                 BlockResult::Return { term } => {
                     return CallReturn::Return { term };
