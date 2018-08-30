@@ -184,7 +184,7 @@ impl ExecutionContext {
                                                  ref fun_name, ref arity } => {
                             assert!(args.len() == *arity as usize);
 
-                            let module_str: &str = &*module_a;
+                            let module_str: &str = module_a.as_str();
                             let ret = self.call_base(module_str, fun_name,
                                                      &args, None);
 
@@ -202,7 +202,7 @@ impl ExecutionContext {
 
                             assert!(args.len() == (arity as usize));
 
-                            let module_str: &str = &*module_a;
+                            let module_str: &str = module_a.as_str();
                             let ret = self.call_base(
                                 module_str, fun_name, &args,
                                 Some((lambda, bound_env.clone())));
@@ -330,13 +330,13 @@ impl ExecutionContext {
                           args: &[Term]) -> CallReturn {
         assert!(args.len() == fun_ident.arity as usize);
         // bad
-        let fun_name_str: &str = &fun_ident.name;
+        let fun_name_str: &str = fun_ident.name.as_str();
         module.functions[&(fun_name_str.to_string(), fun_ident.arity)](args)
     }
 
     pub fn call(&self, module_name: &str, fun_name: &str, args: &[Term])
                 -> CallReturn {
-        self.call_base(module_name, &Atom::from_str(fun_name).unwrap(), args, None)
+        self.call_base(module_name, &Atom::from_str(fun_name), args, None)
     }
 
     pub fn call_base(&self, module_name: &str, fun_name: &Atom, args: &[Term],

@@ -10,116 +10,11 @@
 use ::std::collections::HashMap;
 use ::ir::SSAVariable;
 use ::Variable;
-use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind, LambdaEnvIdx };
+use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind };
 use ::util::ssa_variable::SSAVariableGenerator;
 
-#[derive(Debug)]
-pub struct LambdaEnv {
-    pub captures: Vec<(ScopeDefinition, SSAVariable, SSAVariable)>,
-    pub meta_binds: Vec<::parser::FunctionName>,
-}
-
-#[derive(Debug)]
-pub struct ScopeTracker {
-    scopes: Vec<Scope>,
-    ssa_var_generator: SSAVariableGenerator,
-    lambda_envs: Vec<LambdaEnv>,
-}
-#[derive(Debug)]
-enum Scope {
-    /// A simple scope contains one or more variable assignments
-    Simple(HashMap<ScopeDefinition, SSAVariable>),
-    /// A tracking scope contains no assignments, but tracks variables
-    /// that are referenced across it. Used to capture variables for
-    /// closures.
-    Tracking(HashMap<ScopeDefinition, (SSAVariable, SSAVariable)>),
-}
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum ScopeDefinition {
-    Variable(Variable),
-    Function(::parser::FunctionName),
-}
-
-impl ScopeTracker {
-
-    pub fn new() -> Self {
-        ScopeTracker {
-            scopes: vec![],
-            ssa_var_generator: SSAVariableGenerator::initial(),
-            lambda_envs: Vec::new(),
-        }
-    }
-
-    pub fn push_scope(&mut self, bindings: HashMap<ScopeDefinition, SSAVariable>) {
-        self.scopes.push(Scope::Simple(bindings));
-    }
-    fn push_tracking(&mut self) {
-        self.scopes.push(Scope::Tracking(HashMap::new()));
-    }
-    pub fn pop_scope(&mut self) {
-        match self.scopes.pop().unwrap() {
-            Scope::Simple(_) => (),
-            _ => panic!(),
-        }
-    }
-    fn pop_tracking(&mut self) -> HashMap<ScopeDefinition, (SSAVariable, SSAVariable)> {
-        match self.scopes.pop().unwrap() {
-            Scope::Tracking(tracked) => {
-                tracked
-            },
-            _ => panic!(),
-        }
-    }
-
-    pub fn new_ssa(&mut self) -> SSAVariable {
-        self.ssa_var_generator.next()
-    }
-
-    fn get(&mut self, var: &ScopeDefinition) -> Option<SSAVariable> {
-        let mut ssa_var_root: Option<SSAVariable> = None;
-        let mut end_idx: usize = 0;
-
-        for (idx, scope) in self.scopes.iter().rev().enumerate() {
-            if let &Scope::Simple(ref bindings) = scope {
-                if let Some(ssa) = bindings.get(var) {
-                    ssa_var_root = Some(*ssa);
-                    end_idx = idx;
-                    break;
-                }
-            }
-        }
-        let scopes_len = self.scopes.len();
-        end_idx = scopes_len - end_idx;
-
-        if let Some(mut ssa_var) = ssa_var_root {
-            for scope in &mut self.scopes[end_idx..scopes_len] {
-                if let &mut Scope::Tracking(ref mut escapes) = scope {
-                    if let Some(&(outer_ssa, inner_ssa)) = escapes.get(var) {
-                        assert!(ssa_var == outer_ssa);
-                        ssa_var = inner_ssa;
-                    } else {
-                        let inner_ssa = self.ssa_var_generator.next();
-                        escapes.insert(var.clone(), (ssa_var, inner_ssa));
-                        ssa_var = inner_ssa;
-                    }
-                }
-            }
-            Some(ssa_var)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_lambda_env<'a>(&'a self, env_idx: LambdaEnvIdx)
-                          -> &'a LambdaEnv {
-        &self.lambda_envs[env_idx.0]
-    }
-
-    pub fn finish(self) -> Vec<LambdaEnv> {
-        self.lambda_envs
-    }
-
-}
+use ::ir::hir::scope_tracker::{ ScopeTracker, ScopeDefinition, LambdaEnv,
+                                LambdaEnvIdx };
 
 pub fn assign_ssa_expression(env: &mut ScopeTracker, expr: &mut Expression) {
     for single in &mut expr.values {
@@ -322,13 +217,12 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 .map(|(k, &(o, i))| (k.clone(), o, i))
                 .collect();
 
-            let env_idx = env.lambda_envs.len();
-            env.lambda_envs.push(LambdaEnv {
+            let env_idx = env.add_lambda_env(LambdaEnv {
                 captures: captures,
                 meta_binds: vec![], // TODO
             });
 
-            *lambda_env = Some(LambdaEnvIdx(env_idx));
+            *lambda_env = Some(env_idx);
             closure.env = *lambda_env;
 
             *env_ssa = env.new_ssa();
@@ -365,13 +259,12 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 .map(|(k, &(o, i))| (k.clone(), o, i))
                 .collect();
 
-            let env_idx = env.lambda_envs.len();
-            env.lambda_envs.push(LambdaEnv {
+            let env_idx = env.add_lambda_env(LambdaEnv {
                 captures: captures,
                 meta_binds: vec![], // TODO: Meta binds
             });
 
-            *lambda_env = Some(LambdaEnvIdx(env_idx));
+            *lambda_env = Some(env_idx);
             for closure in closures.iter_mut() {
                 closure.env = *lambda_env;
             }

@@ -1,8 +1,7 @@
-use super::Atom;
+use super::{ Atom, Variable };
 use super::{ Module, Annotated, Integer, FunctionName, AtomicLiteral, Constant,
-Function, FunctionDefinition, Variable, Expression, SingleExpression, Pattern,
+Function, FunctionDefinition, Expression, SingleExpression, Pattern,
 CaseClause, PrimOpCall };
-use std::str::FromStr;
 
 // ===================================
 // ======== Character classes ========
@@ -26,10 +25,10 @@ integer -> Integer = s:sign? d:$(digit+)
         { Integer { sign: s != Some(false), digits: d.to_string() } }
 float = sign? digit+ "." digit+ ([eE] sign? digit+)?
 // TODO
-atom -> Atom = __ "'" a:$([^\u{0000}-\u{001f}\"\\']*) "'" { FromStr::from_str(a).unwrap() }
+atom -> Atom = __ "'" a:$([^\u{0000}-\u{001f}\"\\']*) "'" { Atom::from_str(a) }
 char = __ "$" [^\u{0000}-\u{001f}\"\\ ]
 string -> String = __ "\"" s:$([^\u{0000}-\u{001f}\"\\]*) "\"" { s.to_string() }
-variableName -> Variable = __ n:$((uppercase / ("_" namechar)) namechar*) { FromStr::from_str(n).unwrap() }
+variableName -> Variable = __ n:$((uppercase / ("_" namechar)) namechar*) { Variable::from_str(n) }
 nil = __ "[" __ "]"
 annotatedVariable -> Annotated<Variable> = annotated<variableName>
 

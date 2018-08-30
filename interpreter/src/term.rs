@@ -1,5 +1,5 @@
 use core_erlang_compiler::intern::Atom;
-use core_erlang_compiler::ir::hir::LambdaEnvIdx;
+use core_erlang_compiler::ir::hir::scope_tracker::LambdaEnvIdx;
 
 use ::num_bigint::BigInt;
 
@@ -49,7 +49,7 @@ impl Term {
 
     pub fn atom_str<'a>(&'a self) -> &'a str {
         if let Term::Atom(ref atom) = *self {
-            *&atom
+            atom.as_str()
         } else {
             panic!();
         }

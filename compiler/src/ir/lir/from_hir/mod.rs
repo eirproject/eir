@@ -1,14 +1,12 @@
 use ::ir::{ Module, FunctionDefinition };
-use ::ir::SSAVariable;
 use ::ir::hir;
 use ::ir::lir;
 use ::ir::lir::Source;
-use ::ir::hir::pass::ssa::ScopeTracker;
+use ::ir::hir::scope_tracker::ScopeTracker;
+use ::intern::RAISE as ATOM_RAISE;
 
-use std::str::FromStr;
-lazy_static! {
-    static ref ATOM_RAISE: ::Atom = FromStr::from_str("raise").unwrap();
-}
+mod exception_handler_stack;
+use self::exception_handler_stack::ExceptionHandlerStack;
 
 pub fn do_lower(module: &mut Module, env: &mut ScopeTracker) {
     module.lower(env)
@@ -19,38 +17,6 @@ impl Module {
         for fun in &mut self.functions {
             fun.lower(env);
         }
-    }
-}
-
-struct ExceptionHandlerStack {
-    stack: Vec<(lir::LabelN, SSAVariable)>,
-}
-impl ExceptionHandlerStack {
-
-    fn new(root_label: lir::LabelN, root_ssa: SSAVariable) -> Self {
-        ExceptionHandlerStack{
-            stack: vec![(root_label, root_ssa)],
-        }
-    }
-
-    fn push_catch(&mut self, label: lir::LabelN, phi_ssa: SSAVariable) {
-        self.stack.push((label, phi_ssa));
-    }
-    fn pop_catch(&mut self) {
-        assert!(self.stack.len() > 1);
-        self.stack.pop();
-    }
-
-    fn add_error_jump(&self, b: &mut lir::cfg::FunctionCfgBuilder,
-                      from_label: lir::LabelN, exception_ssa: SSAVariable) {
-        let (handler_label, handler_ssa) = self.stack.last().unwrap();
-        b.add_jump(from_label, *handler_label);
-        b.add_phi(from_label, exception_ssa,
-                  *handler_label, *handler_ssa);
-    }
-
-    fn finish(&self) {
-        assert!(self.stack.len() == 1);
     }
 }
 

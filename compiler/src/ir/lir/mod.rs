@@ -1,5 +1,6 @@
 use super::SSAVariable;
-use ::ir::hir::{ Pattern, LambdaEnvIdx };
+use ::ir::hir::Pattern;
+use ::ir::hir::scope_tracker::LambdaEnvIdx;
 use ::ir::FunctionIdent;
 use ::Atom;
 
@@ -127,7 +128,6 @@ pub enum OpKind {
     /// a hard error!
     CaseGuardOk,
     CaseGuardFail { clause_num: usize },
-
 
     /// Indicates the start of a receive structure, must jump to a block
     /// containing a single ReceiveWait.

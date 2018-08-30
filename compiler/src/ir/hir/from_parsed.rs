@@ -61,8 +61,7 @@ impl Expression {
 fn pat_node_from_parsed(node: &::parser::Pattern,
                         values: &mut Vec<SingleExpression>) -> PatternNode {
 
-    use std::str::FromStr;
-    let wildcard: ::parser::Variable = FromStr::from_str("_").unwrap();
+    let wildcard: ::parser::Variable = Atom::from("_");
 
     use ::parser::Pattern as PP;
     match *node {
@@ -165,6 +164,7 @@ impl SingleExpression {
                         .collect(),
                 },
             PSE::Catch(ref body) => {
+                // TODO: WTF?
                 let r = AVariable { var: Variable::from("_r"),
                                     ssa: INVALID_SSA };
 

@@ -2,9 +2,11 @@ use ::std::fmt;
 use super::{ AVariable, AFunctionName, SSAVariable, FunctionIdent };
 use ::parser;
 use ::{ Atom, Variable };
+use ::ir::hir::scope_tracker::LambdaEnvIdx;
 
 pub mod from_parsed;
 pub mod pass;
+pub mod scope_tracker;
 
 pub trait EachSingleExpression {
     fn each_single_expression_mut<F>(&mut self, f: &mut F, enter_lambdas: bool) where F: FnMut(&mut SingleExpression);
@@ -191,9 +193,6 @@ impl ::ToDoc for SingleExpression {
         ])
     }
 }
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct LambdaEnvIdx(pub usize);
 
 #[derive(Debug, Clone)]
 pub enum SingleExpressionKind {

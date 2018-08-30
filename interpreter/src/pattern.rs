@@ -5,7 +5,7 @@ pub struct CaseContext {
 
 impl CaseContext {
 
-    pub fn new() -> Self {
-    }
+    //pub fn new() -> Self {
+    //}
 
 }

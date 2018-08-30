@@ -168,6 +168,7 @@ impl<'a> FunctionCfgBuilder<'a> {
     pub fn op_tombstone(&mut self, ssa: SSAVariable) {
         self.basic_op(OpKind::TombstoneSSA(ssa), vec![], vec![]);
     }
+
     pub fn op_jump(&mut self, target: LabelN) {
         self.basic_op(OpKind::Jump, vec![], vec![]);
         let source = self.get_block();

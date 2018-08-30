@@ -1,12 +1,10 @@
 use std::collections::HashMap;
-use std::fmt::{ Debug, Formatter };
-use ::pretty::{ Doc, BoxDoc };
 
 pub mod hir;
-use ::ir::hir::LambdaEnvIdx;
-use ::ir::hir::pass::ssa::LambdaEnv;
-use ::ir::hir::pass::ssa::ScopeTracker;
+use ::ir::hir::scope_tracker::{ LambdaEnvIdx, LambdaEnv, ScopeTracker };
 pub mod lir;
+mod doc;
+mod fmt;
 
 use ::intern::{ Atom, Variable };
 use ::parser;
@@ -19,95 +17,9 @@ pub struct Module {
     pub functions: Vec<FunctionDefinition>,
     pub lambda_envs: Option<Vec<LambdaEnv>>,
 }
-
 impl Module {
-
-    pub fn get_env<'a>(&'a self, idx: LambdaEnvIdx) -> &'a LambdaEnv {
-        &self.lambda_envs.as_ref().unwrap()[idx.0]
-    }
-
-}
-
-use ::ToDoc;
-
-impl ::ToDoc for Module {
-    fn to_doc<'a>(&'a self) -> Doc<'a, BoxDoc> {
-        let head: Doc<BoxDoc> = Doc::text(format!("module {}:", self.name));
-        let attrs: Doc<BoxDoc> = Doc::newline()
-            .append(Doc::text(format!("attributes: {:?}", self.attributes)))
-            .nest(2);
-
-        let funs = self.functions.iter().map(|fun| {
-            let args = Doc::intersperse(
-                fun.hir_fun.args.iter().map(|arg| Doc::text(format!("{:?}", arg))),
-                Doc::text(",").append(Doc::space()));
-            let start_signature = Doc::concat(vec![
-                Doc::newline(),
-                Doc::text(format!("fun {:?} {}(", fun.visibility, fun.ident)),
-            ]).group();
-            let args_signature = Doc::concat(vec![
-                args,
-                Doc::text("):")
-            ]).nest(4);
-            let signature = Doc::concat(vec![
-                start_signature, args_signature
-            ]).group();
-
-            let hir = Doc::newline().append(fun.hir_fun.body.to_doc());
-
-            let lir = {
-                let lir = fun.lir_function.as_ref().unwrap();
-                let lir_blocks = lir.cfg.node_indices().map(|node_idx| {
-                    let head = Doc::newline()
-                        .append(Doc::text(format!("block #{}:", node_idx.index())));
-
-                    let phis = lir.cfg[node_idx].phi_nodes.iter().map(|phi| {
-                        Doc::newline().append(Doc::text(format!("{:?}", phi)))
-                    });
-
-                    let block_ops = lir.cfg[node_idx].ops.iter().map(|op| {
-                        Doc::newline().append(Doc::text(format!("{:?}", op)))
-                    });
-
-                    let branches_vec = lir.cfg
-                        .neighbors_directed(node_idx, ::petgraph::Direction::Outgoing)
-                        .map(|branch| Doc::text(format!("{:?}", branch)));
-                    let branches = Doc::newline()
-                        .append(Doc::text("branch ["))
-                        .append(Doc::intersperse(branches_vec, Doc::text(",").append(Doc::space()))
-                                .nest(2).group())
-                        .append(Doc::text("]"));
-
-                    Doc::concat(vec![
-                        head,
-                        Doc::concat(phis).nest(2),
-                        Doc::concat(block_ops).nest(2),
-                        branches.nest(2),
-                    ])
-                });
-
-                Doc::concat(lir_blocks)
-            };
-
-            Doc::concat(vec![
-                signature,
-                Doc::newline().append(Doc::text("hir:")).nest(2),
-                hir.nest(4),
-                Doc::newline().append(Doc::text("lir:")).nest(2),
-                lir.nest(4),
-            ])
-        });
-        let funs_doc = Doc::concat(funs).nest(2);
-
-        Doc::concat(vec![
-            head, attrs, funs_doc
-        ])
-    }
-}
-
-impl Debug for Module {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), ::std::fmt::Error> {
-        self.to_doc().render_fmt(80, f)
+    pub fn get_env<'a>(&'a self, env_idx: LambdaEnvIdx) -> &'a LambdaEnv {
+        &self.lambda_envs.as_ref().unwrap()[env_idx.0]
     }
 }
 
@@ -116,15 +28,6 @@ pub struct FunctionIdent {
     pub name: Atom,
     pub arity: u32,
     pub lambda: Option<u32>,
-}
-impl ::std::fmt::Display for FunctionIdent {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        if let Some(lambda_num) = self.lambda {
-            write!(f, "{}@{}/{}", self.name, lambda_num, self.arity)
-        } else {
-            write!(f, "{}/{}", self.name, self.arity)
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -180,7 +83,7 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
         let mut scope = HashMap::new();
         for arg in &mut func.hir_fun.args {
             arg.ssa = env.new_ssa();
-            scope.insert(::ir::hir::pass::ssa::ScopeDefinition::Variable(
+            scope.insert(::ir::hir::scope_tracker::ScopeDefinition::Variable(
                 arg.var.clone()), arg.ssa);
         }
         env.push_scope(scope);

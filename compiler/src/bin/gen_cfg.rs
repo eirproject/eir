@@ -27,7 +27,7 @@ fn main() {
 
     if let Some(fun_name) = fun_name {
 
-        let name_sym: Atom = FromStr::from_str(&fun_name).unwrap();
+        let name_sym = Atom::from_str(&fun_name);
         let arity = arity.unwrap().parse().unwrap();
         let lambda: Option<u32> = lambda.map(|s| s.parse().unwrap());
 
