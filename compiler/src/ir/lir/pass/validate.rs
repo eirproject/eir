@@ -33,9 +33,11 @@ fn validate_proper_ssa(cfg: &FunctionCfg) {
     // Check for usage of unassigned
     for block in cfg.blocks_iter() {
         for phi in block.phi_nodes.iter() {
-            for &(_label, ssa) in phi.entries.iter() {
-                if !assigns.contains(&ssa) {
-                    println!("Use of unassigned {:?}", ssa);
+            for &(_label, ref src) in phi.entries.iter() {
+                if let Source::Variable(ref ssa) = src {
+                    if !assigns.contains(&ssa) {
+                        println!("Use of unassigned {:?}", ssa);
+                    }
                 }
             }
         }

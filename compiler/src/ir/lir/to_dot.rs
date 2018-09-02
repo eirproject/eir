@@ -68,6 +68,9 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
 
                     write!(w, "\\}} ")?;
                 },
+                ::ir::lir::OpKind::CaptureNamedFunction(ref ident) => {
+                    write!(w, "CaptureNamedFunction({})", ident)?;
+                },
                 kind => {
                     let body = format_label(&format!("{:?} ", kind));
                     write!(w, "{}", body)?;

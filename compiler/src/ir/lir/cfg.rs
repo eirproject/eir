@@ -124,14 +124,14 @@ impl<'a> FunctionCfgBuilder<'a> {
 
         let add_new = if let Some(inner) =
             block.phi_nodes.iter_mut().find(|p| p.ssa == node_instr) {
-                inner.entries.push((pred, pred_instr));
+                inner.entries.push((pred, Source::Variable(pred_instr)));
                 false
             } else {
                 true
             };
         if add_new {
             block.phi_nodes.push(Phi {
-                entries: vec![(pred, pred_instr)],
+                entries: vec![(pred, Source::Variable(pred_instr))],
                 ssa: node_instr,
             });
         }

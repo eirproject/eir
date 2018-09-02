@@ -19,6 +19,15 @@ pub fn propagate_atomics(cfg: &mut FunctionCfg) {
     }
 
     for block in cfg.blocks_iter_mut() {
+        for phi in block.phi_nodes.iter_mut() {
+            for entry in phi.entries.iter_mut() {
+                if let Source::Variable(var) = entry.1 {
+                    if let Some(constant) = constants.get(&var) {
+                        entry.1 = Source::Constant(constant.clone());
+                    }
+                }
+            }
+        }
         for op in block.ops.iter_mut() {
             for read in op.reads.iter_mut() {
                 if let Source::Variable(var) = *read {

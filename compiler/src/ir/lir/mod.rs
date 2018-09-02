@@ -35,7 +35,7 @@ pub enum Source {
 
 #[derive(Debug, Clone)]
 pub struct Phi {
-    entries: Vec<(LabelN, SSAVariable)>,
+    entries: Vec<(LabelN, Source)>,
     ssa: SSAVariable,
 }
 
