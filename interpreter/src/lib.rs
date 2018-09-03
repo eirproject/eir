@@ -3,7 +3,9 @@
 //! details.
 
 use std::str::FromStr;
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
+use std::cell::RefCell;
+use std::rc::Rc;
 
 extern crate core_erlang_compiler;
 use core_erlang_compiler::intern::Atom;
@@ -14,8 +16,9 @@ use core_erlang_compiler::parser::AtomicLiteral;
 extern crate num_bigint;
 
 mod term;
-mod pattern;
 pub use term::{ TermType, Term, BoundLambdaEnv };
+mod pattern;
+use pattern::{ CaseContext, MatchState };
 
 pub mod erl_lib;
 #[cfg(test)] pub mod erl_tests;
@@ -62,13 +65,20 @@ impl CallReturn {
 
 struct StackFrame {
     variables: HashMap<SSAVariable, Term>,
+    tombstones: HashSet<SSAVariable>,
 }
 impl StackFrame {
 
     fn new() -> Self {
         StackFrame {
             variables: HashMap::new(),
+            tombstones: HashSet::new(),
         }
+    }
+
+    fn write(&mut self, ssa: SSAVariable, term: Term) {
+        self.tombstones.remove(&ssa);
+        self.variables.insert(ssa, term);
     }
 
     fn read(&self, src: &Source) -> Term {
@@ -87,6 +97,10 @@ impl StackFrame {
                 }
             }
         }
+    }
+
+    fn tombstone(&mut self, ssa: SSAVariable) {
+        self.tombstones.insert(ssa);
     }
 
 }
@@ -118,10 +132,16 @@ impl ExecutionContext {
     }
 
     fn exec_block(&self, module: &Module, block: &BasicBlock,
-                  _prev: Option<LabelN>, frame: &mut StackFrame) -> BlockResult {
+                  prev: Option<LabelN>, frame: &mut StackFrame) -> BlockResult {
 
         // Apply phi nodes
-        assert!(block.phi_nodes.len() == 0);
+        for phi in &block.phi_nodes {
+            let source = &phi.entries.iter()
+                .find(|(label, _)| label == prev.as_ref().unwrap())
+                .unwrap().1;
+            let term = frame.read(source);
+            frame.write(phi.ssa, term);
+        }
 
         let mut block_ret: Option<BlockResult> = None;
         for op in &block.ops {
@@ -135,7 +155,7 @@ impl ExecutionContext {
                     assert!(op.reads.len() == 1);
                     assert!(op.writes.len() == 1);
                     let res = frame.read(&op.reads[0]);
-                    frame.variables.insert(op.writes[0], res);
+                    frame.write(op.writes[0], res);
                 }
                 OpKind::Call => {
                     assert!(op.reads.len() >= 2);
@@ -149,7 +169,7 @@ impl ExecutionContext {
                     let ret = self.call(module_term.atom_str(), fun_term.atom_str(), &args);
                     match ret {
                         CallReturn::Return { term } => {
-                            frame.variables.insert(op.writes[0], term);
+                            frame.write(op.writes[0], term);
                             block_ret = Some(BlockResult::Branch { slot: 0 });
                         }
                         CallReturn::Throw => unimplemented!(),
@@ -169,7 +189,7 @@ impl ExecutionContext {
                         fun_name: ident.name.clone(),
                         arity: ident.arity,
                     };
-                    frame.variables.insert(op.writes[0], res);
+                    frame.write(op.writes[0], res);
                 }
                 OpKind::Apply => {
                     assert!(op.writes.len() == 1);
@@ -190,7 +210,7 @@ impl ExecutionContext {
 
                             match ret {
                                 CallReturn::Return { term } => {
-                                    frame.variables.insert(op.writes[0], term);
+                                    frame.write(op.writes[0], term);
                                     block_ret = Some(BlockResult::Branch { slot: 0 });
                                 }
                                 CallReturn::Throw => unimplemented!(),
@@ -209,7 +229,7 @@ impl ExecutionContext {
 
                             match ret {
                                 CallReturn::Return { term } => {
-                                    frame.variables.insert(op.writes[0], term);
+                                    frame.write(op.writes[0], term);
                                     block_ret = Some(BlockResult::Branch { slot: 0 });
                                 },
                                 CallReturn::Throw => unimplemented!(),
@@ -226,7 +246,7 @@ impl ExecutionContext {
                         .map(|r| frame.read(r))
                         .collect();
 
-                    frame.variables.insert(op.writes[0], Term::LambdaEnv(BoundLambdaEnv {
+                    frame.write(op.writes[0], Term::LambdaEnv(BoundLambdaEnv {
                         env: *env_idx,
                         vars: env_vars,
                     }));
@@ -242,7 +262,7 @@ impl ExecutionContext {
                         panic!();
                     };
 
-                    frame.variables.insert(op.writes[0], Term::BoundLambda {
+                    frame.write(op.writes[0], Term::BoundLambda {
                         module: module.name.clone(),
                         fun_name: ident.name.clone(),
                         arity: ident.arity,
@@ -250,8 +270,76 @@ impl ExecutionContext {
                         bound_env: lenv.clone(),
                     });
                 }
+                OpKind::CaseStart { ref vars, ref clauses, ref value_vars } => {
+                    let case_ctx = CaseContext::new(op.reads.clone(), clauses.clone());
+
+                    frame.write(op.writes[0], Term::CaseContext(
+                        Rc::new(RefCell::new(case_ctx))));
+                }
+                OpKind::Case(_) => {
+                    let to_leaf = {
+                        let curr = frame.read(&op.reads[0]);
+                        let mut ctx = if let Term::CaseContext(ref ctx) = curr {
+                            ctx.borrow_mut()
+                        } else {
+                            panic!("Case read not case context");
+                        };
+
+                        let args: Vec<_> = ctx.vars.iter()
+                            .map(|s| frame.read(s))
+                            .collect();
+                        ctx.do_body(&args)
+                    };
+                    block_ret = Some(BlockResult::Branch { slot: to_leaf });
+                }
+                OpKind::CaseValues => {
+                    let mut vals = {
+                        let curr = frame.read(&op.reads[0]);
+                        let mut ctx = if let Term::CaseContext(ref ctx) = curr {
+                            ctx.borrow_mut()
+                        } else {
+                            panic!("case read not case context");
+                        };
+
+                        ctx.case_values()
+                    };
+                    for write in &op.writes {
+                        frame.write(*write, vals.remove(write).unwrap());
+                    }
+                }
+                OpKind::CaseGuardOk => {
+                    let curr = frame.read(&op.reads[0]);
+                    let mut ctx = if let Term::CaseContext(ref ctx) = curr {
+                        ctx.borrow_mut()
+                    } else {
+                        panic!("case read not case context");
+                    };
+                    ctx.guard_ok();
+                }
                 OpKind::Jump => {
                     block_ret = Some(BlockResult::Branch { slot: 0 });
+                }
+                OpKind::IfTruthy => {
+                    let false_atom = &*core_erlang_compiler::intern::FALSE;
+                    let matched = match frame.read(&op.reads[0]) {
+                        Term::Atom(ref atom) if atom == false_atom => false,
+                        _ => true,
+                    };
+
+                    if matched {
+                        block_ret = Some(BlockResult::Branch { slot: 0 });
+                    } else {
+                        block_ret = Some(BlockResult::Branch { slot: 1 });
+                    }
+                }
+                OpKind::TombstoneSSA(ssa) => {
+                    frame.tombstone(ssa);
+                }
+                OpKind::MakeTuple => {
+                    let term = Term::Tuple(
+                        op.reads.iter().map(|r| frame.read(r)).collect()
+                    );
+                    frame.write(op.writes[0], term);
                 }
                 _ => {
                     println!("Unimpl: {:?}", op);
@@ -287,14 +375,14 @@ impl ExecutionContext {
             println!("Insert lambda env into frame {:?}, {:?}", env_def, ienv.vars);
 
             for ((_, _, ssa), term) in env_def.captures.iter().zip(ienv.vars.iter()) {
-                frame.variables.insert(*ssa, term.clone());
+                frame.write(*ssa, term.clone());
             }
         } else {
             assert!(fun_ident.lambda.is_none());
         }
 
         for (var_def, term) in fun.hir_fun.args.iter().zip(args) {
-            frame.variables.insert(var_def.ssa, term.clone());
+            frame.write(var_def.ssa, term.clone());
         }
 
         // Execute blocks

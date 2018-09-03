@@ -31,6 +31,14 @@ pub struct Expression {
     pub values: Vec<SingleExpression>,
 }
 
+impl Expression {
+    pub fn ssa_vars<'a>(&'a self) -> impl Iterator<Item = SSAVariable> + 'a {
+        self.values
+            .iter()
+            .map(|v| v.ssa)
+    }
+}
+
 impl EachSingleExpression for Expression {
     fn each_single_expression_mut<F>(&mut self, f: &mut F, enter_lambdas: bool)
         where F: FnMut(&mut SingleExpression) {

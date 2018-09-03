@@ -125,5 +125,12 @@ fn simple_pattern_match() {
 
     let args = vec![Term::new_i64(1), Term::new_i64(2)];
     let result = ctx.call("test", "matching", &args);
+    assert!(result.unwrap_return().erl_eq(&Term::Tuple(vec![
+        Term::new_i64(1),
+        Term::new_i64(2),
+    ])));
 
+    let args = vec![Term::Nil, Term::Nil];
+    let result = ctx.call("test", "matching", &args);
+    assert!(result.unwrap_return().erl_eq(&Term::new_atom("one")));
 }

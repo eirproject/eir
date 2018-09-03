@@ -39,4 +39,6 @@ pub type Variable = Atom;
 
 lazy_static! {
     pub static ref RAISE: Atom = Atom::from("raise");
+    pub static ref TRUE: Atom = Atom::from("true");
+    pub static ref FALSE: Atom = Atom::from("false");
 }

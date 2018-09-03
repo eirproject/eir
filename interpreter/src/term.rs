@@ -1,5 +1,9 @@
+use ::std::cell::RefCell;
+use ::std::rc::Rc;
+
 use core_erlang_compiler::intern::Atom;
 use core_erlang_compiler::ir::hir::scope_tracker::LambdaEnvIdx;
+use ::pattern::CaseContext;
 
 use ::num_bigint::BigInt;
 
@@ -9,9 +13,13 @@ pub enum TermType {
     Integer,
     Float,
     Atom,
-    LambdaEnv,
+    Tuple,
     BoundLambda,
     CapturedFunction,
+
+    // Internal
+    LambdaEnv,
+    CaseContext,
 }
 
 #[derive(Debug, Clone)]
@@ -27,7 +35,7 @@ pub enum Term {
     Integer(BigInt),
     Float(f64),
     Atom(Atom),
-    LambdaEnv(BoundLambdaEnv),
+    Tuple(Vec<Term>),
     BoundLambda {
         module: Atom,
         fun_name: Atom,
@@ -40,11 +48,19 @@ pub enum Term {
         fun_name: Atom,
         arity: u32,
     },
+
+    // Internal
+    LambdaEnv(BoundLambdaEnv),
+    CaseContext(Rc<RefCell<CaseContext>>),
 }
 impl Term {
 
     pub fn new_i64(num: i64) -> Self {
         Term::Integer(num.into())
+    }
+
+    pub fn new_atom(string: &str) -> Self {
+        Term::Atom(Atom::from_str(string))
     }
 
     pub fn atom_str<'a>(&'a self) -> &'a str {
@@ -61,9 +77,11 @@ impl Term {
             Term::Integer(_) => TermType::Integer,
             Term::Float(_) => TermType::Float,
             Term::Atom(_) => TermType::Atom,
+            Term::Tuple(_) => TermType::Tuple,
             Term::LambdaEnv { .. } => TermType::LambdaEnv,
             Term::BoundLambda { .. } => TermType::BoundLambda,
             Term::CapturedFunction { .. } => TermType::CapturedFunction,
+            Term::CaseContext {.. } => TermType::CaseContext,
         }
     }
 
@@ -97,6 +115,8 @@ impl ErlEq for Term {
             (Term::Integer(_), Term::Float(_)) => unimplemented!(),
             (Term::Float(_), Term::Integer(_)) => unimplemented!(),
             (Term::Atom(ref a1), Term::Atom(ref a2)) => a1 == a2,
+            (Term::Tuple(ref v1), Term::Tuple(ref v2)) =>
+                v1.iter().zip(v2).all(|(e1, e2)| e1.erl_eq(e2)),
             (Term::CapturedFunction {
                 module: ref mod1, fun_name: ref fun_name1,
                 arity: ref arity1 },

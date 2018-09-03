@@ -46,8 +46,8 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
             }
 
             match &op.kind {
-                ::ir::lir::OpKind::Case { ref vars, ref clauses, ref value_vars } => {
-                    write!(w, "Case \\{{{}", DOT_BREAK)?;
+                ::ir::lir::OpKind::CaseStart { ref vars, ref clauses, ref value_vars } => {
+                    write!(w, "CaseStart \\{{{}", DOT_BREAK)?;
 
                     let vars_fmt = format_label(&format!("{:?} ", vars));
                     write!(w, "  match on: {}{}", vars_fmt, DOT_BREAK)?;

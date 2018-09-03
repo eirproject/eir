@@ -35,8 +35,8 @@ pub enum Source {
 
 #[derive(Debug, Clone)]
 pub struct Phi {
-    entries: Vec<(LabelN, Source)>,
-    ssa: SSAVariable,
+    pub entries: Vec<(LabelN, Source)>,
+    pub ssa: SSAVariable,
 }
 
 #[derive(Debug, Clone)]
@@ -101,6 +101,11 @@ pub enum OpKind {
 
     IfTruthy,
 
+    CaseStart {
+        vars: Vec<SSAVariable>,
+        clauses: Vec<Clause>,
+        value_vars: Vec<SSAVariable>,
+    },
     /// High level matching construct, lowered to explicit control flow
     /// in a LIR compiler pass.
     /// This OP indicates the start of a case structure.
@@ -112,11 +117,7 @@ pub enum OpKind {
     /// a GuardOk.
     /// Returns a pseudo-value which is used to fetch the matched values
     /// in any subsequent blocks.
-    Case {
-        vars: Vec<SSAVariable>,
-        clauses: Vec<Clause>,
-        value_vars: Vec<SSAVariable>,
-    },
+    Case(usize),
     /// Must have one incoming edge, which must end with a Case OP.
     /// The number of writes are the same as the number of bindings
     /// in the clause just matched in the case block.
@@ -195,7 +196,7 @@ pub enum OpKind {
 
 #[derive(Debug, Clone)]
 pub struct Clause {
-    patterns: Vec<Pattern>,
+    pub patterns: Vec<Pattern>,
 }
 
 impl OpKind {
@@ -205,8 +206,9 @@ impl OpKind {
             OpKind::Call => Some(2),
             OpKind::Apply => Some(2),
             OpKind::Jump => Some(1),
+            OpKind::Case(num_clauses) => Some(num_clauses + 1),
             // One for each clause + failure leaf
-            OpKind::Case { ref clauses, .. } => Some(clauses.len() + 1),
+            //OpKind::Case { ref clauses, .. } => Some(clauses.len() + 1),
             // TODO
             //OpKind::Match { ref types } => Some(types.len()),
             OpKind::ReturnOk => Some(0),
