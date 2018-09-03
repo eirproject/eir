@@ -19,7 +19,7 @@ fn main() {
 
     // do_config_change/3
 
-    let name_sym: Atom = FromStr::from_str("try_catch").unwrap();
+    let name_sym = Atom::from("try_catch");
     let fun = hir.functions.iter().find(|f| {
         f.ident.name == name_sym && f.ident.arity == 1 && f.ident.lambda == None
     }).unwrap();

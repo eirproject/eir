@@ -136,6 +136,8 @@ pub enum OpKind {
     /// before control flow is passed through a ReceiveFinish or exited
     /// the structure through the timeout edge.
     ///
+    /// ```ignore
+    ///
     ///          [ReceiveStart]
     ///                |
     ///                v
@@ -149,6 +151,8 @@ pub enum OpKind {
     ///         v           |
     ///  [ReceiveFinish]    ----->[ReceiveFinish]
     ///  [Other        ]          [Other        ]
+    ///
+    /// ```
     ///
     ///
     /// #start:

@@ -4,9 +4,6 @@ version = "0.1.0"
 authors = ["HansiHE <hansihe@hansihe.com>"]
 autobins = false
 
-[[bin]]
-name = "gen_cfg"
-
 [build-dependencies]
 peg = "0.5.4"
 
