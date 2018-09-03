@@ -5,6 +5,8 @@ Currently compiles a Core Erlang to a (relatively) low level IR.
 
 Current area of work: *Writing LIR interpreter to ease correctness checking*
 
+![Example CFG](example_cfg.png)
+
 Current features:
 * Parses .core file to parse tree
 * Converts parse tree into hierarchical HIR (High-level IR)
@@ -13,3 +15,4 @@ Current features:
 * Flattens HIR into flat LIR (Low-level IR)
 * Performs basic constant propagation
 * Produces DOT graph from LIR
+* Executes (parts of, for now) LIR in reference interpreter
