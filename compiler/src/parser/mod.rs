@@ -25,8 +25,8 @@ pub struct FunctionName {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Integer {
-    sign: bool,
-    digits: String,
+    pub sign: bool,
+    pub digits: String,
 }
 impl Integer {
     fn as_u32(&self) -> u32 {

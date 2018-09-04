@@ -65,7 +65,7 @@ fn bignum_to_f64(n: &BigInt) -> Option<f64> {
 fn add(args: &[Term]) -> CallReturn {
     // TODO: Verify semantics
     println!("{:?}", args);
-    
+
     if args.len() != 2 {
         return CallReturn::Throw;
     }
@@ -94,12 +94,42 @@ fn add(args: &[Term]) -> CallReturn {
         (Term::Float(f1), Term::Float(f2)) => {
             CallReturn::Return { term: Term::Float(f1 + f2) }
         }
-        _ => CallReturn::Throw 
+        _ => CallReturn::Throw,
+    }
+}
+
+fn sub(args: &[Term]) -> CallReturn {
+    if args.len() != 2 {
+        return CallReturn::Throw;
+    }
+    let a1 = &args[0];
+    let a2 = &args[1];
+
+    match (a1, a2) {
+        (Term::Integer(ref i1), Term::Integer(ref i2)) =>
+            CallReturn::Return { term: Term::Integer(i1 - i2) },
+        _ => unimplemented!(),
+    }
+}
+
+fn mul(args: &[Term]) -> CallReturn {
+    if args.len() != 2 {
+        return CallReturn::Throw;
+    }
+    let a1 = &args[0];
+    let a2 = &args[1];
+
+    match (a1, a2) {
+        (Term::Integer(ref i1), Term::Integer(ref i2)) =>
+            CallReturn::Return { term: Term::Integer(i1 * i2) },
+        _ => unimplemented!(),
     }
 }
 
 pub fn make_erlang() -> NativeModule {
     let mut module = NativeModule::new("erlang".to_string());
     module.add_fun("+".to_string(), 2, Box::new(add));
+    module.add_fun("-".to_string(), 2, Box::new(sub));
+    module.add_fun("*".to_string(), 2, Box::new(mul));
     module
 }

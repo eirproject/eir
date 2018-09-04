@@ -1,0 +1,33 @@
+module 'factorial' ['factorial'/1,
+		    'module_info'/0,
+		    'module_info'/1]
+    attributes [%% Line 1
+		'file' =
+		    %% Line 1
+		    [{[102|[97|[99|[116|[111|[114|[105|[97|[108|[46|[101|[114|[108]]]]]]]]]]]]],1}]]
+'factorial'/1 =
+    %% Line 4
+    fun (_0) ->
+	case _0 of
+	  <0> when 'true' ->
+	      1
+	  %% Line 5
+	  <N> when 'true' ->
+	      let <_1> =
+		  call 'erlang':'-'
+		      (N, 1)
+	      in  let <_2> =
+		      apply 'factorial'/1
+			  (_1)
+		  in  call 'erlang':'*'
+			  (N, _2)
+	end
+'module_info'/0 =
+    fun () ->
+	call 'erlang':'get_module_info'
+	    ('factorial')
+'module_info'/1 =
+    fun (_0) ->
+	call 'erlang':'get_module_info'
+	    ('factorial', _0)
+end

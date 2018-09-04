@@ -134,3 +134,22 @@ fn simple_pattern_match() {
     let result = ctx.call("test", "matching", &args);
     assert!(result.unwrap_return().erl_eq(&Term::new_atom("one")));
 }
+
+const FACTORIAL_ERL: &str = r##"
+-module(test).
+-export([factorial/1]).
+
+factorial(0) -> 1;
+factorial(N) -> N * factorial(N-1).
+
+    "##;
+
+#[test]
+fn factorial() {
+    let ctx = ctx_from_erl(FACTORIAL_ERL);
+
+    let args = vec![Term::new_i64(10)];
+    let result = ctx.call("test", "factorial", &args);
+
+    println!("Res: {:?}", result);
+}

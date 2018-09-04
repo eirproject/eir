@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use ::num_bigint::BigInt;
+
 use ::term::Term;
 use core_erlang_compiler::ir::lir::{ Source, Clause };
 use core_erlang_compiler::ir::hir::{ Pattern, PatternNode };
@@ -56,6 +58,16 @@ fn match_node(term: &Term, node: &PatternNode,
               binds_ref: &Vec<(Variable, SSAVariable)>) -> bool {
     match (term, node) {
         (Term::Nil, PatternNode::Atomic(AtomicLiteral::Nil)) => true,
+        (Term::Integer(ref int),
+         PatternNode::Atomic(AtomicLiteral::Integer(ref pat_int))) => {
+            let mut bi = BigInt::parse_bytes(pat_int.digits.as_bytes(), 10)
+                .unwrap();
+            if !pat_int.sign {
+                bi *= -1;
+            }
+            println!("Int pattern {} {}", int, bi);
+            int == &bi
+        }
         (_, PatternNode::BindVar(var_name, i_node)) => {
             binds.insert(
                 binds_ref.iter().find(|(k, _)| k == var_name).unwrap().1,

@@ -14,6 +14,7 @@ use core_erlang_compiler::ir::lir::{ BasicBlock, LabelN, OpKind, Source };
 use core_erlang_compiler::parser::AtomicLiteral;
 
 extern crate num_bigint;
+use num_bigint::BigInt;
 
 mod term;
 pub use term::{ TermType, Term, BoundLambdaEnv };
@@ -93,6 +94,14 @@ impl StackFrame {
             Source::Constant(ref literal) => {
                 match *literal {
                     AtomicLiteral::Atom(ref atom) => Term::Atom(atom.clone()),
+                    AtomicLiteral::Integer(ref inner) => {
+                        let mut bi = BigInt::parse_bytes(inner.digits.as_bytes(), 10)
+                            .unwrap();
+                        if !inner.sign {
+                            bi *= -1;
+                        }
+                        Term::Integer(bi)
+                    },
                     _ => unimplemented!(),
                 }
             }
@@ -416,6 +425,7 @@ impl ExecutionContext {
 
     fn call_native_module(&self, module: &NativeModule, fun_ident: &FunctionIdent,
                           args: &[Term]) -> CallReturn {
+        println!("Call native: {}:{}", module.name, fun_ident);
         assert!(args.len() == fun_ident.arity as usize);
         // bad
         let fun_name_str: &str = fun_ident.name.as_str();
