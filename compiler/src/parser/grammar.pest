@@ -1,0 +1,262 @@
+top = _{ soi ~ module ~ eoi }
+comment = { "%" ~ ( !"\n" ~ any )* }
+
+// Meta
+whitespace = _{ " " | "\n" | "\t" }
+
+// ===================================
+// ======== Character classes ========
+// ===================================
+sign = { "+" | "-" }
+digit = { '0'..'9' }
+uppercase = { 'A'..'Z' | '\u{00c0}'..'\u{00d6}' | '\u{00d8}'..'\u{00de}' }
+lowercase = { 'a'..'z' | '\u{00df}'..'\u{00f6}' | '\u{00f8}'..'\u{00ff}' }
+namechar = { uppercase | lowercase | digit | "@" | "_" }
+escape = { "\\" }
+atom_char = { !( '\u{0000}'..'\u{001f}' | "\"" | "\\" | "'" ) ~ any }
+char_char = { !( '\u{0000}'..'\u{001f}' | "\"" | "\\" | " " ) ~ any }
+string_char = { !( '\u{0000}'..'\u{001f}' | "\"" ) ~ any }
+
+// ===========================
+// ======== Compounds ========
+// ===========================
+base_number = @{ digit+ }
+
+// ===========================
+// ======== Terminals ========
+// ===========================
+integer = @{ sign? ~ base_number }
+float = @{ sign? ~ base_number ~ "." ~ base_number ~ (("E" | "e") ~ base_number) }
+atom = @{ "'" ~ atom_char+ ~ "'" }
+char = @{ "$" ~ char_char }
+string = @{ "\"" ~ string_char* ~ "\"" }
+variable_name = @{ ( uppercase | ( "_" ~ namechar ) ) ~ namechar* }
+nil = { "[" ~ "]" }
+annotated_variable = { variable_name } // TODO
+
+// =========================
+// ======== Modules ========
+// =========================
+module = {
+    "module" ~ atom ~ module_functions ~
+    "attributes" ~ module_attributes ~
+    function_definition* ~
+    "end"
+}
+module_functions = { 
+    "[" ~ 
+    ( ( function_name ~ "," )* ~ function_name )? ~ 
+    "]"
+}
+module_attribute = {
+    line_annotation? ~ atom ~ "=" ~ line_annotation? ~ constant
+}
+module_attributes = {
+    "[" ~
+    ( ( module_attribute ~ "," )* ~ module_attribute )? ~
+    "]"
+}
+
+// ===========================
+// ======== Functions ========
+// ===========================
+function_name = { atom ~ "/" ~ base_number }
+function_definition = { 
+    annotated_function_name ~ "=" ~ 
+    line_annotation? ~ annotated_fun
+}
+annotated_function_name = { function_name } // TODO
+annotated_fun = { fun } // TODO
+fun = {
+    "fun" ~ "(" ~
+    ( ( annotated_variable ~ "," )* ~ annotated_variable )? ~
+    ")" ~
+    "->" ~ expression
+}
+
+// =============================
+// ======== Expressions ========
+// =============================
+expression = {
+    (line_annotation? ~ annotated_value_list)
+    | (line_annotation? ~ annotated_single_expression)
+}
+annotated_value_list = { value_list } // TODO
+annotated_single_expression = { single_expression } // TODO
+value_list = {
+    "<" ~ ( ( annotated_single_expression ~ "," )* ~ annotated_single_expression )? ~ ">"
+}
+
+single_expression = {
+    function_name |
+    ( "fun" ~ atom ~ ":" ~ function_name ) |
+    atomic_literal |
+    variable_name |
+    binary |
+    tuple |
+    list |
+    map |
+    let_c |
+    inter_module_call |
+    catch |
+    case |
+    prim_op_call |
+    do_c |
+    apply_call |
+    try |
+    receive |
+    fun |
+    letrec
+}
+
+comma_separated_expressions = { ( ( expression ~ "," )* ~ expression )? }
+tuple = { "{" ~ comma_separated_expressions ~ "}" }
+list = { 
+    "[" ~ comma_separated_expressions ~ ( "|" ~ expression )? ~ "]"
+}
+map_kv_pair = { expression ~ "=>" ~ expression }
+map = {
+    "~{" ~ 
+    ( ( map_kv_pair ~ "," )* ~ map_kv_pair )? ~ 
+    ( "|" ~ expression )? ~ 
+    "}~"
+}
+let_c = {
+    "let" ~ variables ~ "=" ~ expression ~ "in" ~ expression
+}
+catch = { "catch" ~ expression }
+
+case = {
+    "case" ~ expression ~ "of" ~ annotated_clause ~ "end"
+}
+annotated_clause = { clause } // TODO
+clause = {
+    patterns ~ "when" ~ expression ~ "->" ~ expression
+}
+
+prim_op_call = {
+    "primop" ~ atom ~ "(" ~ comma_separated_expressions ~ ")"
+}
+do_c = {
+    "do" ~ expression ~ expression
+}
+
+try = {
+    "try" ~ expression ~ 
+    "of" ~ variables ~ "->" ~ expression ~ 
+    "catch" ~ variables ~ "->" ~ expression
+}
+variables = {
+    annotated_variable |
+    ( "<" ~ ( ( annotated_variable ~ "," )* ~ annotated_variable ) ~ ">" )
+}
+apply_call = {
+    "apply" ~ expression ~ "(" ~ comma_separated_expressions ~ ")"
+}
+inter_module_call = {
+    "call" ~ expression ~ ":" ~ expression ~ "(" ~ comma_separated_expressions ~ ")"
+}
+
+receive = {
+    "receive" ~ annotated_clause+ ~ "after" ~ expression ~ "->" ~ expression
+}
+letrec_clause = { function_name ~ "=" ~ fun }
+letrec = {
+    "letrec" ~ letrec_clause+ ~ "in" ~ expression
+}
+
+// ==========================
+// ======== Patterns ========
+// ==========================
+patterns = {
+    line_annotated_pattern
+    | ( line_annotation? ~ "<" ~ 
+        ( ( line_annotated_pattern ~ "," )* ~ line_annotated_pattern )? ~
+        ">" )
+}
+line_annotated_pattern = {
+    line_annotation? ~ annotated_pattern ~ line_annotation?
+}
+annotated_pattern = { pattern } // TODO
+pattern = {
+    (variable_name ~ "=" ~ annotated_pattern) |
+    variable_name |
+    atomic_literal |
+    pattern_binary |
+    pattern_tuple |
+    pattern_list |
+    pattern_list_tail |
+    pattern_map
+}
+pattern_tuple = {
+    "{" ~ ( ( annotated_pattern ~ "," )* ~ annotated_pattern )? ~ "}"
+}
+pattern_list = {
+    "[" ~ ( ( annotated_pattern ~ "," )* ~ annotated_pattern ) ~ "]"
+}
+pattern_list_tail = {
+    "[" ~ ( ( annotated_pattern ~ "," )* ~ annotated_pattern ) ~ annotated_pattern ~ "]"
+}
+pattern_map_kv = { single_expression ~ ":=" ~ annotated_pattern }
+pattern_map = {
+    "~{" ~
+    ( ( pattern_map_kv ~ "," )* ~ pattern_map_kv )? ~
+    "}~"
+}
+
+// ==========================
+// ======== Binaries ========
+// ==========================
+pattern_binary = {
+    "#{" ~ ( ( pattern_binary_elem ~ "," ) ~ pattern_binary_elem ) ~ "}#"
+}
+pattern_binary_elem = {
+    "#<" ~ annotated_pattern ~ ">(" ~ 
+    ( ( annotated_single_expression ~ "," )* ~ annotated_single_expression )? ~
+    ")"
+}
+
+binary = {
+    "#{" ~ 
+    ( ( binary_elem ~ "," )* ~ binary_elem )? ~
+    "}#"
+}
+binary_elem = {
+    "#<" ~ expression ~ ">(" ~ 
+    ( ( expression ~ "," )* ~ expression ) ~
+    "("
+}
+
+// ===========================
+// ======== Constants ========
+// ===========================
+constant = {
+    constant_tuple |
+    constant_list_tail |
+    constant_list |
+    atomic_literal
+}
+
+atomic_literal = {
+    integer |
+    float |
+    atom |
+    nil |
+    char |
+    string
+}
+constant_tuple = {
+    "{" ~ ( ( constant ~ "," )* ~ constant )? ~ "}"
+}
+constant_list = {
+    "[" ~ ( ( constant ~ "," )* ~ constant ) ~ "]"
+}
+constant_list_tail = {
+    "[" ~ ( ( constant ~ "," )* ~ constant ) ~ "|" ~ constant ~ "]"
+}
+
+// =============================
+// ======== Annotations ========
+// =============================
+annotations = { "-|" ~ "[" ~ ( ( constant ~ "," )* ~ constant )? ~ "]" }
+line_annotation = { "%%" ~ ( !"\n" ~ any )* }
