@@ -1,0 +1,14 @@
+module 'basic_module' ['woo'/1, 'hoo'/2] attributes [
+'file' = {1, 2, 3},
+'file' = {1, 2, 3}]
+
+'start_application'/2 =
+    %% what
+    fun (_1,_0) ->
+    'woo'
+
+'woo'/1 = fun (_0) -> _0
+
+'woo'/1 = fun (_0) -> _0
+
+end

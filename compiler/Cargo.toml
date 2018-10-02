@@ -3,9 +3,10 @@ name = "core_erlang_compiler"
 version = "0.1.0"
 authors = ["HansiHE <hansihe@hansihe.com>"]
 autobins = false
+build = "build.rs"
 
 [build-dependencies]
-peg = "0.5.4"
+lalrpop = "0.16.0"
 
 [dependencies]
 either = "1.1.0"
@@ -15,6 +16,9 @@ string-intern = "0.1.6"
 pretty = "0.3.3"
 itertools = "0.7.8"
 lazy_static = "1.1.0"
+
+lalrpop-util = "0.16.0"
+regex = "0.2.0"
 
 pattern-compiler = { path = "../pattern-compiler" }
 util = { path = "../util" }

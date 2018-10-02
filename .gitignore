@@ -12,3 +12,5 @@ test_data/**/.*.core
 otp/
 
 *.swp
+
+compiler/src/parser/grammar.rs

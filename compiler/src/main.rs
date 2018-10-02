@@ -10,7 +10,7 @@ fn main() {
     std::fs::File::open("language_test.core").unwrap()
         .read_to_string(&mut text).unwrap();
 
-    let res = core_erlang_compiler::parser::annotated_module(&text).unwrap();
+    let res = core_erlang_compiler::parser::parse(&text).unwrap();
     let hir = core_erlang_compiler::ir::from_parsed(&res.0);
 
     for fun in hir.functions.iter() {

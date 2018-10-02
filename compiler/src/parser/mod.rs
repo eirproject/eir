@@ -1,6 +1,28 @@
 pub use ::{ Variable, Atom };
 use ::std::fmt::{ Formatter, Display };
 
+mod grammar;
+mod lex;
+
+pub fn parse<'input>(text: &'input str) -> Result<Annotated<Module>,
+        ::lalrpop_util::ParseError<usize, lex::Tok<'input>, ()>> {
+
+    let tokenizer = lex::Tokenizer::new(text);
+    let parser = grammar::AnnotatedModuleParser::new();
+    parser.parse(text, tokenizer)
+}
+
+#[test]
+fn parse_otp_compiler_compile() {
+    use ::std::io::Read;
+
+    let mut f = ::std::fs::File::open("../test_data/compile.core").unwrap();
+    let mut s = String::new();
+    f.read_to_string(&mut s);
+
+    parse(&s).unwrap();
+}
+
 #[derive(Debug, Clone)]
 pub struct Annotated<I>(pub I, pub Vec<()>);
 impl<I> Annotated<I> {
@@ -150,7 +172,3 @@ pub struct PrimOpCall {
     pub args: Vec<Expression>,
 }
 
-pub use self::core_parser::annotatedModule as annotated_module;
-mod core_parser {
-    include!(concat!(env!("OUT_DIR"), "/grammar.rs"));
-}

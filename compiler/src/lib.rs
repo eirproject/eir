@@ -4,8 +4,9 @@ extern crate petgraph;
 extern crate either;
 extern crate prettytable;
 extern crate pretty;
-#[macro_use]
-extern crate lazy_static;
+#[macro_use] extern crate lazy_static;
+extern crate regex;
+extern crate lalrpop_util;
 
 extern crate pattern_compiler;
 
@@ -49,7 +50,7 @@ mod tests {
             let mut contents = String::new();
             f.read_to_string(&mut contents).unwrap();
 
-            let res = ::parser::annotated_module(&contents).unwrap();
+            let res = ::parser::annotated_module(&contents).1.unwrap();
             let _hir = ::ir::from_parsed(&res.0);
 
         }

@@ -38,7 +38,7 @@ fn erl_to_core(erlang_code: &str) -> String {
 fn erl_to_ir(erlang_code: &str) -> Module {
     let core = erl_to_core(erlang_code);
 
-    let parsed = ::core_erlang_compiler::parser::annotated_module(&core).unwrap();
+    let parsed = ::core_erlang_compiler::parser::annotated_module(&core).1.unwrap();
     let ir = ::core_erlang_compiler::ir::from_parsed(&parsed.0);
 
     println!("Ir:\n{:?}", ir);
@@ -152,4 +152,52 @@ fn factorial() {
     let result = ctx.call("test", "factorial", &args);
 
     println!("Res: {:?}", result);
+}
+
+//#[test]
+fn long_strings() {
+    let mut ctx = ExecutionContext::new();
+
+    let mut f = ::std::fs::File::open("../test_data/long_strings.core")
+        .unwrap();
+    let mut core = String::new();
+    f.read_to_string(&mut core).unwrap();
+
+    println!("Parsing");
+    let ret = ::core_erlang_compiler::parser::annotated_module(&core);
+    let parsed = ret.1.unwrap();
+
+    println!("Running forensics");
+    let opts = ::core_erlang_compiler::peg::forensics::InvestigationOptions {
+        skip_success: false,
+    };
+    ::core_erlang_compiler::peg::forensics::investigate(&core, &ret.0, &opts);
+
+}
+
+#[test]
+fn compiler() {
+    println!("A");
+
+    let mut ctx = ExecutionContext::new();
+
+    ctx.add_native_module(::erl_lib::make_erlang());
+
+    println!("B");
+
+    let mut f = ::std::fs::File::open("../otp/lib/compiler/beam_out/compile.core")
+        .unwrap();
+    println!("C");
+    let mut core = String::new();
+    f.read_to_string(&mut core).unwrap();
+
+    println!("D");
+    let ret = ::core_erlang_compiler::parser::annotated_module(&core);
+    let parsed = ret.1.unwrap();
+    //::core_erlang_compiler::peg::forensics::investigate(&core, &ret.0);
+
+    println!("E");
+    let ir = ::core_erlang_compiler::ir::from_parsed(&parsed.0);
+    println!("F");
+    ctx.add_erlang_module(ir);
 }
