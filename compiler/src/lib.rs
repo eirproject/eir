@@ -50,7 +50,7 @@ mod tests {
             let mut contents = String::new();
             f.read_to_string(&mut contents).unwrap();
 
-            let res = ::parser::annotated_module(&contents).1.unwrap();
+            let res = ::parser::parse(&contents).unwrap();
             let _hir = ::ir::from_parsed(&res.0);
 
         }
