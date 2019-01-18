@@ -76,6 +76,15 @@ pub enum OpKind {
     MakeMap,
     MakeBinary,
 
+    /// Returns a SSA value that cannot exist in the control flow.
+    /// Used for things like the Raise PrimOp which can never
+    /// return through the main path.
+    /// This must be placed in basic blocks that can never be
+    /// reached through regular control flow.
+    /// For a CFG to be valid, it must contain no instances of this
+    /// operation.
+    MakeNoValue,
+
     MakeClosureEnv {
         env_idx: LambdaEnvIdx,
     },

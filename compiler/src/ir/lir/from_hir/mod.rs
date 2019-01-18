@@ -39,16 +39,14 @@ impl FunctionDefinition {
             let exc_ssa = env.new_ssa();
 
             let mut exc_stack = ExceptionHandlerStack::new(exc_block, exc_ssa);
-            let ret = self.hir_fun.body.lower(&mut builder, env, &mut exc_stack,
+            let (block, ssa) = self.hir_fun.body.lower(&mut builder, env, &mut exc_stack,
                                               entry);
             exc_stack.finish();
 
-            if let Some((block, ssa)) = ret {
-                builder.basic_op(
-                    block,
-                    lir::OpKind::ReturnOk,
-                    vec![lir::Source::Variable(ssa)], vec![]);
-            }
+            builder.basic_op(
+                block,
+                lir::OpKind::ReturnOk,
+                vec![lir::Source::Variable(ssa)], vec![]);
 
             builder.basic_op(exc_block, lir::OpKind::ReturnThrow, vec![], vec![]);
         }
@@ -57,53 +55,27 @@ impl FunctionDefinition {
     }
 }
 
-macro_rules! fuse_ssa {
-    ($e:expr) => {
-        if let Some(ssa) = $e {
-            ssa
-        } else {
-            return None;
-        }
-    }
-}
-
-macro_rules! chain_ssa_block {
-    ($chain_var:expr, $inner:expr) => {
-        {
-            let (label, ssa) = $inner;
-            $chain_var = label;
-            ssa
-        }
-    }
-}
-
-macro_rules! chain_ssa_block_fuse {
-    ($chain_var:expr, $inner:expr) => {
-        chain_ssa_block!($chain_var, fuse_ssa!($inner))
-    }
-}
-
 use self::hir::SingleExpressionKind as HSEK;
 impl hir::SingleExpression {
     fn lower(&self, b: &mut lir::cfg::FunctionCfgBuilder,
              env: &mut ScopeTracker,
              exc_stack: &mut ExceptionHandlerStack, in_block: LabelN)
-             -> Option<(LabelN, SSAVariable)> {
+             -> (LabelN, SSAVariable) {
 
         match self.kind {
             HSEK::InterModuleCall { ref module, ref name, ref args } => {
                 let mut main_cont = in_block;
 
+                let (main_cont, read_1_ssa) = module.lower(b, env, exc_stack, main_cont);
+                let (main_cont, read_2_ssa) = name.lower(b, env, exc_stack, main_cont);
+
                 let mut reads_r = vec![
-                    chain_ssa_block_fuse!(main_cont, module.lower(
-                        b, env, exc_stack, main_cont)),
-                    chain_ssa_block_fuse!(main_cont, name.lower(
-                        b, env, exc_stack, main_cont)),
+                    read_1_ssa,
+                    read_2_ssa,
                 ];
                 for arg in args.iter() {
-                    reads_r.push(
-                        chain_ssa_block_fuse!(main_cont, arg.lower(
-                            b, env, exc_stack, main_cont)));
+                    let (main_cont, read_n_ssa) = arg.lower(b, env, exc_stack, main_cont);
+                    reads_r.push(read_n_ssa);
                 }
 
                 //reads_r.extend(args.iter().map(|a| a.lower(b, env, exc_stack)));
@@ -126,19 +98,19 @@ impl hir::SingleExpression {
                     b, main_cont, ::util::ssa_variable::INVALID_SSA);
                 //b.add_jump(prev_block, throw_block);
 
-                Some((resume_block, self.ssa))
+                (resume_block, self.ssa)
             },
             HSEK::ApplyCall { ref fun, ref args } => {
                 let mut main_cont = in_block;
 
+                let (main_cont, read_1_ssa) = fun.lower(b, env, exc_stack, main_cont);
+
                 let mut reads_r = vec![
-                    chain_ssa_block_fuse!(main_cont, fun.lower(
-                        b, env, exc_stack, main_cont)),
+                    read_1_ssa,
                 ];
                 for arg in args.iter() {
-                    reads_r.push(
-                        chain_ssa_block_fuse!(main_cont, arg.lower(
-                            b, env, exc_stack, main_cont)));
+                    let (main_cont, read_n_ssa) = arg.lower(b, env, exc_stack, main_cont);
+                    reads_r.push(read_n_ssa);
                 }
                 //reads_r.extend(args.iter().map(|a| a.lower(b, env, exc_stack)));
                 let reads: Vec<_> = reads_r.iter()
@@ -159,18 +131,18 @@ impl hir::SingleExpression {
                 exc_stack.add_error_jump(b, main_cont,
                                          ::util::ssa_variable::INVALID_SSA);
 
-                Some((resume_block, self.ssa))
+                (resume_block, self.ssa)
             },
             HSEK::Atomic(ref atomic) => {
                 b.basic_op(
                     in_block,
                     lir::OpKind::Move,
                     vec![lir::Source::Constant(atomic.clone())], vec![self.ssa]);
-                Some((in_block, self.ssa))
+                (in_block, self.ssa)
             },
             HSEK::NamedFunction { ref name, is_lambda } => {
                 if is_lambda {
-                    Some((in_block, self.ssa)) // TODO: What?
+                    (in_block, self.ssa) // TODO: What?
                 } else {
                     let n = ::ir::FunctionIdent {
                         name: name.var.name.clone(),
@@ -181,7 +153,7 @@ impl hir::SingleExpression {
                         in_block,
                         lir::OpKind::CaptureNamedFunction(n),
                         vec![], vec![self.ssa]);
-                    Some((in_block, self.ssa))
+                    (in_block, self.ssa)
                 }
             },
             HSEK::ExternalNamedFunction { ref module, ref name } => {
@@ -194,45 +166,57 @@ impl hir::SingleExpression {
                     in_block,
                     lir::OpKind::CaptureExternalNamedFunction(module.clone(), n),
                     vec![], vec![self.ssa]);
-                Some((in_block, self.ssa))
+                (in_block, self.ssa)
             },
             HSEK::Variable(_) => {
-                Some((in_block, self.ssa))
+                (in_block, self.ssa)
             },
             HSEK::Let { ref val, ref body, .. } => {
                 let mut main_cont = in_block;
 
                 for v in val.values.iter() {
-                    chain_ssa_block_fuse!(main_cont, v.lower(
-                        b, env, exc_stack, main_cont));
+                    let (main_cont, v_ssa) = v.lower(
+                        b, env, exc_stack, main_cont);
+                    assert!(v.ssa == v_ssa);
                 }
-                chain_ssa_block_fuse!(main_cont, body.lower(
-                    b, env, exc_stack, main_cont));
-                Some((main_cont, self.ssa))
+                let (main_cont, body_ssa) = body.lower(
+                    b, env, exc_stack, main_cont);
+                assert!(body_ssa == self.ssa);
+
+                (main_cont, self.ssa)
             },
             HSEK::Try { ref body, ref then, ref catch, .. } => {
 
                 let mut main_cont = in_block;
-                let catch_block = b.add_block();
+                let mut catch_block = b.add_block();
                 let catch_ssa = env.new_ssa();
                 let exit_block = b.add_block();
 
                 exc_stack.push_catch(catch_block, catch_ssa);
                 for expr in body.values.iter() {
-                    chain_ssa_block_fuse!(main_cont, expr.lower(
-                        b, env, exc_stack, main_cont));
+                    let (main_cont, expr_ssa) = expr.lower(
+                        b, env, exc_stack, main_cont);
+                    assert!(expr.ssa == expr_ssa);
                 }
                 exc_stack.pop_catch();
 
-                chain_ssa_block_fuse!(main_cont, then.lower(
-                    b, env, exc_stack, main_cont));
+                let (main_cont, then_ssa) = then.lower(
+                    b, env, exc_stack, main_cont);
+                assert!(then_ssa == then.ssa);
                 b.op_jump(main_cont, exit_block);
 
-                chain_ssa_block_fuse!(main_cont, catch.lower(
-                    b, env, exc_stack, main_cont));
-                b.op_jump(main_cont, exit_block);
+                // TODO TODO FIXME Not 100% sure
+                //chain_ssa_block_fuse!(main_cont, catch.lower(
+                //    b, env, exc_stack, main_cont));
+                //b.op_jump(main_cont, exit_block);
+                let (catch_block, catch_ssa) = catch.lower(
+                    b, env, exc_stack, main_cont);
+                assert!(catch_ssa == catch.ssa);
+                b.op_jump(catch_block, exit_block);
 
-                Some((exit_block, then.ssa))
+                // TODO: Phi node
+
+                (exit_block, then.ssa)
             },
             HSEK::Case { ref val, ref clauses, ref values } => {
 
@@ -240,14 +224,16 @@ impl hir::SingleExpression {
 
                 // Lower values in the expression we match on
                 for v in &val.values {
-                    chain_ssa_block_fuse!(main_cont, v.lower(
-                        b, env, exc_stack, main_cont));
+                    let (main_cont, v_ssa) = v.lower(
+                        b, env, exc_stack, main_cont);
+                    assert!(v.ssa == v_ssa);
                 }
 
                 // Lower match values
                 for value in values {
-                    chain_ssa_block_fuse!(main_cont, value.lower(
-                        b, env, exc_stack, main_cont));
+                    let (main_cont, value_ssa) = value.lower(
+                        b, env, exc_stack, main_cont);
+                    assert!(value_ssa == value.ssa);
                 }
                 let value_vars: Vec<_> = values.iter().map(|v| v.ssa).collect();
 
@@ -280,9 +266,8 @@ impl hir::SingleExpression {
                                     .map(|binding| binding.1)
                             }).collect(),
                     );
-                    let guard_ret = chain_ssa_block_fuse!(
-                        clause_label, clause.guard.lower(
-                            b, env, exc_stack, clause_label));
+                    let (clause_label, guard_ret) = clause.guard.lower(
+                        b, env, exc_stack, clause_label);
                     b.basic_op(clause_label,
                         lir::OpKind::IfTruthy,
                         vec![lir::Source::Variable(guard_ret)],
@@ -311,15 +296,12 @@ impl hir::SingleExpression {
                                lir::OpKind::TombstoneSSA(case_structure_ssa),
                                vec![], vec![]);
 
-                    let clause_ret = clause.body.lower(
+                    let (ret_label, clause_ret_ssa) = clause.body.lower(
                         b, env, exc_stack, leaf_body_label);
-
-                    if let Some((ret_label, clause_ret_ssa)) = clause_ret {
-                        b.op_jump(ret_label, done_label);
-                        b.add_phi(ret_label, clause_ret_ssa,
-                                  done_label, self.ssa);
-                        b.finish(ret_label);
-                    }
+                    b.op_jump(ret_label, done_label);
+                    b.add_phi(ret_label, clause_ret_ssa,
+                              done_label, self.ssa);
+                    b.finish(ret_label);
 
                     leaves.push(clause_label);
                 }
@@ -353,14 +335,15 @@ impl hir::SingleExpression {
                 b.op_jump(main_cont, match_body_label);
                 b.finish(main_cont);
 
-                Some((done_label, self.ssa))
+                (done_label, self.ssa)
             },
             HSEK::Tuple(ref elems) => {
                 let mut main_cont = in_block;
 
                 for elem in elems.iter() {
-                    chain_ssa_block_fuse!(main_cont, elem.lower(
-                        b, env, exc_stack, main_cont));
+                    let (main_cont, elem_ssa) = elem.lower(
+                        b, env, exc_stack, main_cont);
+                    assert!(elem.ssa == elem_ssa);
                 }
 
                 b.basic_op(main_cont,
@@ -370,16 +353,17 @@ impl hir::SingleExpression {
                            .collect(),
                            vec![self.ssa]);
 
-                Some((main_cont, self.ssa))
+                (main_cont, self.ssa)
             },
             HSEK::List{ ref head, ref tail } => {
                 let mut main_cont = in_block;
 
-                chain_ssa_block_fuse!(main_cont, tail.lower(
-                    b, env, exc_stack, main_cont));
+                let (main_cont, tail_ssa) = tail.lower(
+                    b, env, exc_stack, main_cont);
                 for elem in head.iter() {
-                    chain_ssa_block_fuse!(main_cont, elem.lower(
-                        b, env, exc_stack, main_cont));
+                    let (main_cont, elem_ssa) = elem.lower(
+                        b, env, exc_stack, main_cont);
+                    assert!(elem.ssa == elem_ssa);
                 }
 
                 let mut reads = vec![lir::Source::Variable(tail.ssa)];
@@ -390,17 +374,20 @@ impl hir::SingleExpression {
                            lir::OpKind::MakeList,
                            reads, vec![self.ssa]);
 
-                Some((main_cont, self.ssa))
+                (main_cont, self.ssa)
             },
             HSEK::Map { ref values, ref merge } => {
                 let mut main_cont = in_block;
 
                 let mut reads = Vec::new();
                 for &(ref key, ref value) in values.iter() {
-                    chain_ssa_block_fuse!(main_cont, key.lower(
-                        b, env, exc_stack, main_cont));
-                    chain_ssa_block_fuse!(main_cont, value.lower(
-                        b, env, exc_stack, main_cont));
+                    let (main_cont, key_ssa) = key.lower(
+                        b, env, exc_stack, main_cont);
+                    let (main_cont, value_ssa) = value.lower(
+                        b, env, exc_stack, main_cont);
+
+                    assert!(key_ssa == key.ssa);
+                    assert!(value_ssa == value.ssa);
 
                     reads.push(lir::Source::Variable(key.ssa));
                     reads.push(lir::Source::Variable(value.ssa));
@@ -410,13 +397,13 @@ impl hir::SingleExpression {
                 main_cont = merge.as_ref()
                     .map_or(
                         main_cont,
-                        |m| m.lower(b, env, exc_stack, main_cont).unwrap().0);
+                        |m| m.lower(b, env, exc_stack, main_cont).0);
 
                 b.basic_op(main_cont,
                            lir::OpKind::MakeMap,
                            reads, vec![self.ssa]);
 
-                Some((main_cont, self.ssa))
+                (main_cont, self.ssa)
             },
             HSEK::Binary(ref elems) => {
 
@@ -425,16 +412,15 @@ impl hir::SingleExpression {
                 let mut reads = Vec::new();
                 for (val, opts) in elems.iter() {
                     assert!(opts.len() == 4);
-                    let val_ssa = chain_ssa_block_fuse!(main_cont, val.lower(
-                        b, env, exc_stack, main_cont));
+                    let (main_cont, val_ssa) = val.lower(
+                        b, env, exc_stack, main_cont);
                     //let val_ssa = fuse_ssa!(val.lower(b, env, exc_stack));
 
                     reads.push(lir::Source::Variable(val_ssa));
                     for opt in opts {
-                        reads.push(lir::Source::Variable(
-                            chain_ssa_block_fuse!(main_cont, opt.lower(
-                                b, env, exc_stack, main_cont))
-                        ));
+                        let (main_cont, n_ssa) = opt.lower(
+                                b, env, exc_stack, main_cont);
+                        reads.push(lir::Source::Variable(n_ssa));
                     }
                 }
 
@@ -444,7 +430,7 @@ impl hir::SingleExpression {
                     reads,
                     vec![self.ssa]
                 );
-                Some((main_cont, self.ssa))
+                (main_cont, self.ssa)
             },
             HSEK::PrimOp { ref name, ref args } if name == &*ATOM_RAISE => {
 
@@ -453,25 +439,30 @@ impl hir::SingleExpression {
                 // TODO:
                 let mut reads = Vec::new();
                 for arg in args.iter() {
-                    reads.push(lir::Source::Variable(
-                        chain_ssa_block_fuse!(main_cont, arg.lower(
-                            b, env, exc_stack, main_cont))
-                    ));
+                    let (main_cont, n_ssa) = arg.lower(
+                            b, env, exc_stack, main_cont);
+                    reads.push(lir::Source::Variable(n_ssa));
                 }
 
-                b.basic_op(main_cont, lir::OpKind::MakeTuple, reads, vec![self.ssa]);
+                let exc_path_ssa = env.new_ssa();
+                b.basic_op(main_cont, lir::OpKind::MakeTuple, reads, vec![exc_path_ssa]);
 
                 b.basic_op(main_cont, lir::OpKind::Jump, vec![], vec![]);
-                exc_stack.add_error_jump(b, main_cont, self.ssa);
-                None
+                exc_stack.add_error_jump(b, main_cont, exc_path_ssa);
+
+                let ret_dummy = b.add_block();
+                b.basic_op(ret_dummy, lir::OpKind::MakeNoValue, vec![], vec![self.ssa]);
+
+                (ret_dummy, self.ssa)
             },
             HSEK::PrimOp { ref name, ref args } => {
                 let mut main_cont = in_block;
 
                 println!("PrimOp: {}", name);
                 for arg in args.iter() {
-                    chain_ssa_block_fuse!(main_cont, arg.lower(
-                        b, env, exc_stack, main_cont));
+                    let (main_cont, n_ssa) = arg.lower(
+                        b, env, exc_stack, main_cont);
+                    assert!(arg.ssa == n_ssa);
                 }
                 b.basic_op(
                     main_cont,
@@ -479,19 +470,22 @@ impl hir::SingleExpression {
                     args.iter().map(|a| lir::Source::Variable(a.ssa)).collect(),
                     vec![self.ssa]);
 
-                Some((main_cont, self.ssa))
+                (main_cont, self.ssa)
             },
             HSEK::Do(ref d1, ref d2) => {
                 let mut main_cont = in_block;
 
                 for v in d1.values.iter() {
-                    chain_ssa_block_fuse!(main_cont, v.lower(
-                        b, env, exc_stack, main_cont));
+                    let (main_cont, n_ssa) = v.lower(
+                        b, env, exc_stack, main_cont);
+                    assert!(v.ssa == n_ssa);
                 }
-                chain_ssa_block_fuse!(main_cont, d2.lower(
-                    b, env, exc_stack, main_cont));
 
-                Some((main_cont, self.ssa))
+                let (main_cont, ret_ssa) = d2.lower(
+                    b, env, exc_stack, main_cont);
+                assert!(self.ssa == ret_ssa);
+
+                (main_cont, self.ssa)
             },
             HSEK::Receive { ref clauses, ref timeout_time, ref timeout_body,
                             ref pattern_values } => {
@@ -502,14 +496,15 @@ impl hir::SingleExpression {
 
                 // Lower match values
                 for value in pattern_values {
-                    chain_ssa_block_fuse!(main_cont, value.lower(
-                        b, env, exc_stack, main_cont));
+                    let (main_cont, m_n_ssa) = value.lower(
+                        b, env, exc_stack, main_cont);
+                    assert!(m_n_ssa == value.ssa);
                 }
                 let value_vars: Vec<_> = pattern_values.iter().map(|v| v.ssa)
                     .collect();
 
-                let timeout_time_var = chain_ssa_block_fuse!(main_cont, timeout_time.lower(
-                    b, env, exc_stack, main_cont));
+                let (main_cont, timeout_time_var) = timeout_time.lower(
+                    b, env, exc_stack, main_cont);
 
                 let start_label = main_cont; // #start
                 let receive_loop_label = b.add_block(); // #receive_loop
@@ -546,14 +541,12 @@ impl hir::SingleExpression {
                 b.basic_op(timeout_body_cont,
                            lir::OpKind::TombstoneSSA(receive_structure_ssa),
                            vec![], vec![]);
-                let clause_ret = timeout_body.lower(
+                let (clause_ret_block, clause_ret_ssa) = timeout_body.lower(
                     b, env, exc_stack, timeout_body_cont);
-                if let Some((clause_ret_block, clause_ret_ssa)) = clause_ret {
-                    b.basic_op(clause_ret_block, lir::OpKind::Jump, vec![], vec![]);
-                    b.add_jump(clause_ret_block, expression_exit_label);
-                    b.add_phi(clause_ret_block, clause_ret_ssa,
-                              expression_exit_label, self.ssa);
-                }
+                b.basic_op(clause_ret_block, lir::OpKind::Jump, vec![], vec![]);
+                b.add_jump(clause_ret_block, expression_exit_label);
+                b.add_phi(clause_ret_block, clause_ret_ssa,
+                          expression_exit_label, self.ssa);
 
                 // Match leaves (#message_?_match)
                 let mut leaves: Vec<LabelN> = clauses.iter().enumerate()
@@ -573,8 +566,7 @@ impl hir::SingleExpression {
 
                         // Guard ret
                         let (clause_cont, guard_ret) = clause.guard
-                            .lower(b, env, exc_stack, clause_cont)
-                            .expect("guard must return");
+                            .lower(b, env, exc_stack, clause_cont);
 
                         // Guard ret check
                         b.basic_op(
@@ -612,15 +604,13 @@ impl hir::SingleExpression {
                                    lir::OpKind::TombstoneSSA(receive_structure_ssa),
                                    vec![], vec![]);
 
-                        let clause_ret = clause.body.lower(
+                        let (clause_done_label, clause_ret_ssa) = clause.body.lower(
                             b, env, exc_stack, leaf_body_label);
-                        if let Some((clause_done_label, clause_ret_ssa)) = clause_ret {
-                            b.basic_op(clause_done_label,
-                                       lir::OpKind::Jump, vec![], vec![]);
-                            b.add_jump(clause_done_label, expression_exit_label);
-                            b.add_phi(clause_done_label, clause_ret_ssa,
-                                      expression_exit_label, self.ssa);
-                        }
+                        b.basic_op(clause_done_label,
+                                   lir::OpKind::Jump, vec![], vec![]);
+                        b.add_jump(clause_done_label, expression_exit_label);
+                        b.add_phi(clause_done_label, clause_ret_ssa,
+                                  expression_exit_label, self.ssa);
 
                         clause_label
                     }).collect();
@@ -652,7 +642,7 @@ impl hir::SingleExpression {
                     b.add_jump(match_body_label, *leaf);
                 }
 
-                Some((expression_exit_label, self.ssa))
+                (expression_exit_label, self.ssa)
             },
             HSEK::BindClosure { ref closure, lambda_env, env_ssa } => {
                 // TODO
@@ -676,7 +666,7 @@ impl hir::SingleExpression {
                     },
                     vec![Source::Variable(env_ssa)],
                     vec![self.ssa]);
-                Some((in_block, self.ssa))
+                (in_block, self.ssa)
             },
             HSEK::BindClosures { closures: ref _closures, lambda_env, ref body, env_ssa } => {
                 let mut main_cont = in_block;
@@ -694,10 +684,11 @@ impl hir::SingleExpression {
                     lir::OpKind::MakeClosureEnv {
                         env_idx: lambda_env.unwrap()
                     },
-                    env_read_vars, vec![env_ssa]);
-                chain_ssa_block_fuse!(main_cont, body.lower(
-                    b, env, exc_stack, main_cont));
-                Some((main_cont, self.ssa))
+                    env_read_vars, vec![env_ssa]
+                );
+                let (main_cont, ret_ssa) = body.lower(b, env, exc_stack, main_cont);
+                assert!(self.ssa == ret_ssa);
+                (main_cont, self.ssa)
             },
             ref s => panic!("Unhandled: {:?}", s),
         }
