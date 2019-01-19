@@ -11,6 +11,7 @@ extern crate core_erlang_compiler;
 use core_erlang_compiler::intern::Atom;
 use core_erlang_compiler::ir::{ Module, FunctionIdent, SSAVariable };
 use core_erlang_compiler::ir::lir::{ BasicBlock, LabelN, OpKind, Source };
+use core_erlang_compiler::ir::hir::scope_tracker::LambdaEnvIdx;
 use core_erlang_compiler::parser::AtomicLiteral;
 
 extern crate num_bigint;
@@ -438,7 +439,7 @@ impl ExecutionContext {
     }
 
     pub fn call_base(&self, module_name: &str, fun_name: &Atom, args: &[Term],
-                     lambda: Option<(u32, BoundLambdaEnv)>) -> CallReturn {
+                     lambda: Option<(LambdaEnvIdx, BoundLambdaEnv)>) -> CallReturn {
 
         let fun_ident = FunctionIdent {
             name: fun_name.clone(),

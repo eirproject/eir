@@ -27,7 +27,7 @@ impl Module {
 pub struct FunctionIdent {
     pub name: Atom,
     pub arity: u32,
-    pub lambda: Option<u32>,
+    pub lambda: Option<LambdaEnvIdx>,
 }
 
 #[derive(Debug)]
@@ -74,12 +74,15 @@ impl AFunctionName {
 }
 
 pub fn from_parsed(parsed: &parser::Module) -> Module {
+    println!("STAGE: From parsed");
     let mut module = ::ir::hir::from_parsed::from_parsed(parsed);
 
     let mut env = ScopeTracker::new();
 
+    println!("STAGE: Assign SSA");
     // Assign SSA variables
     for func in &mut module.functions {
+        println!("Fun: {:?}", func.ident);
         let mut scope = HashMap::new();
         for arg in &mut func.hir_fun.args {
             arg.ssa = env.new_ssa();
@@ -92,10 +95,11 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
         env.pop_scope();
     }
 
+    println!("STAGE: Extract lambdas");
     // Extract lambdas
     let mut lambda_collector = ::ir::hir::pass::extract_lambda::LambdaCollector::new();
     for fun in module.functions.iter_mut() {
-        lambda_collector.set_ident(fun.ident.clone());
+        println!("Function: {}", fun.ident);
         ::ir::hir::pass::extract_lambda::extract_lambdas(
             &mut fun.hir_fun, &mut lambda_collector);
     }
@@ -107,14 +111,17 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
     //    ::ir::hir::pass::pattern::pattern_to_cfg(fun);
     //}
 
+    println!("STAGE: Lower to LIR");
     // Lower to LIR
     ::ir::lir::from_hir::do_lower(&mut module, &mut env);
 
     module.lambda_envs = Some(env.finish());
 
+    println!("STAGE: Functionwise");
     for function in module.functions.iter_mut() {
         let lir_mut = function.lir_function.as_mut().unwrap();
         println!("Function: {}", function.ident);
+        //println!("{:#?}", function.hir_fun);
         //::ir::lir::pass::compile_pattern(lir_mut);
         ::ir::lir::pass::propagate_atomics(lir_mut);
         ::ir::lir::pass::simplify_branches(lir_mut);

@@ -42,11 +42,11 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             expr.ssa = env.new_ssa();
         },
         SingleExpressionKind::Let { ref mut val, ref mut vars, ref mut body } => {
-            assign_ssa_expression(env, val);
+            assign_ssa_single_expression(env, val);
 
             let mut scope = HashMap::new();
             for (idx, var) in vars.iter_mut().enumerate() {
-                var.ssa = val.values[idx].ssa;
+                var.ssa = env.new_ssa();
                 scope.insert(ScopeDefinition::Variable(var.var.clone()), var.ssa);
             }
             env.push_scope(scope);
@@ -63,13 +63,13 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
         },
         SingleExpressionKind::Try { ref mut body, ref mut then_vars, ref mut then,
                                     ref mut catch_vars, ref mut catch } => {
-            assert!(body.values.len() == then_vars.len());
+            //assert!(body.values.len() == then_vars.len());
 
-            assign_ssa_expression(env, body);
+            assign_ssa_single_expression(env, body);
 
             let mut scope = HashMap::new();
             for (idx, var) in then_vars.iter_mut().enumerate() {
-                var.ssa = body.values[idx].ssa;
+                var.ssa = env.new_ssa(); //body.values[idx].ssa;
                 scope.insert(ScopeDefinition::Variable(var.var.clone()), var.ssa);
             }
             env.push_scope(scope);
@@ -90,7 +90,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
         // TODO
         SingleExpressionKind::Case { ref mut val, ref mut clauses,
                                      ref mut values } => {
-            assign_ssa_expression(env, val);
+            assign_ssa_single_expression(env, val);
 
             // Pattern values are not bound to variables, they are not inserted
             // into scope.
@@ -145,6 +145,12 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             assign_ssa_single_expression(env, tail);
             expr.ssa = env.new_ssa();
         },
+        SingleExpressionKind::ValueList(ref mut vals) => {
+            for val in vals {
+                assign_ssa_single_expression(env, val);
+            }
+            expr.ssa = env.new_ssa();
+        },
         SingleExpressionKind::Map { ref mut values, ref mut merge } => {
             for &mut (ref mut key, ref mut val) in values.iter_mut() {
                 assign_ssa_single_expression(env, key);
@@ -169,7 +175,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             expr.ssa = env.new_ssa();
         },
         SingleExpressionKind::Do(ref mut e1, ref mut e2) => {
-            assign_ssa_expression(env, e1);
+            assign_ssa_single_expression(env, e1);
             assign_ssa_single_expression(env, e2);
             expr.ssa = e2.ssa;
         },
@@ -217,13 +223,16 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 .map(|(k, &(o, i))| (k.clone(), o, i))
                 .collect();
 
-            let env_idx = env.add_lambda_env(LambdaEnv {
-                captures: captures,
-                meta_binds: vec![], // TODO
-            });
+            let env_idx = env.next_env_idx();
+            closure.gen_ident(env_idx);
 
             *lambda_env = Some(env_idx);
-            closure.env = *lambda_env;
+
+            env.add_lambda_env(env_idx, LambdaEnv {
+                captures: captures,
+                meta_binds: vec![closure.ident.clone().unwrap()],
+            });
+
 
             *env_ssa = env.new_ssa();
             expr.ssa = env.new_ssa();
@@ -259,21 +268,25 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 .map(|(k, &(o, i))| (k.clone(), o, i))
                 .collect();
 
-            let env_idx = env.add_lambda_env(LambdaEnv {
-                captures: captures,
-                meta_binds: vec![], // TODO: Meta binds
-            });
+            let env_idx = env.next_env_idx();
 
             *lambda_env = Some(env_idx);
             for closure in closures.iter_mut() {
-                closure.env = *lambda_env;
+                closure.gen_ident(env_idx);
             }
+
+            env.add_lambda_env(env_idx, LambdaEnv {
+                captures: captures,
+                meta_binds: closures.iter()
+                    .map(|c| c.ident.clone().unwrap())
+                    .collect(),
+            });
 
             assign_ssa_single_expression(env, body);
             env.pop_scope();
 
             *env_ssa = env.new_ssa();
-            expr.ssa = env.new_ssa();
+            expr.ssa = body.ssa;
         },
         ref e => panic!("Unhandled: {:?}", e),
     }

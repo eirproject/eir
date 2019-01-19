@@ -108,6 +108,11 @@ impl EachSingleExpression for SingleExpression {
                 }
                 tail.each_single_expression_mut(f, enter_lambdas);
             },
+            SEK::ValueList(ref mut values) => {
+                for val in values.iter_mut() {
+                    val.each_single_expression_mut(f, enter_lambdas);
+                }
+            },
             SEK::Map { ref mut values, ref mut merge } => {
                 for &mut (ref mut key, ref mut val) in values.iter_mut() {
                     key.each_single_expression_mut(f, enter_lambdas);
@@ -227,6 +232,7 @@ pub enum SingleExpressionKind {
     Map { values: Vec<(SingleExpression, SingleExpression)>,
           merge: Option<Box<SingleExpression>> },
     Binary(Vec<(SingleExpression, Vec<SingleExpression>)>),
+    ValueList(Vec<SingleExpression>),
 
     // Calls
     PrimOp { name: Atom, args: Vec<SingleExpression> },
@@ -235,13 +241,13 @@ pub enum SingleExpressionKind {
                       args: Vec<SingleExpression> },
 
     // Combinators
-    Let { vars: Vec<AVariable>, val: Expression, body: Box<SingleExpression> },
+    Let { vars: Vec<AVariable>, val: Box<SingleExpression>, body: Box<SingleExpression> },
     /// then and catch must have the same amount of items
-    Try { body: Expression, then_vars: Vec<AVariable>, then: Box<SingleExpression>,
+    Try { body: Box<SingleExpression>, then_vars: Vec<AVariable>, then: Box<SingleExpression>,
           catch_vars: Vec<AVariable>, catch: Box<SingleExpression> },
-    Case { val: Expression, clauses: Vec<Clause>, values: Vec<SingleExpression> },
+    Case { val: Box<SingleExpression>, clauses: Vec<Clause>, values: Vec<SingleExpression> },
     Test { tests: Vec<TestEntry> },
-    Do(Expression, Box<SingleExpression>),
+    Do(Box<SingleExpression>, Box<SingleExpression>),
     Receive { clauses: Vec<Clause>, timeout_time: Box<SingleExpression>,
               timeout_body: Box<SingleExpression>,
               pattern_values: Vec<SingleExpression> },
@@ -254,9 +260,24 @@ pub enum TestEntry {
 #[derive(Debug, Clone)]
 pub struct Closure {
     pub alias: Option<AFunctionName>,
+    pub parent_ident: FunctionIdent,
     pub ident: Option<FunctionIdent>,
     pub fun: Option<Box<Function>>,
     pub env: Option<LambdaEnvIdx>,
+}
+impl Closure {
+    fn gen_ident(&mut self, env_idx: LambdaEnvIdx) {
+        assert!(self.ident.is_none());
+        assert!(self.env.is_none());
+
+        let mut ident = self.parent_ident.clone();
+        // + 1 for lambda env
+        ident.arity = (self.fun.as_ref().unwrap().args.len() + 1) as u32;
+        ident.lambda = Some(env_idx);
+
+        self.ident = Some(ident);
+        self.env = Some(env_idx);
+    }
 }
 
 #[derive(Debug, Clone)]

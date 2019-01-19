@@ -35,6 +35,13 @@ impl FunctionDefinition {
                 lir::OpKind::Arguments, vec![],
                 self.hir_fun.args.iter().map(|a| a.ssa).collect());
 
+            if self.ident.lambda.is_some() {
+                let lambda_env = env.get_lambda_env(self.ident.lambda.unwrap());
+                for (scope_def, inner, outer) in lambda_env.captures.iter() {
+                    builder.op_tombstone(entry, *inner);
+                }
+            }
+
             let exc_block = builder.add_block();
             let exc_ssa = env.new_ssa();
 
@@ -46,12 +53,29 @@ impl FunctionDefinition {
             builder.basic_op(
                 block,
                 lir::OpKind::ReturnOk,
-                vec![lir::Source::Variable(ssa)], vec![]);
+                vec![lir::Source::Variable(ssa)],
+                vec![]
+            );
 
-            builder.basic_op(exc_block, lir::OpKind::ReturnThrow, vec![], vec![]);
+            builder.basic_op(
+                exc_block,
+                lir::OpKind::ReturnThrow,
+                vec![lir::Source::Variable(exc_ssa)],
+                vec![]
+            );
         }
 
         self.lir_function = Some(cfg);
+    }
+}
+
+macro_rules! lower_chain {
+    ($inner:expr, $builder:expr, $env:expr, $exc_stack:expr, $chain:expr) => {
+        {
+            let (label, ssa) = $inner.lower($builder, $env, $exc_stack, $chain);
+            $chain = label;
+            ssa
+        }
     }
 }
 
@@ -66,16 +90,12 @@ impl hir::SingleExpression {
             HSEK::InterModuleCall { ref module, ref name, ref args } => {
                 let mut main_cont = in_block;
 
-                let (main_cont, read_1_ssa) = module.lower(b, env, exc_stack, main_cont);
-                let (main_cont, read_2_ssa) = name.lower(b, env, exc_stack, main_cont);
-
                 let mut reads_r = vec![
-                    read_1_ssa,
-                    read_2_ssa,
+                    lower_chain!(module, b, env, exc_stack, main_cont),
+                    lower_chain!(name, b, env, exc_stack, main_cont),
                 ];
                 for arg in args.iter() {
-                    let (main_cont, read_n_ssa) = arg.lower(b, env, exc_stack, main_cont);
-                    reads_r.push(read_n_ssa);
+                    reads_r.push(lower_chain!(arg, b, env, exc_stack, main_cont));
                 }
 
                 //reads_r.extend(args.iter().map(|a| a.lower(b, env, exc_stack)));
@@ -83,7 +103,8 @@ impl hir::SingleExpression {
                     .map(|r| lir::Source::Variable(*r))
                     .collect();
 
-                b.basic_op(main_cont, lir::OpKind::Call, reads, vec![self.ssa]);
+                let exc_ssa = env.new_ssa();
+                b.basic_op(main_cont, lir::OpKind::Call, reads, vec![self.ssa, exc_ssa]);
                 //let prev_block = b.get_block();
 
                 //let throw_block = b.add_block();
@@ -94,42 +115,45 @@ impl hir::SingleExpression {
                 //b.set_block(resume_block);
 
                 b.add_jump(main_cont, resume_block);
-                exc_stack.add_error_jump(
-                    b, main_cont, ::util::ssa_variable::INVALID_SSA);
+                exc_stack.add_error_jump(b, main_cont, exc_ssa);
                 //b.add_jump(prev_block, throw_block);
+
+                // Because the exception value can never be used in the
+                // continuation case, tombstone it.
+                b.op_tombstone(resume_block, exc_ssa);
+
+                // TODO: Should add tombstones in exception case as well
 
                 (resume_block, self.ssa)
             },
             HSEK::ApplyCall { ref fun, ref args } => {
                 let mut main_cont = in_block;
 
-                let (main_cont, read_1_ssa) = fun.lower(b, env, exc_stack, main_cont);
+                let read_1_ssa = lower_chain!(fun, b, env, exc_stack, main_cont);
 
                 let mut reads_r = vec![
                     read_1_ssa,
                 ];
                 for arg in args.iter() {
-                    let (main_cont, read_n_ssa) = arg.lower(b, env, exc_stack, main_cont);
-                    reads_r.push(read_n_ssa);
+                    reads_r.push(lower_chain!(arg, b, env, exc_stack, main_cont));
                 }
                 //reads_r.extend(args.iter().map(|a| a.lower(b, env, exc_stack)));
                 let reads: Vec<_> = reads_r.iter()
                     .map(|r| lir::Source::Variable(*r))
                     .collect();
 
-                b.basic_op(main_cont, lir::OpKind::Apply, reads, vec![self.ssa]);
-                //let prev_block = b.get_block();
-
-                //let throw_block = b.add_block();
-                //b.set_block(throw_block);
-                //b.basic_op(lir::OpKind::ReturnThrow, vec![], vec![]);
-
+                let exc_ssa = env.new_ssa();
+                b.basic_op(main_cont, lir::OpKind::Apply, reads, vec![self.ssa, exc_ssa]);
                 let resume_block = b.add_block();
-                //b.set_block(resume_block);
-
                 b.add_jump(main_cont, resume_block);
-                exc_stack.add_error_jump(b, main_cont,
-                                         ::util::ssa_variable::INVALID_SSA);
+
+                exc_stack.add_error_jump(b, main_cont, exc_ssa);
+
+                // Because the exception value can never be used in the
+                // continuation case, tombstone it.
+                b.op_tombstone(resume_block, exc_ssa);
+
+                // TODO: Should add tombstones in exception case as well
 
                 (resume_block, self.ssa)
             },
@@ -171,68 +195,72 @@ impl hir::SingleExpression {
             HSEK::Variable(_) => {
                 (in_block, self.ssa)
             },
-            HSEK::Let { ref val, ref body, .. } => {
+            HSEK::Let { ref val, ref body, ref vars } => {
                 let mut main_cont = in_block;
 
-                for v in val.values.iter() {
-                    let (main_cont, v_ssa) = v.lower(
-                        b, env, exc_stack, main_cont);
-                    assert!(v.ssa == v_ssa);
-                }
-                let (main_cont, body_ssa) = body.lower(
-                    b, env, exc_stack, main_cont);
+                let val_ssa = lower_chain!(val, b, env, exc_stack, main_cont);
+                assert!(val.ssa == val_ssa);
+
+                let ssa_values: Vec<_> = vars.iter().map(|v| v.ssa).collect();
+                b.op_unpack_value_list(main_cont, val_ssa, &ssa_values);
+
+                let body_ssa = lower_chain!(body, b, env, exc_stack, main_cont);
                 assert!(body_ssa == self.ssa);
 
                 (main_cont, self.ssa)
             },
-            HSEK::Try { ref body, ref then, ref catch, .. } => {
+            HSEK::Try { ref body, ref then_vars, ref then, ref catch_vars, ref catch } => {
 
                 let mut main_cont = in_block;
                 let mut catch_block = b.add_block();
                 let catch_ssa = env.new_ssa();
                 let exit_block = b.add_block();
 
+                // == Body ==
                 exc_stack.push_catch(catch_block, catch_ssa);
-                for expr in body.values.iter() {
-                    let (main_cont, expr_ssa) = expr.lower(
-                        b, env, exc_stack, main_cont);
-                    assert!(expr.ssa == expr_ssa);
-                }
+                let body_ssa = lower_chain!(body, b, env, exc_stack, main_cont);
+                assert!(body_ssa == body.ssa);
                 exc_stack.pop_catch();
 
-                let (main_cont, then_ssa) = then.lower(
-                    b, env, exc_stack, main_cont);
+                // == Then clause ==
+                // Unpack the result value list of the body
+                let then_unpack_vars: Vec<_> =
+                    then_vars.iter().map(|v| v.ssa).collect();
+                b.op_unpack_value_list(main_cont, body_ssa, &then_unpack_vars);
+
+                // Then block
+                let then_ssa = lower_chain!(then, b, env, exc_stack, main_cont);
                 assert!(then_ssa == then.ssa);
                 b.op_jump(main_cont, exit_block);
 
-                // TODO TODO FIXME Not 100% sure
-                //chain_ssa_block_fuse!(main_cont, catch.lower(
-                //    b, env, exc_stack, main_cont));
-                //b.op_jump(main_cont, exit_block);
-                let (catch_block, catch_ssa) = catch.lower(
-                    b, env, exc_stack, main_cont);
-                assert!(catch_ssa == catch.ssa);
+                // == Catch clause ==
+                // Unpack the result value list from the error
+                let catch_unpack_vars: Vec<_> =
+                    catch_vars.iter().map(|v| v.ssa).collect();
+                b.op_unpack_value_list(catch_block, catch_ssa, &catch_unpack_vars);
+
+                let catch_ret_ssa = lower_chain!(
+                    catch, b, env, exc_stack, catch_block);
+                assert!(catch_ret_ssa == catch.ssa);
                 b.op_jump(catch_block, exit_block);
 
-                // TODO: Phi node
+                // == Phi node ==
+                b.add_phi(main_cont, then_ssa, exit_block, self.ssa);
+                b.add_phi(catch_block, catch_ret_ssa, exit_block, self.ssa);
 
-                (exit_block, then.ssa)
+                (exit_block, self.ssa)
             },
             HSEK::Case { ref val, ref clauses, ref values } => {
 
                 let mut main_cont = in_block;
 
                 // Lower values in the expression we match on
-                for v in &val.values {
-                    let (main_cont, v_ssa) = v.lower(
-                        b, env, exc_stack, main_cont);
-                    assert!(v.ssa == v_ssa);
-                }
+                let val_ssa = lower_chain!(val, b, env, exc_stack, main_cont);
+                assert!(val.ssa == val_ssa);
 
                 // Lower match values
                 for value in values {
-                    let (main_cont, value_ssa) = value.lower(
-                        b, env, exc_stack, main_cont);
+                    let value_ssa = lower_chain!(value, b, env, exc_stack, main_cont);
                     assert!(value_ssa == value.ssa);
                 }
                 let value_vars: Vec<_> = values.iter().map(|v| v.ssa).collect();
@@ -322,14 +350,16 @@ impl hir::SingleExpression {
                 }
                 b.finish(match_body_label);
 
-                b.basic_op(main_cont,
-                           lir::OpKind::CaseStart {
-                               vars: val.values.iter().map(|v| v.ssa).collect(),
-                               clauses: clauses,
-                               value_vars: value_vars,
-                           },
-                           val.ssa_vars().map(|v| Source::Variable(v)).collect(),
-                           vec![case_structure_ssa]);
+                b.basic_op(
+                    main_cont,
+                    lir::OpKind::CaseStart {
+                        vars: val.ssa,
+                        clauses: clauses,
+                        value_vars: value_vars,
+                    },
+                    vec![Source::Variable(val.ssa)],
+                    vec![case_structure_ssa]
+                );
 
                 // Jump to match body
                 b.op_jump(main_cont, match_body_label);
@@ -341,8 +371,7 @@ impl hir::SingleExpression {
                 let mut main_cont = in_block;
 
                 for elem in elems.iter() {
-                    let (main_cont, elem_ssa) = elem.lower(
-                        b, env, exc_stack, main_cont);
+                    let elem_ssa = lower_chain!(elem, b, env, exc_stack, main_cont);
                     assert!(elem.ssa == elem_ssa);
                 }
 
@@ -358,11 +387,9 @@ impl hir::SingleExpression {
             HSEK::List{ ref head, ref tail } => {
                 let mut main_cont = in_block;
 
-                let (main_cont, tail_ssa) = tail.lower(
-                    b, env, exc_stack, main_cont);
+                let tail_ssa = lower_chain!(tail, b, env, exc_stack, main_cont);
                 for elem in head.iter() {
-                    let (main_cont, elem_ssa) = elem.lower(
-                        b, env, exc_stack, main_cont);
+                    let elem_ssa = lower_chain!(elem, b, env, exc_stack, main_cont);
                     assert!(elem.ssa == elem_ssa);
                 }
 
@@ -381,10 +408,8 @@ impl hir::SingleExpression {
 
                 let mut reads = Vec::new();
                 for &(ref key, ref value) in values.iter() {
-                    let (main_cont, key_ssa) = key.lower(
-                        b, env, exc_stack, main_cont);
-                    let (main_cont, value_ssa) = value.lower(
-                        b, env, exc_stack, main_cont);
+                    let key_ssa = lower_chain!(key, b, env, exc_stack, main_cont);
+                    let value_ssa = lower_chain!(value, b, env, exc_stack, main_cont);
 
                     assert!(key_ssa == key.ssa);
                     assert!(value_ssa == value.ssa);
@@ -412,14 +437,12 @@ impl hir::SingleExpression {
                 let mut reads = Vec::new();
                 for (val, opts) in elems.iter() {
                     assert!(opts.len() == 4);
-                    let (main_cont, val_ssa) = val.lower(
-                        b, env, exc_stack, main_cont);
+                    let val_ssa = lower_chain!(val, b, env, exc_stack, main_cont);
                     //let val_ssa = fuse_ssa!(val.lower(b, env, exc_stack));
 
                     reads.push(lir::Source::Variable(val_ssa));
                     for opt in opts {
-                        let (main_cont, n_ssa) = opt.lower(
-                                b, env, exc_stack, main_cont);
+                        let n_ssa = lower_chain!(opt, b, env, exc_stack, main_cont);
                         reads.push(lir::Source::Variable(n_ssa));
                     }
                 }
@@ -439,8 +462,7 @@ impl hir::SingleExpression {
                 // TODO:
                 let mut reads = Vec::new();
                 for arg in args.iter() {
-                    let (main_cont, n_ssa) = arg.lower(
-                            b, env, exc_stack, main_cont);
+                    let n_ssa = lower_chain!(arg, b, env, exc_stack, main_cont);
                     reads.push(lir::Source::Variable(n_ssa));
                 }
 
@@ -460,8 +482,7 @@ impl hir::SingleExpression {
 
                 println!("PrimOp: {}", name);
                 for arg in args.iter() {
-                    let (main_cont, n_ssa) = arg.lower(
-                        b, env, exc_stack, main_cont);
+                    let n_ssa = lower_chain!(arg, b, env, exc_stack, main_cont);
                     assert!(arg.ssa == n_ssa);
                 }
                 b.basic_op(
@@ -475,14 +496,10 @@ impl hir::SingleExpression {
             HSEK::Do(ref d1, ref d2) => {
                 let mut main_cont = in_block;
 
-                for v in d1.values.iter() {
-                    let (main_cont, n_ssa) = v.lower(
-                        b, env, exc_stack, main_cont);
-                    assert!(v.ssa == n_ssa);
-                }
+                let d1_ssa = lower_chain!(d1, b, env, exc_stack, main_cont);
+                assert!(d1.ssa == d1_ssa);
 
-                let (main_cont, ret_ssa) = d2.lower(
-                    b, env, exc_stack, main_cont);
+                let ret_ssa = lower_chain!(d2, b, env, exc_stack, main_cont);
                 assert!(self.ssa == ret_ssa);
 
                 (main_cont, self.ssa)
@@ -496,15 +513,13 @@ impl hir::SingleExpression {
 
                 // Lower match values
                 for value in pattern_values {
-                    let (main_cont, m_n_ssa) = value.lower(
-                        b, env, exc_stack, main_cont);
+                    let m_n_ssa = lower_chain!(value, b, env, exc_stack, main_cont);
                     assert!(m_n_ssa == value.ssa);
                 }
                 let value_vars: Vec<_> = pattern_values.iter().map(|v| v.ssa)
                     .collect();
 
-                let (main_cont, timeout_time_var) = timeout_time.lower(
-                    b, env, exc_stack, main_cont);
+                let timeout_time_var = lower_chain!(timeout_time, b, env, exc_stack, main_cont);
 
                 let start_label = main_cont; // #start
                 let receive_loop_label = b.add_block(); // #receive_loop
@@ -686,10 +701,31 @@ impl hir::SingleExpression {
                     },
                     env_read_vars, vec![env_ssa]
                 );
-                let (main_cont, ret_ssa) = body.lower(b, env, exc_stack, main_cont);
+                let ret_ssa = lower_chain!(body, b, env, exc_stack, main_cont);
                 assert!(self.ssa == ret_ssa);
                 (main_cont, self.ssa)
             },
+            HSEK::ValueList(ref values) => {
+                let mut main_cont = in_block;
+
+                assert!(values.len() != 0);
+
+                if values.len() == 1 {
+                    let ssa = lower_chain!(values[0], b, env, exc_stack, main_cont);
+                    assert!(ssa == values[0].ssa);
+                    b.op_move(main_cont, Source::Variable(ssa), self.ssa)
+                } else {
+                    let values_src: Vec<_> =
+                        values.iter().map(|v| {
+                            let ssa = lower_chain!(v, b, env, exc_stack, main_cont);
+                            assert!(ssa == v.ssa);
+                            Source::Variable(ssa)
+                        }).collect();
+                    b.op_pack_value_list(main_cont, values_src, self.ssa);
+                }
+
+                (main_cont, self.ssa)
+            }
             ref s => panic!("Unhandled: {:?}", s),
         }
     }

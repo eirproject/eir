@@ -29,12 +29,14 @@ fn main() {
 
         let name_sym = Atom::from_str(&fun_name);
         let arity = arity.unwrap().parse().unwrap();
-        let lambda: Option<u32> = lambda.map(|s| s.parse().unwrap());
+        let lambda: Option<usize> = lambda.map(|s| s.parse().unwrap());
 
+        let funs: Vec<_> = hir.functions.iter().map(|f| f.ident.clone()).collect();
+        println!("{:?}", funs);
         let fun = hir.functions.iter().find(|f| {
             f.ident.name == name_sym
                 && f.ident.arity == arity
-                && f.ident.lambda == lambda
+                && f.ident.lambda.map(|v| v.0) == lambda
         }).unwrap();
 
         println!("Writing to {}.dot", infile);
@@ -42,6 +44,8 @@ fn main() {
         core_erlang_compiler::ir::lir::to_dot::function_to_dot(
             fun, &mut out).unwrap();
 
+    } else {
+        println!("No function name provided");
     }
 
 }

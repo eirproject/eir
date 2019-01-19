@@ -92,6 +92,10 @@ impl<'a> FunctionCfgBuilder<'a> {
     //    self.current
     //}
 
+    pub fn op_move(&mut self, block: LabelN, source: Source, dest: SSAVariable) {
+        self.basic_op(block, OpKind::Move, vec![source], vec![dest]);
+    }
+
     pub fn op_tombstone(&mut self, block: LabelN, ssa: SSAVariable) {
         self.basic_op(block, OpKind::TombstoneSSA(ssa), vec![], vec![]);
     }
@@ -99,6 +103,24 @@ impl<'a> FunctionCfgBuilder<'a> {
     pub fn op_jump(&mut self, block: LabelN, target: LabelN) {
         self.basic_op(block, OpKind::Jump, vec![], vec![]);
         self.add_jump(block, target);
+    }
+
+    pub fn op_unpack_value_list(&mut self, block: LabelN, val_list: SSAVariable, values: &[SSAVariable]) {
+        self.basic_op(
+            block,
+            OpKind::UnpackValueList,
+            vec![Source::Variable(val_list)],
+            values.into()
+        );
+    }
+
+    pub fn op_pack_value_list(&mut self, block: LabelN, values: Vec<Source>, val_list: SSAVariable) {
+        self.basic_op(
+            block,
+            OpKind::PackValueList,
+            values,
+            vec![val_list]
+        );
     }
 
     pub fn finish(&mut self, block: LabelN) {

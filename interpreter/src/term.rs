@@ -40,7 +40,7 @@ pub enum Term {
         module: Atom,
         fun_name: Atom,
         arity: u32,
-        lambda: u32,
+        lambda: LambdaEnvIdx,
         bound_env: BoundLambdaEnv,
     },
     CapturedFunction {

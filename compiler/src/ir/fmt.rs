@@ -11,7 +11,7 @@ impl Debug for Module {
 impl Display for FunctionIdent {
     fn fmt(&self, f: &mut Formatter) -> Result {
         if let Some(lambda_num) = self.lambda {
-            write!(f, "{}@{}/{}", self.name, lambda_num, self.arity)
+            write!(f, "{}@{}/{}", self.name, lambda_num.0, self.arity)
         } else {
             write!(f, "{}/{}", self.name, self.arity)
         }

@@ -9,7 +9,7 @@ pub struct LambdaEnvIdx(pub usize);
 #[derive(Debug)]
 pub struct LambdaEnv {
     pub captures: Vec<(ScopeDefinition, SSAVariable, SSAVariable)>,
-    pub meta_binds: Vec<::parser::FunctionName>,
+    pub meta_binds: Vec<::ir::FunctionIdent>,
 }
 
 #[derive(Debug)]
@@ -104,10 +104,13 @@ impl ScopeTracker {
         }
     }
 
-    pub fn add_lambda_env(&mut self, env: LambdaEnv) -> LambdaEnvIdx {
-        let env_idx = self.lambda_envs.len();
+    pub fn next_env_idx(&self) -> LambdaEnvIdx {
+        LambdaEnvIdx(self.lambda_envs.len())
+    }
+
+    pub fn add_lambda_env(&mut self, env_idx: LambdaEnvIdx, env: LambdaEnv) {
+        assert!(env_idx.0 == self.lambda_envs.len());
         self.lambda_envs.push(env);
-        LambdaEnvIdx(env_idx)
     }
 
     pub fn get_lambda_env<'a>(&'a self, env_idx: LambdaEnvIdx)

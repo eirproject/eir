@@ -76,6 +76,13 @@ pub enum OpKind {
     MakeMap,
     MakeBinary,
 
+    /// Value lists are not an actual type in the program.
+    /// A value list of length 0 is illegal.
+    /// A value list of length 1 is semantically identical
+    /// to the value itself.
+    PackValueList,
+    UnpackValueList,
+
     /// Returns a SSA value that cannot exist in the control flow.
     /// Used for things like the Raise PrimOp which can never
     /// return through the main path.
@@ -111,7 +118,7 @@ pub enum OpKind {
     IfTruthy,
 
     CaseStart {
-        vars: Vec<SSAVariable>,
+        vars: SSAVariable,
         clauses: Vec<Clause>,
         value_vars: Vec<SSAVariable>,
     },

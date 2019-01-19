@@ -1,0 +1,110 @@
+module 'compile_messages_per_file' ['messages_per_file'/1] attributes []
+'messages_per_file'/1 =
+    %% Line 453
+    fun (_0) ->
+	let <_8> =
+	    letrec
+		'lc$^0'/1 =
+		    %% Line 454
+		    fun (_5) ->
+			case _5 of
+			  <[{File,Messages}|_2]> when 'true' ->
+			      ( letrec
+				    'lc$^1'/1 =
+					fun (_6) ->
+					    case _6 of
+					      <[M|_4]> when 'true' ->
+						  let <_7> =
+						      apply 'lc$^1'/1
+							  (_4)
+						  in  ( [{File,M}|_7]
+							-| ['compiler_generated'] )
+					      <[]> when 'true' ->
+						  apply 'lc$^0'/1
+						      (_2)
+					      ( <_38> when 'true' ->
+						    ( primop 'match_fail'
+							  ({'function_clause',_38})
+						      -| [{'function_name',{'lc$^1',1}}] )
+						-| ['compiler_generated'] )
+					    end
+				in  apply 'lc$^1'/1
+					(Messages)
+				-| ['list_comprehension'] )
+			  ( <[_1|_2]> when 'true' ->
+				apply 'lc$^0'/1
+				    (_2)
+			    -| ['compiler_generated'] )
+			  <[]> when 'true' ->
+			      []
+			  ( <_39> when 'true' ->
+				( primop 'match_fail'
+				      ({'function_clause',_39})
+				  -| [{'function_name',{'lc$^0',1}}] )
+			    -| ['compiler_generated'] )
+			end
+	    in  %% Line 454
+		apply 'lc$^0'/1
+		    (_0)
+	in  let <T> =
+		call %% Line 454
+		     'lists':%% Line 454
+			     'sort'
+		    (_8)
+	    in  let <_18> =
+		    fun (_15,_14) ->
+			let <_13> =
+			    fun (_11) ->
+				%% Line 458
+				case _11 of
+				  <{_28,{_29,Mod,_30}}> when 'true' ->
+				      call 'erlang':'=:='
+					  (Mod, _15)
+				  %% Line 459
+				  <_31> when 'true' ->
+				      'false'
+				end
+			in  %% Line 458
+			    call 'lists':'partition'
+				(_13, _14)
+		in  %% Line 456
+		    case %% Line 457
+			 call 'lists':'mapfoldl'
+			     (_18, %% Line 461
+				   T, ['erl_scan'|['epp'|['erl_parse']]]) of
+		      <{Prio0,Rest}> when 'true' ->
+			  let <_25> =
+			      fun (_22,_21) ->
+				  %% Line 462
+				  case <_22,_21> of
+				    <{_32,{L1,_33,_34}},{_35,{L2,_36,_37}}> when 'true' ->
+					call 'erlang':'=<'
+					    (L1, L2)
+				    ( <_24,_23> when 'true' ->
+					  ( primop 'match_fail'
+						({'function_clause',_24,_23})
+					    -| [{'function_name',{'-messages_per_file/1-fun-4-',2}}] )
+				      -| ['compiler_generated'] )
+				  end
+			  in  let <_20> =
+				  call %% Line 463
+				       'lists':%% Line 463
+					       'append'
+				      (%% Line 463
+				       Prio0)
+			      in  let <Prio> =
+				      call %% Line 462
+					   'lists':%% Line 462
+						   'sort'
+					  (_25, _20)
+				  in  %% Line 464
+				      call 'lists':'flatmap'
+					  (( 'mpf'/1
+					     -| [{'id',{0,0,'-messages_per_file/1-fun-5-'}}] ), [Prio|[Rest|[]]])
+		      ( <_19> when 'true' ->
+			    primop 'match_fail'
+				({'badmatch',_19})
+			-| ['compiler_generated'] )
+		    end
+
+end
