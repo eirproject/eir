@@ -119,6 +119,8 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
 
     println!("STAGE: Functionwise");
     for function in module.functions.iter_mut() {
+        //println!("Function: {}", function.ident);
+        //println!("{:#?}", function.hir_fun);
         let lir_mut = function.lir_function.as_mut().unwrap();
         println!("Function: {}", function.ident);
         //println!("{:#?}", function.hir_fun);

@@ -5,6 +5,7 @@ use ::std::collections::HashMap;
 
 pub fn propagate_atomics(cfg: &mut FunctionCfg) {
     let mut constants: HashMap<SSAVariable, AtomicLiteral> = HashMap::new();
+    let mut moves: HashMap<SSAVariable, SSAVariable> = HashMap::new();
 
     for block in cfg.blocks_iter_mut() {
         block.ops.retain(|op| {
@@ -13,6 +14,10 @@ pub fn propagate_atomics(cfg: &mut FunctionCfg) {
                     constants.insert(op.writes[0], constant.clone());
                     return false;
                 }
+                //if let Source::Variable(ref ssa) = op.reads[0] {
+                //    moves.insert(op.writes[0], *ssa);
+                //    return false;
+                //}
             }
             true
         });
@@ -25,6 +30,9 @@ pub fn propagate_atomics(cfg: &mut FunctionCfg) {
                     if let Some(constant) = constants.get(&var) {
                         entry.1 = Source::Constant(constant.clone());
                     }
+                    //if let Some(rssa) = moves.get(&var) {
+                    //    entry.1 = Source::Variable(*rssa);
+                    //}
                 }
             }
         }
@@ -34,6 +42,9 @@ pub fn propagate_atomics(cfg: &mut FunctionCfg) {
                     if let Some(constant) = constants.get(&var) {
                         *read = Source::Constant(constant.clone());
                     }
+                    //if let Some(rssa) = moves.get(&var) {
+                    //    *read = Source::Variable(*rssa);
+                    //}
                 }
             }
         }

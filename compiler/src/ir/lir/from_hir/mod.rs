@@ -17,6 +17,7 @@ pub fn do_lower(module: &mut Module, env: &mut ScopeTracker) {
 impl Module {
     fn lower(&mut self, env: &mut ScopeTracker) {
         for fun in &mut self.functions {
+            println!("{}", fun.ident);
             fun.lower(env);
         }
     }
@@ -30,39 +31,41 @@ impl FunctionDefinition {
             let mut builder = lir::cfg::FunctionCfgBuilder::new(&mut cfg);
             let entry = builder.get_entry();
 
-            builder.basic_op(
+            builder.op_arguments(
                 entry,
-                lir::OpKind::Arguments, vec![],
-                self.hir_fun.args.iter().map(|a| a.ssa).collect());
+                self.hir_fun.args.iter().map(|a| a.ssa).collect()
+            );
 
             if self.ident.lambda.is_some() {
                 let lambda_env = env.get_lambda_env(self.ident.lambda.unwrap());
-                for (scope_def, inner, outer) in lambda_env.captures.iter() {
-                    builder.op_tombstone(entry, *inner);
+                for (_scope_def, _outer, inner) in lambda_env.captures.iter() {
+                    // TODO: Should extract from env
+                    builder.op_move(entry, ::parser::AtomicLiteral::Nil, *inner);
+                }
+                for (fun, ssa) in lambda_env.meta_binds.iter() {
+                    builder.basic_op(
+                        entry,
+                        lir::OpKind::BindClosure {
+                            ident: fun.clone(),
+                        },
+                        // TODO: Should be env
+                        vec![Source::Constant(::parser::AtomicLiteral::Nil)],
+                        vec![*ssa]
+                    );
                 }
             }
 
             let exc_block = builder.add_block();
             let exc_ssa = env.new_ssa();
+            builder.ensure_phi(exc_block, exc_ssa);
 
             let mut exc_stack = ExceptionHandlerStack::new(exc_block, exc_ssa);
             let (block, ssa) = self.hir_fun.body.lower(&mut builder, env, &mut exc_stack,
                                               entry);
             exc_stack.finish();
 
-            builder.basic_op(
-                block,
-                lir::OpKind::ReturnOk,
-                vec![lir::Source::Variable(ssa)],
-                vec![]
-            );
-
-            builder.basic_op(
-                exc_block,
-                lir::OpKind::ReturnThrow,
-                vec![lir::Source::Variable(exc_ssa)],
-                vec![]
-            );
+            builder.op_return_ok(block, lir::Source::Variable(ssa));
+            builder.op_return_throw(exc_block, lir::Source::Variable(exc_ssa));
         }
 
         self.lir_function = Some(cfg);
@@ -78,6 +81,162 @@ macro_rules! lower_chain {
         }
     }
 }
+
+struct CaseStructureDef {
+    entry_block: LabelN,
+    match_val: Source,
+    clauses: Vec<CaseStructureClauseDef>,
+}
+struct CaseStructureClauseDef {
+}
+
+/*
+fn case_structure(
+    b: &mut lir::cfg::FunctionCfgBuilder,
+    env: &mut ScopeTracker,
+    exc_stack: &mut ExceptionHandlerStack,
+    def: CaseStructureDef,
+) -> (LabelN, SSAVariable) {
+    let mut main_cont = def.entry_block;
+
+    // Lower match values
+    for value in values {
+        let value_ssa = lower_chain!(value, b, env, exc_stack, main_cont);
+        assert!(value_ssa == value.ssa);
+    }
+    let value_vars: Vec<_> = values.iter().map(|v| v.ssa).collect();
+
+    // The central block of the Case structure. Contains only one
+    // operation, the OpKind::Case.
+    let match_body_label = b.add_block();
+
+    // The block that control flow converges to after the match
+    // structure is complete. No ops are inserted in this block
+    // here, except a PHI node.
+    let done_label = b.add_block();
+
+    let case_fail_label = b.add_block();
+
+    // The SSA variable representing the case structure.
+    let case_structure_ssa = env.new_ssa();
+
+    let guard_exception_label = b.add_block();
+    let guard_exception_ssa = env.new_ssa();
+    b.ensure_phi(guard_exception_label, guard_exception_ssa);
+
+    // Fail leaf
+    let fail_ssa = env.new_ssa();
+    b.basic_op(case_fail_label,
+               lir::OpKind::Move,
+               vec![lir::Source::Constant(::parser::AtomicLiteral::Nil)],
+               vec![fail_ssa]);
+    b.basic_op(case_fail_label, lir::OpKind::Jump, vec![], vec![]);
+    exc_stack.add_error_jump(
+        b, case_fail_label, fail_ssa);
+
+    let mut leaves = vec![case_fail_label];
+    for (idx, clause) in clauses.iter().enumerate() {
+        let orig_clause_label = b.add_block();
+        let mut clause_label = orig_clause_label;
+        b.basic_op(clause_label,
+                   lir::OpKind::CaseValues,
+                   vec![lir::Source::Variable(case_structure_ssa)],
+                   clause.patterns.iter()
+                   .flat_map(|pattern| {
+                       pattern.binds.iter()
+                           .map(|binding| binding.1)
+                   }).collect(),
+        );
+        exc_stack.push_catch(guard_exception_label, guard_exception_ssa);
+        let (clause_label, guard_ret) = clause.guard.lower(
+            b, env, exc_stack, clause_label);
+        exc_stack.pop_catch();
+        b.basic_op(clause_label,
+                   lir::OpKind::IfTruthy,
+                   vec![lir::Source::Variable(guard_ret)],
+                   vec![]
+        );
+        let guard_fail_label = b.add_block();
+        let mut leaf_body_label = b.add_block();
+        b.add_jump(clause_label, leaf_body_label);
+        b.add_jump(clause_label, guard_fail_label);
+        b.finish(clause_label);
+
+        // Guard fail
+        b.basic_op(guard_fail_label,
+                   lir::OpKind::CaseGuardFail { clause_num: idx },
+                   vec![lir::Source::Variable(case_structure_ssa)],
+                   vec![]);
+        b.add_jump(guard_fail_label, match_body_label);
+        b.finish(guard_fail_label);
+
+        // Guard ok
+        b.basic_op(leaf_body_label,
+                   lir::OpKind::CaseGuardOk,
+                   vec![lir::Source::Variable(case_structure_ssa)],
+                   vec![]);
+        b.op_tombstone(leaf_body_label, case_structure_ssa);
+
+        let (ret_label, clause_ret_ssa) = clause.body.lower(
+            b, env, exc_stack, leaf_body_label);
+        b.op_jump(ret_label, done_label);
+        b.add_phi(ret_label, clause_ret_ssa,
+                  done_label, self.ssa);
+        b.finish(ret_label);
+
+        leaves.push(orig_clause_label);
+    }
+
+    // Match body
+    let mut clauses: Vec<_> = clauses.iter().map(|c| {
+        lir::Clause {
+            patterns: c.patterns.clone(),
+        }
+    }).collect();
+    b.basic_op(
+        match_body_label,
+        lir::OpKind::Case(clauses.len()),
+        vec![Source::Variable(case_structure_ssa)], vec![]);
+    for leaf in leaves.iter() {
+        b.add_jump(match_body_label, *leaf);
+        b.finish(*leaf);
+    }
+    b.finish(match_body_label);
+
+    b.basic_op(
+        main_cont,
+        lir::OpKind::CaseStart {
+            vars: val.ssa,
+            clauses: clauses,
+            value_vars: value_vars,
+        },
+        vec![Source::Variable(val.ssa)],
+        vec![case_structure_ssa]
+    );
+
+    // Jump to match body
+    b.op_jump(main_cont, match_body_label);
+    b.finish(main_cont);
+
+    // Guard exception case
+    b.basic_op(
+        guard_exception_label,
+        lir::OpKind::CaseGuardThrow,
+        vec![case_structure_ssa.into()],
+        vec![]
+    );
+    b.op_tombstone(guard_exception_label, case_structure_ssa);
+    b.basic_op(
+        guard_exception_label,
+        lir::OpKind::Jump,
+        vec![], vec![]
+    );
+    exc_stack.add_error_jump(b, guard_exception_label,
+                             guard_exception_ssa);
+
+    (done_label, self.ssa)
+}
+*/
 
 use self::hir::SingleExpressionKind as HSEK;
 impl hir::SingleExpression {
@@ -202,7 +361,7 @@ impl hir::SingleExpression {
                 assert!(val.ssa == val_ssa);
 
                 let ssa_values: Vec<_> = vars.iter().map(|v| v.ssa).collect();
-                b.op_unpack_value_list(main_cont, val_ssa, &ssa_values);
+                b.op_unpack_value_list(main_cont, val_ssa, ssa_values);
 
                 let body_ssa = lower_chain!(body, b, env, exc_stack, main_cont);
                 assert!(body_ssa == self.ssa);
@@ -226,7 +385,7 @@ impl hir::SingleExpression {
                 // Unpack the result value list of the body
                 let then_unpack_vars: Vec<_> =
                     then_vars.iter().map(|v| v.ssa).collect();
-                b.op_unpack_value_list(main_cont, body_ssa, &then_unpack_vars);
+                b.op_unpack_value_list(main_cont, body_ssa, then_unpack_vars);
 
                 // Then block
                 let then_ssa = lower_chain!(then, b, env, exc_stack, main_cont);
@@ -237,7 +396,7 @@ impl hir::SingleExpression {
                 // Unpack the result value list from the error
                 let catch_unpack_vars: Vec<_> =
                     catch_vars.iter().map(|v| v.ssa).collect();
-                b.op_unpack_value_list(catch_block, catch_ssa, &catch_unpack_vars);
+                b.op_unpack_value_list(catch_block, catch_ssa, catch_unpack_vars);
 
                 let catch_ret_ssa = lower_chain!(
                     catch, b, env, exc_stack, catch_block);
@@ -250,8 +409,150 @@ impl hir::SingleExpression {
 
                 (exit_block, self.ssa)
             },
-            HSEK::Case { ref val, ref clauses, ref values } => {
+            HSEK::Catch { ref body } => {
+                let mut main_cont = in_block;
 
+                let mut catch_block = b.add_block();
+                let catch_ssa = env.new_ssa();
+
+                let ret_block = b.add_block();
+
+                // Main path
+                exc_stack.push_catch(catch_block, catch_ssa);
+                let body_ssa = lower_chain!(body, b, env, exc_stack, main_cont);
+                exc_stack.pop_catch();
+
+                b.op_jump(main_cont, ret_block);
+                b.add_phi(main_cont, body_ssa, ret_block, self.ssa);
+
+                // Exception path
+
+                // Unpack exception
+                let e1_ssa = env.new_ssa();
+                let e2_ssa = env.new_ssa();
+                let e3_ssa = env.new_ssa();
+                b.op_unpack_value_list(
+                    catch_block,
+                    catch_ssa,
+                    vec![e1_ssa, e2_ssa, e3_ssa]
+                );
+
+                let case_main_block = b.add_block();
+                let case_structure_ssa = env.new_ssa();
+                b.basic_op(
+                    catch_block,
+                    lir::OpKind::CaseStart {
+                        vars: catch_ssa,
+                        clauses: vec![
+                            lir::Clause {
+                                patterns: vec![
+                                    hir::Pattern {
+                                        binds: vec![],
+                                        node: hir::PatternNode::Atomic(
+                                            ::parser::AtomicLiteral::Atom(
+                                                ::Atom::from("throw"))),
+                                    },
+                                ]
+                            },
+                            lir::Clause {
+                                patterns: vec![
+                                    hir::Pattern {
+                                        binds: vec![],
+                                        node: hir::PatternNode::Atomic(
+                                            ::parser::AtomicLiteral::Atom(
+                                                ::Atom::from("exit"))),
+                                    },
+                                ]
+                            },
+                            lir::Clause {
+                                patterns: vec![
+                                    hir::Pattern {
+                                        binds: vec![],
+                                        node: hir::PatternNode::Atomic(
+                                            ::parser::AtomicLiteral::Atom(
+                                                ::Atom::from("error"))),
+                                    },
+                                ]
+                            },
+                        ],
+                        value_vars: vec![],
+                    },
+                    vec![lir::Source::Variable(catch_ssa)],
+                    vec![case_structure_ssa]
+                );
+                b.op_jump(catch_block, case_main_block);
+
+                b.basic_op(
+                    case_main_block,
+                    lir::OpKind::Case(3),
+                    vec![Source::Variable(case_structure_ssa)],
+                    vec![]
+                );
+
+                // Failure block. Since this is the value returned
+                // from the exception, this realistically never
+                // happen.
+                let fail_block = b.add_block();
+                b.add_jump(case_main_block, fail_block);
+                b.op_unreachable(fail_block);
+
+                // Throw case
+                let throw_block = b.add_block();
+                b.add_jump(case_main_block, throw_block);
+                b.op_case_guard_ok(throw_block, case_structure_ssa);
+                b.op_jump(throw_block, ret_block);
+                b.add_phi(throw_block, e2_ssa, ret_block, self.ssa);
+
+                // Exit case
+                let exit_block = b.add_block();
+                b.add_jump(case_main_block, exit_block);
+                b.op_case_guard_ok(exit_block, case_structure_ssa);
+                let exit_res_ssa = env.new_ssa();
+                b.op_make_tuple(
+                    exit_block,
+                    vec![
+                        Source::Constant(::parser::AtomicLiteral::Atom(
+                            ::Atom::from("EXIT"))),
+                        Source::Variable(e2_ssa),
+                    ],
+                    exit_res_ssa
+                );
+                b.op_jump(exit_block, ret_block);
+                b.add_phi(exit_block, exit_res_ssa, ret_block, self.ssa);
+
+                // Error case
+                let error_block = b.add_block();
+                b.add_jump(case_main_block, error_block);
+                b.op_case_guard_ok(error_block, case_structure_ssa);
+                let error_stacktrace_ssa = env.new_ssa();
+                b.op_primop(error_block, ::Atom::from("exc_trace"),
+                            vec![Source::Variable(e3_ssa)],
+                            vec![error_stacktrace_ssa]);
+                let error_int_res_ssa = env.new_ssa();
+                b.op_make_tuple(
+                    error_block,
+                    vec![
+                        Source::Variable(e2_ssa),
+                        Source::Variable(error_stacktrace_ssa),
+                    ],
+                    error_int_res_ssa,
+                );
+                let error_res_ssa = env.new_ssa();
+                b.op_make_tuple(
+                    error_block,
+                    vec![
+                        Source::Constant(::parser::AtomicLiteral::Atom(
+                            ::Atom::from("EXIT"))),
+                        Source::Variable(error_int_res_ssa),
+                    ],
+                    error_res_ssa
+                );
+                b.op_jump(error_block, ret_block);
+                b.add_phi(error_block, error_res_ssa, ret_block, self.ssa);
+
+                (ret_block, self.ssa)
+            },
+            HSEK::Case { ref val, ref clauses, ref values } => {
                 let mut main_cont = in_block;
 
                 // Lower values in the expression we match on
@@ -265,14 +566,25 @@ impl hir::SingleExpression {
                 }
                 let value_vars: Vec<_> = values.iter().map(|v| v.ssa).collect();
 
+                // The central block of the Case structure. Contains only one
+                // operation, the OpKind::Case.
                 let match_body_label = b.add_block();
+
+                // The block that control flow converges to after the match
+                // structure is complete. No ops are inserted in this block
+                // here, except a PHI node.
                 let done_label = b.add_block();
+
                 let case_fail_label = b.add_block();
 
+                // The SSA variable representing the case structure.
                 let case_structure_ssa = env.new_ssa();
 
+                let guard_exception_label = b.add_block();
+                let guard_exception_ssa = env.new_ssa();
+                b.ensure_phi(guard_exception_label, guard_exception_ssa);
+
                 // Fail leaf
-                // TODO: Proper error
                 let fail_ssa = env.new_ssa();
                 b.basic_op(case_fail_label,
                     lir::OpKind::Move,
@@ -284,7 +596,8 @@ impl hir::SingleExpression {
 
                 let mut leaves = vec![case_fail_label];
                 for (idx, clause) in clauses.iter().enumerate() {
-                    let mut clause_label = b.add_block();
+                    let orig_clause_label = b.add_block();
+                    let mut clause_label = orig_clause_label;
                     b.basic_op(clause_label,
                         lir::OpKind::CaseValues,
                         vec![lir::Source::Variable(case_structure_ssa)],
@@ -294,8 +607,10 @@ impl hir::SingleExpression {
                                     .map(|binding| binding.1)
                             }).collect(),
                     );
+                    exc_stack.push_catch(guard_exception_label, guard_exception_ssa);
                     let (clause_label, guard_ret) = clause.guard.lower(
                         b, env, exc_stack, clause_label);
+                    exc_stack.pop_catch();
                     b.basic_op(clause_label,
                         lir::OpKind::IfTruthy,
                         vec![lir::Source::Variable(guard_ret)],
@@ -320,9 +635,7 @@ impl hir::SingleExpression {
                                lir::OpKind::CaseGuardOk,
                                vec![lir::Source::Variable(case_structure_ssa)],
                                vec![]);
-                    b.basic_op(leaf_body_label,
-                               lir::OpKind::TombstoneSSA(case_structure_ssa),
-                               vec![], vec![]);
+                    b.op_tombstone(leaf_body_label, case_structure_ssa);
 
                     let (ret_label, clause_ret_ssa) = clause.body.lower(
                         b, env, exc_stack, leaf_body_label);
@@ -331,7 +644,7 @@ impl hir::SingleExpression {
                               done_label, self.ssa);
                     b.finish(ret_label);
 
-                    leaves.push(clause_label);
+                    leaves.push(orig_clause_label);
                 }
 
                 // Match body
@@ -364,6 +677,22 @@ impl hir::SingleExpression {
                 // Jump to match body
                 b.op_jump(main_cont, match_body_label);
                 b.finish(main_cont);
+
+                // Guard exception case
+                b.basic_op(
+                    guard_exception_label,
+                    lir::OpKind::CaseGuardThrow,
+                    vec![case_structure_ssa.into()],
+                    vec![]
+                );
+                b.op_tombstone(guard_exception_label, case_structure_ssa);
+                b.basic_op(
+                    guard_exception_label,
+                    lir::OpKind::Jump,
+                    vec![], vec![]
+                );
+                exc_stack.add_error_jump(b, guard_exception_label,
+                                         guard_exception_ssa);
 
                 (done_label, self.ssa)
             },
@@ -480,7 +809,7 @@ impl hir::SingleExpression {
             HSEK::PrimOp { ref name, ref args } => {
                 let mut main_cont = in_block;
 
-                println!("PrimOp: {}", name);
+                //println!("PrimOp: {}", name);
                 for arg in args.iter() {
                     let n_ssa = lower_chain!(arg, b, env, exc_stack, main_cont);
                     assert!(arg.ssa == n_ssa);
@@ -550,12 +879,8 @@ impl hir::SingleExpression {
                 b.basic_op(timeout_body_cont,
                            lir::OpKind::CaseValues,
                            vec![lir::Source::Variable(case_structure_ssa)], vec![]);
-                b.basic_op(timeout_body_cont,
-                           lir::OpKind::TombstoneSSA(case_structure_ssa),
-                           vec![], vec![]);
-                b.basic_op(timeout_body_cont,
-                           lir::OpKind::TombstoneSSA(receive_structure_ssa),
-                           vec![], vec![]);
+                b.op_tombstone(timeout_body_cont, case_structure_ssa);
+                b.op_tombstone(timeout_body_cont, receive_structure_ssa);
                 let (clause_ret_block, clause_ret_ssa) = timeout_body.lower(
                     b, env, exc_stack, timeout_body_cont);
                 b.basic_op(clause_ret_block, lir::OpKind::Jump, vec![], vec![]);
@@ -607,17 +932,13 @@ impl hir::SingleExpression {
                                    lir::OpKind::CaseGuardOk,
                                    vec![lir::Source::Variable(case_structure_ssa)],
                                    vec![]);
-                        b.basic_op(leaf_body_label,
-                                   lir::OpKind::TombstoneSSA(case_structure_ssa),
-                                   vec![], vec![]);
+                        b.op_tombstone(leaf_body_label, case_structure_ssa);
 
                         b.basic_op(leaf_body_label,
                                    lir::OpKind::ReceiveFinish,
                                    vec![lir::Source::Variable(receive_structure_ssa)],
                                    vec![]);
-                        b.basic_op(leaf_body_label,
-                                   lir::OpKind::TombstoneSSA(receive_structure_ssa),
-                                   vec![], vec![]);
+                        b.op_tombstone(leaf_body_label, receive_structure_ssa);
 
                         let (clause_done_label, clause_ret_ssa) = clause.body.lower(
                             b, env, exc_stack, leaf_body_label);
@@ -683,7 +1004,7 @@ impl hir::SingleExpression {
                     vec![self.ssa]);
                 (in_block, self.ssa)
             },
-            HSEK::BindClosures { closures: ref _closures, lambda_env, ref body, env_ssa } => {
+            HSEK::BindClosures { closures: ref closures, lambda_env, ref body, env_ssa } => {
                 let mut main_cont = in_block;
 
                 // TODO
@@ -695,12 +1016,24 @@ impl hir::SingleExpression {
                 };
 
                 b.basic_op(
-                    in_block,
+                    main_cont,
                     lir::OpKind::MakeClosureEnv {
                         env_idx: lambda_env.unwrap()
                     },
                     env_read_vars, vec![env_ssa]
                 );
+
+                for closure in closures {
+                    b.basic_op(
+                        main_cont,
+                        lir::OpKind::BindClosure {
+                            ident: closure.ident.clone().unwrap(),
+                        },
+                        vec![Source::Variable(env_ssa)],
+                        vec![closure.alias.as_ref().unwrap().ssa]
+                    )
+                }
+
                 let ret_ssa = lower_chain!(body, b, env, exc_stack, main_cont);
                 assert!(self.ssa == ret_ssa);
                 (main_cont, self.ssa)
@@ -708,9 +1041,10 @@ impl hir::SingleExpression {
             HSEK::ValueList(ref values) => {
                 let mut main_cont = in_block;
 
-                assert!(values.len() != 0);
-
-                if values.len() == 1 {
+                if values.len() == 0 {
+                    println!("WARNING: Empty ValueList");
+                    b.op_pack_value_list(main_cont, vec![], self.ssa);
+                } else if values.len() == 1 {
                     let ssa = lower_chain!(values[0], b, env, exc_stack, main_cont);
                     assert!(ssa == values[0].ssa);
                     b.op_move(main_cont, Source::Variable(ssa), self.ssa)

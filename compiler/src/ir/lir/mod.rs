@@ -32,6 +32,16 @@ pub enum Source {
     Variable(SSAVariable),
     Constant(::parser::AtomicLiteral),
 }
+impl From<SSAVariable> for Source {
+    fn from(val: SSAVariable) -> Self {
+        Source::Variable(val)
+    }
+}
+impl From<::parser::AtomicLiteral> for Source {
+    fn from(val: ::parser::AtomicLiteral) -> Self {
+        Source::Constant(val)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Phi {
@@ -77,9 +87,11 @@ pub enum OpKind {
     MakeBinary,
 
     /// Value lists are not an actual type in the program.
-    /// A value list of length 0 is illegal.
     /// A value list of length 1 is semantically identical
     /// to the value itself.
+    /// A value list may only exist as a SSA value directly,
+    /// no other types may contain a value list. Value lists
+    /// may not contain value lists.
     PackValueList,
     UnpackValueList,
 
@@ -145,6 +157,9 @@ pub enum OpKind {
     /// a hard error!
     CaseGuardOk,
     CaseGuardFail { clause_num: usize },
+    /// Indicates exit from the match structure due to a guard throwing
+    /// an error.
+    CaseGuardThrow,
 
     /// Indicates the start of a receive structure, must jump to a block
     /// containing a single ReceiveWait.
@@ -212,6 +227,8 @@ pub enum OpKind {
     /// Has a single read, indicates that the read variable should never be
     /// used after this point in the CFG.
     TombstoneSSA(SSAVariable),
+
+    Unreachable,
 }
 
 #[derive(Debug, Clone)]
@@ -234,9 +251,10 @@ impl OpKind {
             OpKind::ReturnOk => Some(0),
             OpKind::ReturnThrow => Some(0),
             OpKind::ReceiveStart { .. } => Some(1),
-            OpKind::ReceiveGetMessage => Some(2),
+            OpKind::ReceiveWait => Some(2),
             OpKind::IfTruthy => Some(2),
             OpKind::CaseGuardFail { .. } => Some(1),
+            OpKind::Unreachable => Some(0),
             _ => None,
         }
     }

@@ -36,6 +36,20 @@ impl<'a> FunctionCfgBuilder<'a> {
         });
     }
 
+    pub fn ensure_phi(&mut self, node: LabelN, node_instr: SSAVariable) {
+        let block = self.target.cfg.node_weight_mut(node.0).unwrap();
+        assert!(block.ops.len() == 0);
+
+        let has_phi = block.phi_nodes.iter().any(|p| p.ssa == node_instr);
+
+        if !has_phi {
+            block.phi_nodes.push(Phi {
+                entries: vec![],
+                ssa: node_instr,
+            })
+        }
+    }
+
     pub fn add_phi(&mut self,
                    pred: LabelN, pred_instr: SSAVariable,
                    node: LabelN, node_instr: SSAVariable) {
@@ -84,16 +98,8 @@ impl<'a> FunctionCfgBuilder<'a> {
         LabelN(idx)
     }
 
-    //pub fn set_block(&mut self, block: LabelN) {
-    //    self.current = block;
-    //}
-
-    //pub fn get_block(&self) -> LabelN {
-    //    self.current
-    //}
-
-    pub fn op_move(&mut self, block: LabelN, source: Source, dest: SSAVariable) {
-        self.basic_op(block, OpKind::Move, vec![source], vec![dest]);
+    pub fn op_move<I>(&mut self, block: LabelN, source: I, dest: SSAVariable) where I: Into<Source> {
+        self.basic_op(block, OpKind::Move, vec![source.into()], vec![dest]);
     }
 
     pub fn op_tombstone(&mut self, block: LabelN, ssa: SSAVariable) {
@@ -105,12 +111,51 @@ impl<'a> FunctionCfgBuilder<'a> {
         self.add_jump(block, target);
     }
 
-    pub fn op_unpack_value_list(&mut self, block: LabelN, val_list: SSAVariable, values: &[SSAVariable]) {
+    pub fn op_return_ok(&mut self, block: LabelN, value: Source) {
+        self.basic_op(block, OpKind::ReturnOk, vec![value], vec![]);
+    }
+    pub fn op_return_throw(&mut self, block: LabelN, value: Source) {
+        self.basic_op(block, OpKind::ReturnThrow, vec![value], vec![]);
+    }
+
+    pub fn op_arguments(&mut self, block: LabelN, args: Vec<SSAVariable>) {
+        self.basic_op(block, OpKind::Arguments, vec![], args);
+    }
+
+    pub fn op_case_guard_ok(&mut self, block: LabelN, case_structure: SSAVariable) {
+        self.basic_op(block, OpKind::CaseGuardOk,
+                      vec![Source::Variable(case_structure)], vec![]);
+    }
+
+    pub fn op_unreachable(&mut self, block: LabelN) {
+        self.basic_op(block, OpKind::Unreachable, vec![], vec![]);
+        self.finish(block);
+    }
+
+    pub fn op_primop(&mut self, block: LabelN, primop: ::Atom, args: Vec<Source>, results: Vec<SSAVariable>) {
+        self.basic_op(
+            block,
+            OpKind::PrimOp(primop),
+            args,
+            results
+        );
+    }
+
+    pub fn op_make_tuple(&mut self, block: LabelN, vars: Vec<Source>, res: SSAVariable) {
+        self.basic_op(
+            block,
+            OpKind::MakeTuple,
+            vars,
+            vec![res]
+        );
+    }
+
+    pub fn op_unpack_value_list(&mut self, block: LabelN, val_list: SSAVariable, values: Vec<SSAVariable>) {
         self.basic_op(
             block,
             OpKind::UnpackValueList,
             vec![Source::Variable(val_list)],
-            values.into()
+            values
         );
     }
 

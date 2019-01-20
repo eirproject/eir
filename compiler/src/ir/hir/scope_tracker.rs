@@ -9,7 +9,7 @@ pub struct LambdaEnvIdx(pub usize);
 #[derive(Debug)]
 pub struct LambdaEnv {
     pub captures: Vec<(ScopeDefinition, SSAVariable, SSAVariable)>,
-    pub meta_binds: Vec<::ir::FunctionIdent>,
+    pub meta_binds: Vec<(::ir::FunctionIdent, SSAVariable)>,
 }
 
 #[derive(Debug)]

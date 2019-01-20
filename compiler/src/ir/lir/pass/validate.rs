@@ -71,7 +71,7 @@ fn validate_proper_ssa(cfg: &FunctionCfg) {
                 let actual_jumps_num = cfg.jumps_iter(block.label.unwrap()).count();
                 if jumps_num != actual_jumps_num {
                     println!("{}: OP must have {} jumps, has {}",
-                             block.label.unwrap(), actual_jumps_num, jumps_num);
+                             block.label.unwrap(), jumps_num, actual_jumps_num);
                     println!("    {:?}", last.kind);
                 }
             } else {

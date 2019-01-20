@@ -32,9 +32,13 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
             //if phi.dead {
             //    continue;
             //}
-            let fmt = format_label(&format!("{:?}, = PHI[{:?}]\n",
-                                            phi.ssa, phi.entries));
-            write!(w, "{}", fmt)?;
+            let fmt = format_label(&format!("{:?}, = PHI[", phi.ssa));
+            write!(w, "{}{}\n", fmt, DOT_BREAK)?;
+            for entry in phi.entries.iter() {
+                let fmt = format_label(&format!("  {:?},", entry));
+                write!(w, "{}{}", fmt, DOT_BREAK)?;
+            }
+            write!(w, "] {}", DOT_BREAK)?;
         }
 
         for op in block.ops.iter() {

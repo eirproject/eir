@@ -87,6 +87,10 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
 
             expr.ssa = env.new_ssa();
         },
+        SingleExpressionKind::Catch { ref mut body } => {
+            assign_ssa_single_expression(env, body);
+            expr.ssa = env.new_ssa();
+        },
         // TODO
         SingleExpressionKind::Case { ref mut val, ref mut clauses,
                                      ref mut values } => {
@@ -205,41 +209,54 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
         },
         SingleExpressionKind::BindClosure { ref mut closure, ref mut lambda_env,
                                             ref mut env_ssa } => {
+            // BindClosure makes a single closure and returns it.
+
             env.push_tracking();
 
+            // Inject closure arguments into scope
             let mut scope = HashMap::new();
             for arg in &mut closure.fun.as_mut().unwrap().args {
                 arg.ssa = env.new_ssa();
                 scope.insert(ScopeDefinition::Variable(arg.var.clone()), arg.ssa);
             }
-            env.push_scope(scope);
 
+            // Body of closure
+            env.push_scope(scope);
             assign_ssa_single_expression(
                 env, &mut closure.fun.as_mut().unwrap().body);
-
             env.pop_scope();
+
+            // SSA references crossing the closure boundary.
+            // These will be wrapped in a LambdaEnv
             let captures_map = env.pop_tracking();
             let captures = captures_map.iter()
                 .map(|(k, &(o, i))| (k.clone(), o, i))
                 .collect();
 
+            // Generate the LambdaEnvIdx and insert the LambdaEnv
             let env_idx = env.next_env_idx();
             closure.gen_ident(env_idx);
-
             *lambda_env = Some(env_idx);
-
             env.add_lambda_env(env_idx, LambdaEnv {
                 captures: captures,
-                meta_binds: vec![closure.ident.clone().unwrap()],
+                meta_binds: vec![],
+                //meta_binds: vec![(closure.ident.clone().unwrap(),
+                //                  closure.alias.as_ref().unwrap().ssa)],
             });
 
-
+            // SSA results of env and expression
             *env_ssa = env.new_ssa();
             expr.ssa = env.new_ssa();
         },
         SingleExpressionKind::BindClosures { ref mut closures, ref mut body,
                                              ref mut lambda_env, ref mut env_ssa } => {
+            // BindClosures makes a set of closures and makes them availible
+            // inside the body. The result of body is returned.
+            // The magic here is that each closure in the set of closures can
+            // also access and call each other.
 
+            // All closures can access and call each other.
+            // Inject all closures into a scope.
             let mut closures_scope = HashMap::new();
             for closure in closures.iter_mut() {
                 let alias = closure.alias.as_mut().unwrap();
@@ -250,41 +267,54 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             }
             env.push_scope(closures_scope);
 
+            // Since all closures can call each other, they share a single
+            // LambdaEnv. This tracking scope captures all SSA references
+            // that cross the boundary between any one of the closures
+            // and outside.
             env.push_tracking();
+
             for closure in closures.iter_mut() {
+
+                // Inject closure arguments into scope
                 let mut scope = HashMap::new();
                 for arg in &mut closure.fun.as_mut().unwrap().args {
                     arg.ssa = env.new_ssa();
                     scope.insert(ScopeDefinition::Variable(arg.var.clone()), arg.ssa);
                 }
+
+                // Body of closure
                 env.push_scope(scope);
                 assign_ssa_single_expression(
                     env, &mut closure.fun.as_mut().unwrap().body);
                 env.pop_scope();
+
             }
 
+            // SSA references crossing the closures boundary.
+            // These will be wrapped in a LambdaEnv
             let captures_map = env.pop_tracking();
             let captures = captures_map.iter()
                 .map(|(k, &(o, i))| (k.clone(), o, i))
                 .collect();
 
+            // Generate the LambdaEnvIdx and insert the LambdaEnv
             let env_idx = env.next_env_idx();
-
             *lambda_env = Some(env_idx);
             for closure in closures.iter_mut() {
                 closure.gen_ident(env_idx);
             }
-
             env.add_lambda_env(env_idx, LambdaEnv {
                 captures: captures,
                 meta_binds: closures.iter()
-                    .map(|c| c.ident.clone().unwrap())
+                    .map(|c| (c.ident.clone().unwrap(), c.alias.as_ref().unwrap().ssa))
                     .collect(),
             });
 
+            // Outer body. All lambdas are still in scope.
             assign_ssa_single_expression(env, body);
             env.pop_scope();
 
+            // SSA results of env and expression
             *env_ssa = env.new_ssa();
             expr.ssa = body.ssa;
         },

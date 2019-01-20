@@ -84,6 +84,9 @@ impl EachSingleExpression for SingleExpression {
                 then.each_single_expression_mut(f, enter_lambdas);
                 catch.each_single_expression_mut(f, enter_lambdas);
             },
+            SEK::Catch { ref mut body } => {
+                body.each_single_expression_mut(f, enter_lambdas);
+            },
             SEK::Case { ref mut val, ref mut clauses, ref mut values } => {
                 val.each_single_expression_mut(f, enter_lambdas);
 
@@ -243,6 +246,7 @@ pub enum SingleExpressionKind {
     // Combinators
     Let { vars: Vec<AVariable>, val: Box<SingleExpression>, body: Box<SingleExpression> },
     /// then and catch must have the same amount of items
+    Catch { body: Box<SingleExpression> },
     Try { body: Box<SingleExpression>, then_vars: Vec<AVariable>, then: Box<SingleExpression>,
           catch_vars: Vec<AVariable>, catch: Box<SingleExpression> },
     Case { val: Box<SingleExpression>, clauses: Vec<Clause>, values: Vec<SingleExpression> },

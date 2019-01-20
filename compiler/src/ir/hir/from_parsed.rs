@@ -158,43 +158,8 @@ impl SingleExpression {
                         .collect(),
                 },
             PSE::Catch(ref body) => {
-                // TODO: WTF?
-                let r = AVariable { var: Variable::from("_r"),
-                                    ssa: INVALID_SSA };
-
-                let typ = AVariable { var: Variable::from("_t"),
-                                      ssa: INVALID_SSA };
-                let kind = AVariable { var: Variable::from("_k"),
-                                       ssa: INVALID_SSA };
-                let extra = AVariable { var: Variable::from("_e"),
-                                        ssa: INVALID_SSA };
-
-                SingleExpressionKind::Try {
+                SingleExpressionKind::Catch {
                     body: Box::new(SingleExpression::from_parsed(body, fun_ident)),
-                    then_vars: vec![r.clone()],
-                    then: Box::new(SingleExpression {
-                        ssa: INVALID_SSA,
-                        kind: SingleExpressionKind::Variable(r),
-                    }),
-                    catch_vars: vec![typ.clone(), kind.clone(), extra.clone()],
-                    catch: Box::new(SingleExpression {
-                        ssa: INVALID_SSA,
-                        kind: SingleExpressionKind::Case {
-                            val: Box::new(SingleExpression {
-                                ssa: INVALID_SSA,
-                                kind: SingleExpressionKind::ValueList(vec![
-                                    SingleExpression {
-                                        ssa: INVALID_SSA,
-                                        kind: SingleExpressionKind::Variable(typ.clone()),
-                                    }
-                                ]),
-                            }),
-                            values: vec![],
-                            clauses: vec![
-                                // TODO
-                            ],
-                        },
-                    }),
                 }
             },
             PSE::Case { ref val, ref clauses } => {
