@@ -249,7 +249,19 @@ pub enum SingleExpressionKind {
     Catch { body: Box<SingleExpression> },
     Try { body: Box<SingleExpression>, then_vars: Vec<AVariable>, then: Box<SingleExpression>,
           catch_vars: Vec<AVariable>, catch: Box<SingleExpression> },
-    Case { val: Box<SingleExpression>, clauses: Vec<Clause>, values: Vec<SingleExpression> },
+
+    Case {
+        /// The value to match on. Each pattern in the clauses will
+        /// match on the values of this value list.
+        val: Box<SingleExpression>,
+        /// The clauses in the pattern are matched on in order.
+        clauses: Vec<Clause>,
+        /// Values that are utilized to match on in the pattern.
+        /// They should be constructed and available before the pattern
+        /// structure starts.
+        values: Vec<SingleExpression>,
+    },
+
     Test { tests: Vec<TestEntry> },
     Do(Box<SingleExpression>, Box<SingleExpression>),
     Receive { clauses: Vec<Clause>, timeout_time: Box<SingleExpression>,
@@ -286,13 +298,24 @@ impl Closure {
 
 #[derive(Debug, Clone)]
 pub struct Clause {
+    /// Each of these patterns represents a single entry in the
+    /// value list we match on.
     pub patterns: Vec<Pattern>,
+    /// When a pattern matches, the guard clause is evaluated to
+    /// determine if the match should be accepted or rejected.
+    /// In strict erlang, the guard clause can only contain
+    /// function calls from a strict set, but we support all
+    /// calls in the guard clause for uniformity.
     pub guard: SingleExpression,
+    /// The body is evaluated and returned if the clause matches
+    /// and the guard passes.
     pub body: SingleExpression,
 }
 
 #[derive(Debug, Clone)]
 pub struct Pattern {
+    /// If the parent clause matches, these variables identifiers
+    /// in the pattern should be bound to these SSA variables.
     pub binds: Vec<(Variable, SSAVariable)>,
     pub node: PatternNode,
 }
