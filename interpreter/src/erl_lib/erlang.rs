@@ -1,6 +1,8 @@
 use ::{ NativeModule, Term, CallReturn };
 use ::num_bigint::{ BigInt, Sign };
 
+use term::{ ErlEq, ErlExactEq };
+
 fn bignum_to_f64(n: &BigInt) -> Option<f64> {
     // ieee float layout:
     // 1b sign
@@ -126,10 +128,81 @@ fn mul(args: &[Term]) -> CallReturn {
     }
 }
 
+fn is_list(args: &[Term]) -> CallReturn {
+    if args.len() != 1 {
+        return CallReturn::Throw;
+    }
+    let a1 = &args[0];
+
+    match a1 {
+        Term::List(_, _) => CallReturn::Return { term: Term::new_atom("true") },
+        Term::Nil => CallReturn::Return { term: Term::new_atom("true") },
+        _ => CallReturn::Return { term: Term::new_atom("false") },
+    }
+}
+
+fn is_atom(args: &[Term]) -> CallReturn {
+    if args.len() != 1 {
+        return CallReturn::Throw;
+    }
+    let a1 = &args[0];
+
+    match a1 {
+        Term::Atom(_) => CallReturn::Return { term: Term::new_bool(true) },
+        _ => CallReturn::Return { term: Term::new_bool(false) },
+    }
+}
+
+fn list_append(args: &[Term]) -> CallReturn {
+    // TODO: Validate semantics
+    assert!(args.len() == 2);
+    match (&args[0], &args[1]) {
+        (Term::Nil, Term::Nil) => CallReturn::Return { term: Term::Nil },
+        (Term::Nil, Term::List(_, _)) => CallReturn::Return { term: args[1].clone() },
+        (Term::List(_, ref tail), Term::Nil) if tail.erl_eq(&Term::Nil)
+            => CallReturn::Return { term: args[0].clone() },
+        (Term::List(ref f_head, ref f_tail), Term::List(ref b_head, ref b_tail)) if f_tail.erl_eq(&Term::Nil) => {
+            let mut head = f_head.clone();
+            head.extend(b_head.iter().cloned());
+            CallReturn::Return { term: Term::List(head, b_tail.clone()) }
+        }
+        _ => CallReturn::Throw,
+    }
+}
+
+fn exact_eq(args: &[Term]) -> CallReturn {
+    assert!(args.len() == 2);
+    CallReturn::Return { term: Term::new_bool(args[0].erl_exact_eq(&args[1])) }
+}
+
+fn and(args: &[Term]) -> CallReturn {
+    assert!(args.len() == 2);
+    if let (Some(a1), Some(a2)) = (args[0].as_boolean(), args[1].as_boolean()) {
+        CallReturn::Return { term: Term::new_bool(a1 && a2) }
+    } else {
+        CallReturn::Throw
+    }
+}
+
+fn tuple_size(args: &[Term]) -> CallReturn {
+    assert!(args.len() == 1);
+    if let Term::Tuple(ref terms) = &args[0] {
+        CallReturn::Return { term: Term::new_i64(terms.len() as i64) }
+    } else {
+        CallReturn::Throw
+    }
+}
+
 pub fn make_erlang() -> NativeModule {
     let mut module = NativeModule::new("erlang".to_string());
     module.add_fun("+".to_string(), 2, Box::new(add));
     module.add_fun("-".to_string(), 2, Box::new(sub));
     module.add_fun("*".to_string(), 2, Box::new(mul));
+    module.add_fun("is_list".to_string(), 1, Box::new(is_list));
+    module.add_fun("is_atom".to_string(), 1, Box::new(is_atom));
+    module.add_fun("++".to_string(), 2, Box::new(list_append));
+    module.add_fun("=:=".to_string(), 2, Box::new(exact_eq));
+    module.add_fun("and".to_string(), 2, Box::new(and));
+    module.add_fun("tuple_size".to_string(), 1, Box::new(tuple_size));
     module
 }

@@ -1,0 +1,12 @@
+[package]
+name = "term_config_format"
+version = "0.1.0"
+authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
+edition = "2018"
+build = "build.rs"
+
+[build-dependencies]
+lalrpop = "0.16.0"
+
+[dependencies]
+lalrpop-util = "0.16.0"

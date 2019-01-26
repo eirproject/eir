@@ -1,6 +1,6 @@
 use ::std::collections::HashSet;
 
-use ::{ Atom, Variable };
+use ::{ Atom };
 use ::ir::{ AVariable, AFunctionName, Module, FunctionDefinition,
             FunctionVisibility, FunctionIdent };
 use ::ir::hir::{ SingleExpression, SingleExpressionKind,

@@ -1,17 +1,40 @@
 use ::std::collections::HashSet;
-use ::ir::lir::{ FunctionCfg, Source };
+use ::ir::lir::{ FunctionCfg, Source, OpKind };
+use ::ir::FunctionIdent;
 
-pub fn validate(cfg: &FunctionCfg) {
+pub fn validate(ident: &FunctionIdent, cfg: &FunctionCfg) {
 
-    validate_proper_ssa(cfg);
+    validate_proper_ssa(ident, cfg);
 
 }
 
-fn validate_proper_ssa(cfg: &FunctionCfg) {
+fn validate_proper_ssa(ident: &FunctionIdent, cfg: &FunctionCfg) {
 
-    let mut assigns = HashSet::new();
+    let entry = cfg.block(cfg.entry());
+
+    // Check entry invariants
+    if entry.phi_nodes.len() != 0 {
+        println!("Entry block can't have PHI nodes");
+    }
+
+    if let OpKind::Arguments = entry.ops[0].kind {
+        if entry.ops[0].writes.len() != ident.arity as usize {
+            println!("Arity of ident and OpKind::Arguments does not match");
+        }
+        if ident.lambda.is_some() {
+            if let OpKind::UnpackEnv = entry.ops[1].kind {
+            } else {
+                println!("Entry block of lambda function must have OpKind::UnpackEnv as its second argument");;
+            }
+        }
+
+    } else {
+        println!("Entry block must start with OpKind::Arguments");
+    }
 
     // Collect all ssa variables and check for double assigns
+    let mut assigns = HashSet::new();
+
     for block in cfg.blocks_iter() {
         for phi in block.phi_nodes.iter() {
             if assigns.contains(&phi.ssa) {

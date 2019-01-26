@@ -282,14 +282,14 @@ pub struct Closure {
     pub env: Option<LambdaEnvIdx>,
 }
 impl Closure {
-    fn gen_ident(&mut self, env_idx: LambdaEnvIdx) {
+    fn gen_ident(&mut self, env_idx: LambdaEnvIdx, lambda_num: usize) {
         assert!(self.ident.is_none());
         assert!(self.env.is_none());
 
         let mut ident = self.parent_ident.clone();
         // + 1 for lambda env
         ident.arity = (self.fun.as_ref().unwrap().args.len() + 1) as u32;
-        ident.lambda = Some(env_idx);
+        ident.lambda = Some((env_idx, lambda_num));
 
         self.ident = Some(ident);
         self.env = Some(env_idx);

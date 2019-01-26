@@ -4,7 +4,15 @@ use ::ir::lir::Source;
 const DOT_BREAK: &str = "<br align=\"left\" />";
 
 fn format_label(label: &str) -> String {
-    label.replace("{", "\\{").replace("}", "\\}").replace("\n", DOT_BREAK)
+    label
+        .replace("{", "\\{")
+        .replace("}", "\\}")
+        .replace("|", "\\|")
+        .replace(">", "&lt;")
+        .replace("<", "&gt;")
+        .replace("&", "&amp;")
+        .replace("\"", "&quot;")
+        .replace("\n", DOT_BREAK)
 }
 
 use std::io::Write;

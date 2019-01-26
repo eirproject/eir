@@ -6,4 +6,5 @@ members = [
     "util",
     "interpreter",
     "tools",
+    "term_config_format",
 ]

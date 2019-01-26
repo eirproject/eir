@@ -21,6 +21,7 @@ impl MatchState {
     fn clause_num(&self) -> usize {
         match self {
             MatchState::MatchClause(num) => *num,
+            MatchState::GuardWait(num) => *num,
             _ => panic!(),
         }
     }
@@ -39,6 +40,13 @@ impl MatchState {
         }
     }
 
+    fn into_body(&mut self) {
+        match *self {
+            MatchState::GuardWait(num) => *self = MatchState::MatchClause(num+1),
+            _ => unreachable!(),
+        }
+    }
+
     fn into_finished(&mut self) {
         *self = MatchState::Finished;
     }
@@ -48,7 +56,7 @@ impl MatchState {
 #[derive(Debug, Clone)]
 pub struct CaseContext {
     pub state: MatchState,
-    pub vars: Vec<Source>,
+    pub vars: Vec<Term>,
     pub clauses: Vec<Clause>,
     pub last_binds: Option<HashMap<SSAVariable, Term>>,
 }
@@ -56,8 +64,44 @@ pub struct CaseContext {
 fn match_node(term: &Term, node: &PatternNode,
               binds: &mut HashMap<SSAVariable, Term>,
               binds_ref: &Vec<(Variable, SSAVariable)>) -> bool {
+    println!("MATCH_NODE: {:?} {:?}", term, node);
     match (term, node) {
+        (Term::List(ref t_head, ref t_tail),
+         PatternNode::List(ref p_head, ref p_tail)) => {
+            if t_head.len() < p_head.len() {
+                unimplemented!();
+            } else if t_head.len() == p_head.len() {
+                for (pat, term) in p_head.iter().zip(t_head.iter()) {
+                    if !match_node(term, pat, binds, binds_ref) {
+                        return false;
+                    }
+                }
+                return match_node(t_tail, p_tail, binds, binds_ref);
+            } else { // >
+                println!("PAT GT");
+                assert!(t_head.len() > p_head.len());
+                for (pat, term) in p_head.iter().zip(t_head.iter()) {
+                    println!("HEAD MATCH TRY");
+                    if !match_node(term, pat, binds, binds_ref) {
+                        println!("HEAD MATCH FAIL");
+                        return false;
+                    }
+                }
+                println!("REST");
+                let head_rest: Vec<_> = t_head.iter().skip(p_head.len())
+                    .cloned().collect();
+                println!("HEAD REST: {:?}", head_rest);
+                let rest_term = Term::List(head_rest, t_tail.clone());
+                println!("REST TERM: {:?}", rest_term);
+                let a = match_node(&rest_term, p_tail, binds, binds_ref);
+                println!("DONE {}", a);
+                return a;
+            }
+        }
+        (Term::Atom(v1), PatternNode::Atomic(AtomicLiteral::Atom(v2))) => v1 == v2,
         (Term::Nil, PatternNode::Atomic(AtomicLiteral::Nil)) => true,
+        (Term::Nil, PatternNode::List(ref list, ref tail)) if list.len() == 0 =>
+            match_node(term, tail, binds, binds_ref),
         (Term::Integer(ref int),
          PatternNode::Atomic(AtomicLiteral::Integer(ref pat_int))) => {
             let mut bi = BigInt::parse_bytes(pat_int.digits.as_bytes(), 10)
@@ -85,7 +129,7 @@ fn match_node(term: &Term, node: &PatternNode,
 
 impl CaseContext {
 
-    pub fn new(vars: Vec<Source>, clauses: Vec<Clause>) -> Self {
+    pub fn new(vars: Vec<Term>, clauses: Vec<Clause>) -> Self {
         CaseContext {
             state: MatchState::MatchClause(0),
             vars: vars,
@@ -94,16 +138,16 @@ impl CaseContext {
         }
     }
 
-    pub fn do_body(&mut self, terms: &[Term]) -> usize {
+    pub fn do_body(&mut self) -> usize {
         let (matched, values) = {
             let clause = &self.clauses[self.state.clause_num()];
-            assert!(clause.patterns.len() == terms.len());
+            assert!(clause.patterns.len() == self.vars.len());
 
             println!("{:?}", clause);
-            println!("{:?}", terms);
+            println!("{:?}", self.vars);
 
             let mut values: HashMap<SSAVariable, Term> = HashMap::new();
-            let matched = terms.iter()
+            let matched = self.vars.iter()
                 .zip(&clause.patterns)
                 .all(|(term, pattern)| match_node(
                     term, &pattern.node, &mut values, &pattern.binds));
@@ -120,7 +164,7 @@ impl CaseContext {
             if self.state.clause_num() >= self.clauses.len() {
                 0
             } else {
-                self.do_body(terms)
+                self.do_body()
             }
         }
 
@@ -134,6 +178,11 @@ impl CaseContext {
 
     pub fn guard_ok(&mut self) {
         self.state.into_finished();
+    }
+
+    pub fn guard_fail(&mut self, clause_num: usize) {
+        assert!(clause_num == self.state.clause_num());
+        self.state.into_body();
     }
 
 }

@@ -31,17 +31,29 @@ impl FunctionDefinition {
             let mut builder = lir::cfg::FunctionCfgBuilder::new(&mut cfg);
             let entry = builder.get_entry();
 
-            builder.op_arguments(
-                entry,
-                self.hir_fun.args.iter().map(|a| a.ssa).collect()
-            );
+            let mut env_ssa = None;
+            let mut args = if self.ident.lambda.is_some() {
+                let env_ssa_u = env.new_ssa();
+                env_ssa = Some(env_ssa_u);
+                vec![env_ssa_u]
+            } else {
+                vec![]
+            };
+            args.extend(self.hir_fun.args.iter().map(|a| a.ssa));
+            builder.target.args = args.clone();
+            builder.op_arguments(entry, args);
 
             if self.ident.lambda.is_some() {
-                let lambda_env = env.get_lambda_env(self.ident.lambda.unwrap());
-                for (_scope_def, _outer, inner) in lambda_env.captures.iter() {
-                    // TODO: Should extract from env
-                    builder.op_move(entry, ::parser::AtomicLiteral::Nil, *inner);
-                }
+                let lambda_env = env.get_lambda_env(self.ident.lambda.unwrap().0);
+                let lambda_env_ssa = env_ssa.unwrap();
+                builder.basic_op(
+                    entry,
+                    lir::OpKind::UnpackEnv,
+                    vec![Source::Variable(lambda_env_ssa)],
+                    lambda_env.captures.iter()
+                        .map(|c| c.2)
+                        .collect(),
+                );
                 for (fun, ssa) in lambda_env.meta_binds.iter() {
                     builder.basic_op(
                         entry,
@@ -49,7 +61,7 @@ impl FunctionDefinition {
                             ident: fun.clone(),
                         },
                         // TODO: Should be env
-                        vec![Source::Constant(::parser::AtomicLiteral::Nil)],
+                        vec![Source::Variable(lambda_env_ssa)],
                         vec![*ssa]
                     );
                 }
@@ -121,9 +133,9 @@ fn case_structure(
     // The SSA variable representing the case structure.
     let case_structure_ssa = env.new_ssa();
 
-    let guard_exception_label = b.add_block();
-    let guard_exception_ssa = env.new_ssa();
-    b.ensure_phi(guard_exception_label, guard_exception_ssa);
+    //let guard_exception_label = b.add_block();
+    //let guard_exception_ssa = env.new_ssa();
+    //b.ensure_phi(guard_exception_label, guard_exception_ssa);
 
     // === Fail leaf ===
     let mut leaves = if let Some(match_fail) = def.match_fail {
@@ -146,6 +158,9 @@ fn case_structure(
         let orig_clause_label = b.add_block();
         let mut clause_label = orig_clause_label;
 
+        let guard_fail_label = b.add_block();
+        let guard_exception_ssa = env.new_ssa();
+
         let case_values_ssa: Vec<_> = clause.patterns.iter()
             .flat_map(|pattern| {
                 pattern.binds.iter()
@@ -153,11 +168,13 @@ fn case_structure(
             }).collect();
 
         b.basic_op(clause_label,
+
                    lir::OpKind::CaseValues,
                    vec![lir::Source::Variable(case_structure_ssa)],
                    case_values_ssa.clone(),
         );
-        exc_stack.push_catch(guard_exception_label, guard_exception_ssa);
+        //exc_stack.push_catch(guard_exception_label, guard_exception_ssa);
+        exc_stack.push_catch(guard_fail_label, guard_exception_ssa);
         let (clause_label, guard_ret) = (clause.guard)(
             b, env, exc_stack, clause_label, &case_values_ssa);
         exc_stack.pop_catch();
@@ -166,7 +183,6 @@ fn case_structure(
                    vec![lir::Source::Variable(guard_ret)],
                    vec![]
         );
-        let guard_fail_label = b.add_block();
         let mut leaf_body_label = b.add_block();
         b.add_jump(clause_label, leaf_body_label);
         b.add_jump(clause_label, guard_fail_label);
@@ -177,7 +193,7 @@ fn case_structure(
                    lir::OpKind::CaseGuardFail { clause_num: idx },
                    vec![lir::Source::Variable(case_structure_ssa)],
                    vec![]);
-        b.add_jump(guard_fail_label, match_body_label);
+        b.op_jump(guard_fail_label, match_body_label);
         b.finish(guard_fail_label);
 
         // Guard ok
@@ -229,20 +245,20 @@ fn case_structure(
     b.finish(main_cont);
 
     // === Guard exception case ===
-    b.basic_op(
-        guard_exception_label,
-        lir::OpKind::CaseGuardThrow,
-        vec![case_structure_ssa.into()],
-        vec![]
-    );
-    b.op_tombstone(guard_exception_label, case_structure_ssa);
-    b.basic_op(
-        guard_exception_label,
-        lir::OpKind::Jump,
-        vec![], vec![]
-    );
-    exc_stack.add_error_jump(b, guard_exception_label,
-                             guard_exception_ssa);
+    //b.basic_op(
+    //    guard_exception_label,
+    //    lir::OpKind::CaseGuardThrow,
+    //    vec![case_structure_ssa.into()],
+    //    vec![]
+    //);
+    //b.op_tombstone(guard_exception_label, case_structure_ssa);
+    //b.basic_op(
+    //    guard_exception_label,
+    //    lir::OpKind::Jump,
+    //    vec![], vec![]
+    //);
+    //exc_stack.add_error_jump(b, guard_exception_label,
+    //                         guard_exception_ssa);
 
     (done_label, def.return_ssa)
 }
@@ -254,7 +270,8 @@ impl hir::SingleExpression {
              exc_stack: &mut ExceptionHandlerStack, in_block: LabelN)
              -> (LabelN, SSAVariable) {
 
-        match self.kind {
+        //println!("-> lower");
+        let a = match self.kind {
             HSEK::InterModuleCall { ref module, ref name, ref args } => {
                 let mut main_cont = in_block;
 
@@ -636,7 +653,7 @@ impl hir::SingleExpression {
                                lir::OpKind::CaseGuardFail { clause_num: idx },
                                vec![lir::Source::Variable(case_structure_ssa)],
                                vec![]);
-                    b.add_jump(guard_fail_label, match_body_label);
+                    b.op_jump(guard_fail_label, match_body_label);
                     b.finish(guard_fail_label);
 
                     // Guard ok
@@ -970,7 +987,7 @@ impl hir::SingleExpression {
                     vec![self.ssa]);
                 (in_block, self.ssa)
             },
-            HSEK::BindClosures { closures: ref closures, lambda_env, ref body, env_ssa } => {
+            HSEK::BindClosures { ref closures, lambda_env, ref body, env_ssa } => {
                 let mut main_cont = in_block;
 
                 // TODO
@@ -1027,6 +1044,8 @@ impl hir::SingleExpression {
                 (main_cont, self.ssa)
             }
             ref s => panic!("Unhandled: {:?}", s),
-        }
+        };
+        //println!("<- lower");
+        a
     }
 }

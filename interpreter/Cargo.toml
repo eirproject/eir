@@ -5,6 +5,7 @@ authors = ["hansihe"]
 
 [dependencies]
 num = "0.2"
+num-traits = "0.2"
 num-bigint = "0.2"
 tempdir = "0.3"
 

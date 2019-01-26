@@ -6,7 +6,7 @@ use super::{ BasicBlock, Phi, BasicBlockEdge, EdgeN };
 
 #[derive(Debug)]
 pub struct FunctionCfgBuilder<'a> {
-    target: &'a mut FunctionCfg,
+    pub target: &'a mut FunctionCfg,
     finished: HashSet<LabelN>,
     //current: LabelN,
 }

@@ -182,7 +182,7 @@ impl<'input> Tokenizer<'input> {
                     end = idx0;
                     self.bump();
                 }
-                Some((idx0, c)) => {
+                Some((idx0, _c)) => {
                     end = idx0;
                     break;
                 }

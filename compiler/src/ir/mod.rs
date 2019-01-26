@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 pub mod hir;
-use ::ir::hir::scope_tracker::{ LambdaEnvIdx, LambdaEnv, ScopeTracker };
+use ::ir::hir::scope_tracker::{ LambdaEnv, ScopeTracker };
+pub use ::ir::hir::scope_tracker::LambdaEnvIdx;
 pub mod lir;
 mod doc;
 mod fmt;
@@ -27,7 +28,7 @@ impl Module {
 pub struct FunctionIdent {
     pub name: Atom,
     pub arity: u32,
-    pub lambda: Option<LambdaEnvIdx>,
+    pub lambda: Option<(LambdaEnvIdx, usize)>,
 }
 
 #[derive(Debug)]
@@ -127,7 +128,8 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
         //::ir::lir::pass::compile_pattern(lir_mut);
         ::ir::lir::pass::propagate_atomics(lir_mut);
         ::ir::lir::pass::simplify_branches(lir_mut);
-        ::ir::lir::pass::validate(lir_mut);
+        //::ir::lir::pass::remove_orphan_blocks(lir_mut);
+        ::ir::lir::pass::validate(&function.ident, lir_mut);
     }
 
 

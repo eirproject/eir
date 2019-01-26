@@ -2,7 +2,7 @@ use ::ToDoc;
 use super::Module;
 use ::pretty::{ Doc, BoxDoc };
 
-impl ::ToDoc for Module {
+impl ToDoc for Module {
     fn to_doc<'a>(&'a self) -> Doc<'a, BoxDoc> {
         let head: Doc<BoxDoc> = Doc::text(format!("module {}:", self.name));
         let attrs: Doc<BoxDoc> = Doc::newline()

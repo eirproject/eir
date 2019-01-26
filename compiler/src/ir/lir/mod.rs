@@ -64,7 +64,6 @@ pub enum OpKind {
 
     /// If the function is a lambda, this must be the second
     /// instruction in the function.
-    // TODO: Not generated/implemented yet
     UnpackEnv,
 
     /// Move r[0] into w[0]
@@ -253,7 +252,7 @@ impl OpKind {
             OpKind::ReceiveStart { .. } => Some(1),
             OpKind::ReceiveWait => Some(2),
             OpKind::IfTruthy => Some(2),
-            OpKind::CaseGuardFail { .. } => Some(1),
+            //OpKind::CaseGuardFail { .. } => Some(1),
             OpKind::Unreachable => Some(0),
             _ => None,
         }

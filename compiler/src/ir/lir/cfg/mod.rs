@@ -1,6 +1,7 @@
 use ::ir::SSAVariable;
-use super::{ Phi, OpKind, Source, Op };
+use super::{ Phi, Op };
 use ::petgraph::Graph;
+use ::std::collections::HashSet;
 
 mod builder;
 pub use self::builder::FunctionCfgBuilder;
@@ -27,7 +28,11 @@ pub struct BasicBlock {
 #[derive(Debug)]
 pub struct FunctionCfg {
     pub entry: LabelN,
+    pub args: Vec<SSAVariable>,
     pub cfg: Graph<BasicBlock, BasicBlockEdge>,
+    // Hack to get around the fact that StableGraph
+    // is not at feature parity with Graph.
+    pub dead_blocks: HashSet<LabelN>,
 }
 
 #[derive(Debug)]
@@ -50,7 +55,9 @@ impl FunctionCfg {
 
         FunctionCfg {
             entry: LabelN(entry),
+            args: vec![],
             cfg: cfg,
+            dead_blocks: HashSet::new(),
         }
     }
 
@@ -88,6 +95,27 @@ impl FunctionCfg {
 
     pub fn edge_target(&self, lbl: EdgeN) -> LabelN {
         LabelN(self.cfg.edge_endpoints(lbl.0).unwrap().1)
+    }
+
+    pub fn remove_block(&mut self, lbl: LabelN) {
+        // Validate that the node is not the entry point
+        // and is never jumped to
+        assert!(lbl != self.entry());
+        for label in self.labels_iter() {
+            for jump in self.jumps_iter(label) {
+                assert!(self.edge_target(jump) != lbl);
+            }
+        }
+
+        // Remove from graph
+        self.dead_blocks.insert(lbl);
+
+        // Remove from phi nodes
+        for block in self.blocks_iter_mut() {
+            for phi in block.phi_nodes.iter_mut() {
+                phi.entries.retain(|entry| entry.0 != lbl);
+            }
+        }
     }
 
 }

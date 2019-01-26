@@ -38,7 +38,7 @@ fn erl_to_core(erlang_code: &str) -> String {
 fn erl_to_ir(erlang_code: &str) -> Module {
     let core = erl_to_core(erlang_code);
 
-    let parsed = ::core_erlang_compiler::parser::annotated_module(&core).1.unwrap();
+    let parsed = ::core_erlang_compiler::parser::parse(&core).unwrap();
     let ir = ::core_erlang_compiler::ir::from_parsed(&parsed.0);
 
     println!("Ir:\n{:?}", ir);
@@ -69,8 +69,9 @@ add_two(A, B, C) ->
     add(I, C).
 
 return_closure(I) ->
+    O = 1,
     fun(A) ->
-            add(I, A)
+            add(add(I, A), O)
     end.
 
 add_with_closure(A, B) ->
@@ -116,7 +117,7 @@ fn simple_lambda() {
     let args = vec![Term::new_i64(1), Term::new_i64(2)];
     let result = ctx.call("test", "add_with_closure", &args);
 
-    assert!(result.unwrap_return().erl_eq(&Term::Integer(3.into())));
+    assert!(result.unwrap_return().erl_eq(&Term::Integer(4.into())));
 }
 
 #[test]
@@ -164,14 +165,7 @@ fn long_strings() {
     f.read_to_string(&mut core).unwrap();
 
     println!("Parsing");
-    let ret = ::core_erlang_compiler::parser::annotated_module(&core);
-    let parsed = ret.1.unwrap();
-
-    println!("Running forensics");
-    let opts = ::core_erlang_compiler::peg::forensics::InvestigationOptions {
-        skip_success: false,
-    };
-    ::core_erlang_compiler::peg::forensics::investigate(&core, &ret.0, &opts);
+    let parsed = ::core_erlang_compiler::parser::parse(&core).unwrap();
 
 }
 
@@ -182,22 +176,31 @@ fn compiler() {
     let mut ctx = ExecutionContext::new();
 
     ctx.add_native_module(::erl_lib::make_erlang());
+    ctx.add_native_module(::erl_lib::make_os());
 
     println!("B");
 
-    let mut f = ::std::fs::File::open("../otp/lib/compiler/beam_out/compile.core")
+    let mut f = ::std::fs::File::open("../test_data/compile.core")
         .unwrap();
     println!("C");
     let mut core = String::new();
     f.read_to_string(&mut core).unwrap();
-
     println!("D");
-    let ret = ::core_erlang_compiler::parser::annotated_module(&core);
-    let parsed = ret.1.unwrap();
-    //::core_erlang_compiler::peg::forensics::investigate(&core, &ret.0);
-
+    let parsed = ::core_erlang_compiler::parser::parse(&core).unwrap();
     println!("E");
     let ir = ::core_erlang_compiler::ir::from_parsed(&parsed.0);
     println!("F");
     ctx.add_erlang_module(ir);
+
+    let mut f = ::std::fs::File::open("/home/hansihe/proj/checkout/otp/lib/stdlib/ebin/proplists.core")
+        .unwrap();
+    let mut core = String::new();
+    f.read_to_string(&mut core).unwrap();
+    let parsed = ::core_erlang_compiler::parser::parse(&core).unwrap();
+    let ir = ::core_erlang_compiler::ir::from_parsed(&parsed.0);
+    ctx.add_erlang_module(ir);
+
+
+    let args = vec![Term::new_atom("foo.erl")];
+    ctx.call("compile", "file", &args);
 }

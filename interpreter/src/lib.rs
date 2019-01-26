@@ -16,6 +16,7 @@ use core_erlang_compiler::parser::AtomicLiteral;
 
 extern crate num_bigint;
 use num_bigint::BigInt;
+extern crate num_traits;
 
 mod term;
 pub use term::{ TermType, Term, BoundLambdaEnv };
@@ -67,19 +68,19 @@ impl CallReturn {
 
 struct StackFrame {
     variables: HashMap<SSAVariable, Term>,
-    tombstones: HashSet<SSAVariable>,
+    //tombstones: HashSet<SSAVariable>,
 }
 impl StackFrame {
 
     fn new() -> Self {
         StackFrame {
             variables: HashMap::new(),
-            tombstones: HashSet::new(),
+            //tombstones: HashSet::new(),
         }
     }
 
     fn write(&mut self, ssa: SSAVariable, term: Term) {
-        self.tombstones.remove(&ssa);
+        //self.tombstones.remove(&ssa);
         self.variables.insert(ssa, term);
     }
 
@@ -103,6 +104,7 @@ impl StackFrame {
                         }
                         Term::Integer(bi)
                     },
+                    AtomicLiteral::Nil => Term::Nil,
                     _ => unimplemented!(),
                 }
             }
@@ -110,7 +112,8 @@ impl StackFrame {
     }
 
     fn tombstone(&mut self, ssa: SSAVariable) {
-        self.tombstones.insert(ssa);
+        //self.tombstones.insert(ssa);
+        self.variables.remove(&ssa);
     }
 
 }
@@ -123,6 +126,17 @@ enum BlockResult {
 
 pub struct ExecutionContext {
     modules: HashMap<String, ModuleType>,
+}
+
+fn unpack_value_list(val_list: Term) -> Vec<Term> {
+    if val_list.get_type() == TermType::ValueList {
+        if let Term::ValueList(list) = val_list {
+            return list.clone();
+        }
+        unreachable!()
+    } else {
+        return vec![val_list];
+    }
 }
 
 impl ExecutionContext {
@@ -161,6 +175,33 @@ impl ExecutionContext {
                     assert!(op.reads.len() == 0);
                     assert!(op.writes.iter().all(|w| frame.variables.contains_key(w)))
                 }
+                OpKind::UnpackValueList => {
+                    assert!(op.reads.len() == 1);
+                    let res = frame.read(&op.reads[0]);
+                    let unpacked = unpack_value_list(res);
+                    assert!(unpacked.len() == op.writes.len());
+                    for (var, val) in op.writes.iter().zip(unpacked) {
+                        frame.write(*var, val);
+                    }
+                }
+                OpKind::UnpackEnv => {
+                    assert!(op.reads.len() == 1);
+                    let env = frame.read(&op.reads[0]);
+                    assert!(env.get_type() == TermType::LambdaEnv);
+                    if let Term::LambdaEnv(data) = env {
+                        assert!(data.vars.len() == op.writes.len());
+                        for (var, term) in op.writes.iter().zip(data.vars) {
+                            frame.write(*var, term);
+                        }
+                    }
+                }
+                OpKind::PackValueList => {
+                    assert!(op.writes.len() == 1);
+                    let reads_val: Vec<_> = op.reads.iter()
+                        .map(|r| frame.read(r))
+                        .collect();
+                    frame.write(op.writes[0], Term::ValueList(reads_val));
+                }
                 OpKind::Move => {
                     assert!(op.reads.len() == 1);
                     assert!(op.writes.len() == 1);
@@ -169,7 +210,7 @@ impl ExecutionContext {
                 }
                 OpKind::Call => {
                     assert!(op.reads.len() >= 2);
-                    assert!(op.writes.len() == 1);
+                    assert!(op.writes.len() == 2);
 
                     let module_term = frame.read(&op.reads[0]);
                     let fun_term = frame.read(&op.reads[1]);
@@ -202,7 +243,7 @@ impl ExecutionContext {
                     frame.write(op.writes[0], res);
                 }
                 OpKind::Apply => {
-                    assert!(op.writes.len() == 1);
+                    assert!(op.writes.len() == 2);
                     assert!(op.reads.len() >= 1);
 
                     let fun_var = frame.read(&op.reads[0]);
@@ -215,8 +256,7 @@ impl ExecutionContext {
                             assert!(args.len() == *arity as usize);
 
                             let module_str: &str = module_a.as_str();
-                            let ret = self.call_base(module_str, fun_name,
-                                                     &args, None);
+                            let ret = self.call_base(module_str, fun_name, None, &args);
 
                             match ret {
                                 CallReturn::Return { term } => {
@@ -230,12 +270,14 @@ impl ExecutionContext {
                             module: ref module_a, ref fun_name, arity,
                             lambda, ref bound_env } => {
 
-                            assert!(args.len() == (arity as usize));
+                            let mut rargs = vec![Term::LambdaEnv(bound_env.clone())];
+                            rargs.extend(args.iter().cloned());
+
+                            assert!(rargs.len() == (arity as usize));
 
                             let module_str: &str = module_a.as_str();
                             let ret = self.call_base(
-                                module_str, fun_name, &args,
-                                Some((lambda, bound_env.clone())));
+                                module_str, fun_name, Some(lambda), &rargs);
 
                             match ret {
                                 CallReturn::Return { term } => {
@@ -281,7 +323,9 @@ impl ExecutionContext {
                     });
                 }
                 OpKind::CaseStart { ref vars, ref clauses, ref value_vars } => {
-                    let case_ctx = CaseContext::new(op.reads.clone(), clauses.clone());
+                    let term = frame.read(&op.reads[0]);
+                    let vals = unpack_value_list(term);
+                    let case_ctx = CaseContext::new(vals, clauses.clone());
 
                     frame.write(op.writes[0], Term::CaseContext(
                         Rc::new(RefCell::new(case_ctx))));
@@ -295,12 +339,22 @@ impl ExecutionContext {
                             panic!("Case read not case context");
                         };
 
-                        let args: Vec<_> = ctx.vars.iter()
-                            .map(|s| frame.read(s))
-                            .collect();
-                        ctx.do_body(&args)
+                        //let args: Vec<_> = ctx.vars.iter()
+                        //    .map(|s| frame.read(s))
+                        //    .collect();
+                        ctx.do_body()
                     };
                     block_ret = Some(BlockResult::Branch { slot: to_leaf });
+                }
+                OpKind::CaseGuardFail { clause_num } => {
+                    let curr = frame.read(&op.reads[0]);
+                    let mut ctx = if let Term::CaseContext(ref ctx) = curr {
+                        ctx.borrow_mut()
+                    } else {
+                        panic!("Case read not case context");
+                    };
+
+                    ctx.guard_fail(clause_num);
                 }
                 OpKind::CaseValues => {
                     let mut vals = {
@@ -351,6 +405,23 @@ impl ExecutionContext {
                     );
                     frame.write(op.writes[0], term);
                 }
+                OpKind::MakeList => {
+                    assert!(op.reads.len() >= 1);
+                    assert!(op.writes.len() == 1);
+                    let tail = frame.read(&op.reads[0]);
+                    let mut front: Vec<_> = op.reads.iter()
+                        .skip(1)
+                        .map(|r| frame.read(r))
+                        .collect();
+
+                    // Just merge lists for prettyness
+                    if let Term::List(i_head, i_tail) = tail {
+                        front.extend(i_head);
+                        frame.write(op.writes[0], Term::List(front, i_tail));
+                    } else {
+                        frame.write(op.writes[0], Term::List(front, Box::new(tail)));
+                    }
+                }
                 _ => {
                     println!("Unimpl: {:?}", op);
                     println!("Variables: {:?}", frame.variables);
@@ -363,9 +434,9 @@ impl ExecutionContext {
     }
 
     fn call_erlang_module(&self, module: &Module, fun_ident: &FunctionIdent,
-                          args: &[Term],
-                          env: Option<BoundLambdaEnv>)
-                          -> CallReturn {
+                          args: &[Term]) -> CallReturn {
+
+        assert!(fun_ident.arity as usize == args.len());
 
         let fun_opt = module.functions.iter().find(|fun| &fun.ident == fun_ident);
         if fun_opt.is_none() {
@@ -378,21 +449,9 @@ impl ExecutionContext {
         let mut frame = StackFrame::new();
 
         // Insert arguments into frame
-        if let Some(ref ienv) = env {
-            assert!(ienv.env == fun.lambda_env_idx.unwrap());
-            let env_def = module.get_env(fun.lambda_env_idx.unwrap());
-
-            println!("Insert lambda env into frame {:?}, {:?}", env_def, ienv.vars);
-
-            for ((_, _, ssa), term) in env_def.captures.iter().zip(ienv.vars.iter()) {
-                frame.write(*ssa, term.clone());
-            }
-        } else {
-            assert!(fun_ident.lambda.is_none());
-        }
-
-        for (var_def, term) in fun.hir_fun.args.iter().zip(args) {
-            frame.write(var_def.ssa, term.clone());
+        assert!(fun.lir_function.as_ref().unwrap().args.len() == args.len());
+        for (var_def, term) in fun.lir_function.as_ref().unwrap().args.iter().zip(args) {
+            frame.write(*var_def, term.clone());
         }
 
         // Execute blocks
@@ -403,10 +462,7 @@ impl ExecutionContext {
 
             let block = lir.block(curr_block_id);
             let slots = lir.branch_slots(curr_block_id);
-            //for slot in &slots {
-            //    let edge = lir.cfg.find_edge(curr_block_id.0, slot.0).unwrap();
-            //    println!("{:?}", lir.cfg.edge_weight(edge));
-            //}
+
             let ret = self.exec_block(module, block, prev_block_id, &mut frame);
             match ret {
                 BlockResult::Branch { slot } => {
@@ -435,33 +491,37 @@ impl ExecutionContext {
 
     pub fn call(&self, module_name: &str, fun_name: &str, args: &[Term])
                 -> CallReturn {
-        self.call_base(module_name, &Atom::from_str(fun_name), args, None)
+        self.call_base(module_name, &Atom::from_str(fun_name), None, args)
     }
 
-    pub fn call_base(&self, module_name: &str, fun_name: &Atom, args: &[Term],
-                     lambda: Option<(LambdaEnvIdx, BoundLambdaEnv)>) -> CallReturn {
+    pub fn call_base(&self, module_name: &str, fun_name: &Atom, lambda: Option<(LambdaEnvIdx, usize)>, args: &[Term]) -> CallReturn {
 
         let fun_ident = FunctionIdent {
             name: fun_name.clone(),
             arity: args.len() as u32,
-            lambda: lambda.as_ref().map(|l| l.0),
+            lambda: lambda,
         };
+
+        println!("-> {}:{} {:?}", module_name, fun_ident, args);
 
         if !self.modules.contains_key(module_name) {
             panic!("module {:?} not found", module_name);
         }
         let module = &self.modules[module_name];
 
-        match module {
+        let ret = match module {
             ModuleType::Erlang(ref erl_module) => {
-                self.call_erlang_module(erl_module, &fun_ident, args,
-                                        lambda.map(|l| l.1))
+                self.call_erlang_module(erl_module, &fun_ident, args)
             }
             ModuleType::Native(ref native_module) => {
                 assert!(lambda.is_none()); // No lambdas in native modules
                 self.call_native_module(native_module, &fun_ident, args)
             }
-        }
+        };
+
+        println!("<- {}:{}", module_name, fun_ident);
+
+        ret
     }
 
 }

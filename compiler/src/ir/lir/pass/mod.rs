@@ -9,3 +9,6 @@ pub use self::validate::validate;
 
 mod simplify_branches;
 pub use self::simplify_branches::simplify_branches;
+
+mod remove_orphan_blocks;
+pub use self::remove_orphan_blocks::remove_orphan_blocks;

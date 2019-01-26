@@ -1,6 +1,7 @@
 extern crate core_erlang_compiler;
 
 use core_erlang_compiler::parser::Atom;
+use core_erlang_compiler::ir::LambdaEnvIdx;
 
 use std::io::Read;
 use std::str::FromStr;
@@ -12,7 +13,8 @@ fn main() {
 
     let fun_name = args.next();
     let arity = args.next();
-    let lambda = args.next();
+    let lambda_env = args.next();
+    let lambda_num = args.next();
 
     let mut text = String::new();
     std::fs::File::open(&infile).unwrap()
@@ -29,14 +31,17 @@ fn main() {
 
         let name_sym = Atom::from_str(&fun_name);
         let arity = arity.unwrap().parse().unwrap();
-        let lambda: Option<usize> = lambda.map(|s| s.parse().unwrap());
+        let lambda_env: Option<usize> = lambda_env.map(|s| s.parse().unwrap());
+        let lambda_num: Option<usize> = lambda_num.map(|s| s.parse().unwrap());
+
+        let lambda_d = lambda_env.map(|v| (LambdaEnvIdx(v), lambda_num.unwrap()));
 
         let funs: Vec<_> = hir.functions.iter().map(|f| f.ident.clone()).collect();
         println!("{:?}", funs);
         let fun = hir.functions.iter().find(|f| {
             f.ident.name == name_sym
                 && f.ident.arity == arity
-                && f.ident.lambda.map(|v| v.0) == lambda
+                && f.ident.lambda == lambda_d
         }).unwrap();
 
         println!("Writing to {}.dot", infile);

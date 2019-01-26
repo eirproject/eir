@@ -8,13 +8,9 @@
 //! passes. (See pattern match compilation)
 
 use ::std::collections::HashMap;
-use ::ir::SSAVariable;
-use ::Variable;
 use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind };
-use ::util::ssa_variable::SSAVariableGenerator;
 
-use ::ir::hir::scope_tracker::{ ScopeTracker, ScopeDefinition, LambdaEnv,
-                                LambdaEnvIdx };
+use ::ir::hir::scope_tracker::{ ScopeTracker, ScopeDefinition, LambdaEnv };
 
 pub fn assign_ssa_expression(env: &mut ScopeTracker, expr: &mut Expression) {
     for single in &mut expr.values {
@@ -45,7 +41,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             assign_ssa_single_expression(env, val);
 
             let mut scope = HashMap::new();
-            for (idx, var) in vars.iter_mut().enumerate() {
+            for var in vars.iter_mut() {
                 var.ssa = env.new_ssa();
                 scope.insert(ScopeDefinition::Variable(var.var.clone()), var.ssa);
             }
@@ -68,7 +64,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             assign_ssa_single_expression(env, body);
 
             let mut scope = HashMap::new();
-            for (idx, var) in then_vars.iter_mut().enumerate() {
+            for var in then_vars.iter_mut() {
                 var.ssa = env.new_ssa(); //body.values[idx].ssa;
                 scope.insert(ScopeDefinition::Variable(var.var.clone()), var.ssa);
             }
@@ -235,7 +231,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
 
             // Generate the LambdaEnvIdx and insert the LambdaEnv
             let env_idx = env.next_env_idx();
-            closure.gen_ident(env_idx);
+            closure.gen_ident(env_idx, 0);
             *lambda_env = Some(env_idx);
             env.add_lambda_env(env_idx, LambdaEnv {
                 captures: captures,
@@ -300,8 +296,8 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             // Generate the LambdaEnvIdx and insert the LambdaEnv
             let env_idx = env.next_env_idx();
             *lambda_env = Some(env_idx);
-            for closure in closures.iter_mut() {
-                closure.gen_ident(env_idx);
+            for (idx, closure) in closures.iter_mut().enumerate() {
+                closure.gen_ident(env_idx, idx);
             }
             env.add_lambda_env(env_idx, LambdaEnv {
                 captures: captures,
