@@ -193,6 +193,30 @@ fn tuple_size(args: &[Term]) -> CallReturn {
     }
 }
 
+fn is_function(args: &[Term]) -> CallReturn {
+    assert!(args.len() == 1 || args.len() == 2);
+
+    let arity_ref = if args.len() == 2 {
+        if let Some(int) = args[1].as_i64() {
+            Some(int)
+        } else {
+            return CallReturn::Throw;
+        }
+    } else {
+        None
+    };
+
+    if let Term::CapturedFunction { arity, .. } = args[0] {
+        let res = arity_ref.map(|a| a == arity as i64).unwrap_or(true);
+        CallReturn::Return { term: Term::new_bool(res) }
+    } else if let Term::BoundLambda { arity, .. } = args[0] {
+        let res = arity_ref.map(|a| a == arity as i64).unwrap_or(true);
+        CallReturn::Return { term: Term::new_bool(res) }
+    } else {
+        CallReturn::Return { term: Term::new_bool(false) }
+    }
+}
+
 pub fn make_erlang() -> NativeModule {
     let mut module = NativeModule::new("erlang".to_string());
     module.add_fun("+".to_string(), 2, Box::new(add));
@@ -204,5 +228,7 @@ pub fn make_erlang() -> NativeModule {
     module.add_fun("=:=".to_string(), 2, Box::new(exact_eq));
     module.add_fun("and".to_string(), 2, Box::new(and));
     module.add_fun("tuple_size".to_string(), 1, Box::new(tuple_size));
+    module.add_fun("is_function".to_string(), 1, Box::new(is_function));
+    module.add_fun("is_function".to_string(), 2, Box::new(is_function));
     module
 }

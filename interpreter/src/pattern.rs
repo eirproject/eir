@@ -64,8 +64,19 @@ pub struct CaseContext {
 fn match_node(term: &Term, node: &PatternNode,
               binds: &mut HashMap<SSAVariable, Term>,
               binds_ref: &Vec<(Variable, SSAVariable)>) -> bool {
-    println!("MATCH_NODE: {:?} {:?}", term, node);
+    println!("    MATCH_NODE: {:?} {:?}", term, node);
     match (term, node) {
+        // Wildcard and purely recursive
+        (_, PatternNode::Wildcard) => true,
+        (_, PatternNode::BindVar(var_name, i_node)) => {
+            binds.insert(
+                binds_ref.iter().find(|(k, _)| k == var_name).unwrap().1,
+                term.clone()
+            );
+            match_node(term, i_node, binds, binds_ref)
+        },
+
+        // Lists
         (Term::List(ref t_head, ref t_tail),
          PatternNode::List(ref p_head, ref p_tail)) => {
             if t_head.len() < p_head.len() {
@@ -78,30 +89,39 @@ fn match_node(term: &Term, node: &PatternNode,
                 }
                 return match_node(t_tail, p_tail, binds, binds_ref);
             } else { // >
-                println!("PAT GT");
+                println!("    PAT GT");
                 assert!(t_head.len() > p_head.len());
                 for (pat, term) in p_head.iter().zip(t_head.iter()) {
-                    println!("HEAD MATCH TRY");
+                    println!("    HEAD MATCH TRY");
                     if !match_node(term, pat, binds, binds_ref) {
-                        println!("HEAD MATCH FAIL");
+                        println!("    HEAD MATCH FAIL");
                         return false;
                     }
                 }
-                println!("REST");
+                println!("    REST");
                 let head_rest: Vec<_> = t_head.iter().skip(p_head.len())
                     .cloned().collect();
-                println!("HEAD REST: {:?}", head_rest);
+                println!("    HEAD REST: {:?}", head_rest);
                 let rest_term = Term::List(head_rest, t_tail.clone());
-                println!("REST TERM: {:?}", rest_term);
+                println!("    REST TERM: {:?}", rest_term);
                 let a = match_node(&rest_term, p_tail, binds, binds_ref);
-                println!("DONE {}", a);
+                println!("    DONE {}", a);
                 return a;
             }
         }
-        (Term::Atom(v1), PatternNode::Atomic(AtomicLiteral::Atom(v2))) => v1 == v2,
-        (Term::Nil, PatternNode::Atomic(AtomicLiteral::Nil)) => true,
-        (Term::Nil, PatternNode::List(ref list, ref tail)) if list.len() == 0 =>
+        // List with empty head
+        (_, PatternNode::List(ref list, ref tail)) if list.len() == 0 =>
             match_node(term, tail, binds, binds_ref),
+        // Nil ([])
+        (Term::Nil, PatternNode::Atomic(AtomicLiteral::Nil)) => true,
+        (Term::Nil, _) => false,
+        (_, PatternNode::Atomic(AtomicLiteral::Nil)) => false,
+
+        // Atom
+        (Term::Atom(v1), PatternNode::Atomic(AtomicLiteral::Atom(v2))) => v1 == v2,
+        (Term::Atom(_), _) => false,
+        (_, PatternNode::Atomic(AtomicLiteral::Atom(_))) => false,
+
         (Term::Integer(ref int),
          PatternNode::Atomic(AtomicLiteral::Integer(ref pat_int))) => {
             let mut bi = BigInt::parse_bytes(pat_int.digits.as_bytes(), 10)
@@ -109,19 +129,11 @@ fn match_node(term: &Term, node: &PatternNode,
             if !pat_int.sign {
                 bi *= -1;
             }
-            println!("Int pattern {} {}", int, bi);
+            println!("    Int pattern {} {}", int, bi);
             int == &bi
         }
-        (_, PatternNode::BindVar(var_name, i_node)) => {
-            binds.insert(
-                binds_ref.iter().find(|(k, _)| k == var_name).unwrap().1,
-                term.clone()
-            );
-            match_node(term, i_node, binds, binds_ref)
-        },
-        (_, PatternNode::Wildcard) => true,
         _ => {
-            println!("Warning: Pattern matching incomplete");
+            println!("    Warning: Pattern matching incomplete");
             false
         },
     }
@@ -144,13 +156,18 @@ impl CaseContext {
             assert!(clause.patterns.len() == self.vars.len());
 
             println!("{:?}", clause);
-            println!("{:?}", self.vars);
+            println!("  {:?}", self.vars);
 
             let mut values: HashMap<SSAVariable, Term> = HashMap::new();
             let matched = self.vars.iter()
                 .zip(&clause.patterns)
-                .all(|(term, pattern)| match_node(
-                    term, &pattern.node, &mut values, &pattern.binds));
+                .enumerate()
+                .all(|(idx, (term, pattern))| {
+                    let r = match_node(term, &pattern.node,
+                                       &mut values, &pattern.binds);
+                    println!("  Pattern num: {} {}", idx, r);
+                    r
+                });
             (matched, values)
         };
 

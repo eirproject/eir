@@ -43,10 +43,18 @@ impl NativeModule {
         self.functions.insert((name, arity), fun);
     }
 
+    fn has_fun(&self, ident: &FunctionIdent) -> bool {
+        if ident.lambda.is_some() {
+            false
+        } else {
+            self.functions.contains_key(&(ident.name.to_string(), ident.arity))
+        }
+    }
+
 }
 
 enum ModuleType {
-    Erlang(Module),
+    Erlang(Module, Option<NativeModule>),
     Native(NativeModule),
 }
 
@@ -148,11 +156,21 @@ impl ExecutionContext {
     }
 
     pub fn add_erlang_module(&mut self, module: Module) {
-        self.modules.insert(module.name.to_string(), ModuleType::Erlang(module));
+        self.modules.insert(module.name.to_string(), ModuleType::Erlang(module, None));
     }
 
     pub fn add_native_module(&mut self, module: NativeModule) {
         self.modules.insert(module.name.clone(), ModuleType::Native(module));
+    }
+
+    pub fn add_nif_overlay(&mut self, module: NativeModule) {
+        let existing = self.modules.get_mut(&module.name).unwrap();
+        if let ModuleType::Erlang(_, ref mut overlay) = existing {
+            assert!(overlay.is_none());
+            *overlay = Some(module);
+        } else {
+            panic!();
+        }
     }
 
     fn exec_block(&self, module: &Module, block: &BasicBlock,
@@ -223,7 +241,12 @@ impl ExecutionContext {
                             frame.write(op.writes[0], term);
                             block_ret = Some(BlockResult::Branch { slot: 0 });
                         }
-                        CallReturn::Throw => unimplemented!(),
+                        CallReturn::Throw => {
+                            // TODO
+                            frame.write(op.writes[1], Term::ValueList(
+                                vec![Term::Nil, Term::Nil]));
+                            block_ret = Some(BlockResult::Branch { slot: 1 });
+                        },
                     }
                 }
                 OpKind::ReturnOk => {
@@ -510,8 +533,16 @@ impl ExecutionContext {
         let module = &self.modules[module_name];
 
         let ret = match module {
-            ModuleType::Erlang(ref erl_module) => {
-                self.call_erlang_module(erl_module, &fun_ident, args)
+            ModuleType::Erlang(ref erl_module, ref native_overlay) => {
+                if let Some(ref overlay) = native_overlay {
+                    if overlay.has_fun(&fun_ident) {
+                        self.call_native_module(overlay, &fun_ident, args)
+                    } else {
+                        self.call_erlang_module(erl_module, &fun_ident, args)
+                    }
+                } else {
+                    self.call_erlang_module(erl_module, &fun_ident, args)
+                }
             }
             ModuleType::Native(ref native_module) => {
                 assert!(lambda.is_none()); // No lambdas in native modules

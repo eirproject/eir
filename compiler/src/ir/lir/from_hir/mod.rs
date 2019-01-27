@@ -159,7 +159,6 @@ fn case_structure(
         let mut clause_label = orig_clause_label;
 
         let guard_fail_label = b.add_block();
-        let guard_exception_ssa = env.new_ssa();
 
         let case_values_ssa: Vec<_> = clause.patterns.iter()
             .flat_map(|pattern| {
@@ -173,8 +172,7 @@ fn case_structure(
                    vec![lir::Source::Variable(case_structure_ssa)],
                    case_values_ssa.clone(),
         );
-        //exc_stack.push_catch(guard_exception_label, guard_exception_ssa);
-        exc_stack.push_catch(guard_fail_label, guard_exception_ssa);
+        exc_stack.push_catch_novalue(guard_fail_label);
         let (clause_label, guard_ret) = (clause.guard)(
             b, env, exc_stack, clause_label, &case_values_ssa);
         exc_stack.pop_catch();
@@ -592,135 +590,37 @@ impl hir::SingleExpression {
                 }
                 let value_vars: Vec<_> = values.iter().map(|v| v.ssa).collect();
 
-                // The central block of the Case structure. Contains only one
-                // operation, the OpKind::Case.
-                let match_body_label = b.add_block();
+                // NEW!!
+                let (case_ret_label, case_ret_ssa) = {
+                    let case_def = CaseStructureDef {
+                        entry_block: main_cont,
+                        match_val: val_ssa,
+                        clauses: clauses.iter().map(|cl| {
+                            let body = cl.body.clone();
+                            let guard = cl.guard.clone();
+                            CaseStructureClauseDef {
+                                body: Box::new(
+                                    move |b, env, exc_stack, block, _matches|
+                                    body.lower(b, env, exc_stack, block)
+                                ),
+                                guard: Box::new(
+                                    move |b, env, exc_stack, block, _matches|
+                                    guard.lower(b, env, exc_stack, block)
+                                ),
+                                patterns: cl.patterns.clone(),
+                            }
+                        }).collect(),
+                        match_fail: None,
+                        values: value_vars.clone(),
+                        return_ssa: self.ssa,
+                    };
 
-                // The block that control flow converges to after the match
-                // structure is complete. No ops are inserted in this block
-                // here, except a PHI node.
-                let done_label = b.add_block();
+                    case_structure(b, env, exc_stack, &case_def)
+                };
 
-                let case_fail_label = b.add_block();
+                assert!(case_ret_ssa == self.ssa);
 
-                // The SSA variable representing the case structure.
-                let case_structure_ssa = env.new_ssa();
-
-                let guard_exception_label = b.add_block();
-                let guard_exception_ssa = env.new_ssa();
-                b.ensure_phi(guard_exception_label, guard_exception_ssa);
-
-                // Fail leaf
-                let fail_ssa = env.new_ssa();
-                b.basic_op(case_fail_label,
-                    lir::OpKind::Move,
-                    vec![lir::Source::Constant(::parser::AtomicLiteral::Nil)],
-                    vec![fail_ssa]);
-                b.basic_op(case_fail_label, lir::OpKind::Jump, vec![], vec![]);
-                exc_stack.add_error_jump(
-                    b, case_fail_label, fail_ssa);
-
-                let mut leaves = vec![case_fail_label];
-                for (idx, clause) in clauses.iter().enumerate() {
-                    let orig_clause_label = b.add_block();
-                    let mut clause_label = orig_clause_label;
-                    b.basic_op(clause_label,
-                        lir::OpKind::CaseValues,
-                        vec![lir::Source::Variable(case_structure_ssa)],
-                        clause.patterns.iter()
-                            .flat_map(|pattern| {
-                                pattern.binds.iter()
-                                    .map(|binding| binding.1)
-                            }).collect(),
-                    );
-                    exc_stack.push_catch(guard_exception_label, guard_exception_ssa);
-                    let (clause_label, guard_ret) = clause.guard.lower(
-                        b, env, exc_stack, clause_label);
-                    exc_stack.pop_catch();
-                    b.basic_op(clause_label,
-                        lir::OpKind::IfTruthy,
-                        vec![lir::Source::Variable(guard_ret)],
-                        vec![]
-                    );
-                    let guard_fail_label = b.add_block();
-                    let mut leaf_body_label = b.add_block();
-                    b.add_jump(clause_label, leaf_body_label);
-                    b.add_jump(clause_label, guard_fail_label);
-                    b.finish(clause_label);
-
-                    // Guard fail
-                    b.basic_op(guard_fail_label,
-                               lir::OpKind::CaseGuardFail { clause_num: idx },
-                               vec![lir::Source::Variable(case_structure_ssa)],
-                               vec![]);
-                    b.op_jump(guard_fail_label, match_body_label);
-                    b.finish(guard_fail_label);
-
-                    // Guard ok
-                    b.basic_op(leaf_body_label,
-                               lir::OpKind::CaseGuardOk,
-                               vec![lir::Source::Variable(case_structure_ssa)],
-                               vec![]);
-                    b.op_tombstone(leaf_body_label, case_structure_ssa);
-
-                    let (ret_label, clause_ret_ssa) = clause.body.lower(
-                        b, env, exc_stack, leaf_body_label);
-                    b.op_jump(ret_label, done_label);
-                    b.add_phi(ret_label, clause_ret_ssa,
-                              done_label, self.ssa);
-                    b.finish(ret_label);
-
-                    leaves.push(orig_clause_label);
-                }
-
-                // Match body
-                let mut clauses: Vec<_> = clauses.iter().map(|c| {
-                    lir::Clause {
-                        patterns: c.patterns.clone(),
-                    }
-                }).collect();
-                b.basic_op(
-                    match_body_label,
-                    lir::OpKind::Case(clauses.len()),
-                    vec![Source::Variable(case_structure_ssa)], vec![]);
-                for leaf in leaves.iter() {
-                    b.add_jump(match_body_label, *leaf);
-                    b.finish(*leaf);
-                }
-                b.finish(match_body_label);
-
-                b.basic_op(
-                    main_cont,
-                    lir::OpKind::CaseStart {
-                        vars: val.ssa,
-                        clauses: clauses,
-                        value_vars: value_vars,
-                    },
-                    vec![Source::Variable(val.ssa)],
-                    vec![case_structure_ssa]
-                );
-
-                // Jump to match body
-                b.op_jump(main_cont, match_body_label);
-                b.finish(main_cont);
-
-                // Guard exception case
-                b.basic_op(
-                    guard_exception_label,
-                    lir::OpKind::CaseGuardThrow,
-                    vec![case_structure_ssa.into()],
-                    vec![]
-                );
-                b.op_tombstone(guard_exception_label, case_structure_ssa);
-                b.basic_op(
-                    guard_exception_label,
-                    lir::OpKind::Jump,
-                    vec![], vec![]
-                );
-                exc_stack.add_error_jump(b, guard_exception_label,
-                                         guard_exception_ssa);
-
-                (done_label, self.ssa)
+                (case_ret_label, self.ssa)
             },
             HSEK::Tuple(ref elems) => {
                 let mut main_cont = in_block;
@@ -944,7 +844,7 @@ impl hir::SingleExpression {
                                                body.lower(b, env, exc_stack, block)),
                             }
                         }).collect();
-                    let mut def = CaseStructureDef {
+                    let def = CaseStructureDef {
                         clauses: r_clauses,
                         entry_block: match_body_label,
                         match_fail: Some(receive_loop_label),

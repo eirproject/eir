@@ -1,13 +1,12 @@
 use ::std::cell::RefCell;
 use ::std::rc::Rc;
 
-use ::num_traits::cast::ToPrimitive;
-
 use core_erlang_compiler::intern::Atom;
 use core_erlang_compiler::ir::hir::scope_tracker::LambdaEnvIdx;
 use ::pattern::CaseContext;
 
 use ::num_bigint::BigInt;
+use ::num_traits::cast::ToPrimitive;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum TermType {
@@ -139,6 +138,14 @@ impl Term {
             } else {
                 None
             }
+        } else {
+            None
+        }
+    }
+
+    pub fn as_i64(&self) -> Option<i64> {
+        if let Term::Integer(ref bigint) = self {
+            Some(bigint.to_i64().unwrap())
         } else {
             None
         }

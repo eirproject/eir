@@ -169,6 +169,15 @@ fn long_strings() {
 
 }
 
+fn compile_core_file(path: &str) -> Module {
+    let mut f = ::std::fs::File::open(path)
+        .unwrap();
+    let mut core = String::new();
+    f.read_to_string(&mut core).unwrap();
+    let parsed = ::core_erlang_compiler::parser::parse(&core).unwrap();
+    ::core_erlang_compiler::ir::from_parsed(&parsed.0)
+}
+
 #[test]
 fn compiler() {
     println!("A");
@@ -180,26 +189,12 @@ fn compiler() {
 
     println!("B");
 
-    let mut f = ::std::fs::File::open("../test_data/compile.core")
-        .unwrap();
-    println!("C");
-    let mut core = String::new();
-    f.read_to_string(&mut core).unwrap();
-    println!("D");
-    let parsed = ::core_erlang_compiler::parser::parse(&core).unwrap();
-    println!("E");
-    let ir = ::core_erlang_compiler::ir::from_parsed(&parsed.0);
-    println!("F");
-    ctx.add_erlang_module(ir);
+    ctx.add_erlang_module(compile_core_file("../test_data/compile.core"));
+    ctx.add_erlang_module(compile_core_file("/home/hansihe/proj/checkout/otp/lib/stdlib/ebin/proplists.core"));
+    ctx.add_erlang_module(compile_core_file("/home/hansihe/proj/checkout/otp/lib/stdlib/ebin/proplists.core"));
 
-    let mut f = ::std::fs::File::open("/home/hansihe/proj/checkout/otp/lib/stdlib/ebin/proplists.core")
-        .unwrap();
-    let mut core = String::new();
-    f.read_to_string(&mut core).unwrap();
-    let parsed = ::core_erlang_compiler::parser::parse(&core).unwrap();
-    let ir = ::core_erlang_compiler::ir::from_parsed(&parsed.0);
-    ctx.add_erlang_module(ir);
-
+    ctx.add_erlang_module(compile_core_file("/home/hansihe/proj/checkout/otp/lib/stdlib/ebin/lists.core"));
+    ctx.add_nif_overlay(::erl_lib::make_lists());
 
     let args = vec![Term::new_atom("foo.erl")];
     ctx.call("compile", "file", &args);

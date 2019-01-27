@@ -156,9 +156,6 @@ pub enum OpKind {
     /// a hard error!
     CaseGuardOk,
     CaseGuardFail { clause_num: usize },
-    /// Indicates exit from the match structure due to a guard throwing
-    /// an error.
-    CaseGuardThrow,
 
     /// Indicates the start of a receive structure, must jump to a block
     /// containing a single ReceiveWait.
