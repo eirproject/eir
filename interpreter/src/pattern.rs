@@ -117,6 +117,20 @@ fn match_node(term: &Term, node: &PatternNode,
         (Term::Nil, _) => false,
         (_, PatternNode::Atomic(AtomicLiteral::Nil)) => false,
 
+        // Tuple
+        (Term::Tuple(t_entries), PatternNode::Tuple(p_entries)) => {
+            if t_entries.len() != p_entries.len() {
+                return false;
+            }
+            for (term, pat) in t_entries.iter().zip(p_entries) {
+                if !match_node(term, pat, binds, binds_ref) {
+                    return false;
+                }
+            }
+            true
+        }
+        (_, PatternNode::Tuple(_)) => false,
+
         // Atom
         (Term::Atom(v1), PatternNode::Atomic(AtomicLiteral::Atom(v2))) => v1 == v2,
         (Term::Atom(_), _) => false,

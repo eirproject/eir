@@ -1,6 +1,9 @@
-use ::{ NativeModule, Term, CallReturn, VMState };
+use ::vm::VMState;
+use ::module::NativeModule;
+use ::term::Term;
+use ::process::{ CallReturn, ProcessContext };
 
-fn getenv(_vm: &VMState, args: &[Term]) -> CallReturn {
+fn getenv(_vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     if args.len() == 1 {
         CallReturn::Return { term: Term::new_bool(false) }
     } else {

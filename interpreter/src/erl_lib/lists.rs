@@ -1,5 +1,7 @@
-use ::{ NativeModule, Term, CallReturn, VMState };
-use term::{ ErlEq, ErlExactEq };
+use ::term::{ Term, ErlEq, ErlExactEq };
+use ::process::{ CallReturn, ProcessContext };
+use ::vm::VMState;
+use ::module::NativeModule;
 
 fn member_list(item: &Term, list: &Term) -> CallReturn {
     if let Term::Nil = list {
@@ -16,7 +18,7 @@ fn member_list(item: &Term, list: &Term) -> CallReturn {
     }
 }
 
-fn member(_vm: &VMState, args: &[Term]) -> CallReturn {
+fn member(_vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     assert!(args.len() == 2);
     member_list(&args[0], &args[1])
 }

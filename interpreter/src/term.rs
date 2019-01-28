@@ -4,9 +4,16 @@ use ::std::rc::Rc;
 use core_erlang_compiler::intern::Atom;
 use core_erlang_compiler::ir::hir::scope_tracker::LambdaEnvIdx;
 use ::pattern::CaseContext;
+use ::receive::ReceiveContext;
 
 use ::num_bigint::BigInt;
 use ::num_traits::cast::ToPrimitive;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct Pid(pub usize);
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct Reference(pub usize);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum TermType {
@@ -16,6 +23,8 @@ pub enum TermType {
     Atom,
     Tuple,
     List,
+    Pid,
+    Reference,
 
     BoundLambda,
     CapturedFunction,
@@ -23,6 +32,7 @@ pub enum TermType {
     // Internal
     LambdaEnv,
     CaseContext,
+    ReceiveContext,
     ValueList,
 }
 
@@ -41,6 +51,8 @@ pub enum Term {
     Atom(Atom),
     Tuple(Vec<Term>),
     List(Vec<Term>, Box<Term>),
+    Pid(Pid),
+    Reference(Reference),
     BoundLambda {
         module: Atom,
         fun_name: Atom,
@@ -57,6 +69,7 @@ pub enum Term {
     // Internal
     LambdaEnv(BoundLambdaEnv),
     CaseContext(Rc<RefCell<CaseContext>>),
+    ReceiveContext(Rc<RefCell<ReceiveContext>>),
     ValueList(Vec<Term>),
 }
 impl Term {
@@ -116,6 +129,8 @@ impl Term {
     pub fn get_type(&self) -> TermType {
         match self {
             Term::Nil => TermType::Nil,
+            Term::Pid(_) => TermType::Pid,
+            Term::Reference(_) => TermType::Reference,
             Term::Integer(_) => TermType::Integer,
             Term::Float(_) => TermType::Float,
             Term::Atom(_) => TermType::Atom,
@@ -125,6 +140,7 @@ impl Term {
             Term::BoundLambda { .. } => TermType::BoundLambda,
             Term::CapturedFunction { .. } => TermType::CapturedFunction,
             Term::CaseContext {.. } => TermType::CaseContext,
+            Term::ReceiveContext(_) => TermType::ReceiveContext,
             Term::ValueList(_) => TermType::ValueList,
         }
     }

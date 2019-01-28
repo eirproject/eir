@@ -1,7 +1,15 @@
-use ::{ NativeModule, Term, CallReturn, VMState };
+use ::{ FunctionIdent };
+use ::vm::{ VMState, WatchType };
+use ::module::NativeModule;
+use ::term::{ Term, Pid };
+use ::process::{ CallReturn, ProcessContext };
+
 use ::num_bigint::{ BigInt, Sign };
 
 use term::{ ErlEq, ErlExactEq };
+
+use std::rc::Rc;
+use std::cell::RefCell;
 
 fn bignum_to_f64(n: &BigInt) -> Option<f64> {
     // ieee float layout:
@@ -64,7 +72,7 @@ fn bignum_to_f64(n: &BigInt) -> Option<f64> {
     Some(f64::from_bits(ret))
 }
 
-fn add(_vm: &VMState, args: &[Term]) -> CallReturn {
+fn add(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     // TODO: Verify semantics
     println!("{:?}", args);
 
@@ -100,7 +108,7 @@ fn add(_vm: &VMState, args: &[Term]) -> CallReturn {
     }
 }
 
-fn sub(_vm: &VMState, args: &[Term]) -> CallReturn {
+fn sub(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     if args.len() != 2 {
         return CallReturn::Throw;
     }
@@ -114,7 +122,7 @@ fn sub(_vm: &VMState, args: &[Term]) -> CallReturn {
     }
 }
 
-fn mul(_vm: &VMState, args: &[Term]) -> CallReturn {
+fn mul(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     if args.len() != 2 {
         return CallReturn::Throw;
     }
@@ -128,7 +136,7 @@ fn mul(_vm: &VMState, args: &[Term]) -> CallReturn {
     }
 }
 
-fn is_list(_vm: &VMState, args: &[Term]) -> CallReturn {
+fn is_list(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     if args.len() != 1 {
         return CallReturn::Throw;
     }
@@ -141,7 +149,7 @@ fn is_list(_vm: &VMState, args: &[Term]) -> CallReturn {
     }
 }
 
-fn is_atom(_vm: &VMState, args: &[Term]) -> CallReturn {
+fn is_atom(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     if args.len() != 1 {
         return CallReturn::Throw;
     }
@@ -153,7 +161,7 @@ fn is_atom(_vm: &VMState, args: &[Term]) -> CallReturn {
     }
 }
 
-fn list_append(_vm: &VMState, args: &[Term]) -> CallReturn {
+fn list_append(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     // TODO: Validate semantics
     assert!(args.len() == 2);
     match (&args[0], &args[1]) {
@@ -170,12 +178,12 @@ fn list_append(_vm: &VMState, args: &[Term]) -> CallReturn {
     }
 }
 
-fn exact_eq(_vm: &VMState, args: &[Term]) -> CallReturn {
+fn exact_eq(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     assert!(args.len() == 2);
     CallReturn::Return { term: Term::new_bool(args[0].erl_exact_eq(&args[1])) }
 }
 
-fn and(_vm: &VMState, args: &[Term]) -> CallReturn {
+fn and(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     assert!(args.len() == 2);
     if let (Some(a1), Some(a2)) = (args[0].as_boolean(), args[1].as_boolean()) {
         CallReturn::Return { term: Term::new_bool(a1 && a2) }
@@ -184,7 +192,7 @@ fn and(_vm: &VMState, args: &[Term]) -> CallReturn {
     }
 }
 
-fn tuple_size(_vm: &VMState, args: &[Term]) -> CallReturn {
+fn tuple_size(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     assert!(args.len() == 1);
     if let Term::Tuple(ref terms) = &args[0] {
         CallReturn::Return { term: Term::new_i64(terms.len() as i64) }
@@ -193,7 +201,7 @@ fn tuple_size(_vm: &VMState, args: &[Term]) -> CallReturn {
     }
 }
 
-fn is_function(_vm: &VMState, args: &[Term]) -> CallReturn {
+fn is_function(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     assert!(args.len() == 1 || args.len() == 2);
 
     let arity_ref = if args.len() == 2 {
@@ -217,6 +225,75 @@ fn is_function(_vm: &VMState, args: &[Term]) -> CallReturn {
     }
 }
 
+fn spawn_monitor_1(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 1);
+    let fun_term = &args[0];
+
+    let new_pid = {
+        let mut processes = vm.processes.borrow();
+        Pid(processes.len())
+    };
+
+    let mut process = ProcessContext::new(new_pid);
+
+    let process = match fun_term {
+        Term::CapturedFunction { module, fun_name, arity } => {
+            let ident = FunctionIdent {
+                name: fun_name.clone(),
+                arity: *arity,
+                lambda: None,
+            };
+            let frame = process.make_call_stackframe(
+                vm,
+                module.clone(),
+                ident,
+                vec![]
+            );
+            let stack_i = process.stack.clone();
+            let mut stack = stack_i.borrow_mut();
+            stack.push(frame);
+            process
+        }
+        Term::BoundLambda { module, fun_name, arity, lambda, bound_env } => {
+            let ident = FunctionIdent {
+                name: fun_name.clone(),
+                arity: *arity,
+                lambda: Some(*lambda),
+            };
+            let frame = process.make_call_stackframe(
+                vm,
+                module.clone(),
+                ident,
+                vec![Term::LambdaEnv(bound_env.clone())]
+            );
+            let stack_i = process.stack.clone();
+            let mut stack = stack_i.borrow_mut();
+            stack.push(frame);
+            process
+        },
+        _ => panic!(),
+    };
+
+    let mut processes = vm.processes.borrow_mut();
+    processes.push(Rc::new(RefCell::new(process)));
+
+    let monitor_ref = vm.ref_gen.borrow_mut().next();
+    let mut watches = vm.watches.borrow_mut();
+
+    if !watches.contains_key(&new_pid) {
+        watches.insert(new_pid, Vec::new());
+    }
+    let for_proc = watches.get_mut(&new_pid).unwrap();
+
+    for_proc.push((proc.pid, WatchType::Monitor(monitor_ref)));
+
+    let term = Term::Tuple(vec![
+        Term::Pid(new_pid),
+        Term::Reference(monitor_ref),
+    ]);
+    CallReturn::Return { term: term }
+}
+
 pub fn make_erlang() -> NativeModule {
     let mut module = NativeModule::new("erlang".to_string());
     module.add_fun("+".to_string(), 2, Box::new(add));
@@ -230,5 +307,6 @@ pub fn make_erlang() -> NativeModule {
     module.add_fun("tuple_size".to_string(), 1, Box::new(tuple_size));
     module.add_fun("is_function".to_string(), 1, Box::new(is_function));
     module.add_fun("is_function".to_string(), 2, Box::new(is_function));
+    module.add_fun("spawn_monitor".to_string(), 1, Box::new(spawn_monitor_1));
     module
 }
