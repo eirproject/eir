@@ -3,7 +3,7 @@ Core Erlang compiler implemented in Rust
 
 Currently compiles a Core Erlang to a (relatively) low level IR.
 
-Current area of work: *Writing LIR interpreter to ease correctness checking*
+Current area of work: **Making LIR interpreter successfully run compile:file/1**
 
 ![Example CFG](example_cfg.png)
 
