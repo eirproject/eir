@@ -7,6 +7,7 @@ use ::term::{ Term, TermType, Pid };
 use ::vm::VMState;
 use ::module::ModuleType;
 use ::pattern::CaseContext;
+use ::receive::ReceiveContext;
 
 use super:: { StackFrame, BlockResult, CallOutcomes, CallReturn };
 
@@ -258,6 +259,24 @@ impl StackFrame {
                         panic!("case read not case context");
                     };
                     ctx.guard_ok();
+                }
+                OpKind::ReceiveStart => {
+                    assert!(op.reads.len() == 1);
+                    let timeout_term = self.read(&op.reads[0]);
+                    let receive_ctx = ReceiveContext::new(timeout_term);
+
+                    self.write(op.writes[0], Term::ReceiveContext(
+                        Rc::new(RefCell::new(receive_ctx))));
+                }
+                OpKind::ReceiveWait => {
+                    let curr = self.read(&op.reads[0]);
+                    let mut ctx = if let Term::ReceiveContext(ref ctx) = curr {
+                        ctx.borrow_mut()
+                    } else {
+                        panic!("Receive read not receive context");
+                    };
+
+                    block_ret = Some(BlockResult::Suspend);
                 }
                 OpKind::Jump => {
                     block_ret = Some(BlockResult::Branch { slot: 0 });

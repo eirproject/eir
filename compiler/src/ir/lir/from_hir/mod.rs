@@ -789,7 +789,7 @@ impl hir::SingleExpression {
                            lir::OpKind::ReceiveStart,
                            vec![lir::Source::Variable(timeout_time_var)],
                            vec![receive_structure_ssa]);
-                b.add_jump(start_label, receive_loop_label);
+                b.op_jump(start_label, receive_loop_label);
                 b.finish(start_label);
 
                 // Receive loop block (#receive_loop)

@@ -57,6 +57,7 @@ pub enum BlockResult {
         lambda: Option<(LambdaEnvIdx, usize)>,
         outcomes: CallOutcomes,
     },
+    Suspend,
 }
 
 pub struct ProcessContext {
@@ -142,12 +143,13 @@ impl ProcessContext {
     // In our case we count a single basic block as a reduction.
     // This should be a decent way to do things for a reference
     // implementation.
-    pub fn do_reduction(&mut self, vm: &VMState) {
+    pub fn do_reduction(&mut self, vm: &VMState) -> bool {
         let mut push_frame_parts: Option<(Atom, FunctionIdent, Vec<Term>)> = None;
         let mut pop_frame = false;
+        let mut suspend = false;
 
         if self.stack.borrow().len() == 0 {
-            return;
+            return true;
         }
 
         {
@@ -225,6 +227,10 @@ impl ProcessContext {
                                 pop_frame = true;
                                 println!("<- {}:{}", module.name, frame.function);
                             }
+                            BlockResult::Suspend => {
+                                suspend = true;
+                                println!("======== SUSPENDED BY RESULT ========");
+                            }
                         }
 
                     } else {
@@ -272,13 +278,16 @@ impl ProcessContext {
             stack.pop();
         }
 
+        suspend
     }
 
     pub fn run_reductions(&mut self, vm: &mut VMState, reductions: u64) {
         let reduction_counter = 0;
         let stack_len = self.stack.borrow().len();
         while reduction_counter < reductions && stack_len > 0 {
-            self.do_reduction(vm);
+            if self.do_reduction(vm) {
+                break;
+            }
         }
     }
 

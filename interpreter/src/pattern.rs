@@ -64,7 +64,7 @@ pub struct CaseContext {
 fn match_node(term: &Term, node: &PatternNode,
               binds: &mut HashMap<SSAVariable, Term>,
               binds_ref: &Vec<(Variable, SSAVariable)>) -> bool {
-    println!("    MATCH_NODE: {:?} {:?}", term, node);
+    //println!("    MATCH_NODE: {:?} {:?}", term, node);
     match (term, node) {
         // Wildcard and purely recursive
         (_, PatternNode::Wildcard) => true,
@@ -89,23 +89,16 @@ fn match_node(term: &Term, node: &PatternNode,
                 }
                 return match_node(t_tail, p_tail, binds, binds_ref);
             } else { // >
-                println!("    PAT GT");
                 assert!(t_head.len() > p_head.len());
                 for (pat, term) in p_head.iter().zip(t_head.iter()) {
-                    println!("    HEAD MATCH TRY");
                     if !match_node(term, pat, binds, binds_ref) {
-                        println!("    HEAD MATCH FAIL");
                         return false;
                     }
                 }
-                println!("    REST");
                 let head_rest: Vec<_> = t_head.iter().skip(p_head.len())
                     .cloned().collect();
-                println!("    HEAD REST: {:?}", head_rest);
                 let rest_term = Term::List(head_rest, t_tail.clone());
-                println!("    REST TERM: {:?}", rest_term);
                 let a = match_node(&rest_term, p_tail, binds, binds_ref);
-                println!("    DONE {}", a);
                 return a;
             }
         }
@@ -169,8 +162,8 @@ impl CaseContext {
             let clause = &self.clauses[self.state.clause_num()];
             assert!(clause.patterns.len() == self.vars.len());
 
-            println!("{:?}", clause);
-            println!("  {:?}", self.vars);
+            //println!("{:?}", clause);
+            //println!("  {:?}", self.vars);
 
             let mut values: HashMap<SSAVariable, Term> = HashMap::new();
             let matched = self.vars.iter()
