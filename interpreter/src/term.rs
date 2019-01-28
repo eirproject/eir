@@ -151,6 +151,14 @@ impl Term {
         }
     }
 
+    pub fn as_atom(&self) -> Option<Atom> {
+        if let Term::Atom(ref atom) = self {
+            Some(atom.clone())
+        } else {
+            None
+        }
+    }
+
 }
 
 

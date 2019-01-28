@@ -1,6 +1,6 @@
-use ::{ NativeModule, Term, CallReturn };
+use ::{ NativeModule, Term, CallReturn, VMState };
 
-fn getenv(args: &[Term]) -> CallReturn {
+fn getenv(_vm: &VMState, args: &[Term]) -> CallReturn {
     if args.len() == 1 {
         CallReturn::Return { term: Term::new_bool(false) }
     } else {

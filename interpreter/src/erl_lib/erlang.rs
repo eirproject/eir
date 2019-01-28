@@ -1,4 +1,4 @@
-use ::{ NativeModule, Term, CallReturn };
+use ::{ NativeModule, Term, CallReturn, VMState };
 use ::num_bigint::{ BigInt, Sign };
 
 use term::{ ErlEq, ErlExactEq };
@@ -64,7 +64,7 @@ fn bignum_to_f64(n: &BigInt) -> Option<f64> {
     Some(f64::from_bits(ret))
 }
 
-fn add(args: &[Term]) -> CallReturn {
+fn add(_vm: &VMState, args: &[Term]) -> CallReturn {
     // TODO: Verify semantics
     println!("{:?}", args);
 
@@ -100,7 +100,7 @@ fn add(args: &[Term]) -> CallReturn {
     }
 }
 
-fn sub(args: &[Term]) -> CallReturn {
+fn sub(_vm: &VMState, args: &[Term]) -> CallReturn {
     if args.len() != 2 {
         return CallReturn::Throw;
     }
@@ -114,7 +114,7 @@ fn sub(args: &[Term]) -> CallReturn {
     }
 }
 
-fn mul(args: &[Term]) -> CallReturn {
+fn mul(_vm: &VMState, args: &[Term]) -> CallReturn {
     if args.len() != 2 {
         return CallReturn::Throw;
     }
@@ -128,7 +128,7 @@ fn mul(args: &[Term]) -> CallReturn {
     }
 }
 
-fn is_list(args: &[Term]) -> CallReturn {
+fn is_list(_vm: &VMState, args: &[Term]) -> CallReturn {
     if args.len() != 1 {
         return CallReturn::Throw;
     }
@@ -141,7 +141,7 @@ fn is_list(args: &[Term]) -> CallReturn {
     }
 }
 
-fn is_atom(args: &[Term]) -> CallReturn {
+fn is_atom(_vm: &VMState, args: &[Term]) -> CallReturn {
     if args.len() != 1 {
         return CallReturn::Throw;
     }
@@ -153,7 +153,7 @@ fn is_atom(args: &[Term]) -> CallReturn {
     }
 }
 
-fn list_append(args: &[Term]) -> CallReturn {
+fn list_append(_vm: &VMState, args: &[Term]) -> CallReturn {
     // TODO: Validate semantics
     assert!(args.len() == 2);
     match (&args[0], &args[1]) {
@@ -170,12 +170,12 @@ fn list_append(args: &[Term]) -> CallReturn {
     }
 }
 
-fn exact_eq(args: &[Term]) -> CallReturn {
+fn exact_eq(_vm: &VMState, args: &[Term]) -> CallReturn {
     assert!(args.len() == 2);
     CallReturn::Return { term: Term::new_bool(args[0].erl_exact_eq(&args[1])) }
 }
 
-fn and(args: &[Term]) -> CallReturn {
+fn and(_vm: &VMState, args: &[Term]) -> CallReturn {
     assert!(args.len() == 2);
     if let (Some(a1), Some(a2)) = (args[0].as_boolean(), args[1].as_boolean()) {
         CallReturn::Return { term: Term::new_bool(a1 && a2) }
@@ -184,7 +184,7 @@ fn and(args: &[Term]) -> CallReturn {
     }
 }
 
-fn tuple_size(args: &[Term]) -> CallReturn {
+fn tuple_size(_vm: &VMState, args: &[Term]) -> CallReturn {
     assert!(args.len() == 1);
     if let Term::Tuple(ref terms) = &args[0] {
         CallReturn::Return { term: Term::new_i64(terms.len() as i64) }
@@ -193,7 +193,7 @@ fn tuple_size(args: &[Term]) -> CallReturn {
     }
 }
 
-fn is_function(args: &[Term]) -> CallReturn {
+fn is_function(_vm: &VMState, args: &[Term]) -> CallReturn {
     assert!(args.len() == 1 || args.len() == 2);
 
     let arity_ref = if args.len() == 2 {

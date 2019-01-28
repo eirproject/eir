@@ -1,4 +1,4 @@
-use ::{ NativeModule, Term, CallReturn };
+use ::{ NativeModule, Term, CallReturn, VMState };
 use term::{ ErlEq, ErlExactEq };
 
 fn member_list(item: &Term, list: &Term) -> CallReturn {
@@ -16,7 +16,7 @@ fn member_list(item: &Term, list: &Term) -> CallReturn {
     }
 }
 
-fn member(args: &[Term]) -> CallReturn {
+fn member(_vm: &VMState, args: &[Term]) -> CallReturn {
     assert!(args.len() == 2);
     member_list(&args[0], &args[1])
 }

@@ -1,7 +1,7 @@
 extern crate tempdir;
 
 use ::std::io::{ Read, Write };
-use ::{ ExecutionContext, Term };
+use ::{ VMState, Term };
 use ::core_erlang_compiler::ir::Module;
 use ::term::ErlEq;
 
@@ -46,10 +46,10 @@ fn erl_to_ir(erlang_code: &str) -> Module {
     ir
 }
 
-fn ctx_from_erl(erlang_code: &str) -> ExecutionContext {
+fn ctx_from_erl(erlang_code: &str) -> VMState {
     let module = erl_to_ir(erlang_code);
 
-    let mut ctx = ExecutionContext::new();
+    let mut ctx = VMState::new();
 
     ctx.add_native_module(::erl_lib::make_erlang());
     ctx.add_erlang_module(module);
@@ -92,47 +92,47 @@ matching(A, B) ->
 
 #[test]
 fn simple_add() {
-    let ctx = ctx_from_erl(TEST_ERL_1);
+    let mut ctx = ctx_from_erl(TEST_ERL_1);
 
     let args = vec![Term::new_i64(1), Term::new_i64(2)];
-    let result = ctx.call("test", "add", &args);
+    let result = ctx.call("test", "add", args);
 
     assert!(result.unwrap_return().erl_eq(&Term::Integer(3.into())));
 }
 
 #[test]
 fn simple_function_call() {
-    let ctx = ctx_from_erl(TEST_ERL_1);
+    let mut ctx = ctx_from_erl(TEST_ERL_1);
 
     let args = vec![Term::new_i64(1), Term::new_i64(2), Term::new_i64(3)];
-    let result = ctx.call("test", "add_two", &args);
+    let result = ctx.call("test", "add_two", args);
 
     assert!(result.unwrap_return().erl_eq(&Term::Integer(6.into())));
 }
 
 #[test]
 fn simple_lambda() {
-    let ctx = ctx_from_erl(TEST_ERL_1);
+    let mut ctx = ctx_from_erl(TEST_ERL_1);
 
     let args = vec![Term::new_i64(1), Term::new_i64(2)];
-    let result = ctx.call("test", "add_with_closure", &args);
+    let result = ctx.call("test", "add_with_closure", args);
 
     assert!(result.unwrap_return().erl_eq(&Term::Integer(4.into())));
 }
 
 #[test]
 fn simple_pattern_match() {
-    let ctx = ctx_from_erl(TEST_ERL_1);
+    let mut ctx = ctx_from_erl(TEST_ERL_1);
 
     let args = vec![Term::new_i64(1), Term::new_i64(2)];
-    let result = ctx.call("test", "matching", &args);
+    let result = ctx.call("test", "matching", args);
     assert!(result.unwrap_return().erl_eq(&Term::Tuple(vec![
         Term::new_i64(1),
         Term::new_i64(2),
     ])));
 
     let args = vec![Term::Nil, Term::Nil];
-    let result = ctx.call("test", "matching", &args);
+    let result = ctx.call("test", "matching", args);
     assert!(result.unwrap_return().erl_eq(&Term::new_atom("one")));
 }
 
@@ -147,17 +147,17 @@ factorial(N) -> N * factorial(N-1).
 
 #[test]
 fn factorial() {
-    let ctx = ctx_from_erl(FACTORIAL_ERL);
+    let mut ctx = ctx_from_erl(FACTORIAL_ERL);
 
     let args = vec![Term::new_i64(10)];
-    let result = ctx.call("test", "factorial", &args);
+    let result = ctx.call("test", "factorial", args);
 
     println!("Res: {:?}", result);
 }
 
 //#[test]
 fn long_strings() {
-    let mut ctx = ExecutionContext::new();
+    let mut ctx = VMState::new();
 
     let mut f = ::std::fs::File::open("../test_data/long_strings.core")
         .unwrap();
@@ -182,7 +182,7 @@ fn compile_core_file(path: &str) -> Module {
 fn compiler() {
     println!("A");
 
-    let mut ctx = ExecutionContext::new();
+    let mut ctx = VMState::new();
 
     ctx.add_native_module(::erl_lib::make_erlang());
     ctx.add_native_module(::erl_lib::make_os());
@@ -197,5 +197,5 @@ fn compiler() {
     ctx.add_nif_overlay(::erl_lib::make_lists());
 
     let args = vec![Term::new_atom("foo.erl")];
-    ctx.call("compile", "file", &args);
+    ctx.call("compile", "file", args);
 }
