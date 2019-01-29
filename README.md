@@ -5,6 +5,8 @@ Currently compiles a Core Erlang to a (relatively) low level IR.
 
 Current area of work: **Making LIR interpreter successfully run compile:file/1**
 
+Pictured below: CFG for `proplists:get_value/3`
+
 ![Example CFG](example_cfg.png)
 
 Current features:
