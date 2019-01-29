@@ -137,6 +137,10 @@ Patterns: Vec<Annotated<Pattern>> = {
 
 AnnotatedPattern: Annotated<Pattern> = <p:Annotated<Pattern>> => p;
 
+PatternMapEntry: (SingleExpression, Annotated<Pattern>) = {
+    <k:SingleExpression> ":=" <v:AnnotatedPattern> => (k, v),
+};
+
 Pattern: Pattern = {
     <v:Variable> "=" <p:AnnotatedPattern> => Pattern::BindVar(v, Box::new(p)),
     <v:Variable> => Pattern::BindVar(v, Box::new(Annotated::empty(Pattern::Wildcard))),
@@ -144,6 +148,8 @@ Pattern: Pattern = {
     <b:PatternBinary> => Pattern::Binary(b),
 
     "{" <t:Comma<AnnotatedPattern>> "}" => Pattern::Tuple(t),
+
+    "~{" <m:Comma<PatternMapEntry>> "}~" => Pattern::Map(m),
 
     "[" <l:Comma<AnnotatedPattern>> <t:("|" <AnnotatedPattern>)?> "]" => 
         Pattern::List(l, Box::new(t.unwrap_or(Pattern::nil()))),
@@ -255,6 +261,7 @@ extern {
         "<" => Tok::TriOpen,
         ">" => Tok::TriClose,
         "~{" => Tok::MapOpen,
+        ":=" => Tok::MapMatch,
         "}~" => Tok::MapClose,
         "#{" => Tok::BitstringOpen,
         "}#" => Tok::BitstringClose,

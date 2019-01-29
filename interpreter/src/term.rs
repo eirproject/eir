@@ -25,6 +25,7 @@ pub enum TermType {
     List,
     Pid,
     Reference,
+    Binary,
 
     BoundLambda,
     CapturedFunction,
@@ -53,6 +54,7 @@ pub enum Term {
     List(Vec<Term>, Box<Term>),
     Pid(Pid),
     Reference(Reference),
+    Binary(Vec<u8>),
     BoundLambda {
         module: Atom,
         fun_name: Atom,
@@ -128,6 +130,7 @@ impl Term {
 
     pub fn get_type(&self) -> TermType {
         match self {
+            Term::Binary(_) => TermType::Binary,
             Term::Nil => TermType::Nil,
             Term::Pid(_) => TermType::Pid,
             Term::Reference(_) => TermType::Reference,
@@ -170,6 +173,31 @@ impl Term {
     pub fn as_atom(&self) -> Option<Atom> {
         if let Term::Atom(ref atom) = self {
             Some(atom.clone())
+        } else {
+            None
+        }
+    }
+
+    fn join_list(&self, list: &mut Vec<Term>) -> Term {
+        match self {
+            Term::List(head, tail) => {
+                list.extend(head.iter().cloned());
+                tail.join_list(list)
+            }
+            _ => self.clone()
+        }
+    }
+
+    pub fn as_inproper_list(&self) -> (Vec<Term>, Term) {
+        let mut list = Vec::new();
+        let tail = self.join_list(&mut list);
+        (list, tail)
+    }
+
+    pub fn as_list(&self) -> Option<Vec<Term>> {
+        let (list, tail) = self.as_inproper_list();
+        if let Term::Nil = tail {
+            Some(list)
         } else {
             None
         }

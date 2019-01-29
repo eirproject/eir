@@ -12,3 +12,6 @@ test_data/**/.*.core
 *.swp
 
 compiler/src/parser/grammar.rs
+
+trace.html
+trace.json

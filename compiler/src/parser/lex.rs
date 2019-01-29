@@ -46,6 +46,7 @@ pub enum Tok<'input> {
     TriOpen,
     TriClose,
     MapOpen,
+    MapMatch,
     MapClose,
     BitstringOpen,
     BitstringClose,
@@ -353,8 +354,13 @@ impl<'input> Tokenizer<'input> {
                     Some(Ok((idx0, Tok::TriOpen, idx0+1)))
                 }
                 Some((idx0, ':')) => {
-                    self.bump();
-                    Some(Ok((idx0, Tok::Colon, idx0+1)))
+                    match self.bump() {
+                        Some((idx1, '=')) => {
+                            self.bump();
+                            Some(Ok((idx0, Tok::MapMatch, idx1+1)))
+                        }
+                        _ => Some(Ok((idx0, Tok::Colon, idx0+1)))
+                    }
                 }
                 Some((idx0, '-')) => {
                     match self.bump() {

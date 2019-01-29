@@ -234,7 +234,7 @@ fn spawn_monitor_1(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> Ca
         Pid(processes.len())
     };
 
-    let mut process = ProcessContext::new(new_pid);
+    let process = ProcessContext::new(new_pid);
 
     let process = match fun_term {
         Term::CapturedFunction { module, fun_name, arity } => {
@@ -243,12 +243,17 @@ fn spawn_monitor_1(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> Ca
                 arity: *arity,
                 lambda: None,
             };
+
+            let orig_pid = ::trace::get_pid();
+            ::trace::set_pid(new_pid);
             let frame = process.make_call_stackframe(
                 vm,
                 module.clone(),
                 ident,
                 vec![]
             );
+            ::trace::set_pid(orig_pid);
+
             let stack_i = process.stack.clone();
             let mut stack = stack_i.borrow_mut();
             stack.push(frame);
@@ -260,12 +265,17 @@ fn spawn_monitor_1(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> Ca
                 arity: *arity,
                 lambda: Some(*lambda),
             };
+
+            let orig_pid = ::trace::get_pid();
+            ::trace::set_pid(new_pid);
             let frame = process.make_call_stackframe(
                 vm,
                 module.clone(),
                 ident,
                 vec![Term::LambdaEnv(bound_env.clone())]
             );
+            ::trace::set_pid(orig_pid);
+
             let stack_i = process.stack.clone();
             let mut stack = stack_i.borrow_mut();
             stack.push(frame);
@@ -294,6 +304,41 @@ fn spawn_monitor_1(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> Ca
     CallReturn::Return { term: term }
 }
 
+fn not(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 1);
+    if let Some(b) = args[0].as_boolean() {
+        CallReturn::Return { term: Term::new_bool(!b) }
+    } else {
+        CallReturn::Throw
+    }
+}
+
+fn is_binary(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 1);
+    let a1 = &args[0];
+
+    match a1 {
+        Term::Binary(_) => CallReturn::Return { term: Term::new_bool(true) },
+        _ => CallReturn::Return { term: Term::new_bool(false) },
+    }
+}
+
+fn atom_to_list(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 1);
+    let a1 = &args[0];
+
+    match a1 {
+        Term::Atom(atom) => {
+            let chars: Vec<_> = atom.as_str()
+                .chars()
+                .map(|c| Term::new_i64(c as i64))
+                .collect();
+            CallReturn::Return { term: Term::List(chars, Box::new(Term::Nil)) }
+        }
+        _ => CallReturn::Throw,
+    }
+}
+
 pub fn make_erlang() -> NativeModule {
     let mut module = NativeModule::new("erlang".to_string());
     module.add_fun("+".to_string(), 2, Box::new(add));
@@ -301,6 +346,7 @@ pub fn make_erlang() -> NativeModule {
     module.add_fun("*".to_string(), 2, Box::new(mul));
     module.add_fun("is_list".to_string(), 1, Box::new(is_list));
     module.add_fun("is_atom".to_string(), 1, Box::new(is_atom));
+    module.add_fun("is_binary".to_string(), 1, Box::new(is_binary));
     module.add_fun("++".to_string(), 2, Box::new(list_append));
     module.add_fun("=:=".to_string(), 2, Box::new(exact_eq));
     module.add_fun("and".to_string(), 2, Box::new(and));
@@ -308,5 +354,7 @@ pub fn make_erlang() -> NativeModule {
     module.add_fun("is_function".to_string(), 1, Box::new(is_function));
     module.add_fun("is_function".to_string(), 2, Box::new(is_function));
     module.add_fun("spawn_monitor".to_string(), 1, Box::new(spawn_monitor_1));
+    module.add_fun("not".to_string(), 1, Box::new(not));
+    module.add_fun("atom_to_list".to_string(), 1, Box::new(atom_to_list));
     module
 }

@@ -80,12 +80,12 @@ impl ProcessContext {
                             module: Atom, fun_ident: FunctionIdent,
                             args: Vec<Term>) -> StackFrameType {
 
+        println!("-> {}:{}", module, fun_ident);
+        ::trace::enter_function(&module, &fun_ident, &args);
+
         assert!(vm.modules.contains_key(module.as_str()));
         let module_t = vm.modules.get(module.as_str()).unwrap();
-
         assert!(fun_ident.arity == args.len() as u32);
-
-        println!("-> {}:{}", module, fun_ident);
 
         match module_t {
             ModuleType::Erlang(c_module, native_overlay_opt) => {
@@ -202,7 +202,12 @@ impl ProcessContext {
                         let lir = fun.lir_function.as_ref().unwrap();
                         let block = lir.block(frame.basic_block);
 
-                        match frame.exec_block(module, block) {
+                        ::trace::start_basic_block(
+                            &frame.module, &frame.function, curr_block_id);
+                        let exec_res = frame.exec_block(module, block);
+                        ::trace::end_basic_block();
+
+                        match exec_res {
                             BlockResult::Branch { slot } => {
                                 let slots = lir.branch_slots(curr_block_id);
                                 frame.prev_basic_block = Some(curr_block_id);
@@ -223,9 +228,11 @@ impl ProcessContext {
                                 frame.state = StackFrameState::InCall(outcomes);
                             }
                             BlockResult::Return { ret } => {
+                                println!("<- {}:{}", module.name, frame.function);
+                                ::trace::exit_function(&module.name, &frame.function,
+                                                       &ret);
                                 self.return_val = Some(ret);
                                 pop_frame = true;
-                                println!("<- {}:{}", module.name, frame.function);
                             }
                             BlockResult::Suspend => {
                                 suspend = true;
@@ -248,18 +255,24 @@ impl ProcessContext {
                                 frame.fun_ident.name.as_str().to_string(),
                                 frame.fun_ident.arity as u32
                             )];
-                            self.return_val = Some((fun)(vm, self, &frame.args));
-                            pop_frame = true;
+                            let ret = (fun)(vm, self, &frame.args);
                             println!("<- {}:{}", module.name, frame.fun_ident);
+                            ::trace::exit_function(&frame.module, &frame.fun_ident,
+                                                   &ret);
+                            self.return_val = Some(ret);
+                            pop_frame = true;
                         }
                         ModuleType::Erlang(_mod, Some(module)) => {
                             let fun = &module.functions[&(
                                 frame.fun_ident.name.as_str().to_string(),
                                 frame.fun_ident.arity as u32
                             )];
-                            self.return_val = Some((fun)(vm, self, &frame.args));
-                            pop_frame = true;
+                            let ret = (fun)(vm, self, &frame.args);
                             println!("<- {}:{}", module.name, frame.fun_ident);
+                            ::trace::exit_function(&frame.module, &frame.fun_ident,
+                                                   &ret);
+                            self.return_val = Some(ret);
+                            pop_frame = true;
                         }
                         _ => unreachable!(),
                     }

@@ -80,8 +80,9 @@ impl VMState {
             let processes = self.processes.borrow();
             Pid(processes.len())
         };
+        ::trace::set_pid(self_pid);
 
-        let mut process = ProcessContext::new(self_pid);
+        let process = ProcessContext::new(self_pid);
 
         let frame = process.make_call_stackframe(
             self,
@@ -105,6 +106,7 @@ impl VMState {
                 println!("=====================================");
                 println!("======== SWITCH TO PROCESS {} ========", process_num);
                 println!("=====================================");
+                ::trace::set_pid(Pid(process_num));
 
                 let process_rc = self.processes.borrow()[process_num].clone();
                 let mut process = process_rc.borrow_mut();

@@ -9,8 +9,13 @@ use core_erlang_compiler::ir::lir::{ BasicBlock, LabelN, OpKind, Source };
 use core_erlang_compiler::ir::hir::scope_tracker::LambdaEnvIdx;
 use core_erlang_compiler::parser::AtomicLiteral;
 
+extern crate lazy_static;
+
 extern crate num_bigint;
 extern crate num_traits;
+
+extern crate serde;
+extern crate serde_json;
 
 mod term;
 pub use term::{ TermType, Term, BoundLambdaEnv, Pid, Reference };
@@ -28,3 +33,6 @@ mod process;
 mod module;
 
 mod receive;
+
+mod trace;
+
