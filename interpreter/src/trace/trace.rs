@@ -74,7 +74,7 @@ enum TraceEventType {
         args: Vec<Term>,
     },
     FunctionExit {
-        ret: CallReturn
+        ret: Option<CallReturn>,
     },
     BasicBlockStart {
         module: Atom,
@@ -143,7 +143,7 @@ pub fn enter_function(module: &Atom, ident: &FunctionIdent, args: &[Term]) {
     })
 }
 
-pub fn exit_function(module: &Atom, ident: &FunctionIdent, ret: &CallReturn) {
+pub fn exit_function(module: &Atom, ident: &FunctionIdent, ret: Option<&CallReturn>) {
     TRACE_COLLECTOR.with(|c| {
         let mut c = c.lock().unwrap();
         let pid = c.current_pid;
@@ -156,7 +156,7 @@ pub fn exit_function(module: &Atom, ident: &FunctionIdent, ret: &CallReturn) {
         c.events.push(TraceEvent {
             pid: pid,
             typ: TraceEventType::FunctionExit {
-                ret: ret.clone(),
+                ret: ret.cloned(),
             },
         });
     })

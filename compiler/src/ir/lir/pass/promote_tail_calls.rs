@@ -94,6 +94,7 @@ pub fn promote_tail_calls(cfg: &mut FunctionCfg) {
             let call_block_container = &cfg.graph[*call_label];
             let mut call_block = call_block_container.inner.borrow_mut();
             let last_op = call_block.ops.last_mut().unwrap();
+            last_op.writes = vec![];
             match last_op.kind {
                 OpKind::Call { ref mut tail_call } => *tail_call = true,
                 OpKind::Apply { ref mut tail_call } => *tail_call = true,

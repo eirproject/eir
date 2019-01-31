@@ -76,9 +76,13 @@ impl StackFrame {
                     let res = self.read(&op.reads[0]);
                     self.write(op.writes[0], res);
                 }
-                OpKind::Call => {
+                OpKind::Call { tail_call } => {
                     assert!(op.reads.len() >= 2);
-                    assert!(op.writes.len() == 2);
+                    if tail_call {
+                        assert!(op.writes.len() == 0);
+                    } else {
+                        assert!(op.writes.len() == 2);
+                    }
 
                     let module_term = self.read(&op.reads[0]);
                     let fun_term = self.read(&op.reads[1]);
@@ -88,22 +92,31 @@ impl StackFrame {
                     let module_atom = module_term.as_atom().unwrap();
                     let fun_atom = fun_term.as_atom().unwrap();
 
-                    let outcomes = CallOutcomes {
-                        ret_ok_slot: 0,
-                        ret_ok_ssa: op.writes[0],
-                        ret_ok_label: None,
-                        ret_throw_slot: 1,
-                        ret_throw_ssa: op.writes[1],
-                        ret_throw_label: None,
-                    };
+                    if tail_call {
+                        block_ret = Some(BlockResult::TailCall {
+                            module: module_atom,
+                            fun: fun_atom,
+                            lambda: None,
+                            args: args,
+                        });
+                    } else {
+                        let outcomes = CallOutcomes {
+                            ret_ok_slot: 0,
+                            ret_ok_ssa: op.writes[0],
+                            ret_ok_label: None,
+                            ret_throw_slot: 1,
+                            ret_throw_ssa: op.writes[1],
+                            ret_throw_label: None,
+                        };
 
-                    block_ret = Some(BlockResult::Call {
-                        module: module_atom,
-                        fun: fun_atom,
-                        lambda: None,
-                        args: args,
-                        outcomes: outcomes,
-                    });
+                        block_ret = Some(BlockResult::Call {
+                            module: module_atom,
+                            fun: fun_atom,
+                            lambda: None,
+                            args: args,
+                            outcomes: outcomes,
+                        });
+                    }
                 }
                 OpKind::ReturnOk => {
                     assert!(op.reads.len() == 1);
@@ -123,21 +136,29 @@ impl StackFrame {
                     };
                     self.write(op.writes[0], res);
                 }
-                OpKind::Apply => {
-                    assert!(op.writes.len() == 2);
+                OpKind::Apply { tail_call } => {
                     assert!(op.reads.len() >= 1);
+                    if tail_call {
+                        assert!(op.writes.len() == 0);
+                    } else {
+                        assert!(op.writes.len() == 2);
+                    }
 
                     let fun_var = self.read(&op.reads[0]);
                     let args: Vec<Term> = op.reads[1..].iter()
                         .map(|arg| self.read(arg)).collect();
 
-                    let outcomes = CallOutcomes {
-                        ret_ok_slot: 0,
-                        ret_ok_ssa: op.writes[0],
-                        ret_ok_label: None,
-                        ret_throw_slot: 1,
-                        ret_throw_ssa: op.writes[1],
-                        ret_throw_label: None,
+                    let outcomes = if tail_call {
+                        None
+                    } else {
+                        Some(CallOutcomes {
+                            ret_ok_slot: 0,
+                            ret_ok_ssa: op.writes[0],
+                            ret_ok_label: None,
+                            ret_throw_slot: 1,
+                            ret_throw_ssa: op.writes[1],
+                            ret_throw_label: None,
+                        })
                     };
 
                     match fun_var {
@@ -145,13 +166,22 @@ impl StackFrame {
                                                  ref fun_name, ref arity } => {
                             assert!(args.len() == *arity as usize);
 
-                            block_ret = Some(BlockResult::Call {
-                                module: module_a.clone(),
-                                fun: fun_name.clone(),
-                                lambda: None,
-                                args: args,
-                                outcomes: outcomes,
-                            });
+                            if tail_call {
+                                block_ret = Some(BlockResult::TailCall {
+                                    module: module_a.clone(),
+                                    fun: fun_name.clone(),
+                                    lambda: None,
+                                    args: args,
+                                });
+                            } else {
+                                block_ret = Some(BlockResult::Call {
+                                    module: module_a.clone(),
+                                    fun: fun_name.clone(),
+                                    lambda: None,
+                                    args: args,
+                                    outcomes: outcomes.unwrap(),
+                                });
+                            }
                         }
                         Term::BoundLambda {
                             module: ref module_a, ref fun_name, arity,
@@ -162,13 +192,22 @@ impl StackFrame {
 
                             assert!(rargs.len() == (arity as usize));
 
-                            block_ret = Some(BlockResult::Call {
-                                module: module_a.clone(),
-                                fun: fun_name.clone(),
-                                lambda: Some(lambda),
-                                args: rargs,
-                                outcomes: outcomes,
-                            });
+                            if tail_call {
+                                block_ret = Some(BlockResult::TailCall {
+                                    module: module_a.clone(),
+                                    fun: fun_name.clone(),
+                                    lambda: Some(lambda),
+                                    args: rargs,
+                                });
+                            } else {
+                                block_ret = Some(BlockResult::Call {
+                                    module: module_a.clone(),
+                                    fun: fun_name.clone(),
+                                    lambda: Some(lambda),
+                                    args: rargs,
+                                    outcomes: outcomes.unwrap(),
+                                });
+                            }
                         }
                         _ => panic!("Var is not callable"),
                     }

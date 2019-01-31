@@ -68,6 +68,10 @@ impl FunctionCfg {
         self.graph.remove_edge(lbl);
     }
 
+    pub fn branch_slots(&self, lbl: LabelN) -> Vec<LabelN> {
+        self.graph[lbl].outgoing.iter().map(|v| v.1).collect()
+    }
+
     pub fn remove_block(&mut self, lbl: LabelN) {
     //    // Validate that the node is not the entry point
     //    // and is never jumped to

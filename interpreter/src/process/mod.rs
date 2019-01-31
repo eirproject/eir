@@ -57,6 +57,12 @@ pub enum BlockResult {
         lambda: Option<(LambdaEnvIdx, usize)>,
         outcomes: CallOutcomes,
     },
+    TailCall {
+        module: Atom,
+        fun: Atom,
+        args: Vec<Term>,
+        lambda: Option<(LambdaEnvIdx, usize)>,
+    },
     Suspend,
 }
 
@@ -200,11 +206,12 @@ impl ProcessContext {
                             .find(|fun| fun.ident == frame.function)
                             .unwrap();
                         let lir = fun.lir_function.as_ref().unwrap();
-                        let block = lir.block(frame.basic_block);
+                        let block_container = &lir.graph[frame.basic_block];
+                        let block = block_container.inner.borrow();
 
                         ::trace::start_basic_block(
                             &frame.module, &frame.function, curr_block_id);
-                        let exec_res = frame.exec_block(module, block);
+                        let exec_res = frame.exec_block(module, &*block);
                         ::trace::end_basic_block();
 
                         match exec_res {
@@ -227,10 +234,21 @@ impl ProcessContext {
                                 push_frame_parts = Some((module, ident, args));
                                 frame.state = StackFrameState::InCall(outcomes);
                             }
+                            BlockResult::TailCall { module: m, fun, args, lambda } => {
+                                let ident = FunctionIdent {
+                                    name: fun,
+                                    arity: args.len() as u32,
+                                    lambda: lambda,
+                                };
+                                ::trace::exit_function(&module.name, &frame.function,
+                                                       None);
+                                pop_frame = true;
+                                push_frame_parts = Some((m, ident, args));
+                            }
                             BlockResult::Return { ret } => {
                                 println!("<- {}:{}", module.name, frame.function);
                                 ::trace::exit_function(&module.name, &frame.function,
-                                                       &ret);
+                                                       Some(&ret));
                                 self.return_val = Some(ret);
                                 pop_frame = true;
                             }
@@ -258,7 +276,7 @@ impl ProcessContext {
                             let ret = (fun)(vm, self, &frame.args);
                             println!("<- {}:{}", module.name, frame.fun_ident);
                             ::trace::exit_function(&frame.module, &frame.fun_ident,
-                                                   &ret);
+                                                   Some(&ret));
                             self.return_val = Some(ret);
                             pop_frame = true;
                         }
@@ -270,7 +288,7 @@ impl ProcessContext {
                             let ret = (fun)(vm, self, &frame.args);
                             println!("<- {}:{}", module.name, frame.fun_ident);
                             ::trace::exit_function(&frame.module, &frame.fun_ident,
-                                                   &ret);
+                                                   Some(&ret));
                             self.return_val = Some(ret);
                             pop_frame = true;
                         }
@@ -280,15 +298,15 @@ impl ProcessContext {
             }
         }
 
+        if pop_frame {
+            let mut stack = self.stack.borrow_mut();
+            stack.pop();
+        }
         if push_frame_parts.is_some() {
             let (module, ident, args) = push_frame_parts.take().unwrap();
             let frame = self.make_call_stackframe(vm, module, ident, args);
             let mut stack = self.stack.borrow_mut();
             stack.push(frame);
-        }
-        if pop_frame {
-            let mut stack = self.stack.borrow_mut();
-            stack.pop();
         }
 
         suspend
