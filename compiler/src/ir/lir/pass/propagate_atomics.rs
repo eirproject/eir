@@ -9,19 +9,44 @@ pub fn propagate_atomics(cfg: &mut FunctionCfg) {
     let mut constants: HashMap<SSAVariable, AtomicLiteral> = HashMap::new();
     let mut moves: HashMap<SSAVariable, SSAVariable> = HashMap::new();
 
-    for block in cfg.blocks_iter_mut() {
+    for block_container in cfg.graph.nodes() {
+        let mut block = block_container.inner.borrow_mut();
         block.ops.retain(|op| {
-            if let OpKind::Move = op.kind {
-                if let Source::Constant(ref constant) = op.reads[0] {
-                    constants.insert(op.writes[0], constant.clone());
-                    return false;
+            match op.kind {
+                // Moves can always be removed
+                OpKind::Move => {
+                    match op.reads[0] {
+                        Source::Constant(ref constant) => {
+                            constants.insert(op.writes[0], constant.clone());
+                            false
+                        }
+                        Source::Variable(ssa) => {
+                            moves.insert(op.writes[0], ssa);
+                            false
+                        }
+                    }
                 }
-                if let Source::Variable(ref ssa) = op.reads[0] {
-                    moves.insert(op.writes[0], *ssa);
-                    return false;
+                // UnpackValueList with 0 or 1 writes can be removed
+                OpKind::UnpackValueList => {
+                    if op.writes.len() == 0 {
+                        false
+                    } else if op.writes.len() == 1 {
+                        match op.reads[0] {
+                            Source::Constant(ref constant) => {
+                                constants.insert(op.writes[0], constant.clone());
+                                false
+                            }
+                            Source::Variable(ssa) => {
+                                moves.insert(op.writes[0], ssa);
+                                false
+                            }
+                        }
+                    } else {
+                        true
+                    }
                 }
+                _ => true,
             }
-            true
         });
     }
 
@@ -37,7 +62,8 @@ pub fn propagate_atomics(cfg: &mut FunctionCfg) {
         }
     }
 
-    for block in cfg.blocks_iter_mut() {
+    for block_container in cfg.graph.nodes() {
+        let mut block = block_container.inner.borrow_mut();
         for phi in block.phi_nodes.iter_mut() {
             for entry in phi.entries.iter_mut() {
                 if let Source::Variable(var) = entry.1 {

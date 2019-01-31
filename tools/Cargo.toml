@@ -13,4 +13,4 @@ path = "src/gen_cfg.rs"
 
 [dependencies]
 core_erlang_compiler = { path = "../compiler" }
-core_erlang_interpreter = { path = "../interpreter" }
+#core_erlang_interpreter = { path = "../interpreter" }

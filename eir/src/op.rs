@@ -1,52 +1,19 @@
-use super::SSAVariable;
-use ::ir::hir::Pattern;
-use ::ir::hir::scope_tracker::LambdaEnvIdx;
-use ::ir::FunctionIdent;
-use ::Atom;
+use crate::{ SSAVariable, ConstantTerm, FunctionIdent, LambdaEnvIdx, Atom, Clause };
 
-pub mod from_hir;
-pub mod to_dot;
-pub mod pass;
-
-pub mod cfg;
-pub use self::cfg::{ FunctionCfg, FunctionCfgBuilder, LabelN, BasicBlock };
-
-//#[derive(Debug, Clone)]
-//pub struct BasicBlock {
-//    label: Label,
-//
-//    // Meta
-//    back_refs: Vec<Label>,
-//
-//    // Main data
-//    phi_nodes: Vec<Phi>,
-//    ops: Vec<Op>,
-//    jumps: Vec<Label>,
-//}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Label(u32);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Source {
     Variable(SSAVariable),
-    Constant(::parser::AtomicLiteral),
+    Constant(ConstantTerm),
 }
 impl From<SSAVariable> for Source {
     fn from(val: SSAVariable) -> Self {
         Source::Variable(val)
     }
 }
-impl From<::parser::AtomicLiteral> for Source {
-    fn from(val: ::parser::AtomicLiteral) -> Self {
+impl From<ConstantTerm> for Source {
+    fn from(val: ConstantTerm) -> Self {
         Source::Constant(val)
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct Phi {
-    pub entries: Vec<(LabelN, Source)>,
-    pub ssa: SSAVariable,
 }
 
 #[derive(Debug, Clone)]
@@ -75,10 +42,8 @@ pub enum OpKind {
     /// Calls r[0] with args r[1..].
     /// Jumps to branch slot 0 on return, 1 on exception
     Apply { tail_call: bool },
-    /// Captures the local function, and assigns it to w[0]
-    CaptureNamedFunction(::ir::FunctionIdent),
-    /// Captures the external function, assigns it to w[0]
-    CaptureExternalNamedFunction(Atom, ::ir::FunctionIdent),
+    /// Captures the function, and assigns it to w[0]
+    CaptureNamedFunction(FunctionIdent),
 
     MakeTuple,
     MakeList,
@@ -225,46 +190,4 @@ pub enum OpKind {
     TombstoneSSA(SSAVariable),
 
     Unreachable,
-}
-
-#[derive(Debug, Clone)]
-pub struct Clause {
-    pub patterns: Vec<Pattern>,
-}
-
-impl OpKind {
-
-    fn num_jumps(&self) -> Option<usize> {
-        match *self {
-            OpKind::Call { tail_call: false } => Some(2),
-            OpKind::Call { tail_call: true } => Some(0),
-            OpKind::Apply { tail_call: false } => Some(2),
-            OpKind::Apply { tail_call: true } => Some(0),
-            OpKind::Jump => Some(1),
-            OpKind::Case(num_clauses) => Some(num_clauses + 1),
-            // One for each clause + failure leaf
-            //OpKind::Case { ref clauses, .. } => Some(clauses.len() + 1),
-            // TODO
-            //OpKind::Match { ref types } => Some(types.len()),
-            OpKind::ReturnOk => Some(0),
-            OpKind::ReturnThrow => Some(0),
-            OpKind::ReceiveStart { .. } => Some(1),
-            OpKind::ReceiveWait => Some(2),
-            OpKind::IfTruthy => Some(2),
-            //OpKind::CaseGuardFail { .. } => Some(1),
-            OpKind::Unreachable => Some(0),
-            _ => None,
-        }
-    }
-
-    fn is_logic(&self) -> bool {
-        match *self {
-            OpKind::TombstoneSSA(_) => false,
-            OpKind::Jump => false,
-            OpKind::ReturnOk => false,
-            OpKind::ReturnThrow => false,
-            _ => true,
-        }
-    }
-
 }

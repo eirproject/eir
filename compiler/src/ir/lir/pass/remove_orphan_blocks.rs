@@ -8,11 +8,10 @@ pub fn remove_orphan_blocks(cfg: &mut FunctionCfg) {
         let mut jump_targets: HashSet<LabelN> = HashSet::new();
         jump_targets.insert(cfg.entry());
 
-        for label in cfg.labels_iter() {
-            all_labels.insert(label);
-            for jump in cfg.jumps_iter(label) {
-                let dest = cfg.edge_target(jump);
-                jump_targets.insert(dest);
+        for block_container in cfg.graph.nodes() {
+            all_labels.insert(block_container.label);
+            for (_edge, dest) in block_container.outgoing.iter() {
+                jump_targets.insert(*dest);
             }
         }
 
@@ -23,7 +22,7 @@ pub fn remove_orphan_blocks(cfg: &mut FunctionCfg) {
         for orphan in all_labels.difference(&jump_targets) {
             println!("Removing orphan: {}", orphan);
             found = true;
-            cfg.remove_block(*orphan);
+            //cfg.remove_block(*orphan);
         }
         if !found { break; }
 

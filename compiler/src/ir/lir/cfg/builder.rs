@@ -28,7 +28,9 @@ impl<'a> FunctionCfgBuilder<'a> {
     pub fn basic_op(&mut self, block: LabelN, op: OpKind,
                     reads: Vec<Source>, writes: Vec<SSAVariable>) {
         self.assert_not_finished(block);
-        let node = self.target.cfg.node_weight_mut(block.0).unwrap();
+        //let node = self.target.cfg.node_weight_mut(block.0).unwrap();
+        let node_container = self.target.graph.node(block);
+        let mut node = node_container.inner.borrow_mut();
         node.ops.push(Op {
             kind: op,
             reads: reads,
@@ -37,7 +39,8 @@ impl<'a> FunctionCfgBuilder<'a> {
     }
 
     pub fn ensure_phi(&mut self, node: LabelN, node_instr: SSAVariable) {
-        let block = self.target.cfg.node_weight_mut(node.0).unwrap();
+        let node_container = self.target.graph.node(node);
+        let mut block = node_container.inner.borrow_mut();
         assert!(block.ops.len() == 0);
 
         let has_phi = block.phi_nodes.iter().any(|p| p.ssa == node_instr);
@@ -54,9 +57,10 @@ impl<'a> FunctionCfgBuilder<'a> {
                    pred: LabelN, pred_instr: SSAVariable,
                    node: LabelN, node_instr: SSAVariable) {
 
-        assert!(self.target.cfg.contains_edge(pred.0, node.0));
+        assert!(self.target.graph.has_edge(pred, node));
         self.assert_not_finished(pred);
-        let block = self.target.cfg.node_weight_mut(node.0).unwrap();
+        let block_container = &self.target.graph[node];
+        let mut block = block_container.inner.borrow_mut();
         assert!(block.ops.len() == 0);
 
         let add_new = if let Some(inner) =
@@ -74,28 +78,18 @@ impl<'a> FunctionCfgBuilder<'a> {
         }
     }
 
-    pub fn add_jump(&mut self, source: LabelN, dest: LabelN) {
-
+    pub fn add_jump(&mut self, source: LabelN, dest: LabelN) -> EdgeN {
         self.assert_not_finished(source);
-        //self.assert_not_finished(dest);
-
-        let edge_id = self.target.cfg.add_edge(source.0, dest.0, BasicBlockEdge {
+        self.target.graph.add_edge(source, dest, BasicBlockEdge {
             writes: vec![],
-        });
-        let node = self.target.cfg.node_weight_mut(source.0).unwrap();
-        node.outgoing_edges.push(EdgeN(edge_id));
+        })
     }
 
     pub fn add_block(&mut self) -> LabelN {
-        let idx = self.target.cfg.add_node(BasicBlock {
-            label: None,
+        self.target.graph.add_node(BasicBlock {
             ops: vec![],
             phi_nodes: vec![],
-            outgoing_edges: vec![],
-        });
-        self.target.cfg[idx].label = Some(LabelN(idx));
-
-        LabelN(idx)
+        })
     }
 
     pub fn op_move<I>(&mut self, block: LabelN, source: I, dest: SSAVariable) where I: Into<Source> {

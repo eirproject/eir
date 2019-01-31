@@ -287,7 +287,8 @@ impl hir::SingleExpression {
                     .collect();
 
                 let exc_ssa = env.new_ssa();
-                b.basic_op(main_cont, lir::OpKind::Call, reads, vec![self.ssa, exc_ssa]);
+                b.basic_op(main_cont, lir::OpKind::Call { tail_call: false },
+                           reads, vec![self.ssa, exc_ssa]);
                 //let prev_block = b.get_block();
 
                 //let throw_block = b.add_block();
@@ -326,7 +327,9 @@ impl hir::SingleExpression {
                     .collect();
 
                 let exc_ssa = env.new_ssa();
-                b.basic_op(main_cont, lir::OpKind::Apply, reads, vec![self.ssa, exc_ssa]);
+                b.basic_op(main_cont,
+                           lir::OpKind::Apply { tail_call: false },
+                           reads, vec![self.ssa, exc_ssa]);
                 let resume_block = b.add_block();
                 b.add_jump(main_cont, resume_block);
 

@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use super::{ Module, Annotated, Integer, FunctionName, AtomicLiteral, Constant,
 Function, FunctionDefinition, Expression, SingleExpression, Pattern,
 CaseClause, PrimOpCall };

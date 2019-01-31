@@ -30,16 +30,13 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
            fun_name, function.visibility, args)?;
     write!(w, "entry -> blk_{};\n\n", lir.entry())?;
 
-    for block_idx in lir.labels_iter() {
-        let block_name = block_idx;
-        let block = lir.block(block_idx);
+    for block_container in lir.graph.nodes() {
+        let block_name = block_container.label;
+        let block = block_container.inner.borrow();
 
         write!(w, "blk_{} [ label=<{}|", block_name, block_name)?;
 
         for phi in &block.phi_nodes {
-            //if phi.dead {
-            //    continue;
-            //}
             let fmt = format_label(&format!("{:?}, = PHI[", phi.ssa));
             write!(w, "{}{}\n", fmt, DOT_BREAK)?;
             for entry in phi.entries.iter() {
@@ -95,8 +92,6 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
                     match *read {
                         Source::Variable(reg) =>
                             write!(w, "{}", format_label(&format!("{:?}, ", reg)))?,
-                        //Source::Literal(ref lit) => write!(w, "{}, ", format_label(
-                        //    &format!("{:?}", lit)))?,
                         Source::Constant(ref lit) =>
                             write!(w, "{}", format_label(&format!("{:?}, ", lit)))?,
                     }
@@ -104,27 +99,13 @@ pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::i
                 write!(w, "] ")?;
             }
 
-            //write!(w, "r{:?}", op.r)?;
-            //write!(w, " w{:?}", op.w)?;
-
             write!(w, "{}", DOT_BREAK)?;
         }
 
-        //write!(w, "jumps[")?;
-        //for label in block.jumps.iter() {
-        //    write!(w, "{}, ", label.name())?;
-        //}
-        //write!(w, "] ")?;
-
         write!(w, "> ];\n")?;
 
-        //if let Some(label) = block.continuation {
-        //    write!(w, "blk_{} -> blk_{} [ label=cont ];\n", block_name, label.name())?;
-        //}
-
-        for (idx, edge_id) in lir.jumps_iter(block_idx).enumerate() {
-            let edge = lir.edge_target(edge_id);
-            write!(w, "blk_{} -> blk_L{} [ label={} ];\n", block_name, edge.0.index(), idx)?;
+        for (idx, (_edge_id, dst)) in block_container.outgoing.iter().enumerate() {
+            write!(w, "blk_{} -> blk_{} [ label={} ];\n", block_name, dst, idx)?;
         }
         write!(w, "\n")?;
     }

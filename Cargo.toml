@@ -7,4 +7,5 @@ members = [
     "interpreter",
     "tools",
     "term_config_format",
+    "eir",
 ]

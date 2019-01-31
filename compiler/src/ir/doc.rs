@@ -29,20 +29,22 @@ impl ToDoc for Module {
 
             let lir = {
                 let lir = fun.lir_function.as_ref().unwrap();
-                let lir_blocks = lir.cfg.node_indices().map(|node_idx| {
+                let lir_blocks = lir.graph.node_labels().map(|node_idx| {
                     let head = Doc::newline()
-                        .append(Doc::text(format!("block #{}:", node_idx.index())));
+                        .append(Doc::text(format!("block #{}:", node_idx)));
 
-                    let phis = lir.cfg[node_idx].phi_nodes.iter().map(|phi| {
+                    let block_container = &lir.graph[node_idx];
+                    let block = block_container.inner.borrow();
+
+                    let phis = block.phi_nodes.iter().map(|phi| {
                         Doc::newline().append(Doc::text(format!("{:?}", phi)))
                     });
 
-                    let block_ops = lir.cfg[node_idx].ops.iter().map(|op| {
+                    let block_ops = block.ops.iter().map(|op| {
                         Doc::newline().append(Doc::text(format!("{:?}", op)))
                     });
 
-                    let branches_vec = lir.cfg
-                        .neighbors_directed(node_idx, ::petgraph::Direction::Outgoing)
+                    let branches_vec = lir.graph[node_idx].outgoing.iter()
                         .map(|branch| Doc::text(format!("{:?}", branch)));
                     let branches = Doc::newline()
                         .append(Doc::text("branch ["))

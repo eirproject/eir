@@ -130,6 +130,8 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
         ::ir::lir::pass::simplify_branches(lir_mut);
         //::ir::lir::pass::remove_orphan_blocks(lir_mut);
         ::ir::lir::pass::validate(&function.ident, lir_mut);
+        ::ir::lir::pass::promote_tail_calls(lir_mut);
+        ::ir::lir::pass::validate(&function.ident, lir_mut);
     }
 
 
