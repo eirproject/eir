@@ -1,6 +1,13 @@
 use ::ir::lir::{ FunctionCfg, LabelN };
 use ::std::collections::HashSet;
 
+/// This pass removes blocks which have no predecessors.
+///
+/// Useful for cleaning up after other passes which would produce
+/// otherwise illegal IR.
+/// An example is the `promote_tail_calls` pass which can produce
+/// an orphaned chain of blocks which end in a PHI which references
+/// a nonexistent SSA variable.
 pub fn remove_orphan_blocks(cfg: &mut FunctionCfg) {
     loop {
 
@@ -15,14 +22,14 @@ pub fn remove_orphan_blocks(cfg: &mut FunctionCfg) {
             }
         }
 
-        println!("ALL: {:?}", all_labels);
-        println!("ALIVE: {:?}", jump_targets);
+        //println!("ALL: {:?}", all_labels);
+        //println!("ALIVE: {:?}", jump_targets);
 
         let mut found = false;
         for orphan in all_labels.difference(&jump_targets) {
-            println!("Removing orphan: {}", orphan);
+            //println!("Removing orphan: {}", orphan);
             found = true;
-            //cfg.remove_block(*orphan);
+            cfg.remove_block(*orphan);
         }
         if !found { break; }
 

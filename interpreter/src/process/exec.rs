@@ -213,7 +213,6 @@ impl StackFrame {
                     }
                 }
                 OpKind::MakeClosureEnv { ref env_idx } => {
-                    assert!(op.reads.len() > 0);
                     assert!(op.writes.len() == 1);
 
                     let env_vars: Vec<Term> = op.reads.iter()

@@ -80,7 +80,15 @@ fn match_node(term: &Term, node: &PatternNode,
         (Term::List(ref t_head, ref t_tail),
          PatternNode::List(ref p_head, ref p_tail)) => {
             if t_head.len() < p_head.len() {
-                unimplemented!();
+                for (pat, term) in p_head.iter().zip(t_head.iter()) {
+                    if !match_node(term, pat, binds, binds_ref) {
+                        return false;
+                    }
+                }
+                let n_p_head: Vec<_> = p_head.iter().skip(t_head.len())
+                    .cloned().collect();
+                let n_pat = PatternNode::List(n_p_head, p_tail.clone());
+                return match_node(t_tail, &n_pat, binds, binds_ref);
             } else if t_head.len() == p_head.len() {
                 for (pat, term) in p_head.iter().zip(t_head.iter()) {
                     if !match_node(term, pat, binds, binds_ref) {
@@ -140,6 +148,7 @@ fn match_node(term: &Term, node: &PatternNode,
             int == &bi
         }
         _ => {
+            ::trace::warning("WARNING: Pattern matching incomplete".to_string());
             println!("    Warning: Pattern matching incomplete");
             false
         },

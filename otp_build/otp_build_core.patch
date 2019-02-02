@@ -1,0 +1,16 @@
+diff --git a/make/otp.mk.in b/make/otp.mk.in
+index df29d26833..b74fb14a71 100644
+--- a/make/otp.mk.in
++++ b/make/otp.mk.in
+@@ -126,9 +126,11 @@ endif
+ 
+ $(EBIN)/%.beam: $(EGEN)/%.erl
+ 	$(V_ERLC) $(ERL_COMPILE_FLAGS) -o$(EBIN) $<
++	$(V_ERLC) $(ERL_COMPILE_FLAGS) +to_core -o$(EBIN) $<
+ 
+ $(EBIN)/%.beam: $(ESRC)/%.erl
+ 	$(V_ERLC) $(ERL_COMPILE_FLAGS) -o$(EBIN) $<
++	$(V_ERLC) $(ERL_COMPILE_FLAGS) +to_core -o$(EBIN) $<
+ 
+ ifeq ($(NATIVE_LIBS_ENABLED),yes)
+ # Special rule for the HIPE bootstrap w/ native libs

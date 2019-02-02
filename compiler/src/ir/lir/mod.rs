@@ -248,7 +248,7 @@ impl OpKind {
             //OpKind::Match { ref types } => Some(types.len()),
             OpKind::ReturnOk => Some(0),
             OpKind::ReturnThrow => Some(0),
-            OpKind::ReceiveStart { .. } => Some(1),
+            //OpKind::ReceiveStart { .. } => Some(1),
             OpKind::ReceiveWait => Some(2),
             OpKind::IfTruthy => Some(2),
             //OpKind::CaseGuardFail { .. } => Some(1),

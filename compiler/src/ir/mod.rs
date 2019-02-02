@@ -118,20 +118,32 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
 
     module.lambda_envs = Some(env.finish());
 
+    // Validate CFG between each major pass.
+    let hardass_validate = false;
+
     println!("STAGE: Functionwise");
     for function in module.functions.iter_mut() {
-        //println!("Function: {}", function.ident);
-        //println!("{:#?}", function.hir_fun);
         let lir_mut = function.lir_function.as_mut().unwrap();
         println!("Function: {}", function.ident);
-        //println!("{:#?}", function.hir_fun);
-        //::ir::lir::pass::compile_pattern(lir_mut);
+
+        if hardass_validate { ::ir::lir::pass::validate(&function.ident, lir_mut); }
+
+        // Remove orphans in generated LIR
+        ::ir::lir::pass::remove_orphan_blocks(lir_mut);
+        if hardass_validate { ::ir::lir::pass::validate(&function.ident, lir_mut); }
+
+        // Propagate atomics
         ::ir::lir::pass::propagate_atomics(lir_mut);
-        ::ir::lir::pass::simplify_branches(lir_mut);
-        //::ir::lir::pass::remove_orphan_blocks(lir_mut);
-        ::ir::lir::pass::validate(&function.ident, lir_mut);
+        if hardass_validate { ::ir::lir::pass::validate(&function.ident, lir_mut); }
+
+        // Promote tail calls
+        // AFTER propagate atomics
         ::ir::lir::pass::promote_tail_calls(lir_mut);
+        // REQUIRED after promote tail calls
+        ::ir::lir::pass::remove_orphan_blocks(lir_mut);
+
         ::ir::lir::pass::validate(&function.ident, lir_mut);
+
     }
 
 

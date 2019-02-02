@@ -4,10 +4,10 @@ use super::{ Phi, Op };
 mod builder;
 pub use self::builder::FunctionCfgBuilder;
 
-mod graph;
+use ::util::graph::*;
 
-pub type LabelN = self::graph::NodeLabel;
-pub type EdgeN = self::graph::EdgeLabel;
+pub type LabelN = NodeLabel;
+pub type EdgeN = EdgeLabel;
 
 #[derive(Debug)]
 pub struct BasicBlock {
@@ -19,7 +19,7 @@ pub struct BasicBlock {
 pub struct FunctionCfg {
     pub entry: LabelN,
     pub args: Vec<SSAVariable>,
-    pub graph: graph::Graph<BasicBlock, BasicBlockEdge>,
+    pub graph: Graph<BasicBlock, BasicBlockEdge>,
 }
 
 #[derive(Debug)]
@@ -30,7 +30,7 @@ pub struct BasicBlockEdge {
 impl FunctionCfg {
 
     pub fn new() -> Self {
-        let mut graph = graph::Graph::new();
+        let mut graph = Graph::new();
 
         let entry = graph.add_node(BasicBlock {
             phi_nodes: vec![],
@@ -73,24 +73,29 @@ impl FunctionCfg {
     }
 
     pub fn remove_block(&mut self, lbl: LabelN) {
-    //    // Validate that the node is not the entry point
-    //    // and is never jumped to
-    //    assert!(lbl != self.entry());
-    //    for label in self.labels_iter() {
-    //        for jump in self.jumps_iter(label) {
-    //            assert!(self.edge_target(jump) != lbl);
-    //        }
-    //    }
+        // Validate that the node is not the entry point.
+        assert!(lbl != self.entry());
 
-    //    // Remove from graph
-    //    self.dead_blocks.insert(lbl);
+        {
+            // Validate that the node has no incoming edges.
+            let block_container = &self.graph[lbl];
+            assert!(block_container.incoming.len() == 0);
 
-    //    // Remove from phi nodes
-    //    for block in self.blocks_iter_mut() {
-    //        for phi in block.phi_nodes.iter_mut() {
-    //            phi.entries.retain(|entry| entry.0 != lbl);
-    //        }
-    //    }
+            // Remove from PHI nodes
+            for (_edge, node) in block_container.outgoing.iter() {
+                let dst_block_container = &self.graph[*node];
+                let mut dst_block = dst_block_container.inner.borrow_mut();
+                for phi in dst_block.phi_nodes.iter_mut() {
+                    let pos = phi.entries.iter()
+                        .position(|(label, _ssa)| *label == lbl)
+                        .unwrap();
+                    phi.entries.remove(pos);
+                }
+            }
+        }
+
+        // Remove actual node
+        self.graph.remove_node(lbl);
     }
 
 }

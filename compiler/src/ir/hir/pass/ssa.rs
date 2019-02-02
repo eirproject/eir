@@ -7,7 +7,7 @@
 //! pass, since it dramatically simplifies some other compilation
 //! passes. (See pattern match compilation)
 
-use ::std::collections::HashMap;
+use ::std::collections::{ HashMap, HashSet };
 use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind };
 
 use ::ir::hir::scope_tracker::{ ScopeTracker, ScopeDefinition, LambdaEnv };
@@ -289,7 +289,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             // SSA references crossing the closures boundary.
             // These will be wrapped in a LambdaEnv
             let captures_map = env.pop_tracking();
-            let captures = captures_map.iter()
+            let mut captures: Vec<_> = captures_map.iter()
                 .map(|(k, &(o, i))| (k.clone(), o, i))
                 .collect();
 
@@ -299,11 +299,29 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             for (idx, closure) in closures.iter_mut().enumerate() {
                 closure.gen_ident(env_idx, idx);
             }
+
+            // For lambdas from same env which are referenced from within,
+            // add an alternate SSA alias since they are removed from the
+            // explicit captures. This is kinda hacky.
+            let inside_vars_map: HashMap<_, _> =
+                captures.iter().map(|v| (v.1, v.2)).collect();
+            let meta_binds: Vec<_> = closures.iter()
+                .map(|c| {
+                    let ident = c.ident.clone().unwrap();
+                    let outside_ssa = c.alias.as_ref().unwrap().ssa;
+                    let inside_ssa = inside_vars_map.get(&outside_ssa).cloned();
+                    (ident, outside_ssa, inside_ssa)
+                })
+                .collect();
+
+            // Remove references to meta binds from captures
+            let meta_binds_vars: HashSet<_> =
+                meta_binds.iter().map(|v| v.1).collect();
+            captures.retain(|v| !meta_binds_vars.contains(&v.1));
+
             env.add_lambda_env(env_idx, LambdaEnv {
                 captures: captures,
-                meta_binds: closures.iter()
-                    .map(|c| (c.ident.clone().unwrap(), c.alias.as_ref().unwrap().ssa))
-                    .collect(),
+                meta_binds: meta_binds,
             });
 
             // Outer body. All lambdas are still in scope.

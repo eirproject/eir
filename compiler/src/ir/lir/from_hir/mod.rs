@@ -54,7 +54,7 @@ impl FunctionDefinition {
                         .map(|c| c.2)
                         .collect(),
                 );
-                for (fun, ssa) in lambda_env.meta_binds.iter() {
+                for (fun, ssa, alt_ssa) in lambda_env.meta_binds.iter() {
                     builder.basic_op(
                         entry,
                         lir::OpKind::BindClosure {
@@ -64,6 +64,9 @@ impl FunctionDefinition {
                         vec![Source::Variable(lambda_env_ssa)],
                         vec![*ssa]
                     );
+                    if let Some(alt_ssa) = alt_ssa {
+                        builder.op_move(entry, *ssa, *alt_ssa);
+                    }
                 }
             }
 

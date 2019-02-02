@@ -6,7 +6,7 @@ use ::process::{ CallReturn, ProcessContext };
 
 use ::num_bigint::{ BigInt, Sign };
 
-use term::{ ErlEq, ErlExactEq };
+use term::{ ErlEq, ErlExactEq, ErlOrd };
 
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -161,6 +161,15 @@ fn is_atom(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallRetu
     }
 }
 
+fn is_integer(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 1);
+    let a1 = &args[0];
+    match a1 {
+        Term::Integer(_) => CallReturn::Return { term: Term::new_bool(true) },
+        _ => CallReturn::Return { term: Term::new_bool(false) },
+    }
+}
+
 fn list_append(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     // TODO: Validate semantics
     assert!(args.len() == 2);
@@ -169,10 +178,14 @@ fn list_append(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> Call
         (Term::Nil, Term::List(_, _)) => CallReturn::Return { term: args[1].clone() },
         (Term::List(_, ref tail), Term::Nil) if tail.erl_eq(&Term::Nil)
             => CallReturn::Return { term: args[0].clone() },
-        (Term::List(ref f_head, ref f_tail), Term::List(ref b_head, ref b_tail)) if f_tail.erl_eq(&Term::Nil) => {
-            let mut head = f_head.clone();
-            head.extend(b_head.iter().cloned());
-            CallReturn::Return { term: Term::List(head, b_tail.clone()) }
+        (Term::List(ref _f_head, ref _f_tail), Term::List(ref b_head, ref b_tail)) => {
+            let (mut f_head_terms, f_tail_term) = args[0].as_inproper_list();
+            if let Term::Nil = f_tail_term {
+                f_head_terms.extend(b_head.iter().cloned());
+                CallReturn::Return { term: Term::List(f_head_terms, b_tail.clone()) }
+            } else {
+                CallReturn::Throw
+            }
         }
         _ => CallReturn::Throw,
     }
@@ -187,6 +200,15 @@ fn and(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     assert!(args.len() == 2);
     if let (Some(a1), Some(a2)) = (args[0].as_boolean(), args[1].as_boolean()) {
         CallReturn::Return { term: Term::new_bool(a1 && a2) }
+    } else {
+        CallReturn::Throw
+    }
+}
+
+fn or(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 2);
+    if let (Some(a1), Some(a2)) = (args[0].as_boolean(), args[1].as_boolean()) {
+        CallReturn::Return { term: Term::new_bool(a1 || a2) }
     } else {
         CallReturn::Throw
     }
@@ -339,22 +361,53 @@ fn atom_to_list(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> Cal
     }
 }
 
+fn less_than_or_equal(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 2);
+    let a1 = &args[0];
+    let a2 = &args[1];
+    let ord = a1.erl_ord(a2);
+    CallReturn::Return { term: Term::new_bool(ord != std::cmp::Ordering::Greater) }
+}
+
+fn setelement(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 3);
+    let idx = if let Some(num) = args[0].as_usize() { num } else {
+        return CallReturn::Throw;
+    };
+    let value = args[2].clone();
+    if let Term::Tuple(vals) = &args[1] {
+        if idx > vals.len() {
+            CallReturn::Throw
+        } else {
+            let mut vals = vals.clone();
+            vals[idx] = value;
+            CallReturn::Return { term: Term::Tuple(vals) }
+        }
+    } else {
+        CallReturn::Throw
+    }
+}
+
 pub fn make_erlang() -> NativeModule {
     let mut module = NativeModule::new("erlang".to_string());
     module.add_fun("+".to_string(), 2, Box::new(add));
     module.add_fun("-".to_string(), 2, Box::new(sub));
     module.add_fun("*".to_string(), 2, Box::new(mul));
+    module.add_fun("++".to_string(), 2, Box::new(list_append));
+    module.add_fun("=:=".to_string(), 2, Box::new(exact_eq));
+    module.add_fun("=<".to_string(), 2, Box::new(less_than_or_equal));
     module.add_fun("is_list".to_string(), 1, Box::new(is_list));
     module.add_fun("is_atom".to_string(), 1, Box::new(is_atom));
     module.add_fun("is_binary".to_string(), 1, Box::new(is_binary));
-    module.add_fun("++".to_string(), 2, Box::new(list_append));
-    module.add_fun("=:=".to_string(), 2, Box::new(exact_eq));
+    module.add_fun("is_integer".to_string(), 1, Box::new(is_integer));
     module.add_fun("and".to_string(), 2, Box::new(and));
+    module.add_fun("or".to_string(), 2, Box::new(or));
     module.add_fun("tuple_size".to_string(), 1, Box::new(tuple_size));
     module.add_fun("is_function".to_string(), 1, Box::new(is_function));
     module.add_fun("is_function".to_string(), 2, Box::new(is_function));
     module.add_fun("spawn_monitor".to_string(), 1, Box::new(spawn_monitor_1));
     module.add_fun("not".to_string(), 1, Box::new(not));
     module.add_fun("atom_to_list".to_string(), 1, Box::new(atom_to_list));
+    module.add_fun("setelement".to_string(), 3, Box::new(setelement));
     module
 }

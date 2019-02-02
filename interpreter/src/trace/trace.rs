@@ -30,6 +30,17 @@ enum TraceEntry {
         tid: u64,
         args: HashMap<String, ::serde_json::Value>,
     },
+    #[serde(rename = "i")]
+    Instant {
+        name: String,
+        #[serde(rename = "ts")]
+        timestamp: u64,
+        pid: u64,
+        tid: u64,
+        #[serde(rename = "s")]
+        scope: &'static str,
+        args: HashMap<String, ::serde_json::Value>,
+    }
 }
 
 lazy_static::lazy_static! {
@@ -82,6 +93,10 @@ enum TraceEventType {
         block: LabelN,
     },
     BasicBlockEnd,
+    Warning {
+        text: String,
+        args: HashMap<String, ::serde_json::Value>,
+    },
 }
 
 struct TraceCollector {
@@ -111,7 +126,7 @@ pub fn set_pid(pid: Pid) {
 
 pub fn get_pid() -> Pid {
     TRACE_COLLECTOR.with(|c| {
-        let mut c = c.lock().unwrap();
+        let c = c.lock().unwrap();
         c.current_pid
     })
 }
@@ -188,11 +203,40 @@ pub fn end_basic_block() {
     })
 }
 
+pub fn warning(text: String) {
+    TRACE_COLLECTOR.with(|c| {
+        let mut c = c.lock().unwrap();
+        let pid = c.current_pid;
+        c.events.push(TraceEvent {
+            pid: pid,
+            typ: TraceEventType::Warning {
+                text: text,
+                args: HashMap::new(),
+            }
+        });
+    })
+}
+
+pub fn warning_args<F>(text: String, make_args: F) where F: FnOnce() -> HashMap<String, ::serde_json::Value> {
+    TRACE_COLLECTOR.with(|c| {
+        let mut c = c.lock().unwrap();
+        let pid = c.current_pid;
+        c.events.push(TraceEvent {
+            pid: pid,
+            typ: TraceEventType::Warning {
+                text: text,
+                args: (make_args)()
+            }
+        });
+    })
+}
+
 pub fn dump_trace(filename: String) {
     let json = TRACE_COLLECTOR.with(|c| {
         let c = c.lock().unwrap();
-        let json_events: Vec<_> = c.events.iter().enumerate()
-            .map(|(idx, event)| {
+        let mut idx = 0;
+        let json_events: Vec<_> = c.events.iter()
+            .map(|event| {
                 match &event.typ {
                     TraceEventType::FunctionEnter { module, ident, args } => {
                         let mut event_args = HashMap::new();
@@ -214,6 +258,7 @@ pub fn dump_trace(filename: String) {
                         }
                     }
                     TraceEventType::FunctionExit { ret } => {
+                        if ret.is_some() { idx += 1; }
                         let mut event_args = HashMap::new();
                         event_args.insert(
                             "Call Return".to_string(),
@@ -238,11 +283,22 @@ pub fn dump_trace(filename: String) {
                         }
                     }
                     TraceEventType::BasicBlockEnd => {
+                        idx += 1;
                         TraceEntry::DurationEnd {
                             timestamp: idx as u64,
                             pid: event.pid.0 as u64,
                             tid: 1,
                             args: HashMap::new(),
+                        }
+                    }
+                    TraceEventType::Warning { text, args } => {
+                        TraceEntry::Instant {
+                            name: text.clone(),
+                            timestamp: idx as u64,
+                            pid: event.pid.0 as u64,
+                            tid: 0,
+                            scope: "p",
+                            args: args.clone(),
                         }
                     }
                 }

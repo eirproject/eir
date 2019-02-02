@@ -117,6 +117,22 @@ impl<Node, Edge> Graph<Node, Edge> {
         }
     }
 
+    pub fn remove_node(&mut self, lbl: NodeLabel) -> Node {
+        {
+            let (incoming, outgoing) = {
+                let node = &self.nodes[&lbl];
+                (node.incoming.clone(), node.outgoing.clone())
+            };
+            for (edge, _node) in incoming.iter() {
+                self.remove_edge(*edge);
+            }
+            for (edge, _node) in outgoing.iter() {
+                self.remove_edge(*edge);
+            }
+        }
+        self.nodes.remove(&lbl).unwrap().inner.into_inner()
+    }
+
 }
 
 impl<Node, Edge> Index<NodeLabel> for Graph<Node, Edge> {

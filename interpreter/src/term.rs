@@ -1,5 +1,6 @@
 use ::std::cell::RefCell;
 use ::std::rc::Rc;
+use std::cmp::Ord;
 
 use core_erlang_compiler::intern::Atom;
 use core_erlang_compiler::ir::hir::scope_tracker::LambdaEnvIdx;
@@ -170,6 +171,14 @@ impl Term {
         }
     }
 
+    pub fn as_usize(&self) -> Option<usize> {
+        if let Term::Integer(ref bigint) = self {
+            Some(bigint.to_usize().unwrap())
+        } else {
+            None
+        }
+    }
+
     pub fn as_atom(&self) -> Option<Atom> {
         if let Term::Atom(ref atom) = self {
             Some(atom.clone())
@@ -236,6 +245,31 @@ impl ErlEq for Term {
             (_, Term::ValueList(_)) => unimplemented!(),
 
             (Term::Nil, Term::Nil) => true,
+            (Term::List(h1, t1), Term::Nil) if h1.len() == 0 =>
+                if let Term::Nil = **t1 { true } else { false },
+            (Term::Nil, Term::List(h2, t2)) if h2.len() == 0 =>
+                if let Term::Nil = **t2 { true } else { false },
+            (Term::List(h1, t1), Term::List(h2, t2)) => {
+                let head_ok = h1.iter().zip(h2.iter())
+                    .all(|(v1, v2)| v1.erl_eq(v2));
+                if !head_ok { return false; }
+                if h1.len() == h2.len() {
+                    t1.erl_eq(t2)
+                } else if h1.len() > h2.len() {
+                    let h1_new_head: Vec<_> = h1.iter().skip(h2.len())
+                        .cloned().collect();
+                    let h1_new = Term::List(h1_new_head, t1.clone());
+                    h1_new.erl_eq(t2)
+                } else {
+                    let h2_new_head: Vec<_> = h2.iter().skip(h1.len())
+                        .cloned().collect();
+                    let h2_new = Term::List(h2_new_head, t2.clone());
+                    t1.erl_eq(&h2_new)
+                }
+            }
+            (Term::Nil, _) => false,
+            (_, Term::Nil) => false,
+
             (Term::Integer(ref i1), Term::Integer(ref i2)) => i1 == i2,
             (Term::Float(ref f1), Term::Float(ref f2)) => f1 == f2,
             (Term::Integer(_), Term::Float(_)) => unimplemented!(),
@@ -251,6 +285,21 @@ impl ErlEq for Term {
                  arity: ref arity2 }) =>
                 mod1 == mod2 && fun_name1 == fun_name2 && arity1 == arity2,
             _ => {
+                ::trace::warning_args(
+                    "WARNING: ErlEq might be unimplemented".to_string(),
+                    || {
+                        let mut event_args = std::collections::HashMap::new();
+                        event_args.insert(
+                            "lhs".to_string(),
+                            ::serde_json::Value::String(format!("{:?}", self))
+                        );
+                        event_args.insert(
+                            "rhs".to_string(),
+                            ::serde_json::Value::String(format!("{:?}", other))
+                        );
+                        event_args
+                    }
+                );
                 println!("WARNING: ErlEq might be unimplemented");
                 println!("  {:?} == {:?}", self, other);
                 false
@@ -270,12 +319,69 @@ impl ErlExactEq for Term {
             (_, Term::ValueList(_)) => unimplemented!(),
 
             (Term::Atom(ref a1), Term::Atom(ref a2)) => a1 == a2,
+            (Term::Atom(_), _) => false,
+            (_, Term::Atom(_)) => false,
+
+            (Term::Integer(lhs), Term::Integer(rhs)) => lhs == rhs,
+            (Term::Integer(_), _) => false,
+            (_, Term::Integer(_)) => false,
+
+            (Term::Nil, Term::Nil) => true,
+            (Term::List(h1, t1), Term::Nil) if h1.len() == 0 =>
+                if let Term::Nil = **t1 { true } else { false },
+            (Term::Nil, Term::List(h2, t2)) if h2.len() == 0 =>
+                if let Term::Nil = **t2 { true } else { false },
+            (Term::List(h1, t1), Term::List(h2, t2)) => {
+                let head_ok = h1.iter().zip(h2.iter())
+                    .all(|(v1, v2)| v1.erl_exact_eq(v2));
+                if !head_ok { return false; }
+                if h1.len() == h2.len() {
+                    t1.erl_exact_eq(t2)
+                } else if h1.len() > h2.len() {
+                    let h1_new_head: Vec<_> = h1.iter().skip(h2.len())
+                        .cloned().collect();
+                    let h1_new = Term::List(h1_new_head, t1.clone());
+                    h1_new.erl_exact_eq(t2)
+                } else {
+                    let h2_new_head: Vec<_> = h2.iter().skip(h1.len())
+                        .cloned().collect();
+                    let h2_new = Term::List(h2_new_head, t2.clone());
+                    t1.erl_exact_eq(&h2_new)
+                }
+            }
+            (Term::Nil, _) => false,
+            (_, Term::Nil) => false,
 
             _ => {
+                ::trace::warning_args(
+                    "WARNING: ErlExactEq might be unimplemented".to_string(),
+                    || {
+                        let mut event_args = std::collections::HashMap::new();
+                        event_args.insert(
+                            "lhs".to_string(),
+                            ::serde_json::Value::String(format!("{:?}", self))
+                        );
+                        event_args.insert(
+                            "rhs".to_string(),
+                            ::serde_json::Value::String(format!("{:?}", other))
+                        );
+                        event_args
+                    }
+                );
                 println!("WARNING: ErlExactEq might be unimplemented");
                 println!("  {:?} =:= {:?}", self, other);
                 false
             }
+        }
+    }
+}
+
+impl ErlOrd for Term {
+    fn erl_ord(&self, other: &Term) -> ::std::cmp::Ordering {
+        match (self, other) {
+            (Term::Integer(val1), Term::Integer(val2)) =>
+                val1.cmp(val2),
+            (_, _) => unimplemented!(),
         }
     }
 }
