@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::cell::RefCell;
 use std::ops::{ Index, IndexMut };
 
+pub mod dominators;
+
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct NodeLabel(usize);
 impl std::fmt::Display for NodeLabel {

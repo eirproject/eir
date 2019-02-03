@@ -1,10 +1,11 @@
-use ::ir::SSAVariable;
-use super::{ Phi, Op };
+use super::SSAVariable;
+use crate::op::{ Op };
+use crate::Source;
 
 mod builder;
 pub use self::builder::FunctionCfgBuilder;
 
-use ::util_c::graph::*;
+use util::graph::*;
 
 pub type LabelN = NodeLabel;
 pub type EdgeN = EdgeLabel;
@@ -13,6 +14,12 @@ pub type EdgeN = EdgeLabel;
 pub struct BasicBlock {
     pub phi_nodes: Vec<Phi>,
     pub ops: Vec<Op>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Phi {
+    pub entries: Vec<(LabelN, Source)>,
+    pub ssa: SSAVariable,
 }
 
 #[derive(Debug)]

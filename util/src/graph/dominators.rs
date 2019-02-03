@@ -1,4 +1,4 @@
-use super::graph::*;
+use super::*;
 
 use std::collections::{ HashMap, HashSet };
 

@@ -7,13 +7,3 @@ impl Debug for Module {
         self.to_doc().render_fmt(80, f)
     }
 }
-
-impl Display for FunctionIdent {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        if let Some(lambda_num) = self.lambda {
-            write!(f, "{}@{}.{}/{}", self.name, (lambda_num.0).0, lambda_num.1, self.arity)
-        } else {
-            write!(f, "{}/{}", self.name, self.arity)
-        }
-    }
-}

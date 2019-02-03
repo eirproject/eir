@@ -31,10 +31,11 @@ fn main() {
 
         let name_sym = Atom::from_str(&fun_name);
         let arity = arity.unwrap().parse().unwrap();
-        let lambda_env: Option<usize> = lambda_env.map(|s| s.parse().unwrap());
+        let lambda_env: Option<String> = lambda_env.map(|s| s);
         let lambda_num: Option<usize> = lambda_num.map(|s| s.parse().unwrap());
 
-        let lambda_d = lambda_env.map(|v| (LambdaEnvIdx(v), lambda_num.unwrap()));
+        let lambda_d = lambda_env.as_ref().map(|v| (
+            LambdaEnvIdx::parse_from_str(v), lambda_num.unwrap()));
 
         let funs: Vec<_> = hir.functions.iter().map(|f| f.ident.clone()).collect();
         println!("{:?}", funs);

@@ -10,7 +10,8 @@
 use ::std::collections::{ HashMap, HashSet };
 use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind };
 
-use ::ir::hir::scope_tracker::{ ScopeTracker, ScopeDefinition, LambdaEnv };
+use ::ir::hir::scope_tracker::VerboseLambdaEnv;
+use ::ir::hir::scope_tracker::{ ScopeTracker, ScopeDefinition };
 
 pub fn assign_ssa_expression(env: &mut ScopeTracker, expr: &mut Expression) {
     for single in &mut expr.values {
@@ -152,7 +153,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             expr.ssa = env.new_ssa();
         },
         SingleExpressionKind::Map { ref mut values, ref mut merge } => {
-            for &mut (ref mut key, ref mut val) in values.iter_mut() {
+            for &mut (ref mut key, ref mut val, assoc) in values.iter_mut() {
                 assign_ssa_single_expression(env, key);
                 assign_ssa_single_expression(env, val);
             }
@@ -230,10 +231,10 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 .collect();
 
             // Generate the LambdaEnvIdx and insert the LambdaEnv
-            let env_idx = env.next_env_idx();
+            let env_idx = env.gen_env_idx();
             closure.gen_ident(env_idx, 0);
             *lambda_env = Some(env_idx);
-            env.add_lambda_env(env_idx, LambdaEnv {
+            env.add_lambda_env(env_idx, VerboseLambdaEnv {
                 captures: captures,
                 meta_binds: vec![],
                 //meta_binds: vec![(closure.ident.clone().unwrap(),
@@ -294,7 +295,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 .collect();
 
             // Generate the LambdaEnvIdx and insert the LambdaEnv
-            let env_idx = env.next_env_idx();
+            let env_idx = env.gen_env_idx();
             *lambda_env = Some(env_idx);
             for (idx, closure) in closures.iter_mut().enumerate() {
                 closure.gen_ident(env_idx, idx);
@@ -319,7 +320,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 meta_binds.iter().map(|v| v.1).collect();
             captures.retain(|v| !meta_binds_vars.contains(&v.1));
 
-            env.add_lambda_env(env_idx, LambdaEnv {
+            env.add_lambda_env(env_idx, VerboseLambdaEnv {
                 captures: captures,
                 meta_binds: meta_binds,
             });

@@ -1,34 +1,28 @@
 use std::collections::HashMap;
 
 pub mod hir;
-use ::ir::hir::scope_tracker::{ LambdaEnv, ScopeTracker };
-pub use ::ir::hir::scope_tracker::LambdaEnvIdx;
+use ::ir::hir::scope_tracker::{ ScopeTracker, ScopeDefinition };
+pub use ::eir::{ LambdaEnv, LambdaEnvIdx };
+use ::eir::FunctionIdent;
 pub mod lir;
 mod doc;
 mod fmt;
 
-use ::intern::{ Atom, Variable };
+use ::{ Atom, Variable };
 use ::parser;
 
-pub use ::util::ssa_variable::{ SSAVariable, INVALID_SSA };
+use ::eir::ssa::{ SSAVariable, INVALID_SSA };
 
 pub struct Module {
     pub name: Atom,
     pub attributes: Vec<(Atom, parser::Constant)>,
     pub functions: Vec<FunctionDefinition>,
-    pub lambda_envs: Option<Vec<LambdaEnv>>,
+    pub lambda_envs: Option<HashMap<LambdaEnvIdx, LambdaEnv>>,
 }
 impl Module {
     pub fn get_env<'a>(&'a self, env_idx: LambdaEnvIdx) -> &'a LambdaEnv {
-        &self.lambda_envs.as_ref().unwrap()[env_idx.0]
+        &self.lambda_envs.as_ref().unwrap()[&env_idx]
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FunctionIdent {
-    pub name: Atom,
-    pub arity: u32,
-    pub lambda: Option<(LambdaEnvIdx, usize)>,
 }
 
 #[derive(Debug)]
@@ -62,11 +56,11 @@ impl AVariable {
 
 #[derive(Debug, Clone)]
 pub struct AFunctionName {
-    var: ::parser::FunctionName,
+    var: FunctionIdent,
     ssa: SSAVariable,
 }
 impl AFunctionName {
-    fn new(var: ::parser::FunctionName) -> Self {
+    fn new(var: FunctionIdent) -> Self {
         AFunctionName {
             var: var,
             ssa: INVALID_SSA,
@@ -87,7 +81,7 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
         let mut scope = HashMap::new();
         for arg in &mut func.hir_fun.args {
             arg.ssa = env.new_ssa();
-            scope.insert(::ir::hir::scope_tracker::ScopeDefinition::Variable(
+            scope.insert(ScopeDefinition::Variable(
                 arg.var.clone()), arg.ssa);
         }
         env.push_scope(scope);

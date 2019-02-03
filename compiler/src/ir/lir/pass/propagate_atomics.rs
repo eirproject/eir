@@ -1,12 +1,13 @@
-use ::parser::AtomicLiteral;
 use ::ir::SSAVariable;
-use ::ir::lir::{ OpKind, Source, FunctionCfg };
+use ::eir::{ Source, ConstantTerm };
+use ::eir::op::OpKind;
+use ::eir::cfg::FunctionCfg;
 use ::std::collections::HashMap;
 
 pub fn propagate_atomics(cfg: &mut FunctionCfg) {
 
     // Write => Read
-    let mut constants: HashMap<SSAVariable, AtomicLiteral> = HashMap::new();
+    let mut constants: HashMap<SSAVariable, ConstantTerm> = HashMap::new();
     let mut moves: HashMap<SSAVariable, SSAVariable> = HashMap::new();
 
     for block_container in cfg.graph.nodes() {

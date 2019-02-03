@@ -1,8 +1,10 @@
+use std::collections::HashMap;
 use ::std::fmt;
 use super::{ AVariable, AFunctionName, SSAVariable, FunctionIdent };
 use ::parser;
 use ::{ Atom, Variable };
-use ::ir::hir::scope_tracker::LambdaEnvIdx;
+use ::eir::LambdaEnvIdx;
+use ::parser::MapExactAssoc;
 
 pub mod from_parsed;
 pub mod pass;
@@ -117,7 +119,7 @@ impl EachSingleExpression for SingleExpression {
                 }
             },
             SEK::Map { ref mut values, ref mut merge } => {
-                for &mut (ref mut key, ref mut val) in values.iter_mut() {
+                for &mut (ref mut key, ref mut val, assoc) in values.iter_mut() {
                     key.each_single_expression_mut(f, enter_lambdas);
                     val.each_single_expression_mut(f, enter_lambdas);
                 }
@@ -184,8 +186,8 @@ impl ::ToDoc for SingleExpression {
             SEK::Variable(ref var) => Doc::text(format!("{:?}", var)),
             SEK::NamedFunction { ref name, ref is_lambda } =>
                 Doc::text(format!("{:?} lambda: {}", name, is_lambda)),
-            SEK::ExternalNamedFunction { ref module, ref name } =>
-                Doc::text(format!("{:?}:{:?}", module, name)),
+            SEK::ExternalNamedFunction { ref name } =>
+                Doc::text(format!("{:?}", name)),
             SEK::InterModuleCall { ref module, ref name, ref args } => {
                 let args_doc = Doc::intersperse(
                     args.iter().map(|arg| Doc::newline().append(arg.to_doc())),
@@ -218,7 +220,6 @@ pub enum SingleExpressionKind {
         is_lambda: bool,
     },
     ExternalNamedFunction {
-        module: Atom,
         name: AFunctionName,
     },
 
@@ -229,10 +230,10 @@ pub enum SingleExpressionKind {
                    body: Box<SingleExpression>, env_ssa: SSAVariable },
 
     // Value constructors
-    Atomic(parser::AtomicLiteral),
+    Atomic(::eir::AtomicTerm),
     Tuple(Vec<SingleExpression>),
     List { head: Vec<SingleExpression>, tail: Box<SingleExpression> },
-    Map { values: Vec<(SingleExpression, SingleExpression)>,
+    Map { values: Vec<(SingleExpression, SingleExpression, MapExactAssoc)>,
           merge: Option<Box<SingleExpression>> },
     Binary(Vec<(SingleExpression, Vec<SingleExpression>)>),
     ValueList(Vec<SingleExpression>),
@@ -288,7 +289,7 @@ impl Closure {
 
         let mut ident = self.parent_ident.clone();
         // + 1 for lambda env
-        ident.arity = (self.fun.as_ref().unwrap().args.len() + 1) as u32;
+        ident.arity = self.fun.as_ref().unwrap().args.len() + 1;
         ident.lambda = Some((env_idx, lambda_num));
 
         self.ident = Some(ident);
@@ -326,17 +327,46 @@ impl Pattern {
             node: PatternNode::Wildcard,
         }
     }
+    pub fn to_eir(&self) -> ::eir::pattern::Pattern {
+        let binds_map: HashMap<_, _> = self.binds.iter().cloned().collect();
+        ::eir::pattern::Pattern {
+            binds: self.binds.iter().map(|(_var, ssa)| *ssa).collect(),
+            node: self.node.to_eir(&binds_map),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub enum PatternNode {
     Wildcard,
     BindVar(Variable, Box<PatternNode>),
-    Atomic(parser::AtomicLiteral),
+    Atomic(::eir::AtomicTerm),
     Binary(Vec<(PatternNode, Vec<usize>)>),
     Tuple(Vec<PatternNode>),
     List(Vec<PatternNode>, Box<PatternNode>),
     Map(Vec<(usize, Box<PatternNode>)>),
+}
+impl PatternNode {
+    fn to_eir(&self, binds: &HashMap<Variable, SSAVariable>) -> ::eir::pattern::PatternNode {
+        use ::eir::pattern::PatternNode as EPN;
+        match self {
+            PatternNode::Wildcard => EPN::Wildcard,
+            PatternNode::BindVar(var, node) =>
+                EPN::Bind(binds[var], Box::new(node.to_eir(binds))),
+            PatternNode::Atomic(atomic) => EPN::Atomic(atomic.clone()),
+            PatternNode::Binary(_) => unimplemented!(),
+            PatternNode::Tuple(nodes) =>
+                EPN::Tuple(nodes.iter().map(|n| n.to_eir(binds)).collect()),
+            PatternNode::List(head, tail) =>
+                EPN::List(
+                    head.iter().map(|n| n.to_eir(binds)).collect(),
+                    Box::new(tail.to_eir(binds))),
+            PatternNode::Map(nodes) =>
+                EPN::Map(nodes.iter()
+                         .map(|n| (n.0, Box::new(n.1.to_eir(binds))))
+                         .collect()),
+        }
+    }
 }
 impl fmt::Display for PatternNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

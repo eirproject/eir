@@ -1,5 +1,7 @@
 use ::std::collections::{ HashSet, HashMap };
-use ::ir::lir::{ FunctionCfg, Source, OpKind, LabelN, SSAVariable };
+use ::eir::Source;
+use ::eir::op::OpKind;
+use ::ir::lir::{ FunctionCfg, LabelN, SSAVariable };
 use ::ir::FunctionIdent;
 
 pub fn validate(ident: &FunctionIdent, cfg: &FunctionCfg) {

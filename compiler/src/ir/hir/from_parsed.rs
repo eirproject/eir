@@ -5,11 +5,12 @@ use ::ir::{ AVariable, AFunctionName, Module, FunctionDefinition,
             FunctionVisibility, FunctionIdent };
 use ::ir::hir::{ SingleExpression, SingleExpressionKind,
                  Function, Pattern, PatternNode, Closure };
-use ::util::ssa_variable::INVALID_SSA;
+
+use ::eir::ssa::INVALID_SSA;
 
 impl Module {
     fn from_parsed(module: &::parser::Module) -> Self {
-        let exported: HashSet<(Atom, u32)> = module.declarations.iter()
+        let exported: HashSet<(Atom, usize)> = module.declarations.iter()
             .map(|f| (f.name.clone(), f.arity)).collect();
         Module {
             name: module.name.clone(),
@@ -20,6 +21,7 @@ impl Module {
                     let arity = f.name.0.arity;
                     let is_visible = exported.contains(&(name.clone(), arity));
                     let fun_ident = FunctionIdent {
+                        module: module.name.clone(),
                         name: name,
                         arity: arity,
                         lambda: None,
@@ -123,15 +125,20 @@ impl SingleExpression {
             PSE::Variable(ref v) =>
                 SingleExpressionKind::Variable(AVariable::new(v.clone())),
             PSE::FunctionName(ref f) => {
+                let ident = FunctionIdent {
+                    module: fun_ident.module.clone(),
+                    name: f.name.clone(),
+                    arity: f.arity,
+                    lambda: None,
+                };
                 SingleExpressionKind::NamedFunction {
-                    name: AFunctionName::new(f.clone()),
+                    name: AFunctionName::new(ident),
                     is_lambda: false,
                 }
             },
             PSE::ExternalFunctionName { ref module, ref name } => {
                 SingleExpressionKind::ExternalNamedFunction {
-                    module: module.clone(),
-                    name: AFunctionName::new(name.clone()),
+                    name: AFunctionName::new(name.to_eir(module.clone())),
                 }
             }
 
@@ -268,7 +275,8 @@ impl SingleExpression {
                 SingleExpressionKind::BindClosures {
                     closures: funs.iter().map(|f| {
                         Closure {
-                            alias: Some(AFunctionName::new(f.0.clone())),
+                            alias: Some(AFunctionName::new(
+                                f.0.to_eir(fun_ident.module.clone()))),
                             ident: None,
                             parent_ident: fun_ident.clone(),
                             fun: Some(Box::new(Function::from_parsed(&f.1, fun_ident))),
@@ -282,9 +290,10 @@ impl SingleExpression {
             },
             PSE::Map(ref kv, ref merge) => {
                 let kv_h = kv.iter()
-                    .map(|&(ref k, ref v)| {
+                    .map(|&(ref k, assoc, ref v)| {
                         (SingleExpression::from_parsed(k, fun_ident),
-                         SingleExpression::from_parsed(v, fun_ident))
+                         SingleExpression::from_parsed(v, fun_ident),
+                         assoc)
                     }).collect();
                 let merge = merge.as_ref().map(
                     |v| Box::new(SingleExpression::from_parsed(&v, fun_ident)));

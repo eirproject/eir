@@ -1,6 +1,5 @@
-use ::ir::SSAVariable;
-use ::ir::lir::LabelN;
-use ::ir::lir::cfg::FunctionCfgBuilder;
+use ::eir::SSAVariable;
+use ::eir::cfg::{ FunctionCfgBuilder, LabelN };
 
 pub struct ExceptionHandlerStack {
     stack: Vec<(LabelN, Option<SSAVariable>)>,

@@ -1,11 +1,16 @@
+use std::collections::HashSet;
+
 use ::ir::{ Module, FunctionDefinition };
 use ::ir::hir;
 use ::ir::lir;
-use ::ir::lir::Source;
+//use ::ir::lir::Source;
 use ::ir::hir::scope_tracker::ScopeTracker;
-use ::ir::SSAVariable;
-use ::ir::lir::cfg::LabelN;
-use ::intern::RAISE as ATOM_RAISE;
+//use ::ir::SSAVariable;
+
+use ::eir::{ Source, SSAVariable, FunctionIdent, AtomicTerm, Clause };
+use ::eir::intern::Atom;
+use ::eir::cfg::{ FunctionCfgBuilder, LabelN };
+use ::eir::op::{ OpKind };
 
 mod exception_handler_stack;
 use self::exception_handler_stack::ExceptionHandlerStack;
@@ -28,7 +33,7 @@ impl FunctionDefinition {
         let mut cfg = lir::FunctionCfg::new();
 
         {
-            let mut builder = lir::cfg::FunctionCfgBuilder::new(&mut cfg);
+            let mut builder = FunctionCfgBuilder::new(&mut cfg);
             let entry = builder.get_entry();
 
             let mut env_ssa = None;
@@ -48,7 +53,7 @@ impl FunctionDefinition {
                 let lambda_env_ssa = env_ssa.unwrap();
                 builder.basic_op(
                     entry,
-                    lir::OpKind::UnpackEnv,
+                    OpKind::UnpackEnv,
                     vec![Source::Variable(lambda_env_ssa)],
                     lambda_env.captures.iter()
                         .map(|c| c.2)
@@ -57,7 +62,7 @@ impl FunctionDefinition {
                 for (fun, ssa, alt_ssa) in lambda_env.meta_binds.iter() {
                     builder.basic_op(
                         entry,
-                        lir::OpKind::BindClosure {
+                        OpKind::BindClosure {
                             ident: fun.clone(),
                         },
                         // TODO: Should be env
@@ -79,8 +84,8 @@ impl FunctionDefinition {
                                               entry);
             exc_stack.finish();
 
-            builder.op_return_ok(block, lir::Source::Variable(ssa));
-            builder.op_return_throw(exc_block, lir::Source::Variable(exc_ssa));
+            builder.op_return_ok(block, Source::Variable(ssa));
+            builder.op_return_throw(exc_block, Source::Variable(exc_ssa));
         }
 
         self.lir_function = Some(cfg);
@@ -107,16 +112,16 @@ struct CaseStructureDef<'a> {
 }
 struct CaseStructureClauseDef<'a> {
     patterns: Vec<::ir::hir::Pattern>,
-    guard: Box<Fn(&mut lir::cfg::FunctionCfgBuilder, &mut ScopeTracker,
+    guard: Box<Fn(&mut FunctionCfgBuilder, &mut ScopeTracker,
                       &mut ExceptionHandlerStack, LabelN, &[SSAVariable])
                      -> (LabelN, SSAVariable) + 'a>,
-    body: Box<Fn(&mut lir::cfg::FunctionCfgBuilder, &mut ScopeTracker,
+    body: Box<Fn(&mut FunctionCfgBuilder, &mut ScopeTracker,
                      &mut ExceptionHandlerStack, LabelN, &[SSAVariable])
                     -> (LabelN, SSAVariable) + 'a>,
 }
 
 fn case_structure(
-    b: &mut lir::cfg::FunctionCfgBuilder,
+    b: &mut FunctionCfgBuilder,
     env: &mut ScopeTracker,
     exc_stack: &mut ExceptionHandlerStack,
     def: &CaseStructureDef,
@@ -147,10 +152,10 @@ fn case_structure(
         let case_fail_label = b.add_block();
         let fail_ssa = env.new_ssa();
         b.basic_op(case_fail_label,
-                   lir::OpKind::Move,
-                   vec![lir::Source::Constant(::parser::AtomicLiteral::Nil)],
+                   OpKind::Move,
+                   vec![AtomicTerm::Nil.into()],
                    vec![fail_ssa]);
-        b.basic_op(case_fail_label, lir::OpKind::Jump, vec![], vec![]);
+        b.basic_op(case_fail_label, OpKind::Jump, vec![], vec![]);
         exc_stack.add_error_jump(
             b, case_fail_label, fail_ssa);
         vec![case_fail_label]
@@ -171,8 +176,8 @@ fn case_structure(
 
         b.basic_op(clause_label,
 
-                   lir::OpKind::CaseValues,
-                   vec![lir::Source::Variable(case_structure_ssa)],
+                   OpKind::CaseValues,
+                   vec![case_structure_ssa.into()],
                    case_values_ssa.clone(),
         );
         exc_stack.push_catch_novalue(guard_fail_label);
@@ -180,8 +185,8 @@ fn case_structure(
             b, env, exc_stack, clause_label, &case_values_ssa);
         exc_stack.pop_catch();
         b.basic_op(clause_label,
-                   lir::OpKind::IfTruthy,
-                   vec![lir::Source::Variable(guard_ret)],
+                   OpKind::IfTruthy,
+                   vec![guard_ret.into()],
                    vec![]
         );
         let mut leaf_body_label = b.add_block();
@@ -191,16 +196,16 @@ fn case_structure(
 
         // Guard fail
         b.basic_op(guard_fail_label,
-                   lir::OpKind::CaseGuardFail { clause_num: idx },
-                   vec![lir::Source::Variable(case_structure_ssa)],
+                   OpKind::CaseGuardFail { clause_num: idx },
+                   vec![case_structure_ssa.into()],
                    vec![]);
         b.op_jump(guard_fail_label, match_body_label);
         b.finish(guard_fail_label);
 
         // Guard ok
         b.basic_op(leaf_body_label,
-                   lir::OpKind::CaseGuardOk,
-                   vec![lir::Source::Variable(case_structure_ssa)],
+                   OpKind::CaseGuardOk,
+                   vec![Source::Variable(case_structure_ssa)],
                    vec![]);
         b.op_tombstone(leaf_body_label, case_structure_ssa);
 
@@ -216,14 +221,14 @@ fn case_structure(
 
     // === Match body ===
     let clauses: Vec<_> = def.clauses.iter().map(|c| {
-        lir::Clause {
-            patterns: c.patterns.clone(),
+        Clause {
+            patterns: c.patterns.iter().map(|p| p.to_eir()).collect(),
         }
     }).collect();
     b.basic_op(
         match_body_label,
-        lir::OpKind::Case(clauses.len()),
-        vec![Source::Variable(case_structure_ssa)], vec![]);
+        OpKind::Case(clauses.len()),
+        vec![case_structure_ssa.into()], vec![]);
     for leaf in leaves.iter() {
         b.add_jump(match_body_label, *leaf);
         b.finish(*leaf);
@@ -233,12 +238,12 @@ fn case_structure(
     // === Entry block ===
     b.basic_op(
         main_cont,
-        lir::OpKind::CaseStart {
+        OpKind::CaseStart {
             vars: def.match_val,
             clauses: clauses,
             value_vars: def.values.clone(),
         },
-        vec![Source::Variable(def.match_val)],
+        vec![def.match_val.into()],
         vec![case_structure_ssa]
     );
     // Jump to match body
@@ -266,7 +271,7 @@ fn case_structure(
 
 use self::hir::SingleExpressionKind as HSEK;
 impl hir::SingleExpression {
-    fn lower(&self, b: &mut lir::cfg::FunctionCfgBuilder,
+    fn lower(&self, b: &mut FunctionCfgBuilder,
              env: &mut ScopeTracker,
              exc_stack: &mut ExceptionHandlerStack, in_block: LabelN)
              -> (LabelN, SSAVariable) {
@@ -286,11 +291,11 @@ impl hir::SingleExpression {
 
                 //reads_r.extend(args.iter().map(|a| a.lower(b, env, exc_stack)));
                 let reads: Vec<_> = reads_r.iter()
-                    .map(|r| lir::Source::Variable(*r))
+                    .map(|r| Source::Variable(*r))
                     .collect();
 
                 let exc_ssa = env.new_ssa();
-                b.basic_op(main_cont, lir::OpKind::Call { tail_call: false },
+                b.basic_op(main_cont, OpKind::Call { tail_call: false },
                            reads, vec![self.ssa, exc_ssa]);
                 //let prev_block = b.get_block();
 
@@ -326,12 +331,12 @@ impl hir::SingleExpression {
                 }
                 //reads_r.extend(args.iter().map(|a| a.lower(b, env, exc_stack)));
                 let reads: Vec<_> = reads_r.iter()
-                    .map(|r| lir::Source::Variable(*r))
+                    .map(|r| Source::Variable(*r))
                     .collect();
 
                 let exc_ssa = env.new_ssa();
                 b.basic_op(main_cont,
-                           lir::OpKind::Apply { tail_call: false },
+                           OpKind::Apply { tail_call: false },
                            reads, vec![self.ssa, exc_ssa]);
                 let resume_block = b.add_block();
                 b.add_jump(main_cont, resume_block);
@@ -349,35 +354,25 @@ impl hir::SingleExpression {
             HSEK::Atomic(ref atomic) => {
                 b.basic_op(
                     in_block,
-                    lir::OpKind::Move,
-                    vec![lir::Source::Constant(atomic.clone())], vec![self.ssa]);
+                    OpKind::Move,
+                    vec![atomic.clone().into()], vec![self.ssa]);
                 (in_block, self.ssa)
             },
             HSEK::NamedFunction { ref name, is_lambda } => {
                 if is_lambda {
                     (in_block, self.ssa) // TODO: What?
                 } else {
-                    let n = ::ir::FunctionIdent {
-                        name: name.var.name.clone(),
-                        arity: name.var.arity,
-                        lambda: None,
-                    };
                     b.basic_op(
                         in_block,
-                        lir::OpKind::CaptureNamedFunction(n),
+                        OpKind::CaptureNamedFunction(name.var.clone()),
                         vec![], vec![self.ssa]);
                     (in_block, self.ssa)
                 }
             },
-            HSEK::ExternalNamedFunction { ref module, ref name } => {
-                let n = ::ir::FunctionIdent {
-                    name: name.var.name.clone(),
-                    arity: name.var.arity,
-                    lambda: None,
-                };
+            HSEK::ExternalNamedFunction { ref name } => {
                 b.basic_op(
                     in_block,
-                    lir::OpKind::CaptureExternalNamedFunction(module.clone(), n),
+                    OpKind::CaptureNamedFunction(name.var.clone()),
                     vec![], vec![self.ssa]);
                 (in_block, self.ssa)
             },
@@ -471,51 +466,48 @@ impl hir::SingleExpression {
                 let case_structure_ssa = env.new_ssa();
                 b.basic_op(
                     catch_block,
-                    lir::OpKind::CaseStart {
+                    OpKind::CaseStart {
                         vars: catch_ssa,
                         clauses: vec![
-                            lir::Clause {
+                            Clause {
                                 patterns: vec![
-                                    hir::Pattern {
-                                        binds: vec![],
-                                        node: hir::PatternNode::Atomic(
-                                            ::parser::AtomicLiteral::Atom(
-                                                ::Atom::from("throw"))),
+                                    ::eir::pattern::Pattern {
+                                        binds: HashSet::new(),
+                                        node: ::eir::pattern::PatternNode::Atomic(
+                                            Atom::from("throw").into()),
                                     },
                                 ]
                             },
-                            lir::Clause {
+                            Clause {
                                 patterns: vec![
-                                    hir::Pattern {
-                                        binds: vec![],
-                                        node: hir::PatternNode::Atomic(
-                                            ::parser::AtomicLiteral::Atom(
-                                                ::Atom::from("exit"))),
+                                    ::eir::pattern::Pattern {
+                                        binds: HashSet::new(),
+                                        node: ::eir::pattern::PatternNode::Atomic(
+                                            Atom::from("exit").into()),
                                     },
                                 ]
                             },
-                            lir::Clause {
+                            Clause {
                                 patterns: vec![
-                                    hir::Pattern {
-                                        binds: vec![],
-                                        node: hir::PatternNode::Atomic(
-                                            ::parser::AtomicLiteral::Atom(
-                                                ::Atom::from("error"))),
+                                    ::eir::pattern::Pattern {
+                                        binds: HashSet::new(),
+                                        node: ::eir::pattern::PatternNode::Atomic(
+                                            Atom::from("error").into()),
                                     },
                                 ]
                             },
                         ],
                         value_vars: vec![],
                     },
-                    vec![lir::Source::Variable(catch_ssa)],
+                    vec![catch_ssa.into()],
                     vec![case_structure_ssa]
                 );
                 b.op_jump(catch_block, case_main_block);
 
                 b.basic_op(
                     case_main_block,
-                    lir::OpKind::Case(3),
-                    vec![Source::Variable(case_structure_ssa)],
+                    OpKind::Case(3),
+                    vec![case_structure_ssa.into()],
                     vec![]
                 );
 
@@ -541,8 +533,7 @@ impl hir::SingleExpression {
                 b.op_make_tuple(
                     exit_block,
                     vec![
-                        Source::Constant(::parser::AtomicLiteral::Atom(
-                            ::Atom::from("EXIT"))),
+                        Atom::from("EXIT").into(),
                         Source::Variable(e2_ssa),
                     ],
                     exit_res_ssa
@@ -555,7 +546,7 @@ impl hir::SingleExpression {
                 b.add_jump(case_main_block, error_block);
                 b.op_case_guard_ok(error_block, case_structure_ssa);
                 let error_stacktrace_ssa = env.new_ssa();
-                b.op_primop(error_block, ::Atom::from("exc_trace"),
+                b.op_primop(error_block, Atom::from("exc_trace"),
                             vec![Source::Variable(e3_ssa)],
                             vec![error_stacktrace_ssa]);
                 let error_int_res_ssa = env.new_ssa();
@@ -571,8 +562,7 @@ impl hir::SingleExpression {
                 b.op_make_tuple(
                     error_block,
                     vec![
-                        Source::Constant(::parser::AtomicLiteral::Atom(
-                            ::Atom::from("EXIT"))),
+                        Atom::from("EXIT").into(),
                         Source::Variable(error_int_res_ssa),
                     ],
                     error_res_ssa
@@ -637,9 +627,9 @@ impl hir::SingleExpression {
                 }
 
                 b.basic_op(main_cont,
-                           lir::OpKind::MakeTuple,
+                           OpKind::MakeTuple,
                            elems.iter()
-                           .map(|e| lir::Source::Variable(e.ssa))
+                           .map(|e| e.ssa.into())
                            .collect(),
                            vec![self.ssa]);
 
@@ -656,12 +646,11 @@ impl hir::SingleExpression {
                     assert!(elem.ssa == elem_ssa);
                 }
 
-                let mut reads = vec![lir::Source::Variable(tail.ssa)];
-                reads.extend(head.iter()
-                             .map(|v| lir::Source::Variable(v.ssa)));
+                let mut reads = vec![tail.ssa.into()];
+                reads.extend(head.iter().map(|v| v.ssa.into()));
 
                 b.basic_op(main_cont,
-                           lir::OpKind::MakeList,
+                           OpKind::MakeList,
                            reads, vec![self.ssa]);
 
                 (main_cont, self.ssa)
@@ -670,15 +659,17 @@ impl hir::SingleExpression {
                 let mut main_cont = in_block;
 
                 let mut reads = Vec::new();
-                for &(ref key, ref value) in values.iter() {
+                for &(ref key, ref value, _assoc) in values.iter() {
+                    // TODO: Handle Assoc
+
                     let key_ssa = lower_chain!(key, b, env, exc_stack, main_cont);
                     let value_ssa = lower_chain!(value, b, env, exc_stack, main_cont);
 
                     assert!(key_ssa == key.ssa);
                     assert!(value_ssa == value.ssa);
 
-                    reads.push(lir::Source::Variable(key.ssa));
-                    reads.push(lir::Source::Variable(value.ssa));
+                    reads.push(key.ssa.into());
+                    reads.push(value.ssa.into());
                 }
 
                 // TODO INCORRECT CONTROL FLOW: Merge!
@@ -688,7 +679,7 @@ impl hir::SingleExpression {
                         |m| m.lower(b, env, exc_stack, main_cont).0);
 
                 b.basic_op(main_cont,
-                           lir::OpKind::MakeMap,
+                           OpKind::MakeMap,
                            reads, vec![self.ssa]);
 
                 (main_cont, self.ssa)
@@ -703,22 +694,22 @@ impl hir::SingleExpression {
                     let val_ssa = lower_chain!(val, b, env, exc_stack, main_cont);
                     //let val_ssa = fuse_ssa!(val.lower(b, env, exc_stack));
 
-                    reads.push(lir::Source::Variable(val_ssa));
+                    reads.push(val_ssa.into());
                     for opt in opts {
                         let n_ssa = lower_chain!(opt, b, env, exc_stack, main_cont);
-                        reads.push(lir::Source::Variable(n_ssa));
+                        reads.push(n_ssa.into());
                     }
                 }
 
                 b.basic_op(
                     main_cont,
-                    lir::OpKind::MakeBinary,
+                    OpKind::MakeBinary,
                     reads,
                     vec![self.ssa]
                 );
                 (main_cont, self.ssa)
             },
-            HSEK::PrimOp { ref name, ref args } if name == &*ATOM_RAISE => {
+            HSEK::PrimOp { ref name, ref args } if name == &Atom::from("raise") => {
 
                 let mut main_cont = in_block;
 
@@ -726,17 +717,17 @@ impl hir::SingleExpression {
                 let mut reads = Vec::new();
                 for arg in args.iter() {
                     let n_ssa = lower_chain!(arg, b, env, exc_stack, main_cont);
-                    reads.push(lir::Source::Variable(n_ssa));
+                    reads.push(Source::Variable(n_ssa));
                 }
 
                 let exc_path_ssa = env.new_ssa();
-                b.basic_op(main_cont, lir::OpKind::MakeTuple, reads, vec![exc_path_ssa]);
+                b.basic_op(main_cont, OpKind::MakeTuple, reads, vec![exc_path_ssa]);
 
-                b.basic_op(main_cont, lir::OpKind::Jump, vec![], vec![]);
+                b.basic_op(main_cont, OpKind::Jump, vec![], vec![]);
                 exc_stack.add_error_jump(b, main_cont, exc_path_ssa);
 
                 let ret_dummy = b.add_block();
-                b.basic_op(ret_dummy, lir::OpKind::MakeNoValue, vec![], vec![self.ssa]);
+                b.basic_op(ret_dummy, OpKind::MakeNoValue, vec![], vec![self.ssa]);
 
                 (ret_dummy, self.ssa)
             },
@@ -750,8 +741,8 @@ impl hir::SingleExpression {
                 }
                 b.basic_op(
                     main_cont,
-                    lir::OpKind::PrimOp(name.clone()),
-                    args.iter().map(|a| lir::Source::Variable(a.ssa)).collect(),
+                    OpKind::PrimOp(name.clone()),
+                    args.iter().map(|a| a.ssa.into()).collect(),
                     vec![self.ssa]);
 
                 (main_cont, self.ssa)
@@ -792,16 +783,16 @@ impl hir::SingleExpression {
 
                 // Entry to receive structure (#start)
                 b.basic_op(start_label,
-                           lir::OpKind::ReceiveStart,
-                           vec![lir::Source::Variable(timeout_time_var)],
+                           OpKind::ReceiveStart,
+                           vec![timeout_time_var.into()],
                            vec![receive_structure_ssa]);
                 b.op_jump(start_label, receive_loop_label);
                 b.finish(start_label);
 
                 // Receive loop block (#receive_loop)
                 b.basic_op(receive_loop_label,
-                           lir::OpKind::ReceiveWait,
-                           vec![lir::Source::Variable(receive_structure_ssa)],
+                           OpKind::ReceiveWait,
+                           vec![receive_structure_ssa.into()],
                            vec![]);
                 b.add_jump(receive_loop_label, match_body_label);
                 b.add_jump(receive_loop_label, timeout_body_label);
@@ -812,7 +803,7 @@ impl hir::SingleExpression {
                 b.op_tombstone(timeout_body_cont, receive_structure_ssa);
                 let (clause_ret_block, clause_ret_ssa) = timeout_body.lower(
                     b, env, exc_stack, timeout_body_cont);
-                b.basic_op(clause_ret_block, lir::OpKind::Jump, vec![], vec![]);
+                b.basic_op(clause_ret_block, OpKind::Jump, vec![], vec![]);
                 b.add_jump(clause_ret_block, expression_exit_label);
                 b.add_phi(clause_ret_block, clause_ret_ssa,
                           expression_exit_label, self.ssa);
@@ -822,8 +813,8 @@ impl hir::SingleExpression {
                 let case_ret_label = env.new_ssa();
                 b.basic_op(
                     match_body_label,
-                    lir::OpKind::ReceiveGetMessage,
-                    vec![lir::Source::Variable(receive_structure_ssa)],
+                    OpKind::ReceiveGetMessage,
+                    vec![Source::Variable(receive_structure_ssa)],
                     vec![message_label]
                 );
 
@@ -839,9 +830,7 @@ impl hir::SingleExpression {
                                     let ssa = env.new_ssa();
                                     b.op_move(
                                         block,
-                                        Source::Constant(
-                                            ::parser::AtomicLiteral::Atom(
-                                                ::Atom::from("true"))),
+                                        Atom::from("true"),
                                         ssa
                                     );
                                     (block, ssa)
@@ -862,7 +851,7 @@ impl hir::SingleExpression {
                     case_structure(b, env, exc_stack, &def)
                 };
 
-                b.basic_op(case_ret_label, lir::OpKind::Jump, vec![], vec![]);
+                b.basic_op(case_ret_label, OpKind::Jump, vec![], vec![]);
                 b.add_jump(case_ret_label, expression_exit_label);
                 b.add_phi(case_ret_label, case_ret_ssa,
                           expression_exit_label, self.ssa);
@@ -874,22 +863,22 @@ impl hir::SingleExpression {
                 let env_read_vars: Vec<_> = {
                     let lenv = env.get_lambda_env(lambda_env.unwrap());
                     lenv.captures.iter()
-                        .map(|(_, r, _)| lir::Source::Variable(*r))
+                        .map(|(_, r, _)| Source::Variable(*r))
                         .collect()
                 };
 
                 b.basic_op(
                     in_block,
-                    lir::OpKind::MakeClosureEnv {
+                    OpKind::MakeClosureEnv {
                         env_idx: lambda_env.unwrap()
                     },
                     env_read_vars, vec![env_ssa]);
                 b.basic_op(
                     in_block,
-                    lir::OpKind::BindClosure {
+                    OpKind::BindClosure {
                         ident: closure.ident.clone().unwrap(),
                     },
-                    vec![Source::Variable(env_ssa)],
+                    vec![env_ssa.into()],
                     vec![self.ssa]);
                 (in_block, self.ssa)
             },
@@ -900,13 +889,13 @@ impl hir::SingleExpression {
                 let env_read_vars: Vec<_> = {
                     let lenv = env.get_lambda_env(lambda_env.unwrap());
                     lenv.captures.iter()
-                        .map(|(_, r, _)| lir::Source::Variable(*r))
+                        .map(|(_, r, _)| Source::Variable(*r))
                         .collect()
                 };
 
                 b.basic_op(
                     main_cont,
-                    lir::OpKind::MakeClosureEnv {
+                    OpKind::MakeClosureEnv {
                         env_idx: lambda_env.unwrap()
                     },
                     env_read_vars, vec![env_ssa]
@@ -915,10 +904,10 @@ impl hir::SingleExpression {
                 for closure in closures {
                     b.basic_op(
                         main_cont,
-                        lir::OpKind::BindClosure {
+                        OpKind::BindClosure {
                             ident: closure.ident.clone().unwrap(),
                         },
-                        vec![Source::Variable(env_ssa)],
+                        vec![env_ssa.into()],
                         vec![closure.alias.as_ref().unwrap().ssa]
                     )
                 }

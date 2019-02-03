@@ -8,10 +8,17 @@ extern crate pretty;
 extern crate regex;
 extern crate lalrpop_util;
 
-extern crate pattern_compiler;
+extern crate num_bigint;
+extern crate num_traits;
 
-pub mod intern;
-pub use self::intern::{ Atom, Variable };
+extern crate eir;
+extern crate pattern_compiler;
+extern crate util as util_c;
+
+//pub mod intern;
+//pub use self::intern::{ Atom, Variable };
+pub use ::eir::intern::Atom;
+pub type Variable = Atom;
 
 pub mod parser;
 pub mod ir;

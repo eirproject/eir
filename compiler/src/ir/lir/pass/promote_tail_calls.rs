@@ -1,4 +1,6 @@
-use ::ir::lir::{ FunctionCfg, LabelN, OpKind, SSAVariable, Source };
+use ::eir::{ SSAVariable, Source };
+use ::eir::cfg::{ FunctionCfg, LabelN };
+use ::eir::op::{ OpKind };
 use std::collections::HashSet;
 
 fn does_return_val(cfg: &FunctionCfg, last_label: LabelN, label: LabelN, val: SSAVariable) -> bool {

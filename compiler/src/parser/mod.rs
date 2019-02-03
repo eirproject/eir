@@ -1,5 +1,6 @@
 pub use ::{ Variable, Atom };
 use ::std::fmt::{ Formatter, Display };
+use ::eir::FunctionIdent;
 
 mod grammar;
 mod lex;
@@ -23,6 +24,12 @@ fn parse_otp_compiler_compile() {
     parse(&s).unwrap();
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum MapExactAssoc {
+    Exact,
+    Assoc,
+}
+
 #[derive(Debug, Clone)]
 pub struct Annotated<I>(pub I, pub Vec<()>);
 impl<I> Annotated<I> {
@@ -42,7 +49,17 @@ pub struct Module {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct FunctionName {
     pub name: Atom,
-    pub arity: u32,
+    pub arity: usize,
+}
+impl FunctionName {
+    pub fn to_eir(&self, module: Atom) -> FunctionIdent {
+        FunctionIdent {
+            module: module,
+            name: self.name.clone(),
+            arity: self.arity,
+            lambda: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -55,25 +72,32 @@ impl Integer {
         assert!(self.sign);
         self.digits.parse().unwrap()
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum AtomicLiteral {
-    Integer(Integer),
-    Float,
-    Atom(Atom),
-    Nil,
-    Char(char),
-    String(String),
-}
-impl Display for AtomicLiteral {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), ::std::fmt::Error> {
-        match self {
-            &AtomicLiteral::Integer(ref int) => write!(f, "{}{}", int.sign, int.digits),
-            _ => write!(f, "unimpl"),
-        }
+    fn as_usize(&self) -> usize {
+        assert!(self.sign);
+        self.digits.parse().unwrap()
     }
 }
+
+use eir::AtomicTerm;
+type AtomicLiteral = AtomicTerm;
+
+//#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+//pub enum AtomicLiteral {
+//    Integer(Integer),
+//    Float,
+//    Atom(Atom),
+//    Nil,
+//    Char(char),
+//    String(String),
+//}
+//impl Display for AtomicLiteral {
+//    fn fmt(&self, f: &mut Formatter) -> Result<(), ::std::fmt::Error> {
+//        match self {
+//            &AtomicLiteral::Integer(ref int) => write!(f, "{}{}", int.sign, int.digits),
+//            _ => write!(f, "unimpl"),
+//        }
+//    }
+//}
 
 #[derive(Debug, Clone)]
 pub enum Constant {
@@ -81,14 +105,14 @@ pub enum Constant {
     Tuple(Vec<Constant>),
     List(Vec<Constant>, Box<Constant>),
 }
-impl Display for Constant {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), ::std::fmt::Error> {
-        match self {
-            &Constant::Atomic(ref lit) => write!(f, "{}", lit),
-            _ => write!(f, "unimpl"),
-        }
-    }
-}
+//impl Display for Constant {
+//    fn fmt(&self, f: &mut Formatter) -> Result<(), ::std::fmt::Error> {
+//        match self {
+//            &Constant::Atomic(ref lit) => write!(f, "{}", lit),
+//            _ => write!(f, "unimpl"),
+//        }
+//    }
+//}
 
 #[derive(Debug, Clone)]
 pub struct FunctionDefinition {
@@ -126,7 +150,7 @@ pub enum SingleExpression {
     AtomicLiteral(AtomicLiteral),
     Tuple(Vec<Expression>),
     List { head: Vec<Expression>, tail: Box<Expression> },
-    Map(Vec<(Expression, Expression)>, Option<Expression>),
+    Map(Vec<(Expression, MapExactAssoc, Expression)>, Option<Expression>),
     Binary(Vec<(Expression, Vec<Expression>)>),
 }
 
@@ -149,14 +173,15 @@ pub enum Pattern {
 }
 impl Pattern {
     fn nil() -> Annotated<Pattern> {
-        Annotated::empty(Pattern::Atomic(AtomicLiteral::Nil))
+        Annotated::empty(Pattern::Atomic(AtomicTerm::Nil))
     }
 }
 
 pub type Expression = Annotated<Vec<Annotated<SingleExpression>>>;
 impl Expression {
     fn nil() -> Self {
-        Annotated::empty(vec![Annotated::empty(SingleExpression::AtomicLiteral(AtomicLiteral::Nil))])
+        Annotated::empty(vec![Annotated::empty(SingleExpression::AtomicLiteral(
+            AtomicTerm::Nil))])
     }
 }
 

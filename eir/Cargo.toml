@@ -5,4 +5,10 @@ authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
 edition = "2018"
 
 [dependencies]
+util = { path = "../util" } 
+
 string-intern = "0.1.7"
+
+num = "0.2"
+num-traits = "0.2"
+num-bigint = "0.2"

@@ -1,7 +1,7 @@
 use ::ir::{ FunctionDefinition, FunctionIdent, FunctionVisibility };
 use ::ir::hir::Function;
 use ::ir::hir::EachSingleExpression;
-use ::ir::hir::scope_tracker::LambdaEnvIdx;
+use ::eir::LambdaEnvIdx;
 
 pub struct LambdaCollector {
     num: u32,

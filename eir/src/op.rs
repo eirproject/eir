@@ -1,20 +1,5 @@
-use crate::{ SSAVariable, ConstantTerm, FunctionIdent, LambdaEnvIdx, Atom, Clause };
-
-#[derive(Debug, Clone)]
-pub enum Source {
-    Variable(SSAVariable),
-    Constant(ConstantTerm),
-}
-impl From<SSAVariable> for Source {
-    fn from(val: SSAVariable) -> Self {
-        Source::Variable(val)
-    }
-}
-impl From<ConstantTerm> for Source {
-    fn from(val: ConstantTerm) -> Self {
-        Source::Constant(val)
-    }
-}
+use crate::{ SSAVariable, FunctionIdent, LambdaEnvIdx, Atom, Clause };
+use crate::{ Source };
 
 #[derive(Debug, Clone)]
 pub struct Op {
@@ -190,4 +175,41 @@ pub enum OpKind {
     TombstoneSSA(SSAVariable),
 
     Unreachable,
+}
+
+impl OpKind {
+
+    pub fn num_jumps(&self) -> Option<usize> {
+        match *self {
+            OpKind::Call { tail_call: false } => Some(2),
+            OpKind::Call { tail_call: true } => Some(0),
+            OpKind::Apply { tail_call: false } => Some(2),
+            OpKind::Apply { tail_call: true } => Some(0),
+            OpKind::Jump => Some(1),
+            OpKind::Case(num_clauses) => Some(num_clauses + 1),
+            // One for each clause + failure leaf
+            //OpKind::Case { ref clauses, .. } => Some(clauses.len() + 1),
+            // TODO
+            //OpKind::Match { ref types } => Some(types.len()),
+            OpKind::ReturnOk => Some(0),
+            OpKind::ReturnThrow => Some(0),
+            //OpKind::ReceiveStart { .. } => Some(1),
+            OpKind::ReceiveWait => Some(2),
+            OpKind::IfTruthy => Some(2),
+            //OpKind::CaseGuardFail { .. } => Some(1),
+            OpKind::Unreachable => Some(0),
+            _ => None,
+        }
+    }
+
+    pub fn is_logic(&self) -> bool {
+        match *self {
+            OpKind::TombstoneSSA(_) => false,
+            OpKind::Jump => false,
+            OpKind::ReturnOk => false,
+            OpKind::ReturnThrow => false,
+            _ => true,
+        }
+    }
+
 }
