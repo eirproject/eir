@@ -2,8 +2,8 @@ use ::std::cell::RefCell;
 use ::std::rc::Rc;
 use std::cmp::Ord;
 
-use core_erlang_compiler::intern::Atom;
-use core_erlang_compiler::ir::hir::scope_tracker::LambdaEnvIdx;
+use eir::Atom;
+use eir::LambdaEnvIdx;
 use ::pattern::CaseContext;
 use ::receive::ReceiveContext;
 
@@ -59,14 +59,14 @@ pub enum Term {
     BoundLambda {
         module: Atom,
         fun_name: Atom,
-        arity: u32,
+        arity: usize,
         lambda: (LambdaEnvIdx, usize),
         bound_env: BoundLambdaEnv,
     },
     CapturedFunction {
         module: Atom,
         fun_name: Atom,
-        arity: u32,
+        arity: usize,
     },
 
     // Internal

@@ -1,7 +1,7 @@
 use ::std::collections::HashSet;
 
 use ::{ Atom };
-use ::ir::{ AVariable, AFunctionName, Module, FunctionDefinition,
+use ::ir::{ Module, AVariable, AFunctionName, FunctionDefinition,
             FunctionVisibility, FunctionIdent };
 use ::ir::hir::{ SingleExpression, SingleExpressionKind,
                  Function, Pattern, PatternNode, Closure };
@@ -70,12 +70,8 @@ fn pat_node_from_parsed(node: &::parser::Pattern,
         PP::Binary(ref elems) => {
             PatternNode::Binary(
                 elems.iter().map(|(pat, opts)| {
-                    let opts_ids: Vec<_> = opts.iter().map(|o| {
-                        let curr_val_num = values.len();
-                        values.push(SingleExpression::from_parsed_single(&o.0, fun_ident));
-                        curr_val_num
-                    }).collect();
-                    (pat_node_from_parsed(&pat.0, values, fun_ident), opts_ids)
+                    let opts_n = opts.iter().map(|o| o.0.clone()).collect();
+                    (pat_node_from_parsed(&pat.0, values, fun_ident), opts_n)
                 }).collect(),
             )
         },

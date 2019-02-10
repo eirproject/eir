@@ -1,6 +1,6 @@
-use super::{ Module, Annotated, Integer, FunctionName, AtomicLiteral, Constant,
+use super::{ Module, Annotated, FunctionName, Constant,
 Function, FunctionDefinition, Expression, SingleExpression, Pattern,
-CaseClause, PrimOpCall, MapExactAssoc };
+CaseClause, PrimOpCall, MapExactAssoc, ConstantOrVariable };
 use super::lex::Tok;
 use ::{Atom, Variable};
 use ::eir::AtomicTerm;
@@ -179,11 +179,15 @@ Pattern: Pattern = {
 // ======== Binaries ========
 // ==========================
 
-PatternBinary: Vec<(Annotated<Pattern>, Vec<Annotated<SingleExpression>>)> = {
+ConstantOrVariable: ConstantOrVariable = {
+    <c:Constant> => ConstantOrVariable::Constant(c),
+    <v:Variable> => ConstantOrVariable::Variable(v),
+};
+PatternBinary: Vec<(Annotated<Pattern>, Vec<Annotated<ConstantOrVariable>>)> = {
     "#{" <b:Comma<PatternBinaryElem>> "}#" => b,
 };
-PatternBinaryElem: (Annotated<Pattern>, Vec<Annotated<SingleExpression>>) = {
-    "#<" <p:AnnotatedPattern> ">(" <a:Comma<Annotated<SingleExpression>>> ")" => (p, a),
+PatternBinaryElem: (Annotated<Pattern>, Vec<Annotated<ConstantOrVariable>>) = {
+    "#<" <p:AnnotatedPattern> ">(" <a:Comma<Annotated<ConstantOrVariable>>> ")" => (p, a),
 };
 
 Binary: Vec<(Expression, Vec<Expression>)> = {

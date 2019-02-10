@@ -7,7 +7,7 @@ use ::ir::lir;
 use ::ir::hir::scope_tracker::ScopeTracker;
 //use ::ir::SSAVariable;
 
-use ::eir::{ Source, SSAVariable, FunctionIdent, AtomicTerm, Clause };
+use ::eir::{ Source, SSAVariable, AtomicTerm, Clause };
 use ::eir::intern::Atom;
 use ::eir::cfg::{ FunctionCfgBuilder, LabelN };
 use ::eir::op::{ OpKind };

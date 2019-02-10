@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use ::{ SSAVariable, LabelN, Atom, LambdaEnvIdx, FunctionIdent, Source,
-        AtomicLiteral, OpKind, BoundLambdaEnv, BasicBlock, Module };
+        AtomicTerm, OpKind, BoundLambdaEnv, BasicBlock, Module };
 use ::term::{ Term, TermType, Pid };
 use ::vm::VMState;
 use ::module::ModuleType;
@@ -320,9 +320,9 @@ impl StackFrame {
                     block_ret = Some(BlockResult::Branch { slot: 0 });
                 }
                 OpKind::IfTruthy => {
-                    let false_atom = &*core_erlang_compiler::intern::FALSE;
+                    let false_atom = eir::Atom::from_str("false");
                     let matched = match self.read(&op.reads[0]) {
-                        Term::Atom(ref atom) if atom == false_atom => false,
+                        Term::Atom(ref atom) if atom == &false_atom => false,
                         _ => true,
                     };
 

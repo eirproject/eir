@@ -1,4 +1,5 @@
 use std::fmt::{ Display, Formatter };
+use std::collections::HashMap;
 
 pub mod intern;
 pub use intern::Atom;
@@ -10,8 +11,22 @@ pub use ssa::{ SSAVariable, SSAVariableGenerator };
 
 pub mod cfg;
 
+pub mod text;
+
 pub mod pattern;
 pub use pattern::{ Clause, Pattern };
+
+pub struct Module {
+    pub name: Atom,
+    pub lambda_envs: HashMap<LambdaEnvIdx, LambdaEnv>,
+    pub functions: HashMap<FunctionIdent, Function>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub ident: FunctionIdent,
+    pub lir: cfg::FunctionCfg,
+}
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct LambdaEnvIdx(usize);
@@ -33,7 +48,7 @@ impl LambdaEnvIdxGenerator {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LambdaEnv {
     pub num_captures: usize,
     pub meta_binds: Vec<FunctionIdent>,

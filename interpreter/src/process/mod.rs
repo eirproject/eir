@@ -4,12 +4,11 @@ use std::collections::HashMap;
 
 use num_bigint::BigInt;
 
-use ::{ SSAVariable, LabelN, Atom, LambdaEnvIdx, FunctionIdent, Source,
-        AtomicLiteral, OpKind, BoundLambdaEnv, BasicBlock, Module };
-use ::term::{ Term, TermType, Pid };
+use ::{ SSAVariable, LabelN, Atom, LambdaEnvIdx, FunctionIdent, Source };
+use ::term::{ Term, Pid };
 use ::vm::VMState;
 use ::module::ModuleType;
-use ::pattern::CaseContext;
+use eir::{ ConstantTerm , AtomicTerm };
 
 mod exec;
 
@@ -91,14 +90,14 @@ impl ProcessContext {
 
         assert!(vm.modules.contains_key(module.as_str()));
         let module_t = vm.modules.get(module.as_str()).unwrap();
-        assert!(fun_ident.arity == args.len() as u32);
+        assert!(fun_ident.arity == args.len());
 
         match module_t {
             ModuleType::Erlang(c_module, native_overlay_opt) => {
                 if let Some(native_overlay) = native_overlay_opt {
                     if native_overlay.functions.contains_key(&(
                         fun_ident.name.as_str().to_string(),
-                        fun_ident.arity as u32
+                        fun_ident.arity
                     )) {
                         let native_frame = NativeStackFrame {
                             module,
@@ -110,9 +109,9 @@ impl ProcessContext {
                 }
 
                 let fun = c_module.functions.iter()
-                    .find(|f| f.ident == fun_ident)
-                    .unwrap();
-                let c_lir = fun.lir_function.as_ref().unwrap();
+                    .find(|(ident, _fun)| **ident == fun_ident)
+                    .unwrap().1;
+                let c_lir = &fun.lir;
 
                 let mut call_frame = StackFrame::new(
                     module.clone(),
@@ -131,7 +130,7 @@ impl ProcessContext {
             ModuleType::Native(native) => {
                 if native.functions.contains_key(&(
                     fun_ident.name.as_str().to_string(),
-                    fun_ident.arity as u32
+                    fun_ident.arity
                 )) {
                     let native_frame = NativeStackFrame {
                         module,
@@ -203,9 +202,9 @@ impl ProcessContext {
                     if let ModuleType::Erlang(ref module, _native_overlay_opt) = module_t {
 
                         let fun = module.functions.iter()
-                            .find(|fun| fun.ident == frame.function)
-                            .unwrap();
-                        let lir = fun.lir_function.as_ref().unwrap();
+                            .find(|(ident, _fun)| **ident == frame.function)
+                            .unwrap().1;
+                        let lir = &fun.lir;
                         let block_container = &lir.graph[frame.basic_block];
                         let block = block_container.inner.borrow();
 
@@ -227,8 +226,9 @@ impl ProcessContext {
                                 outcomes.ret_throw_label = Some(slots[outcomes.ret_throw_slot]);
 
                                 let ident = FunctionIdent {
+                                    module: module.clone(),
                                     name: fun,
-                                    arity: args.len() as u32,
+                                    arity: args.len(),
                                     lambda: lambda,
                                 };
                                 push_frame_parts = Some((module, ident, args));
@@ -236,8 +236,9 @@ impl ProcessContext {
                             }
                             BlockResult::TailCall { module: m, fun, args, lambda } => {
                                 let ident = FunctionIdent {
+                                    module: m.clone(),
                                     name: fun,
-                                    arity: args.len() as u32,
+                                    arity: args.len(),
                                     lambda: lambda,
                                 };
                                 ::trace::exit_function(&module.name, &frame.function,
@@ -271,7 +272,7 @@ impl ProcessContext {
                         ModuleType::Native(module) => {
                             let fun = &module.functions[&(
                                 frame.fun_ident.name.as_str().to_string(),
-                                frame.fun_ident.arity as u32
+                                frame.fun_ident.arity
                             )];
                             let ret = (fun)(vm, self, &frame.args);
                             println!("<- {}:{}", module.name, frame.fun_ident);
@@ -283,7 +284,7 @@ impl ProcessContext {
                         ModuleType::Erlang(_mod, Some(module)) => {
                             let fun = &module.functions[&(
                                 frame.fun_ident.name.as_str().to_string(),
-                                frame.fun_ident.arity as u32
+                                frame.fun_ident.arity
                             )];
                             let ret = (fun)(vm, self, &frame.args);
                             println!("<- {}:{}", module.name, frame.fun_ident);
@@ -372,16 +373,12 @@ impl StackFrame {
             }
             Source::Constant(ref literal) => {
                 match *literal {
-                    AtomicLiteral::Atom(ref atom) => Term::Atom(atom.clone()),
-                    AtomicLiteral::Integer(ref inner) => {
-                        let mut bi = BigInt::parse_bytes(inner.digits.as_bytes(), 10)
-                            .unwrap();
-                        if !inner.sign {
-                            bi *= -1;
-                        }
-                        Term::Integer(bi)
+                    ConstantTerm::Atomic(AtomicTerm::Atom(ref atom)) =>
+                        Term::Atom(atom.clone()),
+                    ConstantTerm::Atomic(AtomicTerm::Integer(ref inner)) => {
+                        Term::Integer(inner.clone())
                     },
-                    AtomicLiteral::Nil => Term::Nil,
+                    ConstantTerm::Atomic(AtomicTerm::Nil) => Term::Nil,
                     _ => unimplemented!(),
                 }
             }

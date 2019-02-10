@@ -226,7 +226,7 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
     }
 
     pub fn to_table(&self, pat: &P) -> Table {
-        use ::prettytable::cell::Cell;
+        use ::prettytable::Cell;
 
         let mut table = Table::new();
 

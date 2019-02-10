@@ -20,7 +20,7 @@ impl std::fmt::Display for EdgeLabel {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NodeData<Node> {
     pub label: NodeLabel,
     pub inner: RefCell<Node>,
@@ -28,7 +28,7 @@ pub struct NodeData<Node> {
     pub outgoing: Vec<(EdgeLabel, NodeLabel)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EdgeData<Edge> {
     pub label: EdgeLabel,
     pub from: NodeLabel,
@@ -36,7 +36,7 @@ pub struct EdgeData<Edge> {
     pub inner: RefCell<Edge>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Graph<Node, Edge> {
     node_label_counter: usize,
     edge_label_counter: usize,

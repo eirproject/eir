@@ -71,8 +71,9 @@ impl VMState {
     pub fn call(&mut self, module_name: &str, fun_name: &str, args: Vec<Term>)
                 -> CallReturn {
         let fun_ident = FunctionIdent {
+            module: Atom::from_str(module_name),
             name: Atom::from_str(fun_name),
-            arity: args.len() as u32,
+            arity: args.len(),
             lambda: None,
         };
 

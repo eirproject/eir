@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use ::std::fmt;
 use super::{ AVariable, AFunctionName, SSAVariable, FunctionIdent };
-use ::parser;
 use ::{ Atom, Variable };
 use ::eir::LambdaEnvIdx;
-use ::parser::MapExactAssoc;
+use ::parser::{ MapExactAssoc, ConstantOrVariable };
 
 pub mod from_parsed;
 pub mod pass;
@@ -119,7 +118,7 @@ impl EachSingleExpression for SingleExpression {
                 }
             },
             SEK::Map { ref mut values, ref mut merge } => {
-                for &mut (ref mut key, ref mut val, assoc) in values.iter_mut() {
+                for &mut (ref mut key, ref mut val, _assoc) in values.iter_mut() {
                     key.each_single_expression_mut(f, enter_lambdas);
                     val.each_single_expression_mut(f, enter_lambdas);
                 }
@@ -341,7 +340,7 @@ pub enum PatternNode {
     Wildcard,
     BindVar(Variable, Box<PatternNode>),
     Atomic(::eir::AtomicTerm),
-    Binary(Vec<(PatternNode, Vec<usize>)>),
+    Binary(Vec<(PatternNode, Vec<ConstantOrVariable>)>),
     Tuple(Vec<PatternNode>),
     List(Vec<PatternNode>, Box<PatternNode>),
     Map(Vec<(usize, Box<PatternNode>)>),
@@ -354,7 +353,10 @@ impl PatternNode {
             PatternNode::BindVar(var, node) =>
                 EPN::Bind(binds[var], Box::new(node.to_eir(binds))),
             PatternNode::Atomic(atomic) => EPN::Atomic(atomic.clone()),
-            PatternNode::Binary(_) => unimplemented!(),
+            PatternNode::Binary(_) => {
+                println!("{:?}", self);
+                unimplemented!();
+            },
             PatternNode::Tuple(nodes) =>
                 EPN::Tuple(nodes.iter().map(|n| n.to_eir(binds)).collect()),
             PatternNode::List(head, tail) =>
@@ -405,7 +407,7 @@ impl fmt::Display for PatternNode {
                 for elem in elems {
                     write!(f, "#<{}>(", elem.0)?;
                     for attr in &elem.1 {
-                        write!(f, "{}, ", attr)?;
+                        write!(f, "{:?}, ", attr)?;
                     }
                     write!(f, ")#")?;
                 }

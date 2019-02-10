@@ -3,10 +3,12 @@ authors = ["HansiHE <hansihe@hansihe.com>"]
 name = "pattern-compiler"
 version = "0.1.0"
 
-[dependencies]
-either = "1.1.0"
-petgraph = "0.4.5"
-prettytable-rs = "0.6.7"
-derivative = "1.0.0"
+description = "Utilities for compiling pattern matches into optimal decision trees"
+license = "MIT/Apache-2.0"
+repository = "https://github.com/hansihe/core_erlang/tree/master/pattern-compiler"
 
-util = { path = "../util" }
+[dependencies]
+either = "1.5"
+petgraph = "0.4"
+prettytable-rs = "0.8"
+derivative = "1.0"

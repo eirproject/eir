@@ -11,7 +11,7 @@ impl ::std::fmt::Display for SSAVariable {
 }
 impl ::std::fmt::Debug for SSAVariable {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        ::std::fmt::Debug::fmt(self, f)
+        ::std::fmt::Display::fmt(self, f)
     }
 }
 pub const INVALID_SSA: SSAVariable = SSAVariable(0);

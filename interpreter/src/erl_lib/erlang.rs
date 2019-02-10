@@ -261,6 +261,7 @@ fn spawn_monitor_1(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> Ca
     let process = match fun_term {
         Term::CapturedFunction { module, fun_name, arity } => {
             let ident = FunctionIdent {
+                module: module.clone(),
                 name: fun_name.clone(),
                 arity: *arity,
                 lambda: None,
@@ -283,6 +284,7 @@ fn spawn_monitor_1(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> Ca
         }
         Term::BoundLambda { module, fun_name, arity, lambda, bound_env } => {
             let ident = FunctionIdent {
+                module: module.clone(),
                 name: fun_name.clone(),
                 arity: *arity,
                 lambda: Some(*lambda),

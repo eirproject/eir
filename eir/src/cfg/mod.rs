@@ -5,12 +5,14 @@ use crate::Source;
 mod builder;
 pub use self::builder::FunctionCfgBuilder;
 
+mod validate;
+
 use util::graph::*;
 
 pub type LabelN = NodeLabel;
 pub type EdgeN = EdgeLabel;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BasicBlock {
     pub phi_nodes: Vec<Phi>,
     pub ops: Vec<Op>,
@@ -22,14 +24,14 @@ pub struct Phi {
     pub ssa: SSAVariable,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionCfg {
     pub entry: LabelN,
     pub args: Vec<SSAVariable>,
     pub graph: Graph<BasicBlock, BasicBlockEdge>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BasicBlockEdge {
     writes: Vec<SSAVariable>,
 }

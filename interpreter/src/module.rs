@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use ::{ VMState, Term, FunctionIdent };
-use core_erlang_compiler::ir::{ Module };
 use ::process::{ ProcessContext, CallReturn };
+use ::eir::Module;
 
 pub struct NativeModule {
     pub name: String,
-    pub functions: HashMap<(String, u32), Box<Fn(&VMState, &mut ProcessContext,
-                                                 &[Term]) -> CallReturn>>,
+    pub functions: HashMap<(String, usize), Box<Fn(&VMState, &mut ProcessContext,
+                                                   &[Term]) -> CallReturn>>,
 }
 impl NativeModule {
 
@@ -17,7 +17,7 @@ impl NativeModule {
         }
     }
 
-    pub fn add_fun(&mut self, name: String, arity: u32,
+    pub fn add_fun(&mut self, name: String, arity: usize,
                fun: Box<Fn(&VMState, &mut ProcessContext, &[Term]) -> CallReturn>) {
         self.functions.insert((name, arity), fun);
     }

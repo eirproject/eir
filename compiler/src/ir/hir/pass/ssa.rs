@@ -153,7 +153,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             expr.ssa = env.new_ssa();
         },
         SingleExpressionKind::Map { ref mut values, ref mut merge } => {
-            for &mut (ref mut key, ref mut val, assoc) in values.iter_mut() {
+            for &mut (ref mut key, ref mut val, _assoc) in values.iter_mut() {
                 assign_ssa_single_expression(env, key);
                 assign_ssa_single_expression(env, val);
             }

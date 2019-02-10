@@ -2,12 +2,15 @@
 //! Made as an experiment to narrow down relevant implementation
 //! details.
 
+extern crate eir;
 extern crate core_erlang_compiler;
-use core_erlang_compiler::intern::Atom;
-use core_erlang_compiler::ir::{ Module, FunctionIdent, SSAVariable };
-use core_erlang_compiler::ir::lir::{ BasicBlock, LabelN, OpKind, Source };
-use core_erlang_compiler::ir::hir::scope_tracker::LambdaEnvIdx;
-use core_erlang_compiler::parser::AtomicLiteral;
+
+use eir::Atom;
+use eir::{ Module, FunctionIdent, SSAVariable, Source };
+use eir::cfg::{ BasicBlock, LabelN };
+use eir::op::{ OpKind };
+use eir::LambdaEnvIdx;
+use eir::AtomicTerm;
 
 extern crate lazy_static;
 
@@ -20,7 +23,6 @@ extern crate serde_json;
 mod term;
 pub use term::{ TermType, Term, BoundLambdaEnv, Pid, Reference };
 mod pattern;
-use pattern::{ CaseContext };
 
 pub mod erl_lib;
 #[cfg(test)] pub mod erl_tests;

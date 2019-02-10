@@ -1,5 +1,4 @@
 pub use ::{ Variable, Atom };
-use ::std::fmt::{ Formatter, Display };
 use ::eir::FunctionIdent;
 
 mod grammar;
@@ -22,6 +21,12 @@ fn parse_otp_compiler_compile() {
     f.read_to_string(&mut s);
 
     parse(&s).unwrap();
+}
+
+#[derive(Debug, Clone)]
+pub enum ConstantOrVariable {
+    Constant(Constant),
+    Variable(Variable),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -166,7 +171,7 @@ pub enum Pattern {
     Wildcard,
     BindVar(Variable, Box<Annotated<Pattern>>),
     Atomic(AtomicLiteral),
-    Binary(Vec<(Annotated<Pattern>, Vec<Annotated<SingleExpression>>)>),
+    Binary(Vec<(Annotated<Pattern>, Vec<Annotated<ConstantOrVariable>>)>),
     Tuple(Vec<Annotated<Pattern>>),
     List(Vec<Annotated<Pattern>>, Box<Annotated<Pattern>>),
     Map(Vec<(SingleExpression, Annotated<Pattern>)>),

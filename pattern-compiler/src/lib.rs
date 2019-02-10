@@ -4,7 +4,7 @@
 extern crate petgraph;
 extern crate prettytable;
 extern crate either;
-extern crate util;
+//extern crate util;
 #[macro_use] extern crate derivative;
 
 use ::std::collections::HashMap;

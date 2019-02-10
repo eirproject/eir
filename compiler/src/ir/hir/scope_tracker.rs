@@ -3,7 +3,6 @@ use ::Atom;
 use ::eir::FunctionIdent;
 use ::eir::{ LambdaEnv, LambdaEnvIdx, LambdaEnvIdxGenerator };
 use ::eir::ssa::{ SSAVariable, SSAVariableGenerator };
-use ::Variable;
 
 //#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 //pub struct LambdaEnvIdx(pub usize);

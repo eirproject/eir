@@ -8,4 +8,5 @@ members = [
     "tools",
     "term_config_format",
     "eir",
+    "eir_passes",
 ]

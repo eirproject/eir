@@ -1,6 +1,6 @@
-use std::fmt::{ Display, Debug, Formatter, Result };
+use std::fmt::{ Debug, Formatter, Result };
 use ::ToDoc;
-use ::ir::{ FunctionIdent, Module };
+use ::ir::{ Module };
 
 impl Debug for Module {
     fn fmt(&self, f: &mut Formatter) -> Result {

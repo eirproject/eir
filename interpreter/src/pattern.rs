@@ -1,13 +1,10 @@
 use std::collections::HashMap;
 
-use ::num_bigint::BigInt;
-
 use ::term::Term;
-use core_erlang_compiler::ir::lir::{ Source, Clause };
-use core_erlang_compiler::ir::hir::{ Pattern, PatternNode };
-use core_erlang_compiler::parser::AtomicLiteral;
-use core_erlang_compiler::ir::SSAVariable;
-use core_erlang_compiler::Variable;
+use eir::Clause;
+use eir::pattern::PatternNode;
+use eir::AtomicTerm;
+use eir::SSAVariable;
 
 #[derive(Debug, Copy, Clone)]
 pub enum MatchState {
@@ -62,18 +59,17 @@ pub struct CaseContext {
 }
 
 fn match_node(term: &Term, node: &PatternNode,
-              binds: &mut HashMap<SSAVariable, Term>,
-              binds_ref: &Vec<(Variable, SSAVariable)>) -> bool {
+              binds: &mut HashMap<SSAVariable, Term>) -> bool {
     //println!("    MATCH_NODE: {:?} {:?}", term, node);
     match (term, node) {
         // Wildcard and purely recursive
         (_, PatternNode::Wildcard) => true,
-        (_, PatternNode::BindVar(var_name, i_node)) => {
+        (_, PatternNode::Bind(ssa, i_node)) => {
             binds.insert(
-                binds_ref.iter().find(|(k, _)| k == var_name).unwrap().1,
+                *ssa, //binds_ref.iter().find(|(k, _)| k == var_name).unwrap().1,
                 term.clone()
             );
-            match_node(term, i_node, binds, binds_ref)
+            match_node(term, i_node, binds)
         },
 
         // Lists
@@ -81,42 +77,42 @@ fn match_node(term: &Term, node: &PatternNode,
          PatternNode::List(ref p_head, ref p_tail)) => {
             if t_head.len() < p_head.len() {
                 for (pat, term) in p_head.iter().zip(t_head.iter()) {
-                    if !match_node(term, pat, binds, binds_ref) {
+                    if !match_node(term, pat, binds) {
                         return false;
                     }
                 }
                 let n_p_head: Vec<_> = p_head.iter().skip(t_head.len())
                     .cloned().collect();
                 let n_pat = PatternNode::List(n_p_head, p_tail.clone());
-                return match_node(t_tail, &n_pat, binds, binds_ref);
+                return match_node(t_tail, &n_pat, binds);
             } else if t_head.len() == p_head.len() {
                 for (pat, term) in p_head.iter().zip(t_head.iter()) {
-                    if !match_node(term, pat, binds, binds_ref) {
+                    if !match_node(term, pat, binds) {
                         return false;
                     }
                 }
-                return match_node(t_tail, p_tail, binds, binds_ref);
+                return match_node(t_tail, p_tail, binds);
             } else { // >
                 assert!(t_head.len() > p_head.len());
                 for (pat, term) in p_head.iter().zip(t_head.iter()) {
-                    if !match_node(term, pat, binds, binds_ref) {
+                    if !match_node(term, pat, binds) {
                         return false;
                     }
                 }
                 let head_rest: Vec<_> = t_head.iter().skip(p_head.len())
                     .cloned().collect();
                 let rest_term = Term::List(head_rest, t_tail.clone());
-                let a = match_node(&rest_term, p_tail, binds, binds_ref);
+                let a = match_node(&rest_term, p_tail, binds);
                 return a;
             }
         }
         // List with empty head
         (_, PatternNode::List(ref list, ref tail)) if list.len() == 0 =>
-            match_node(term, tail, binds, binds_ref),
+            match_node(term, tail, binds),
         // Nil ([])
-        (Term::Nil, PatternNode::Atomic(AtomicLiteral::Nil)) => true,
+        (Term::Nil, PatternNode::Atomic(AtomicTerm::Nil)) => true,
         (Term::Nil, _) => false,
-        (_, PatternNode::Atomic(AtomicLiteral::Nil)) => false,
+        (_, PatternNode::Atomic(AtomicTerm::Nil)) => false,
 
         // Tuple
         (Term::Tuple(t_entries), PatternNode::Tuple(p_entries)) => {
@@ -124,7 +120,7 @@ fn match_node(term: &Term, node: &PatternNode,
                 return false;
             }
             for (term, pat) in t_entries.iter().zip(p_entries) {
-                if !match_node(term, pat, binds, binds_ref) {
+                if !match_node(term, pat, binds) {
                     return false;
                 }
             }
@@ -133,19 +129,14 @@ fn match_node(term: &Term, node: &PatternNode,
         (_, PatternNode::Tuple(_)) => false,
 
         // Atom
-        (Term::Atom(v1), PatternNode::Atomic(AtomicLiteral::Atom(v2))) => v1 == v2,
+        (Term::Atom(v1), PatternNode::Atomic(AtomicTerm::Atom(v2))) => v1 == v2,
         (Term::Atom(_), _) => false,
-        (_, PatternNode::Atomic(AtomicLiteral::Atom(_))) => false,
+        (_, PatternNode::Atomic(AtomicTerm::Atom(_))) => false,
 
         (Term::Integer(ref int),
-         PatternNode::Atomic(AtomicLiteral::Integer(ref pat_int))) => {
-            let mut bi = BigInt::parse_bytes(pat_int.digits.as_bytes(), 10)
-                .unwrap();
-            if !pat_int.sign {
-                bi *= -1;
-            }
-            println!("    Int pattern {} {}", int, bi);
-            int == &bi
+         PatternNode::Atomic(AtomicTerm::Integer(ref pat_int))) => {
+            println!("    Int pattern {} {}", int, pat_int);
+            int == pat_int
         }
         _ => {
             ::trace::warning("WARNING: Pattern matching incomplete".to_string());
@@ -180,7 +171,7 @@ impl CaseContext {
                 .enumerate()
                 .all(|(idx, (term, pattern))| {
                     let r = match_node(term, &pattern.node,
-                                       &mut values, &pattern.binds);
+                                       &mut values);
                     println!("  Pattern num: {} {}", idx, r);
                     r
                 });

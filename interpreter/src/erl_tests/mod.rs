@@ -2,7 +2,7 @@ extern crate tempdir;
 
 use ::std::io::{ Read, Write };
 use ::{ VMState, Term };
-use ::core_erlang_compiler::ir::Module;
+use eir::Module;
 use ::term::ErlEq;
 
 fn erl_to_core(erlang_code: &str) -> String {
@@ -41,7 +41,7 @@ fn erl_to_ir(erlang_code: &str) -> Module {
     let parsed = ::core_erlang_compiler::parser::parse(&core).unwrap();
     let ir = ::core_erlang_compiler::ir::from_parsed(&parsed.0);
 
-    println!("Ir:\n{:?}", ir);
+    //println!("Ir:\n{:?}", ir);
 
     ir
 }

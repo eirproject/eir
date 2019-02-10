@@ -23,6 +23,20 @@ impl Module {
     pub fn get_env<'a>(&'a self, env_idx: LambdaEnvIdx) -> &'a LambdaEnv {
         &self.lambda_envs.as_ref().unwrap()[&env_idx]
     }
+    pub fn to_eir(mut self) -> ::eir::Module {
+        ::eir::Module {
+            name: self.name,
+            functions: self.functions.drain(..)
+                .map(|f| {
+                    let fun = ::eir::Function {
+                        ident: f.ident.clone(),
+                        lir: f.lir_function.unwrap(),
+                    };
+                    (f.ident, fun)
+                }).collect(),
+            lambda_envs: self.lambda_envs.unwrap(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -68,7 +82,7 @@ impl AFunctionName {
     }
 }
 
-pub fn from_parsed(parsed: &parser::Module) -> Module {
+pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
     println!("STAGE: From parsed");
     let mut module = ::ir::hir::from_parsed::from_parsed(parsed);
 
@@ -109,15 +123,16 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
     println!("STAGE: Lower to LIR");
     // Lower to LIR
     ::ir::lir::from_hir::do_lower(&mut module, &mut env);
-
     module.lambda_envs = Some(env.finish());
+
+    let mut eir_module = module.to_eir();
 
     // Validate CFG between each major pass.
     let hardass_validate = false;
 
     println!("STAGE: Functionwise");
-    for function in module.functions.iter_mut() {
-        let lir_mut = function.lir_function.as_mut().unwrap();
+    for function in eir_module.functions.values_mut() {
+        let lir_mut = &mut function.lir;
         println!("Function: {}", function.ident);
 
         if hardass_validate { ::ir::lir::pass::validate(&function.ident, lir_mut); }
@@ -140,6 +155,5 @@ pub fn from_parsed(parsed: &parser::Module) -> Module {
 
     }
 
-
-    module
+    eir_module
 }
