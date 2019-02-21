@@ -1,7 +1,7 @@
 use ::{ FunctionIdent };
 use ::vm::{ VMState, WatchType };
 use ::module::NativeModule;
-use ::term::{ Term, Pid };
+use ::term::{ Term, Pid, Reference };
 use ::process::{ CallReturn, ProcessContext };
 
 use ::num_bigint::{ BigInt, Sign };
@@ -247,10 +247,7 @@ fn is_function(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> Call
     }
 }
 
-fn spawn_monitor_1(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
-    assert!(args.len() == 1);
-    let fun_term = &args[0];
-
+fn base_spawn(vm: &VMState, ident: &FunctionIdent, args: Vec<Term>) -> Pid {
     let new_pid = {
         let mut processes = vm.processes.borrow();
         Pid(processes.len())
@@ -258,7 +255,35 @@ fn spawn_monitor_1(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> Ca
 
     let process = ProcessContext::new(new_pid);
 
-    let process = match fun_term {
+    let orig_pid = ::trace::get_pid();
+    ::trace::set_pid(new_pid);
+    let frame = process.make_call_stackframe(
+        vm,
+        ident.module.clone(),
+        ident.clone(),
+        args
+    );
+    ::trace::set_pid(orig_pid);
+
+    let stack_i = process.stack.clone();
+    let mut stack = stack_i.borrow_mut();
+    stack.push(frame);
+
+    {
+        let mut processes = vm.processes.borrow_mut();
+        processes.push(Rc::new(RefCell::new(process)));
+    }
+
+    {
+        let mut mailboxes = vm.mailboxes.borrow_mut();
+        mailboxes.insert(new_pid, ::mailbox::Mailbox::new());
+    }
+
+    new_pid
+}
+
+fn base_spawn_term(vm: &VMState, callable: &Term, mut args: Vec<Term>) -> Pid {
+    match callable {
         Term::CapturedFunction { module, fun_name, arity } => {
             let ident = FunctionIdent {
                 module: module.clone(),
@@ -266,21 +291,7 @@ fn spawn_monitor_1(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> Ca
                 arity: *arity,
                 lambda: None,
             };
-
-            let orig_pid = ::trace::get_pid();
-            ::trace::set_pid(new_pid);
-            let frame = process.make_call_stackframe(
-                vm,
-                module.clone(),
-                ident,
-                vec![]
-            );
-            ::trace::set_pid(orig_pid);
-
-            let stack_i = process.stack.clone();
-            let mut stack = stack_i.borrow_mut();
-            stack.push(frame);
-            process
+            base_spawn(vm, &ident, args)
         }
         Term::BoundLambda { module, fun_name, arity, lambda, bound_env } => {
             let ident = FunctionIdent {
@@ -289,43 +300,61 @@ fn spawn_monitor_1(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> Ca
                 arity: *arity,
                 lambda: Some(*lambda),
             };
-
-            let orig_pid = ::trace::get_pid();
-            ::trace::set_pid(new_pid);
-            let frame = process.make_call_stackframe(
-                vm,
-                module.clone(),
-                ident,
-                vec![Term::LambdaEnv(bound_env.clone())]
-            );
-            ::trace::set_pid(orig_pid);
-
-            let stack_i = process.stack.clone();
-            let mut stack = stack_i.borrow_mut();
-            stack.push(frame);
-            process
+            args.insert(0, Term::LambdaEnv(bound_env.clone()));
+            base_spawn(vm, &ident, args)
         },
         _ => panic!(),
-    };
+    }
+}
 
-    let mut processes = vm.processes.borrow_mut();
-    processes.push(Rc::new(RefCell::new(process)));
-
+fn base_monitor(vm: &VMState, proc: &mut ProcessContext, other: Pid) -> Reference {
     let monitor_ref = vm.ref_gen.borrow_mut().next();
     let mut watches = vm.watches.borrow_mut();
 
-    if !watches.contains_key(&new_pid) {
-        watches.insert(new_pid, Vec::new());
+    if !watches.contains_key(&other) {
+        watches.insert(other, Vec::new());
     }
-    let for_proc = watches.get_mut(&new_pid).unwrap();
+    let for_proc = watches.get_mut(&other).unwrap();
 
     for_proc.push((proc.pid, WatchType::Monitor(monitor_ref)));
+
+    monitor_ref
+}
+
+fn spawn_1(vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 1);
+    let fun_term = &args[0];
+
+    let new_pid = base_spawn_term(vm, fun_term, vec![]);
+    CallReturn::Return { term: Term::Pid(new_pid) }
+}
+
+fn spawn_monitor_1(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 1);
+    let fun_term = &args[0];
+
+    let new_pid = base_spawn_term(vm, fun_term, vec![]);
+    let monitor_ref = base_monitor(vm, proc, new_pid);
 
     let term = Term::Tuple(vec![
         Term::Pid(new_pid),
         Term::Reference(monitor_ref),
     ]);
     CallReturn::Return { term: term }
+}
+
+fn monitor_2(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 2);
+    if args[0].erl_eq(&Term::new_atom("process")) {
+        if let Term::Pid(pid) = args[1] {
+            let monitor_ref = base_monitor(vm, proc, pid);
+            CallReturn::Return { term: Term::Reference(monitor_ref) }
+        } else {
+            CallReturn::Throw
+        }
+    } else {
+        unimplemented!()
+    }
 }
 
 fn not(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
@@ -370,6 +399,13 @@ fn less_than_or_equal(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) 
     let ord = a1.erl_ord(a2);
     CallReturn::Return { term: Term::new_bool(ord != std::cmp::Ordering::Greater) }
 }
+fn greater_than_or_equal(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 2);
+    let a1 = &args[0];
+    let a2 = &args[1];
+    let ord = a1.erl_ord(a2);
+    CallReturn::Return { term: Term::new_bool(ord != std::cmp::Ordering::Less) }
+}
 
 fn setelement(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
     assert!(args.len() == 3);
@@ -378,15 +414,48 @@ fn setelement(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallR
     };
     let value = args[2].clone();
     if let Term::Tuple(vals) = &args[1] {
-        if idx > vals.len() {
+        if idx == 0 || idx > vals.len() {
             CallReturn::Throw
         } else {
             let mut vals = vals.clone();
-            vals[idx] = value;
+            vals[idx-1] = value;
             CallReturn::Return { term: Term::Tuple(vals) }
         }
     } else {
         CallReturn::Throw
+    }
+}
+fn element(_vm: &VMState, _proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 2);
+    let idx = if let Some(num) = args[0].as_usize() { num } else {
+        return CallReturn::Throw;
+    };
+    if let Term::Tuple(vals) = &args[1] {
+        if idx == 0 || idx > vals.len() {
+            CallReturn::Throw
+        } else {
+            CallReturn::Return { term: vals[idx-1].clone() }
+        }
+    } else {
+        CallReturn::Throw
+    }
+}
+
+fn erl_self(_vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 0);
+    CallReturn::Return { term: Term::Pid(proc.pid) }
+}
+
+fn process_flag(vm: &VMState, proc: &mut ProcessContext, args: &[Term]) -> CallReturn {
+    assert!(args.len() == 2);
+    if args[0].erl_eq(&Term::new_atom("trap_exit")) {
+        let mut mailboxes = vm.mailboxes.borrow_mut();
+        let mailbox = &mut mailboxes.get_mut(&proc.pid).unwrap();
+        let old_trap_exits = mailbox.get_trap_exits();
+        mailbox.set_trap_exits(args[1].as_boolean().unwrap());
+        CallReturn::Return { term: Term::new_bool(old_trap_exits) }
+    } else {
+        unimplemented!()
     }
 }
 
@@ -398,6 +467,7 @@ pub fn make_erlang() -> NativeModule {
     module.add_fun("++".to_string(), 2, Box::new(list_append));
     module.add_fun("=:=".to_string(), 2, Box::new(exact_eq));
     module.add_fun("=<".to_string(), 2, Box::new(less_than_or_equal));
+    module.add_fun(">=".to_string(), 2, Box::new(greater_than_or_equal));
     module.add_fun("is_list".to_string(), 1, Box::new(is_list));
     module.add_fun("is_atom".to_string(), 1, Box::new(is_atom));
     module.add_fun("is_binary".to_string(), 1, Box::new(is_binary));
@@ -411,5 +481,10 @@ pub fn make_erlang() -> NativeModule {
     module.add_fun("not".to_string(), 1, Box::new(not));
     module.add_fun("atom_to_list".to_string(), 1, Box::new(atom_to_list));
     module.add_fun("setelement".to_string(), 3, Box::new(setelement));
+    module.add_fun("element".to_string(), 2, Box::new(element));
+    module.add_fun("self".to_string(), 0, Box::new(erl_self));
+    module.add_fun("spawn".to_string(), 1, Box::new(spawn_1));
+    module.add_fun("monitor".to_string(), 2, Box::new(monitor_2));
+    module.add_fun("process_flag".to_string(), 2, Box::new(process_flag));
     module
 }

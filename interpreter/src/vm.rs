@@ -37,6 +37,8 @@ pub struct VMState {
 
     /// Hashmap of all watches a process has placed on it.
     pub watches: RefCell<HashMap<Pid, Vec<(Pid, WatchType)>>>,
+
+    pub mailboxes: RefCell<HashMap<Pid, ::mailbox::Mailbox>>,
 }
 
 impl VMState {
@@ -47,6 +49,7 @@ impl VMState {
             processes: RefCell::new(Vec::new()),
             ref_gen: RefCell::new(ReferenceGenerator::new()),
             watches: RefCell::new(HashMap::new()),
+            mailboxes: RefCell::new(HashMap::new()),
         }
     }
 
@@ -99,6 +102,10 @@ impl VMState {
                 stack.push(frame);
             }
             processes.push(Rc::new(RefCell::new(process)));
+        }
+        {
+            let mut mailboxes = self.mailboxes.borrow_mut();
+            mailboxes.insert(self_pid, ::mailbox::Mailbox::new());
         }
 
         loop {

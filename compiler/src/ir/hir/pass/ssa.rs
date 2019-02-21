@@ -8,7 +8,7 @@
 //! passes. (See pattern match compilation)
 
 use ::std::collections::{ HashMap, HashSet };
-use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind };
+use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind, PatternNode };
 
 use ::ir::hir::scope_tracker::VerboseLambdaEnv;
 use ::ir::hir::scope_tracker::{ ScopeTracker, ScopeDefinition };
@@ -111,6 +111,9 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
                 }
 
                 env.push_scope(scope.clone());
+                for pattern in clause.patterns.iter_mut() {
+                    assign_ssa_pattern_node(env, &mut pattern.node);
+                }
                 assign_ssa_single_expression(env, &mut clause.guard);
                 assign_ssa_single_expression(env, &mut clause.body);
                 env.pop_scope();
@@ -334,5 +337,42 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             expr.ssa = body.ssa;
         },
         ref e => panic!("Unhandled: {:?}", e),
+    }
+}
+
+pub fn assign_ssa_pattern_node(env: &mut ScopeTracker, node: &mut PatternNode) {
+    match node {
+        PatternNode::Wildcard => (),
+        PatternNode::Atomic(_) => (),
+        PatternNode::BindVar(_var, node) => assign_ssa_pattern_node(env, node),
+        PatternNode::Binary(entries) => {
+            for (_bind, args) in entries.iter_mut() {
+                for arg in args.iter_mut() {
+                    match arg {
+                        ::parser::ConstantOrVariable::Variable(var) =>
+                            var.ssa = env.get(
+                                &ScopeDefinition::Variable(var.var.clone()))
+                            .unwrap(),
+                        _ => (),
+                    }
+                }
+            }
+        },
+        PatternNode::Tuple(nodes) => {
+            for node in nodes.iter_mut() {
+                assign_ssa_pattern_node(env, node);
+            }
+        },
+        PatternNode::List(head, tail) => {
+            for node in head.iter_mut() {
+                assign_ssa_pattern_node(env, node);
+            }
+            assign_ssa_pattern_node(env, tail);
+        }
+        PatternNode::Map(entries) => {
+            for (_key_num, val) in entries.iter_mut() {
+                assign_ssa_pattern_node(env, val);
+            }
+        }
     }
 }

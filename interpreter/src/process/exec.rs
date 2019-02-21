@@ -358,6 +358,14 @@ impl StackFrame {
                         self.write(op.writes[0], Term::List(front, Box::new(tail)));
                     }
                 }
+                OpKind::MakeMap => {
+                    assert!(op.writes.len() == 1);
+                    if op.reads.len() == 0 {
+                        self.write(op.writes[0], Term::Map(vec![]))
+                    } else {
+                        unimplemented!()
+                    }
+                }
                 _ => {
                     println!("Unimpl: {:?}", op);
                     println!("Variables: {:?}", self.variables);

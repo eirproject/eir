@@ -60,7 +60,7 @@ pub struct AVariable {
     pub ssa: SSAVariable,
 }
 impl AVariable {
-    fn new(var: Variable) -> Self {
+    pub fn new(var: Variable) -> Self {
         AVariable {
             var: var,
             ssa: INVALID_SSA,
@@ -91,7 +91,7 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
     println!("STAGE: Assign SSA");
     // Assign SSA variables
     for func in &mut module.functions {
-        println!("Fun: {:?}", func.ident);
+        println!("Fun: {}", func.ident);
         let mut scope = HashMap::new();
         for arg in &mut func.hir_fun.args {
             arg.ssa = env.new_ssa();
@@ -125,33 +125,46 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
     ::ir::lir::from_hir::do_lower(&mut module, &mut env);
     module.lambda_envs = Some(env.finish());
 
+    let fun_idents: Vec<_> = module.functions.iter()
+        .map(|f| f.ident.clone()).collect();
     let mut eir_module = module.to_eir();
 
     // Validate CFG between each major pass.
     let hardass_validate = false;
 
     println!("STAGE: Functionwise");
-    for function in eir_module.functions.values_mut() {
+    for fun_ident in fun_idents.iter() {
+        let function = eir_module.functions.get_mut(fun_ident).unwrap();
         let lir_mut = &mut function.lir;
         println!("Function: {}", function.ident);
 
-        if hardass_validate { ::ir::lir::pass::validate(&function.ident, lir_mut); }
+        if hardass_validate { lir_mut.validate(&function.ident) }
 
         // Remove orphans in generated LIR
         ::ir::lir::pass::remove_orphan_blocks(lir_mut);
-        if hardass_validate { ::ir::lir::pass::validate(&function.ident, lir_mut); }
+        if hardass_validate { lir_mut.validate(&function.ident) }
 
         // Propagate atomics
         ::ir::lir::pass::propagate_atomics(lir_mut);
-        if hardass_validate { ::ir::lir::pass::validate(&function.ident, lir_mut); }
+        if hardass_validate { lir_mut.validate(&function.ident) }
 
         // Promote tail calls
         // AFTER propagate atomics
         ::ir::lir::pass::promote_tail_calls(lir_mut);
         // REQUIRED after promote tail calls
         ::ir::lir::pass::remove_orphan_blocks(lir_mut);
+        if hardass_validate { lir_mut.validate(&function.ident) }
 
-        ::ir::lir::pass::validate(&function.ident, lir_mut);
+        ::ir::lir::pass::simplify_branches(lir_mut);
+        ::ir::lir::pass::remove_orphan_blocks(lir_mut);
+        if hardass_validate { lir_mut.validate(&function.ident) }
+
+        ::ir::lir::pass::compile_pattern(&function.ident, lir_mut);
+        ::ir::lir::pass::simplify_branches(lir_mut);
+        ::ir::lir::pass::remove_orphan_blocks(lir_mut);
+        if hardass_validate { lir_mut.validate(&function.ident) }
+
+        lir_mut.validate(&function.ident)
 
     }
 

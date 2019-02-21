@@ -2,6 +2,11 @@ use ::string_intern::{ Validator, Symbol };
 use ::std::str::FromStr;
 use ::std::fmt::Display;
 
+lazy_static::lazy_static! {
+    pub static ref FALSE: Atom = Atom::from("false");
+    pub static ref NIL: Atom = Atom::from("false");
+}
+
 struct AtomSymbol;
 impl Validator for AtomSymbol {
     type Err = ::std::string::ParseError;

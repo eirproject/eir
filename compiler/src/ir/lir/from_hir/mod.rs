@@ -15,12 +15,12 @@ use ::eir::op::{ OpKind };
 mod exception_handler_stack;
 use self::exception_handler_stack::ExceptionHandlerStack;
 
-pub fn do_lower(module: &mut Module, env: &mut ScopeTracker) {
+pub fn do_lower(module: &mut Module, env: &ScopeTracker) {
     module.lower(env)
 }
 
 impl Module {
-    fn lower(&mut self, env: &mut ScopeTracker) {
+    fn lower(&mut self, env: &ScopeTracker) {
         for fun in &mut self.functions {
             println!("{}", fun.ident);
             fun.lower(env);
@@ -29,8 +29,8 @@ impl Module {
 }
 
 impl FunctionDefinition {
-    fn lower(&mut self, env: &mut ScopeTracker) {
-        let mut cfg = lir::FunctionCfg::new();
+    fn lower(&mut self, env: &ScopeTracker) {
+        let mut cfg = lir::FunctionCfg::new(env.clone_ssa_generator());
 
         {
             let mut builder = FunctionCfgBuilder::new(&mut cfg);
@@ -38,7 +38,7 @@ impl FunctionDefinition {
 
             let mut env_ssa = None;
             let mut args = if self.ident.lambda.is_some() {
-                let env_ssa_u = env.new_ssa();
+                let env_ssa_u = builder.new_ssa();
                 env_ssa = Some(env_ssa_u);
                 vec![env_ssa_u]
             } else {
@@ -76,7 +76,7 @@ impl FunctionDefinition {
             }
 
             let exc_block = builder.add_block();
-            let exc_ssa = env.new_ssa();
+            let exc_ssa = builder.new_ssa();
             builder.ensure_phi(exc_block, exc_ssa);
 
             let mut exc_stack = ExceptionHandlerStack::new(exc_block, exc_ssa);
@@ -112,17 +112,17 @@ struct CaseStructureDef<'a> {
 }
 struct CaseStructureClauseDef<'a> {
     patterns: Vec<::ir::hir::Pattern>,
-    guard: Box<Fn(&mut FunctionCfgBuilder, &mut ScopeTracker,
+    guard: Box<Fn(&mut FunctionCfgBuilder, &ScopeTracker,
                       &mut ExceptionHandlerStack, LabelN, &[SSAVariable])
                      -> (LabelN, SSAVariable) + 'a>,
-    body: Box<Fn(&mut FunctionCfgBuilder, &mut ScopeTracker,
+    body: Box<Fn(&mut FunctionCfgBuilder, &ScopeTracker,
                      &mut ExceptionHandlerStack, LabelN, &[SSAVariable])
                     -> (LabelN, SSAVariable) + 'a>,
 }
 
 fn case_structure(
     b: &mut FunctionCfgBuilder,
-    env: &mut ScopeTracker,
+    env: &ScopeTracker,
     exc_stack: &mut ExceptionHandlerStack,
     def: &CaseStructureDef,
 ) -> (LabelN, SSAVariable) {
@@ -139,7 +139,7 @@ fn case_structure(
 
 
     // The SSA variable representing the case structure.
-    let case_structure_ssa = env.new_ssa();
+    let case_structure_ssa = b.new_ssa();
 
     //let guard_exception_label = b.add_block();
     //let guard_exception_ssa = env.new_ssa();
@@ -150,7 +150,7 @@ fn case_structure(
         vec![match_fail]
     } else {
         let case_fail_label = b.add_block();
-        let fail_ssa = env.new_ssa();
+        let fail_ssa = b.new_ssa();
         b.basic_op(case_fail_label,
                    OpKind::Move,
                    vec![AtomicTerm::Nil.into()],
@@ -211,9 +211,8 @@ fn case_structure(
 
         let (ret_label, clause_ret_ssa) = (clause.body)(
             b, env, exc_stack, leaf_body_label, &case_values_ssa);
-        b.op_jump(ret_label, done_label);
-        b.add_phi(ret_label, clause_ret_ssa,
-                  done_label, def.return_ssa);
+        let j_edge = b.op_jump(ret_label, done_label);
+        b.add_phi(j_edge, clause_ret_ssa, def.return_ssa);
         b.finish(ret_label);
 
         leaves.push(orig_clause_label);
@@ -247,7 +246,7 @@ fn case_structure(
         vec![case_structure_ssa]
     );
     // Jump to match body
-    b.op_jump(main_cont, match_body_label);
+    b.add_jump(main_cont, match_body_label);
     b.finish(main_cont);
 
     // === Guard exception case ===
@@ -272,7 +271,7 @@ fn case_structure(
 use self::hir::SingleExpressionKind as HSEK;
 impl hir::SingleExpression {
     fn lower(&self, b: &mut FunctionCfgBuilder,
-             env: &mut ScopeTracker,
+             env: &ScopeTracker,
              exc_stack: &mut ExceptionHandlerStack, in_block: LabelN)
              -> (LabelN, SSAVariable) {
 
@@ -294,7 +293,7 @@ impl hir::SingleExpression {
                     .map(|r| Source::Variable(*r))
                     .collect();
 
-                let exc_ssa = env.new_ssa();
+                let exc_ssa = b.new_ssa();
                 b.basic_op(main_cont, OpKind::Call { tail_call: false },
                            reads, vec![self.ssa, exc_ssa]);
                 //let prev_block = b.get_block();
@@ -334,7 +333,7 @@ impl hir::SingleExpression {
                     .map(|r| Source::Variable(*r))
                     .collect();
 
-                let exc_ssa = env.new_ssa();
+                let exc_ssa = b.new_ssa();
                 b.basic_op(main_cont,
                            OpKind::Apply { tail_call: false },
                            reads, vec![self.ssa, exc_ssa]);
@@ -397,7 +396,7 @@ impl hir::SingleExpression {
 
                 let mut main_cont = in_block;
                 let mut catch_block = b.add_block();
-                let catch_ssa = env.new_ssa();
+                let catch_ssa = b.new_ssa();
                 let exit_block = b.add_block();
 
                 // == Body ==
@@ -415,7 +414,7 @@ impl hir::SingleExpression {
                 // Then block
                 let then_ssa = lower_chain!(then, b, env, exc_stack, main_cont);
                 assert!(then_ssa == then.ssa);
-                b.op_jump(main_cont, exit_block);
+                let main_exit_jump = b.op_jump(main_cont, exit_block);
 
                 // == Catch clause ==
                 // Unpack the result value list from the error
@@ -426,11 +425,11 @@ impl hir::SingleExpression {
                 let catch_ret_ssa = lower_chain!(
                     catch, b, env, exc_stack, catch_block);
                 assert!(catch_ret_ssa == catch.ssa);
-                b.op_jump(catch_block, exit_block);
+                let catch_exit_jump = b.op_jump(catch_block, exit_block);
 
                 // == Phi node ==
-                b.add_phi(main_cont, then_ssa, exit_block, self.ssa);
-                b.add_phi(catch_block, catch_ret_ssa, exit_block, self.ssa);
+                b.add_phi(main_exit_jump, then_ssa, self.ssa);
+                b.add_phi(catch_exit_jump, catch_ret_ssa, self.ssa);
 
                 (exit_block, self.ssa)
             },
@@ -438,7 +437,7 @@ impl hir::SingleExpression {
                 let mut main_cont = in_block;
 
                 let mut catch_block = b.add_block();
-                let catch_ssa = env.new_ssa();
+                let catch_ssa = b.new_ssa();
 
                 let ret_block = b.add_block();
 
@@ -447,15 +446,15 @@ impl hir::SingleExpression {
                 let body_ssa = lower_chain!(body, b, env, exc_stack, main_cont);
                 exc_stack.pop_catch();
 
-                b.op_jump(main_cont, ret_block);
-                b.add_phi(main_cont, body_ssa, ret_block, self.ssa);
+                let ret_jump = b.op_jump(main_cont, ret_block);
+                b.add_phi(ret_jump, body_ssa, self.ssa);
 
                 // Exception path
 
                 // Unpack exception
-                let e1_ssa = env.new_ssa();
-                let e2_ssa = env.new_ssa();
-                let e3_ssa = env.new_ssa();
+                let e1_ssa = b.new_ssa();
+                let e2_ssa = b.new_ssa();
+                let e3_ssa = b.new_ssa();
                 b.op_unpack_value_list(
                     catch_block,
                     catch_ssa,
@@ -463,7 +462,7 @@ impl hir::SingleExpression {
                 );
 
                 let case_main_block = b.add_block();
-                let case_structure_ssa = env.new_ssa();
+                let case_structure_ssa = b.new_ssa();
                 b.basic_op(
                     catch_block,
                     OpKind::CaseStart {
@@ -502,7 +501,7 @@ impl hir::SingleExpression {
                     vec![catch_ssa.into()],
                     vec![case_structure_ssa]
                 );
-                b.op_jump(catch_block, case_main_block);
+                b.add_jump(catch_block, case_main_block);
 
                 b.basic_op(
                     case_main_block,
@@ -521,15 +520,17 @@ impl hir::SingleExpression {
                 // Throw case
                 let throw_block = b.add_block();
                 b.add_jump(case_main_block, throw_block);
+                b.op_case_values(throw_block, case_structure_ssa, vec![]);
                 b.op_case_guard_ok(throw_block, case_structure_ssa);
-                b.op_jump(throw_block, ret_block);
-                b.add_phi(throw_block, e2_ssa, ret_block, self.ssa);
+                let ret_jump = b.op_jump(throw_block, ret_block);
+                b.add_phi(ret_jump, e2_ssa, self.ssa);
 
                 // Exit case
                 let exit_block = b.add_block();
                 b.add_jump(case_main_block, exit_block);
+                b.op_case_values(exit_block, case_structure_ssa, vec![]);
                 b.op_case_guard_ok(exit_block, case_structure_ssa);
-                let exit_res_ssa = env.new_ssa();
+                let exit_res_ssa = b.new_ssa();
                 b.op_make_tuple(
                     exit_block,
                     vec![
@@ -538,18 +539,19 @@ impl hir::SingleExpression {
                     ],
                     exit_res_ssa
                 );
-                b.op_jump(exit_block, ret_block);
-                b.add_phi(exit_block, exit_res_ssa, ret_block, self.ssa);
+                let ret_jump = b.op_jump(exit_block, ret_block);
+                b.add_phi(ret_jump, exit_res_ssa, self.ssa);
 
                 // Error case
                 let error_block = b.add_block();
                 b.add_jump(case_main_block, error_block);
+                b.op_case_values(error_block, case_structure_ssa, vec![]);
                 b.op_case_guard_ok(error_block, case_structure_ssa);
-                let error_stacktrace_ssa = env.new_ssa();
+                let error_stacktrace_ssa = b.new_ssa();
                 b.op_primop(error_block, Atom::from("exc_trace"),
                             vec![Source::Variable(e3_ssa)],
                             vec![error_stacktrace_ssa]);
-                let error_int_res_ssa = env.new_ssa();
+                let error_int_res_ssa = b.new_ssa();
                 b.op_make_tuple(
                     error_block,
                     vec![
@@ -558,7 +560,7 @@ impl hir::SingleExpression {
                     ],
                     error_int_res_ssa,
                 );
-                let error_res_ssa = env.new_ssa();
+                let error_res_ssa = b.new_ssa();
                 b.op_make_tuple(
                     error_block,
                     vec![
@@ -567,8 +569,8 @@ impl hir::SingleExpression {
                     ],
                     error_res_ssa
                 );
-                b.op_jump(error_block, ret_block);
-                b.add_phi(error_block, error_res_ssa, ret_block, self.ssa);
+                let ret_jump = b.op_jump(error_block, ret_block);
+                b.add_phi(ret_jump, error_res_ssa, self.ssa);
 
                 (ret_block, self.ssa)
             },
@@ -720,7 +722,7 @@ impl hir::SingleExpression {
                     reads.push(Source::Variable(n_ssa));
                 }
 
-                let exc_path_ssa = env.new_ssa();
+                let exc_path_ssa = b.new_ssa();
                 b.basic_op(main_cont, OpKind::MakeTuple, reads, vec![exc_path_ssa]);
 
                 b.basic_op(main_cont, OpKind::Jump, vec![], vec![]);
@@ -779,7 +781,7 @@ impl hir::SingleExpression {
                 let match_body_label = b.add_block();
                 let expression_exit_label = b.add_block();
 
-                let receive_structure_ssa = env.new_ssa();
+                let receive_structure_ssa = b.new_ssa();
 
                 // Entry to receive structure (#start)
                 b.basic_op(start_label,
@@ -804,13 +806,12 @@ impl hir::SingleExpression {
                 let (clause_ret_block, clause_ret_ssa) = timeout_body.lower(
                     b, env, exc_stack, timeout_body_cont);
                 b.basic_op(clause_ret_block, OpKind::Jump, vec![], vec![]);
-                b.add_jump(clause_ret_block, expression_exit_label);
-                b.add_phi(clause_ret_block, clause_ret_ssa,
-                          expression_exit_label, self.ssa);
+                let exit_jump = b.add_jump(clause_ret_block, expression_exit_label);
+                b.add_phi(exit_jump, clause_ret_ssa, self.ssa);
 
                 // Match logic (#match_body)
-                let message_label = env.new_ssa();
-                let case_ret_label = env.new_ssa();
+                let message_label = b.new_ssa();
+                let case_ret_label = b.new_ssa();
                 b.basic_op(
                     match_body_label,
                     OpKind::ReceiveGetMessage,
@@ -827,7 +828,7 @@ impl hir::SingleExpression {
                             CaseStructureClauseDef {
                                 patterns: c.patterns.clone(),
                                 guard: Box::new(|b, env, _exc_stack, block, _matches| {
-                                    let ssa = env.new_ssa();
+                                    let ssa = b.new_ssa();
                                     b.op_move(
                                         block,
                                         Atom::from("true"),
@@ -852,9 +853,8 @@ impl hir::SingleExpression {
                 };
 
                 b.basic_op(case_ret_label, OpKind::Jump, vec![], vec![]);
-                b.add_jump(case_ret_label, expression_exit_label);
-                b.add_phi(case_ret_label, case_ret_ssa,
-                          expression_exit_label, self.ssa);
+                let exit_jump = b.add_jump(case_ret_label, expression_exit_label);
+                b.add_phi(exit_jump, case_ret_ssa, self.ssa);
 
                 (expression_exit_label, self.ssa)
             },

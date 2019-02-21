@@ -5,6 +5,7 @@ use crate::Atom;
 use crate::op::{ Op, OpKind };
 use super::{ FunctionCfg, LabelN, Source };
 use super::{ BasicBlock, Phi, BasicBlockEdge, EdgeN };
+use crate::AtomicTerm;
 
 #[derive(Debug)]
 pub struct FunctionCfgBuilder<'a> {
@@ -21,6 +22,10 @@ impl<'a> FunctionCfgBuilder<'a> {
             target: cfg,
             finished: HashSet::new(),
         }
+    }
+
+    pub fn new_ssa(&mut self) -> SSAVariable {
+        self.target.ssa_gen.next()
     }
 
     pub fn get_entry(&self) -> LabelN {
@@ -56,26 +61,28 @@ impl<'a> FunctionCfgBuilder<'a> {
     }
 
     pub fn add_phi(&mut self,
-                   pred: LabelN, pred_instr: SSAVariable,
-                   node: LabelN, node_instr: SSAVariable) {
+                   edge: EdgeN, from_ssa: SSAVariable,
+                   to_ssa: SSAVariable) {
 
-        assert!(self.target.graph.has_edge(pred, node));
-        self.assert_not_finished(pred);
-        let block_container = &self.target.graph[node];
+        let from_node = self.target.graph.edge_from(edge);
+        let to_node = self.target.graph.edge_to(edge);
+
+        self.assert_not_finished(from_node);
+        let block_container = &self.target.graph[to_node];
         let mut block = block_container.inner.borrow_mut();
         assert!(block.ops.len() == 0);
 
         let add_new = if let Some(inner) =
-            block.phi_nodes.iter_mut().find(|p| p.ssa == node_instr) {
-                inner.entries.push((pred, Source::Variable(pred_instr)));
+            block.phi_nodes.iter_mut().find(|p| p.ssa == to_ssa) {
+                inner.entries.push((edge, Source::Variable(from_ssa)));
                 false
             } else {
                 true
             };
         if add_new {
             block.phi_nodes.push(Phi {
-                entries: vec![(pred, Source::Variable(pred_instr))],
-                ssa: node_instr,
+                entries: vec![(edge, Source::Variable(from_ssa))],
+                ssa: to_ssa,
             });
         }
     }
@@ -102,9 +109,9 @@ impl<'a> FunctionCfgBuilder<'a> {
         self.basic_op(block, OpKind::TombstoneSSA(ssa), vec![], vec![]);
     }
 
-    pub fn op_jump(&mut self, block: LabelN, target: LabelN) {
+    pub fn op_jump(&mut self, block: LabelN, target: LabelN) -> EdgeN {
         self.basic_op(block, OpKind::Jump, vec![], vec![]);
-        self.add_jump(block, target);
+        self.add_jump(block, target)
     }
 
     pub fn op_return_ok(&mut self, block: LabelN, value: Source) {
@@ -121,6 +128,14 @@ impl<'a> FunctionCfgBuilder<'a> {
     pub fn op_case_guard_ok(&mut self, block: LabelN, case_structure: SSAVariable) {
         self.basic_op(block, OpKind::CaseGuardOk,
                       vec![Source::Variable(case_structure)], vec![]);
+    }
+    pub fn op_case_values(&mut self, block: LabelN, case_structure: SSAVariable, values: Vec<SSAVariable>) {
+        self.basic_op(
+            block,
+            OpKind::CaseValues,
+            vec![case_structure.into()],
+            values
+        );
     }
 
     pub fn op_unreachable(&mut self, block: LabelN) {
@@ -162,6 +177,42 @@ impl<'a> FunctionCfgBuilder<'a> {
             values,
             vec![val_list]
         );
+    }
+
+    pub fn op_unpack_tuple(&mut self, block: LabelN, value: Source, values: Vec<SSAVariable>, ok_jump: LabelN, fail_jump: LabelN) {
+        self.basic_op(
+            block,
+            OpKind::UnpackTuple,
+            vec![value],
+            values,
+        );
+        self.add_jump(block, ok_jump);
+        self.add_jump(block, fail_jump);
+        self.finish(block);
+    }
+
+    pub fn op_equal_atomic(&mut self, block: LabelN, value: Source, atomic: AtomicTerm, ok_jump: LabelN, fail_jump: LabelN) {
+        self.basic_op(
+            block,
+            OpKind::EqualAtomic(atomic),
+            vec![value],
+            vec![]
+        );
+        self.add_jump(block, ok_jump);
+        self.add_jump(block, fail_jump);
+        self.finish(block);
+    }
+
+    pub fn op_unpack_list_cell(&mut self, block: LabelN, value: Source, head: SSAVariable, tail: SSAVariable, ok_jump: LabelN, fail_jump: LabelN) {
+        self.basic_op(
+            block,
+            OpKind::UnpackListCell,
+            vec![value],
+            vec![head, tail]
+        );
+        self.add_jump(block, ok_jump);
+        self.add_jump(block, fail_jump);
+        self.finish(block);
     }
 
     pub fn finish(&mut self, block: LabelN) {

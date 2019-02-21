@@ -1,6 +1,7 @@
 use super::SSAVariable;
 use crate::op::{ Op };
 use crate::Source;
+use crate::ssa::SSAVariableGenerator;
 
 mod builder;
 pub use self::builder::FunctionCfgBuilder;
@@ -20,7 +21,7 @@ pub struct BasicBlock {
 
 #[derive(Debug, Clone)]
 pub struct Phi {
-    pub entries: Vec<(LabelN, Source)>,
+    pub entries: Vec<(EdgeN, Source)>,
     pub ssa: SSAVariable,
 }
 
@@ -29,6 +30,7 @@ pub struct FunctionCfg {
     pub entry: LabelN,
     pub args: Vec<SSAVariable>,
     pub graph: Graph<BasicBlock, BasicBlockEdge>,
+    pub ssa_gen: SSAVariableGenerator,
 }
 
 #[derive(Debug, Clone)]
@@ -38,7 +40,7 @@ pub struct BasicBlockEdge {
 
 impl FunctionCfg {
 
-    pub fn new() -> Self {
+    pub fn new(ssa_gen: SSAVariableGenerator) -> Self {
         let mut graph = Graph::new();
 
         let entry = graph.add_node(BasicBlock {
@@ -50,6 +52,7 @@ impl FunctionCfg {
             entry: entry,
             args: vec![],
             graph: graph,
+            ssa_gen: ssa_gen,
         }
     }
 
@@ -68,7 +71,7 @@ impl FunctionCfg {
             let mut dst = dst_container.inner.borrow_mut();
             for phi in dst.phi_nodes.iter_mut() {
                 let pos = phi.entries.iter()
-                    .position(|(from, _src)| *from == edge_from_label)
+                    .position(|(from, _src)| *from == lbl)
                     .expect("Phi node was invalid!");
                 phi.entries.remove(pos);
             }
@@ -91,12 +94,12 @@ impl FunctionCfg {
             assert!(block_container.incoming.len() == 0);
 
             // Remove from PHI nodes
-            for (_edge, node) in block_container.outgoing.iter() {
+            for (edge, node) in block_container.outgoing.iter() {
                 let dst_block_container = &self.graph[*node];
                 let mut dst_block = dst_block_container.inner.borrow_mut();
                 for phi in dst_block.phi_nodes.iter_mut() {
                     let pos = phi.entries.iter()
-                        .position(|(label, _ssa)| *label == lbl)
+                        .position(|(label, _ssa)| label == edge)
                         .unwrap();
                     phi.entries.remove(pos);
                 }
@@ -106,5 +109,9 @@ impl FunctionCfg {
         // Remove actual node
         self.graph.remove_node(lbl);
     }
+
+    //pub fn reparent_edge(&mut self, edge: EdgeN, new_parent: LabelN) {
+    //    self.graph.
+    //}
 
 }

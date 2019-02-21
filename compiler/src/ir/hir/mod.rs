@@ -353,9 +353,23 @@ impl PatternNode {
             PatternNode::BindVar(var, node) =>
                 EPN::Bind(binds[var], Box::new(node.to_eir(binds))),
             PatternNode::Atomic(atomic) => EPN::Atomic(atomic.clone()),
-            PatternNode::Binary(_) => {
-                println!("{:?}", self);
-                unimplemented!();
+            PatternNode::Binary(entries) => {
+                let entries_n = entries.iter()
+                    .map(|(pat, args)| {
+                        ::eir::pattern::BinaryPatternElem {
+                            node: pat.to_eir(binds),
+                            args: args.iter()
+                                .map(|a| {
+                                    match a {
+                                        ConstantOrVariable::Variable(var) =>
+                                            ::eir::pattern::ConstantOrSSA::SSA(var.ssa),
+                                        ConstantOrVariable::Constant(constant) =>
+                                            ::eir::pattern::ConstantOrSSA::Constant(constant.to_eir()),
+                                    }
+                                }).collect(),
+                        }
+                    }).collect();
+                EPN::Binary(entries_n)
             },
             PatternNode::Tuple(nodes) =>
                 EPN::Tuple(nodes.iter().map(|n| n.to_eir(binds)).collect()),

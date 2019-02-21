@@ -9,6 +9,7 @@ util = { path = "../util" }
 
 string-intern = "0.1.7"
 pretty = "0.3.3"
+lazy_static = "1.2.0"
 
 num = "0.2"
 num-traits = "0.2"

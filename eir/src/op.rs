@@ -1,5 +1,5 @@
 use crate::{ SSAVariable, FunctionIdent, LambdaEnvIdx, Atom, Clause };
-use crate::{ Source };
+use crate::{ Source, AtomicTerm };
 
 #[derive(Debug, Clone)]
 pub struct Op {
@@ -107,6 +107,13 @@ pub enum OpKind {
     CaseGuardOk,
     CaseGuardFail { clause_num: usize },
 
+    /// Lower level branches used in compiled patterns.
+    UnpackTuple,
+    UnpackListCell,
+    IsMap,
+    UnpackMapItem,
+    EqualAtomic(AtomicTerm),
+
     /// Indicates the start of a receive structure, must jump to a block
     /// containing a single ReceiveWait.
     /// No further ReceiveStart or function termination is allowed
@@ -186,6 +193,7 @@ impl OpKind {
             OpKind::Apply { tail_call: false } => Some(2),
             OpKind::Apply { tail_call: true } => Some(0),
             OpKind::Jump => Some(1),
+            OpKind::CaseStart { .. } => Some(1),
             OpKind::Case(num_clauses) => Some(num_clauses + 1),
             // One for each clause + failure leaf
             //OpKind::Case { ref clauses, .. } => Some(clauses.len() + 1),
@@ -198,6 +206,14 @@ impl OpKind {
             OpKind::IfTruthy => Some(2),
             //OpKind::CaseGuardFail { .. } => Some(1),
             OpKind::Unreachable => Some(0),
+
+            // Value conditionals
+            OpKind::UnpackTuple => Some(2),
+            OpKind::UnpackListCell => Some(2),
+            OpKind::IsMap => Some(2),
+            OpKind::UnpackMapItem => Some(2),
+            OpKind::EqualAtomic(_) => Some(2),
+
             _ => None,
         }
     }

@@ -47,6 +47,10 @@ impl ScopeTracker {
         }
     }
 
+    pub fn clone_ssa_generator(&self) -> SSAVariableGenerator {
+        self.ssa_var_generator.clone()
+    }
+
     pub fn push_scope(&mut self, bindings: HashMap<ScopeDefinition, SSAVariable>) {
         self.scopes.push(Scope::Simple(bindings));
     }

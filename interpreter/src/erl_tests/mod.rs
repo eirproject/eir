@@ -185,6 +185,7 @@ fn compiler() {
 
         ctx.add_native_module(::erl_lib::make_erlang());
         ctx.add_native_module(::erl_lib::make_os());
+        ctx.add_native_module(::erl_lib::make_time());
 
         ctx.add_erlang_module(compile_core_file(
             "../otp/lib/compiler/ebin/compile.core"));
@@ -194,6 +195,8 @@ fn compiler() {
         ctx.add_erlang_module(compile_core_file(
             "../otp/lib/stdlib/ebin/filename.core"));
             //"/home/hansihe/proj/checkout/otp/lib/stdlib/ebin/filename.core"));
+        ctx.add_erlang_module(compile_core_file(
+            "../otp/lib/stdlib/ebin/epp.core"));
 
         ctx.add_erlang_module(compile_core_file(
             "../otp/lib/stdlib/ebin/lists.core"));

@@ -16,6 +16,16 @@ fn list_merge_pattern() {
 
     {
         let clause = pattern.add_clause(NodeKind::RootValues);
+        pattern.add_child(clause, NodeKind::Wildcard);
+        pattern.add_child(clause, NodeKind::Wildcard);
+    }
+    {
+        let clause = pattern.add_clause(NodeKind::RootValues);
+        pattern.add_child(clause, NodeKind::Terminal);
+        pattern.add_child(clause, NodeKind::Wildcard);
+    }
+    {
+        let clause = pattern.add_clause(NodeKind::RootValues);
         pattern.add_child(clause, NodeKind::Terminal);
         pattern.add_child(clause, NodeKind::Wildcard);
     }

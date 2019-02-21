@@ -24,7 +24,7 @@ fn main() {
     let hir = core_erlang_compiler::ir::from_parsed(&res.0);
 
     for fun in hir.functions.iter() {
-        println!("{}", fun.ident);
+        println!("{}", fun.0);
     }
 
     if let Some(fun_name) = fun_name {
@@ -37,18 +37,18 @@ fn main() {
         let lambda_d = lambda_env.as_ref().map(|v| (
             LambdaEnvIdx::parse_from_str(v), lambda_num.unwrap()));
 
-        let funs: Vec<_> = hir.functions.iter().map(|f| f.ident.clone()).collect();
+        let funs: Vec<_> = hir.functions.iter().map(|f| f.0.clone()).collect();
         println!("{:?}", funs);
         let fun = hir.functions.iter().find(|f| {
-            f.ident.name == name_sym
-                && f.ident.arity == arity
-                && f.ident.lambda == lambda_d
+            f.0.name == name_sym
+                && f.0.arity == arity
+                && f.0.lambda == lambda_d
         }).unwrap();
 
         println!("Writing to {}.dot", infile);
         let mut out = ::std::fs::File::create(infile + ".dot").unwrap();
         core_erlang_compiler::ir::lir::to_dot::function_to_dot(
-            fun, &mut out).unwrap();
+            &fun.0, &fun.1.lir, &mut out).unwrap();
 
     } else {
         println!("No function name provided");

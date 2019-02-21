@@ -238,10 +238,11 @@ pub fn dump_trace(filename: String) {
         let json_events: Vec<_> = c.events.iter()
             .map(|event| {
                 match &event.typ {
-                    TraceEventType::FunctionEnter { module, ident, args } => {
+                    TraceEventType::FunctionEnter { ident, args, .. } => {
                         let mut event_args = HashMap::new();
                         let fun_args: Vec<_> = args.iter()
-                            .map(|a| ::serde_json::Value::String(format!("{:?}", a)))
+                            .map(|a| ::serde_json::Value::String(
+                                format!("{}", a.to_doc().pretty(40))))
                             .collect();
                         event_args.insert(
                             "Call Arguments".to_string(),
@@ -253,7 +254,7 @@ pub fn dump_trace(filename: String) {
                             tid: 0,
                             cname: None,
                             args: event_args,
-                            name: format!("{}:{}", module, ident),
+                            name: format!("{}", ident),
                             categories: "".to_string(),
                         }
                     }
@@ -262,7 +263,15 @@ pub fn dump_trace(filename: String) {
                         let mut event_args = HashMap::new();
                         event_args.insert(
                             "Call Return".to_string(),
-                            ::serde_json::Value::String(format!("{:?}", ret))
+                            match ret {
+                                None => ::serde_json::Value::String(
+                                    "TailCall".to_string()),
+                                Some(CallReturn::Return{ term: val }) =>
+                                    ::serde_json::Value::String(
+                                        format!("{}", val.to_doc().pretty(40))),
+                                Some(CallReturn::Throw) =>
+                                    ::serde_json::Value::String("Throw".to_string()),
+                            }
                         );
                         TraceEntry::DurationEnd {
                             timestamp: idx as u64,

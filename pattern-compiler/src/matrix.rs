@@ -119,6 +119,8 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
                          on: P::PatternNodeKind)
                          -> (Vec<P::CfgVariable>, MatchMatrix<P>)
     {
+        //println!("Specialize variable #{} on {:?}", variable, on);
+        //println!("{}", self.to_table(&ctx.pattern));
 
         // 1: Collect rows that should be included in the specialization
         let to_specialize_rows: Vec<(usize, &[MatchMatrixElement<_>])> = self.data
@@ -182,6 +184,23 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
         let new_mat = Self::new(new_nodes.as_slice(),
                                 new_clause_leaves, new_variables);
         (specialized.variables, new_mat)
+    }
+
+    pub fn without_head<'a>(&'a self) -> MatchMatrix<P> {
+        // TODO move to actual new instead of this
+        // This just removes the top row of the table.
+        // Since data is unrolled, remove the n first entries
+        // where n is the number of variables
+        // Then remove first clause leaf
+        let mut new = self.clone();
+        for _ in 0..(new.variables.len()) {
+            new.data.remove(0);
+        }
+        new.clause_leaves.remove(0);
+        for entry in new.data.iter_mut() {
+            entry.clause_num -= 1;
+        }
+        new
     }
 
     pub fn iterate_clauses<'a>(&'a self) -> Box<Iterator<Item = (NodeIndex, &'a [MatchMatrixElement<P>])> + 'a> {

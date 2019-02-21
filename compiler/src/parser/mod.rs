@@ -1,4 +1,5 @@
 pub use ::{ Variable, Atom };
+use ::ir::AVariable;
 use ::eir::FunctionIdent;
 
 mod grammar;
@@ -26,7 +27,7 @@ fn parse_otp_compiler_compile() {
 #[derive(Debug, Clone)]
 pub enum ConstantOrVariable {
     Constant(Constant),
-    Variable(Variable),
+    Variable(AVariable),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -109,6 +110,19 @@ pub enum Constant {
     Atomic(AtomicLiteral),
     Tuple(Vec<Constant>),
     List(Vec<Constant>, Box<Constant>),
+}
+impl Constant {
+    pub fn to_eir(&self) -> ::eir::ConstantTerm {
+        match self {
+            Constant::Atomic(atomic) => ::eir::ConstantTerm::Atomic(atomic.clone()),
+            Constant::List(head, tail) =>
+                ::eir::ConstantTerm::List(
+                    head.iter().map(|c| c.to_eir()).collect(),
+                    Box::new(tail.to_eir()),
+                ),
+            _ => unimplemented!(),
+        }
+    }
 }
 //impl Display for Constant {
 //    fn fmt(&self, f: &mut Formatter) -> Result<(), ::std::fmt::Error> {

@@ -1,9 +1,10 @@
 use ::eir::{ SSAVariable, Source };
-use ::eir::cfg::{ FunctionCfg, LabelN };
+use ::eir::cfg::{ FunctionCfg, EdgeN, LabelN };
 use ::eir::op::{ OpKind };
 use std::collections::HashSet;
 
-fn does_return_val(cfg: &FunctionCfg, last_label: LabelN, label: LabelN, val: SSAVariable) -> bool {
+fn does_return_val(cfg: &FunctionCfg, in_edge: EdgeN, val: SSAVariable) -> bool {
+    let label = cfg.graph.edge_to(in_edge);
     let block_container = &cfg.graph[label];
     let block = block_container.inner.borrow();
     assert!(block.ops.len() > 0);
@@ -18,7 +19,7 @@ fn does_return_val(cfg: &FunctionCfg, last_label: LabelN, label: LabelN, val: SS
         }
         let phi = &block.phi_nodes[0];
         let entry = phi.entries.iter()
-            .find(|(l, _s)| *l == last_label).unwrap();
+            .find(|(l, _s)| *l == in_edge).unwrap();
         if let Source::Variable(issa) = entry.1 {
             if issa == val {
                 val = phi.ssa;
@@ -38,8 +39,8 @@ fn does_return_val(cfg: &FunctionCfg, last_label: LabelN, label: LabelN, val: SS
     }
 
     match last.kind {
-        OpKind::Jump => does_return_val(cfg, label,
-                                        block_container.outgoing[0].1, val),
+        OpKind::Jump => does_return_val(
+            cfg, block_container.outgoing[0].0, val),
         OpKind::ReturnOk => last.reads[0] == Source::Variable(val),
         OpKind::ReturnThrow => last.reads[0] == Source::Variable(val),
         _ => false,
@@ -76,13 +77,13 @@ pub fn promote_tail_calls(cfg: &mut FunctionCfg) {
         let call_block = call_block_container.inner.borrow();
         let last_op = call_block.ops.last().unwrap();
 
-        let ok_jump_label = call_block_container.outgoing[0].1;
+        let ok_jump_edge = call_block_container.outgoing[0].0;
         let returns_ok = does_return_val(
-            cfg, *call_label, ok_jump_label, last_op.writes[0]);
+            cfg, ok_jump_edge, last_op.writes[0]);
 
-        let error_jump_label = call_block_container.outgoing[1].1;
+        let error_jump_edge = call_block_container.outgoing[1].0;
         let returns_error = does_return_val(
-            cfg, *call_label, error_jump_label, last_op.writes[1]);
+            cfg, error_jump_edge, last_op.writes[1]);
         //println!("{} {}", returns_ok, returns_error);
 
         if returns_ok && returns_error {

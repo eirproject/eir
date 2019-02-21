@@ -139,7 +139,7 @@ impl ProcessContext {
                     };
                     StackFrameType::Native(native_frame)
                 } else {
-                    panic!()
+                    panic!("Function not found in native module: {}", fun_ident);
                 }
             }
         }

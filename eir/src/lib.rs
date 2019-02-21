@@ -35,6 +35,11 @@ impl LambdaEnvIdx {
         LambdaEnvIdx(string.parse().unwrap())
     }
 }
+impl Display for LambdaEnvIdx {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Debug)]
 pub struct LambdaEnvIdxGenerator(LambdaEnvIdx);
@@ -65,10 +70,10 @@ pub struct FunctionIdent {
 impl Display for FunctionIdent {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         if let Some(lambda_num) = self.lambda {
-            write!(f, "{}@{}.{}/{}", self.name,
+            write!(f, "{}:{}@{}.{}/{}", self.module, self.name,
                    (lambda_num.0).0, lambda_num.1, self.arity)
         } else {
-            write!(f, "{}/{}", self.name, self.arity)
+            write!(f, "{}:{}/{}", self.module, self.name, self.arity)
         }
     }
 }
@@ -91,6 +96,7 @@ impl From<Atom> for AtomicTerm {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConstantTerm {
     Atomic(AtomicTerm),
+    List(Vec<ConstantTerm>, Box<ConstantTerm>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

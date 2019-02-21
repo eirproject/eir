@@ -8,6 +8,9 @@ extern crate pretty;
 extern crate regex;
 extern crate lalrpop_util;
 
+#[macro_use]
+extern crate matches;
+
 extern crate num_bigint;
 extern crate num_traits;
 

@@ -20,6 +20,8 @@ extern crate num_traits;
 extern crate serde;
 extern crate serde_json;
 
+extern crate pretty;
+
 mod term;
 pub use term::{ TermType, Term, BoundLambdaEnv, Pid, Reference };
 mod pattern;
@@ -38,3 +40,4 @@ mod receive;
 
 mod trace;
 
+mod mailbox;

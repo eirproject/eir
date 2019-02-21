@@ -16,7 +16,7 @@ impl ::std::fmt::Debug for SSAVariable {
 }
 pub const INVALID_SSA: SSAVariable = SSAVariable(0);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SSAVariableGenerator(SSAVariable);
 
 impl SSAVariableGenerator {

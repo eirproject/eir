@@ -1,4 +1,5 @@
-use ::ir::FunctionDefinition;
+use ::eir::FunctionIdent;
+use ::eir::cfg::FunctionCfg;
 use ::eir::Source;
 use ::eir::op::OpKind;
 
@@ -17,18 +18,18 @@ fn format_label(label: &str) -> String {
 }
 
 use std::io::Write;
-pub fn function_to_dot(function: &FunctionDefinition, w: &mut Write) -> ::std::io::Result<()> {
-    let lir = function.lir_function.as_ref().unwrap();
+pub fn function_to_dot(ident: &FunctionIdent, lir: &FunctionCfg, w: &mut Write) -> ::std::io::Result<()> {
+    //let lir = function.lir_function.as_ref().unwrap();
 
     write!(w, "digraph g {{\n")?;
     write!(w, "node [labeljust=\"l\", shape=record, fontname=\"Courier New\"]\n")?;
     write!(w, "edge [fontname=\"Courier New\" ]\n\n")?;
 
-    let fun_name = format_label(&format!("{}", function.ident));
-    let args: Vec<_> = function.hir_fun.args.iter()
-        .map(|a| (a.var.clone(), a.ssa)).collect();
-    write!(w, "entry [ label=<entry|fun: {} free: {:?} write[{:?}]> ];\n",
-           fun_name, function.visibility, args)?;
+    let fun_name = format_label(&format!("{}", ident));
+    //let args: Vec<_> = function.hir_fun.args.iter()
+    //    .map(|a| (a.var.clone(), a.ssa)).collect();
+    write!(w, "entry [ label=<entry|fun: {}> ];\n",
+           fun_name)?;
     write!(w, "entry -> blk_{};\n\n", lir.entry())?;
 
     for block_container in lir.graph.nodes() {

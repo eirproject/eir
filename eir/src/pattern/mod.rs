@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use super::{ SSAVariable, AtomicTerm };
+use super::{ SSAVariable, ConstantTerm, AtomicTerm };
 
 mod fmt;
 
@@ -15,10 +15,23 @@ pub struct Pattern {
 }
 
 #[derive(Debug, Clone)]
+pub enum ConstantOrSSA {
+    Constant(ConstantTerm),
+    SSA(SSAVariable),
+}
+
+#[derive(Debug, Clone)]
+pub struct BinaryPatternElem {
+    pub node: PatternNode,
+    pub args: Vec<ConstantOrSSA>,
+}
+
+#[derive(Debug, Clone)]
 pub enum PatternNode {
     Wildcard,
     Bind(SSAVariable, Box<PatternNode>),
     Atomic(AtomicTerm),
+    Binary(Vec<BinaryPatternElem>),
     //Binary(Vec<(PatternNode, Vec<usize>)>),
     Tuple(Vec<PatternNode>),
     List(Vec<PatternNode>, Box<PatternNode>),

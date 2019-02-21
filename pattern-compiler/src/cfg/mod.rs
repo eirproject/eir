@@ -70,20 +70,25 @@ impl<P> PatternCfg<P> where P: PatternProvider {
 #[derive(Clone)]
 pub struct CfgEdge<P> where P: PatternProvider {
     //_provider: ::std::marker::PhantomData<P>,
-    pub kind: P::PatternNodeKind,
+    pub kind: Option<P::PatternNodeKind>,
     pub variable_binds: Vec<P::CfgVariable>,
     //pub pattern_node: super::pattern::PatternNodeIndex,
 }
 impl<P> ::std::fmt::Debug for CfgEdge<P> where P: PatternProvider {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        write!(f, "{:?} {:?}", self.kind, self.variable_binds)
+        if let Some(kind) = self.kind {
+            write!(f, "{:?} {:?}", kind, self.variable_binds)
+        } else {
+            write!(f, "")
+        }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CfgNodeKind<CVT> {
     Root,
     Match(CVT),
     Fail,
     Leaf(usize),
+    Guard,
 }

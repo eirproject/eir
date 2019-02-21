@@ -7,13 +7,15 @@ extern crate either;
 //extern crate util;
 #[macro_use] extern crate derivative;
 
+pub use petgraph::visit::EdgeRef;
+
 use ::std::collections::HashMap;
 
 mod pattern;
 pub use self::pattern::{ PatternProvider, ExpandedClauseNodes };
 
 mod cfg;
-pub use self::cfg::{ PatternCfg, CfgEdge };
+pub use self::cfg::{ PatternCfg, CfgEdge, CfgNodeKind, CfgNodeIndex };
 
 mod matrix;
 
@@ -71,11 +73,17 @@ impl<'a, P> MatchCompileContext<'a, P> where P: PatternProvider {
 
 fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
                               ctx: &mut MatchCompileContext<P>,
-                              spec: P::PatternNodeKind,
+                              spec: Option<P::PatternNodeKind>,
                               matrix: &matrix::MatchMatrix<P>,
-                              introduced_vars: Vec<P::CfgVariable>)
+                              introduced_vars: Vec<P::CfgVariable>, level: usize)
     where P: PatternProvider
 {
+
+    //for _ in 0..level {
+    //    print!(" ==");
+    //}
+    //println!(" MATRIX AT LEVEL {}", level);
+
     let edge = cfg::CfgEdge {
         kind: spec.clone(),
         variable_binds: introduced_vars,
@@ -91,6 +99,9 @@ fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
     // can happen.
     if let Some(node) = matrix.has_wildcard_head(&ctx.pattern) {
         ctx.cfg.add_edge(parent, node, edge);
+        //let guard_node = ctx.cfg.add_guard(node);
+        let new_mat = matrix.without_head();
+        matrix_to_decision_tree(node, ctx, None, &new_mat, vec![], level+1);
         return;
     }
 
@@ -124,8 +135,8 @@ fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
         }
 
         matrix_to_decision_tree(
-            cfg_node, ctx, *specialization,
-            &specialized, introduced);
+            cfg_node, ctx, Some(*specialization),
+            &specialized, introduced, level+1);
     }
 
     // Specialize on default matrix
@@ -143,8 +154,8 @@ fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
     let wildcard = ctx.pattern.get_wildcard();
     matrix_to_decision_tree(
         cfg_node, ctx,
-        wildcard,
-        &default, introduced);
+        Some(wildcard),
+        &default, introduced, level+1);
 
 }
 
@@ -159,9 +170,9 @@ pub fn to_decision_tree<P>(pattern: &mut P) -> cfg::PatternCfg<P>
     let wildcard = context.pattern.get_wildcard();
 
     matrix_to_decision_tree(root_cfg, &mut context,
-                            wildcard,
+                            Some(wildcard),
                             &root,
-                            root.variables.clone());
+                            root.variables.clone(), 0);
 
     let mut cfg = context.cfg;
     cfg.leaf_bindings = context.leaf_bindings;

@@ -32,6 +32,13 @@ impl fmt::Display for PatternNode {
                 }
                 write!(f, "}}~")?;
             },
+            PatternNode::Binary(elems) => {
+                write!(f, "#<")?;
+                for elem in elems.iter() {
+                    write!(f, "{}:{:?}, ", elem.node, elem.args)?;
+                }
+                write!(f, ">#")?;
+            },
             //PatternNode::Binary(elems) => {
             //    write!(f, "#<")?;
 

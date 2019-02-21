@@ -1,6 +1,6 @@
 use super::{ Module, Annotated, FunctionName, Constant,
 Function, FunctionDefinition, Expression, SingleExpression, Pattern,
-CaseClause, PrimOpCall, MapExactAssoc, ConstantOrVariable };
+CaseClause, PrimOpCall, MapExactAssoc, ConstantOrVariable, AVariable };
 use super::lex::Tok;
 use ::{Atom, Variable};
 use ::eir::AtomicTerm;
@@ -181,7 +181,7 @@ Pattern: Pattern = {
 
 ConstantOrVariable: ConstantOrVariable = {
     <c:Constant> => ConstantOrVariable::Constant(c),
-    <v:Variable> => ConstantOrVariable::Variable(v),
+    <v:Variable> => ConstantOrVariable::Variable(AVariable::new(v)),
 };
 PatternBinary: Vec<(Annotated<Pattern>, Vec<Annotated<ConstantOrVariable>>)> = {
     "#{" <b:Comma<PatternBinaryElem>> "}#" => b,

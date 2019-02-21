@@ -27,10 +27,9 @@ impl ExceptionHandlerStack {
     pub fn add_error_jump(&self, b: &mut FunctionCfgBuilder,
                       from_label: LabelN, exception_ssa: SSAVariable) {
         let (handler_label, handler_ssa) = self.stack.last().unwrap();
-        b.add_jump(from_label, *handler_label);
+        let handler_jump = b.add_jump(from_label, *handler_label);
         if let Some(ssa) = handler_ssa {
-            b.add_phi(from_label, exception_ssa,
-                      *handler_label, *ssa);
+            b.add_phi(handler_jump, exception_ssa, *ssa);
         }
     }
 

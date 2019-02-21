@@ -35,8 +35,8 @@ pub enum ValidationEntry {
 }
 
 impl FunctionCfg {
-    pub fn validate(ident: &FunctionIdent, cfg: &FunctionCfg) {
-        validate_proper_ssa(ident, cfg);
+    pub fn validate(&self, ident: &FunctionIdent) {
+        validate_proper_ssa(ident, self);
     }
 }
 
@@ -61,7 +61,7 @@ fn validate_proper_ssa(ident: &FunctionIdent, cfg: &FunctionCfg) {
             }
             for phi in node.phi_nodes.iter() {
                 for entry in phi.entries.iter() {
-                    d.insert(entry.0);
+                    d.insert(cfg.graph.edge_from(entry.0));
                 }
             }
         }
@@ -259,10 +259,11 @@ fn validate_ssa_visibility(cfg: &FunctionCfg) {
         let mut visible = live_variables_entry[&node_container.label].clone();
 
         for phi in node.phi_nodes.iter() {
-            for (label, source) in phi.entries.iter() {
+            for (edge_label, source) in phi.entries.iter() {
+                let label = cfg.graph.edge_from(*edge_label);
                 if let Source::Variable(ssa) = source {
                     // Ignore orphaned parts of the CFG.
-                    if let Some(prev_visible) = live_variables_exit.get(label) {
+                    if let Some(prev_visible) = live_variables_exit.get(&label) {
                         if !prev_visible.contains(ssa) {
                             println!("{}: {:?} is referenced in PHI node, but is not visible in {}", node_container.label, ssa, label);
                         }

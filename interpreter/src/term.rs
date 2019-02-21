@@ -24,6 +24,7 @@ pub enum TermType {
     Atom,
     Tuple,
     List,
+    Map,
     Pid,
     Reference,
     Binary,
@@ -53,6 +54,7 @@ pub enum Term {
     Atom(Atom),
     Tuple(Vec<Term>),
     List(Vec<Term>, Box<Term>),
+    Map(Vec<(Term, Term)>),
     Pid(Pid),
     Reference(Reference),
     Binary(Vec<u8>),
@@ -140,6 +142,7 @@ impl Term {
             Term::Atom(_) => TermType::Atom,
             Term::Tuple(_) => TermType::Tuple,
             Term::List(_, _) => TermType::List,
+            Term::Map(_) => TermType::Map,
             Term::LambdaEnv { .. } => TermType::LambdaEnv,
             Term::BoundLambda { .. } => TermType::BoundLambda,
             Term::CapturedFunction { .. } => TermType::CapturedFunction,
@@ -209,6 +212,79 @@ impl Term {
             Some(list)
         } else {
             None
+        }
+    }
+
+    pub fn to_doc(&self) -> ::pretty::Doc<::pretty::BoxDoc> {
+        use ::pretty::Doc;
+        match self {
+            Term::Nil => Doc::text("[]"),
+            Term::Integer(int) => Doc::text(int.to_string()),
+            Term::Float(num) => Doc::text(num.to_string()),
+            Term::Atom(atom) => Doc::text(atom.to_string()),
+            Term::Tuple(items) => {
+                let docs: Vec<_> = items.iter().map(|i| i.to_doc()).collect();
+                Doc::text("{")
+                    .append(Doc::intersperse(docs, Doc::text(",")))
+                    .append(Doc::text("}"))
+            },
+            Term::List(head, tail) if head.len() == 0 => tail.to_doc(),
+            Term::List(head, tail) => {
+                let head_docs: Vec<_> = head.iter().map(|i| i.to_doc()).collect();
+                let tail_doc = tail.to_doc();
+                Doc::text("[")
+                    .append(Doc::intersperse(head_docs, Doc::text(",")))
+                    .append(Doc::text("|"))
+                    .append(tail_doc)
+                    .append(Doc::text("]"))
+            },
+            Term::Map(entries) => {
+                let entries_doc: Vec<_> = entries.iter()
+                    .map(|(k, v)| {
+                        Doc::group(
+                            k.to_doc()
+                                .append(Doc::text("=>"))
+                                .append(v.to_doc())
+                        )
+                    }).collect();
+                Doc::text("%{")
+                    .append(Doc::intersperse(entries_doc, Doc::text(",")))
+                    .append(Doc::text("}"))
+            },
+            Term::Pid(pid) => Doc::text(format!("Pid<{}>", pid.0)),
+            Term::Reference(refe) => Doc::text(format!("Reference<{}>", refe.0)),
+            Term::Binary(bin) => {
+                if let Ok(utf) = std::str::from_utf8(&bin) {
+                    Doc::text("\"")
+                        .append(Doc::text(utf))
+                        .append(Doc::text("\""))
+                } else {
+                    let items: Vec<_> = bin.iter().map(|v| Doc::text(v.to_string()))
+                        .collect();
+                    Doc::text("<")
+                        .append(Doc::intersperse(items, Doc::text(",")))
+                        .append(Doc::text(">"))
+                }
+            },
+            Term::BoundLambda { module, fun_name, arity, lambda, .. } => {
+                Doc::text(format!("Bound<{}:{}@{}.{}/{}>", module, fun_name,
+                                  lambda.0, lambda.1, arity))
+            },
+            Term::CapturedFunction { module, fun_name, arity } => {
+                Doc::text(format!("Captured<{}:{}/{}>", module, fun_name, arity))
+            },
+            Term::LambdaEnv(_env) =>
+                Doc::text("BoundLambdaEnv"),
+            Term::CaseContext(_case) =>
+                Doc::text("CaseContext"),
+            Term::ReceiveContext(_recv) =>
+                Doc::text("ReceiveContext"),
+            Term::ValueList(items) => {
+                let docs: Vec<_> = items.iter().map(|i| i.to_doc()).collect();
+                Doc::text("<")
+                    .append(Doc::intersperse(docs, Doc::text(",")))
+                    .append(Doc::text(">"))
+            }
         }
     }
 

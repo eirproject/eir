@@ -24,6 +24,8 @@ num = "0.2"
 num-traits = "0.2"
 num-bigint = "0.2"
 
+matches = "0.1.8"
+
 pattern-compiler = { path = "../pattern-compiler" }
 util = { path = "../util" }
 eir = { path = "../eir" }

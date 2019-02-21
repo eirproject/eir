@@ -92,6 +92,9 @@ impl<Node, Edge> Graph<Node, Edge> {
     pub fn nodes<'a>(&'a self) -> impl Iterator<Item = &'a NodeData<Node>> {
         self.nodes.values()
     }
+    pub fn nodes_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut NodeData<Node>> {
+        self.nodes.values_mut()
+    }
 
     pub fn node_labels<'a>(&'a self) -> impl Iterator<Item = NodeLabel> + 'a {
         self.nodes.keys().cloned()
@@ -133,6 +136,65 @@ impl<Node, Edge> Graph<Node, Edge> {
             }
         }
         self.nodes.remove(&lbl).unwrap().inner.into_inner()
+    }
+
+    pub fn edge_from(&self, edge: EdgeLabel) -> NodeLabel {
+        self.edges[&edge].from
+    }
+    pub fn edge_to(&self, edge: EdgeLabel) -> NodeLabel {
+        self.edges[&edge].to
+    }
+
+    pub fn reparent_edge(&mut self, edge: EdgeLabel, new_parent: NodeLabel) {
+        let (from, to) = {
+            let edge = self.edges.get_mut(&edge).unwrap();
+            let from = edge.from;
+            let to = edge.to;
+            edge.from = new_parent;
+            (from, to)
+        };
+        {
+            let from_node = self.nodes.get_mut(&from).unwrap();
+            let pos = from_node.outgoing.iter()
+                .position(|(r_edge, _node)| *r_edge == edge).unwrap();
+            from_node.outgoing.remove(pos);
+        }
+        {
+            let new_from_node = self.nodes.get_mut(&new_parent).unwrap();
+            new_from_node.outgoing.push((edge, to));
+        }
+        {
+            let to_node = self.nodes.get_mut(&to).unwrap();
+            let pos = to_node.incoming.iter()
+                .position(|(r_edge, _node)| *r_edge == edge).unwrap();
+            to_node.incoming[pos].1 = new_parent;
+        }
+    }
+
+    pub fn rechild_edge(&mut self, edge: EdgeLabel, new_child: NodeLabel) {
+        let (from, to) = {
+            let edge = self.edges.get_mut(&edge).unwrap();
+            let from = edge.from;
+            let to = edge.to;
+            edge.to = new_child;
+            (from, to)
+        };
+        {
+            let from_node = self.nodes.get_mut(&from).unwrap();
+            let pos = from_node.outgoing.iter()
+                .position(|(r_edge, _node)| *r_edge == edge).unwrap();
+            from_node.outgoing[pos].1 = new_child;
+        }
+        {
+            let new_to_node = self.nodes.get_mut(&new_child).unwrap();
+            new_to_node.incoming.push((edge, from));
+        }
+        {
+            let to_node = self.nodes.get_mut(&to).unwrap();
+            let pos = to_node.incoming.iter()
+                .position(|(r_edge, _node)| *r_edge == edge).unwrap();
+            to_node.incoming.remove(pos);
+        }
     }
 
 }

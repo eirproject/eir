@@ -9,4 +9,6 @@ members = [
     "term_config_format",
     "eir",
     "eir_passes",
+    "jit",
+    "gen_nif",
 ]

@@ -22,7 +22,7 @@ impl<P> PatternCfg<P> where P: PatternProvider {
 
         for index in self.graph.node_indices() {
             let node = &self.graph[index];
-            println!("{:?}", node);
+            //println!("{:?}", node);
 
             let label = format_label(&format!("{:?}", node));
             write!(w, "node_{} [ label=<{}: {}", index.index(), index.index(), label)?;

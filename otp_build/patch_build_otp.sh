@@ -10,7 +10,7 @@ git apply ../otp_build/otp_build_core.patch
 ./configure
 
 # TODO: This will fail on the `tools` app. Will fix when needed
-make libs
+make preloaded libs
 
 #APPS="kernel stdlib compiler common_test"
 #for app_name in $APPS; do
