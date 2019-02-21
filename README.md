@@ -15,6 +15,7 @@ Current features:
 * Resolves scoping, converts to SSA form
 * Performs lambda lifting on closures
 * Flattens HIR into flat LIR (Low-level IR)
-* Performs basic constant propagation
+* Performs constant propagation and branch simplification
+* Compiles pattern matching constructs to optimal decision trees
 * Produces DOT graph from LIR
 * Executes (parts of, for now) LIR in reference interpreter
