@@ -196,7 +196,17 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
             builder.op_jump(block, destinations.fail);
         },
         CfgNodeKind::Leaf(num) => {
-            builder.op_jump(block, destinations.leaves[num]);
+            let dest_leaf = destinations.leaves[num];
+            builder.op_jump(block, dest_leaf);
+            let leaf_binding = &dec.leaf_bindings[&cfg_node];
+            for (cfg_var, pattern_ref) in leaf_binding.iter() {
+                if collector.node_bindings.contains_key(pattern_ref) {
+                    let from_ssa = mappings[cfg_var];
+                    let to_ssa = collector.node_bindings[pattern_ref];
+                    builder.op_move(dest_leaf, from_ssa, to_ssa);
+                }
+            }
+
             let edges: Vec<_> = dec.graph.edges(cfg_node).collect();
             assert!(edges.len() == 1);
             decision_tree_to_cfg_rec(
@@ -215,7 +225,7 @@ fn decision_tree_to_cfg(dec: &PatternCfg<ErlangPatternProvider>,
                         num_clauses: usize,
                         entry: LabelN,
                         val: SSAVariable)
-                        -> (HashMap<erlang_pattern_provider::PatternVar, SSAVariable>, DecisionTreeDestinations) {
+                        -> DecisionTreeDestinations {
 
     use ::pattern_compiler::CfgNodeKind;
     use self::erlang_pattern_provider::NodeKind as MatchKind;
@@ -278,7 +288,7 @@ fn decision_tree_to_cfg(dec: &PatternCfg<ErlangPatternProvider>,
 
     decision_tree_to_cfg_rec(dec, collector, builder, &mut mappings, &destinations, entry, start_node);
 
-    (mappings, destinations)
+    destinations
 }
 
 
@@ -296,7 +306,7 @@ pub fn compile_pattern(ident: &FunctionIdent, lir: &mut ::eir::cfg::FunctionCfg)
 
     for start_label in case_starts.iter() {
         // Start node
-        let (clause_edges, collector, decision_tree, match_val, num_clauses, fail_edge, entry_edge) = {
+        let (clause_edges, collector, decision_tree, match_val, num_clauses, fail_edge, entry_edge, case_ssa) = {
             let start_node = lir.graph.node(*start_label);
             let start_inner = start_node.inner.borrow();
             assert!(start_node.outgoing.len() == 1);
@@ -339,14 +349,14 @@ pub fn compile_pattern(ident: &FunctionIdent, lir: &mut ::eir::cfg::FunctionCfg)
                 erlang_pattern_provider::pattern_to_provider(clauses);
             let decision_tree = ::pattern_compiler::to_decision_tree(&mut provider);
 
-            (clause_edges, collector, decision_tree, match_val, clauses.len(), fail_edge, entry_edge)
+            (clause_edges, collector, decision_tree, match_val, clauses.len(), fail_edge, entry_edge, case_ssa)
         };
 
         let mut builder = ::eir::cfg::FunctionCfgBuilder::new(lir);
         let entry = builder.add_block();
         let match_ssa = builder.new_ssa();
         builder.op_move(entry, match_val, match_ssa);
-        let (mappings, destinations) =
+        let destinations =
             decision_tree_to_cfg(&decision_tree, &collector, &mut builder,
                                  num_clauses, entry, match_ssa);
 
@@ -378,11 +388,8 @@ pub fn compile_pattern(ident: &FunctionIdent, lir: &mut ::eir::cfg::FunctionCfg)
                 let mut entry_inner = entry_node.inner.borrow_mut();
                 //println!("{:?}", entry_label);
                 //println!("{:?}", entry_inner);
-                if let OpKind::CaseValues = entry_inner.ops.first().unwrap().kind {
-                    ()
-                } else {
-                    panic!();
-                }
+                assert_matches!(entry_inner.ops.first().unwrap().kind,
+                                OpKind::CaseValues);
                 entry_inner.ops.remove(0);
             }
 
@@ -395,13 +402,24 @@ pub fn compile_pattern(ident: &FunctionIdent, lir: &mut ::eir::cfg::FunctionCfg)
 
         }
 
-
-
-
-
-
-
-
+        // Remove remaining operations referencing case SSA
+        for node in builder.target.graph.nodes_mut() {
+            let mut inner = node.inner.borrow_mut();
+            inner.ops.retain(|op| {
+                match op.kind {
+                    OpKind::CaseGuardFail { .. } if
+                        op.reads[0] == Source::Variable(case_ssa)
+                        => false,
+                    OpKind::CaseGuardOk { .. } if
+                        op.reads[0] == Source::Variable(case_ssa)
+                        => false,
+                    OpKind::TombstoneSSA(ssa) if
+                        ssa == case_ssa
+                        => false,
+                    _ => true,
+                }
+            });
+        }
 
     }
 

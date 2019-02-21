@@ -150,7 +150,7 @@ impl PatternProvider for ErlangPatternProvider {
 
 pub struct PatternValueCollector {
     pub atomic_terms: Vec<AtomicTerm>,
-    pub node_bindings: HashMap<SSAVariable, PatternRef>,
+    pub node_bindings: HashMap<PatternRef, SSAVariable>,
 }
 impl PatternValueCollector {
     fn new() -> Self {
@@ -171,7 +171,7 @@ fn pattern_node_to_provider(provider: &mut ErlangPatternProvider,
         }
         PatternNode::Bind(ssa, inner) => {
             let child = pattern_node_to_provider(provider, collector, inner, parent);
-            collector.node_bindings.insert(*ssa, child);
+            collector.node_bindings.insert(child, *ssa);
             child
         }
         PatternNode::Atomic(atomic_term) => {
