@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
 use std::cell::RefCell;
 use std::ops::{ Index, IndexMut };
 
@@ -120,9 +120,12 @@ impl<Node, Edge> Graph<Node, Edge> {
                 .unwrap();
             to_node.incoming.remove(i_pos);
         }
+        //self.validate();
     }
 
-    pub fn remove_node(&mut self, lbl: NodeLabel) -> Node {
+    /// Not memory unsafe, but has a large potential of messing up our
+    /// graph invariants.
+    pub unsafe fn remove_node(&mut self, lbl: NodeLabel) -> Node {
         {
             let (incoming, outgoing) = {
                 let node = &self.nodes[&lbl];
@@ -135,7 +138,9 @@ impl<Node, Edge> Graph<Node, Edge> {
                 self.remove_edge(*edge);
             }
         }
-        self.nodes.remove(&lbl).unwrap().inner.into_inner()
+        let node = self.nodes.remove(&lbl).unwrap().inner.into_inner();
+        //self.validate();
+        node
     }
 
     pub fn edge_from(&self, edge: EdgeLabel) -> NodeLabel {
@@ -169,6 +174,7 @@ impl<Node, Edge> Graph<Node, Edge> {
                 .position(|(r_edge, _node)| *r_edge == edge).unwrap();
             to_node.incoming[pos].1 = new_parent;
         }
+        //self.validate();
     }
 
     pub fn rechild_edge(&mut self, edge: EdgeLabel, new_child: NodeLabel) {
@@ -194,6 +200,39 @@ impl<Node, Edge> Graph<Node, Edge> {
             let pos = to_node.incoming.iter()
                 .position(|(r_edge, _node)| *r_edge == edge).unwrap();
             to_node.incoming.remove(pos);
+        }
+        //self.validate();
+    }
+
+    /// Validates that the graph itself is internally consistent.
+    pub fn validate(&self) {
+        let valid_nodes: HashSet<_> = self.nodes.keys().collect();
+        let valid_edges: HashSet<_> = self.edges.keys().collect();
+        let mut visited_in: HashSet<_> = HashSet::new();
+        let mut visited_out: HashSet<_> = HashSet::new();
+        for node in self.nodes.values() {
+            for (i_edge, i_node) in node.incoming.iter() {
+                assert!(valid_edges.contains(i_edge));
+                assert!(valid_nodes.contains(i_node));
+                assert!(self.edges[i_edge].to == node.label);
+                assert!(self.edges[i_edge].from == *i_node);
+                assert!(!visited_in.contains(i_edge));
+                visited_in.insert(*i_edge);
+            }
+            for (o_edge, o_node) in node.outgoing.iter() {
+                assert!(valid_edges.contains(o_edge));
+                assert!(valid_nodes.contains(o_node));
+                assert!(self.edges[o_edge].from == node.label);
+                assert!(self.edges[o_edge].to == *o_node);
+                assert!(!visited_out.contains(o_edge));
+                visited_out.insert(*o_edge);
+            }
+        }
+        for edge in self.edges.values() {
+            assert!(valid_nodes.contains(&edge.from));
+            assert!(valid_nodes.contains(&edge.to));
+            assert!(visited_in.contains(&edge.label));
+            assert!(visited_out.contains(&edge.label));
         }
     }
 

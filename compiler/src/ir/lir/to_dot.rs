@@ -42,7 +42,9 @@ pub fn function_to_dot(ident: &FunctionIdent, lir: &FunctionCfg, w: &mut Write) 
             let fmt = format_label(&format!("{:?}, = PHI[", phi.ssa));
             write!(w, "{}{}\n", fmt, DOT_BREAK)?;
             for entry in phi.entries.iter() {
-                let fmt = format_label(&format!("  {:?},", entry));
+                let fmt = format_label(
+                    &format!("  ({}, {}): {:?},", entry.0,
+                             lir.graph.edge_from(entry.0), entry.1));
                 write!(w, "{}{}", fmt, DOT_BREAK)?;
             }
             write!(w, "] {}", DOT_BREAK)?;

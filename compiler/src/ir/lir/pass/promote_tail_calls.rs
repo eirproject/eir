@@ -20,12 +20,8 @@ fn does_return_val(cfg: &FunctionCfg, in_edge: EdgeN, val: SSAVariable) -> bool 
         let phi = &block.phi_nodes[0];
         let entry = phi.entries.iter()
             .find(|(l, _s)| *l == in_edge).unwrap();
-        if let Source::Variable(issa) = entry.1 {
-            if issa == val {
-                val = phi.ssa;
-            } else {
-                return false;
-            }
+        if entry.1 == val {
+            val = phi.ssa;
         } else {
             return false;
         }

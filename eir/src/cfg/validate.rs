@@ -259,14 +259,12 @@ fn validate_ssa_visibility(cfg: &FunctionCfg) {
         let mut visible = live_variables_entry[&node_container.label].clone();
 
         for phi in node.phi_nodes.iter() {
-            for (edge_label, source) in phi.entries.iter() {
+            for (edge_label, ssa) in phi.entries.iter() {
                 let label = cfg.graph.edge_from(*edge_label);
-                if let Source::Variable(ssa) = source {
-                    // Ignore orphaned parts of the CFG.
-                    if let Some(prev_visible) = live_variables_exit.get(&label) {
-                        if !prev_visible.contains(ssa) {
-                            println!("{}: {:?} is referenced in PHI node, but is not visible in {}", node_container.label, ssa, label);
-                        }
+                // Ignore orphaned parts of the CFG.
+                if let Some(prev_visible) = live_variables_exit.get(&label) {
+                    if !prev_visible.contains(ssa) {
+                        println!("{}: {:?} is referenced in PHI node, but is not visible in {}", node_container.label, ssa, label);
                     }
                 }
             }

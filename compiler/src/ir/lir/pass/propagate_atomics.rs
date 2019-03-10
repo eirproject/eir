@@ -2,20 +2,31 @@ use ::ir::SSAVariable;
 use ::eir::{ Source, ConstantTerm };
 use ::eir::op::OpKind;
 use ::eir::cfg::FunctionCfg;
-use ::std::collections::HashMap;
+use ::std::collections::{ HashMap, HashSet };
 
 pub fn propagate_atomics(cfg: &mut FunctionCfg) {
 
     // Write => Read
     let mut constants: HashMap<SSAVariable, ConstantTerm> = HashMap::new();
     let mut moves: HashMap<SSAVariable, SSAVariable> = HashMap::new();
+    let mut phi_reads: HashSet<SSAVariable> = HashSet::new();
+
+    for block_container in cfg.graph.nodes() {
+        let mut block = block_container.inner.borrow_mut();
+        for phi in block.phi_nodes.iter() {
+            for (_edge, ssa) in phi.entries.iter() {
+                phi_reads.insert(*ssa);
+            }
+        }
+    }
 
     for block_container in cfg.graph.nodes() {
         let mut block = block_container.inner.borrow_mut();
         block.ops.retain(|op| {
             match op.kind {
-                // Moves can always be removed
-                OpKind::Move => {
+                // Moves can be removed if they are not referenced in any
+                // PHI reads.
+                OpKind::Move if !phi_reads.contains(&op.writes[0]) => {
                     match op.reads[0] {
                         Source::Constant(ref constant) => {
                             constants.insert(op.writes[0], constant.clone());
@@ -65,23 +76,23 @@ pub fn propagate_atomics(cfg: &mut FunctionCfg) {
 
     for block_container in cfg.graph.nodes() {
         let mut block = block_container.inner.borrow_mut();
-        for phi in block.phi_nodes.iter_mut() {
-            for entry in phi.entries.iter_mut() {
-                if let Source::Variable(var) = entry.1 {
-                    if let Some(constant) = constants.get(&var) {
-                        entry.1 = Source::Constant(constant.clone());
-                    } else {
-                        if let Some(rssa) = moves_prop.get(&var) {
-                            if let Some(constant) = constants.get(rssa) {
-                                entry.1 = Source::Constant(constant.clone());
-                            } else {
-                                entry.1 = Source::Variable(*rssa);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        //for phi in block.phi_nodes.iter_mut() {
+        //    for (_edge, ref mut ssa) in phi.entries.iter_mut() {
+        //        if let Source::Variable(var) = entry.1 {
+        //            if let Some(constant) = constants.get(&var) {
+        //                entry.1 = Source::Constant(constant.clone());
+        //            } else {
+        //                if let Some(rssa) = moves_prop.get(&var) {
+        //                    if let Some(constant) = constants.get(rssa) {
+        //                        entry.1 = Source::Constant(constant.clone());
+        //                    } else {
+        //                        entry.1 = Source::Variable(*rssa);
+        //                    }
+        //                }
+        //            }
+        //        }
+        //    }
+        //}
         for op in block.ops.iter_mut() {
             for read in op.reads.iter_mut() {
                 if let Source::Variable(var) = *read {

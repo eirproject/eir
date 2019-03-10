@@ -7,3 +7,7 @@ edition = "2018"
 [dependencies]
 llvm-sys = "70"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "llvm7-0" }
+eir = { path = "../eir" }
+core_erlang_compiler = { path = "../compiler" }
+
+num-traits = "0.2"

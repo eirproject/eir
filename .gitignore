@@ -15,3 +15,10 @@ compiler/src/parser/grammar.rs
 
 trace.html
 trace.json
+
+*.ll
+*.bc
+*.so
+*.ll.old
+*.o
+*.s

@@ -1,4 +1,4 @@
-use super::{ Module, Annotated, FunctionName, Constant,
+use super::{ Module, Annotated, FunctionName, Constant, 
 Function, FunctionDefinition, Expression, SingleExpression, Pattern,
 CaseClause, PrimOpCall, MapExactAssoc, ConstantOrVariable, AVariable };
 use super::lex::Tok;

@@ -1,7 +1,9 @@
-use super::SSAVariable;
-use crate::op::{ Op };
+use super::{ SSAVariable, FunctionIdent };
+use crate::op::{ Op, OpKind };
 use crate::Source;
 use crate::ssa::SSAVariableGenerator;
+
+use ::std::collections::{ HashMap, HashSet };
 
 mod builder;
 pub use self::builder::FunctionCfgBuilder;
@@ -21,7 +23,7 @@ pub struct BasicBlock {
 
 #[derive(Debug, Clone)]
 pub struct Phi {
-    pub entries: Vec<(EdgeN, Source)>,
+    pub entries: Vec<(EdgeN, SSAVariable)>,
     pub ssa: SSAVariable,
 }
 
@@ -61,7 +63,7 @@ impl FunctionCfg {
     }
 
     pub fn remove_edge(&mut self, lbl: EdgeN) {
-        let (edge_from_label, edge_to_label) = {
+        let (_edge_from_label, edge_to_label) = {
             let edge_container = &self.graph[lbl];
             (edge_container.from, edge_container.to)
         };
@@ -107,11 +109,99 @@ impl FunctionCfg {
         }
 
         // Remove actual node
-        self.graph.remove_node(lbl);
+        unsafe { self.graph.remove_node(lbl) };
+    }
+
+    pub fn compress_numbering(&mut self) {
+
+        // Generate set of all written SSA variables in CFG
+        let mut ssa_vars = HashSet::new();
+        for node in self.graph.nodes() {
+            let node_inner = node.inner.borrow();
+            for phi in node_inner.phi_nodes.iter() {
+                ssa_vars.insert(phi.ssa);
+            }
+            for op in node_inner.ops.iter() {
+                for ssa in op.writes.iter() {
+                    ssa_vars.insert(*ssa);
+                }
+            }
+        }
+
+        // Reset SSA generator
+        self.ssa_gen = SSAVariableGenerator::initial();
+
+        // Sort the set of old SSA variables
+        let mut ssa_vars_vec: Vec<_> = ssa_vars.iter().cloned().collect();
+        ssa_vars_vec.sort_unstable();
+
+        // Generate a new mapping
+        let mut mapping = HashMap::new();
+        for old_ssa in ssa_vars_vec.iter() {
+            mapping.insert(*old_ssa, self.ssa_gen.next());
+        }
+
+        // Update CFG with new mapping
+        for node in self.graph.nodes() {
+            let mut node_inner = node.inner.borrow_mut();
+            for phi in node_inner.phi_nodes.iter_mut() {
+                phi.ssa = mapping[&phi.ssa];
+                for (_entry_edge, ref mut ssa) in phi.entries.iter_mut() {
+                    *ssa = mapping[ssa];
+                }
+            }
+            for op in node_inner.ops.iter_mut() {
+                for write in op.writes.iter_mut() {
+                    *write = mapping[write];
+                }
+                for read in op.reads.iter_mut() {
+                    if let Source::Variable(ref mut ssa) = read {
+                        *ssa = mapping[ssa];
+                    }
+                }
+                if let OpKind::TombstoneSSA(ref mut ssa) = &mut op.kind {
+                    *ssa = mapping[ssa];
+                }
+            }
+        }
+
     }
 
     //pub fn reparent_edge(&mut self, edge: EdgeN, new_parent: LabelN) {
     //    self.graph.
     //}
+
+    // Gets all static calls from the function.
+    pub fn get_all_calls(&self) -> HashSet<FunctionIdent> {
+        let mut calls = HashSet::new();
+        for node in self.graph.nodes() {
+            let node_inner = node.inner.borrow();
+            let op_last = node_inner.ops.last().unwrap();
+            match op_last.kind {
+                OpKind::Call { .. } => {
+                    let arity = op_last.reads.len() - 2;
+                    let module = op_last.reads[0].constant()
+                        .map_or(None, |c| c.atom());
+                    let name = op_last.reads[1].constant()
+                        .map_or(None, |c| c.atom());
+                    if module.is_some() && name.is_some() {
+                        let module = module.unwrap();
+                        let name = name.unwrap();
+                        calls.insert(FunctionIdent {
+                            module: module,
+                            name: name,
+                            arity: arity,
+                            lambda: None,
+                        });
+                    }
+                }
+                OpKind::CaptureNamedFunction(ref ident) => {
+                    calls.insert(ident.clone());
+                }
+                _ => (),
+            }
+        }
+        calls
+    }
 
 }

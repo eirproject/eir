@@ -4,7 +4,7 @@ use std::collections::{ HashMap, HashSet };
 
 impl<Node, Edge> Graph<Node, Edge> {
 
-    fn dfs_walk(&self, node: NodeLabel, visited: &mut HashSet<NodeLabel>,
+    pub fn dfs_walk(&self, node: NodeLabel, visited: &mut HashSet<NodeLabel>,
                 order: &mut Vec<NodeLabel>) {
         visited.insert(node);
         for (_edge, succ) in self.node(node).outgoing.iter() {
@@ -15,14 +15,14 @@ impl<Node, Edge> Graph<Node, Edge> {
         order.push(node);
     }
 
-    fn post_order(&self, root: NodeLabel) -> Vec<NodeLabel> {
+    pub fn post_order(&self, root: NodeLabel) -> Vec<NodeLabel> {
         let mut visited = HashSet::new();
         let mut order = Vec::new();
         self.dfs_walk(root, &mut visited, &mut order);
         order
     }
 
-    fn reverse_post_order(&self, root: NodeLabel) -> Vec<NodeLabel> {
+    pub fn reverse_post_order(&self, root: NodeLabel) -> Vec<NodeLabel> {
         let mut order = self.post_order(root);
         order.reverse();
         order

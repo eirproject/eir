@@ -15,3 +15,6 @@ pub use self::remove_orphan_blocks::remove_orphan_blocks;
 
 mod promote_tail_calls;
 pub use self::promote_tail_calls::promote_tail_calls;
+
+mod promote_primops;
+pub use self::promote_primops::promote_primops;

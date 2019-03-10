@@ -1,8 +1,0 @@
-[package]
-name = "jit"
-version = "0.1.0"
-authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
-edition = "2018"
-
-[dependencies]
-llvm-sys = "70"

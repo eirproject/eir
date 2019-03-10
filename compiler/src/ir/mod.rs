@@ -130,7 +130,7 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
     let mut eir_module = module.to_eir();
 
     // Validate CFG between each major pass.
-    let hardass_validate = false;
+    let hardass_validate = true;
 
     println!("STAGE: Functionwise");
     for fun_ident in fun_idents.iter() {
@@ -160,10 +160,12 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
         if hardass_validate { lir_mut.validate(&function.ident) }
 
         ::ir::lir::pass::compile_pattern(&function.ident, lir_mut);
+        ::ir::lir::pass::propagate_atomics(lir_mut);
         ::ir::lir::pass::simplify_branches(lir_mut);
         ::ir::lir::pass::remove_orphan_blocks(lir_mut);
         if hardass_validate { lir_mut.validate(&function.ident) }
 
+        lir_mut.compress_numbering();
         lir_mut.validate(&function.ident)
 
     }

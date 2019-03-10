@@ -9,6 +9,26 @@ pub struct Op {
 }
 
 #[derive(Debug, Clone)]
+pub enum ComparisonOperation {
+    /// ==
+    Equal,
+    /// /=
+    NotEqual,
+    /// =<
+    LessEqual,
+    /// <
+    Less,
+    /// >=
+    GreaterEqual,
+    /// >
+    Greater,
+    /// =:=
+    ExactEqual,
+    /// =/=
+    ExactNotEqual,
+}
+
+#[derive(Debug, Clone)]
 pub enum OpKind {
     /// Must be the first OP in a function.
     /// Write number must be equal to the function arity
@@ -77,6 +97,7 @@ pub enum OpKind {
     ReturnThrow,
 
     IfTruthy,
+    ComparisonOperation(ComparisonOperation),
 
     CaseStart {
         vars: SSAVariable,

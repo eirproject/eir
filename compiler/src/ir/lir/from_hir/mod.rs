@@ -712,7 +712,27 @@ impl hir::SingleExpression {
                 (main_cont, self.ssa)
             },
             HSEK::PrimOp { ref name, ref args } if name == &Atom::from("raise") => {
+                let mut main_cont = in_block;
 
+                // TODO:
+                let mut reads = Vec::new();
+                for arg in args.iter() {
+                    let n_ssa = lower_chain!(arg, b, env, exc_stack, main_cont);
+                    reads.push(Source::Variable(n_ssa));
+                }
+
+                let exc_path_ssa = b.new_ssa();
+                b.basic_op(main_cont, OpKind::MakeTuple, reads, vec![exc_path_ssa]);
+
+                b.basic_op(main_cont, OpKind::Jump, vec![], vec![]);
+                exc_stack.add_error_jump(b, main_cont, exc_path_ssa);
+
+                let ret_dummy = b.add_block();
+                b.basic_op(ret_dummy, OpKind::MakeNoValue, vec![], vec![self.ssa]);
+
+                (ret_dummy, self.ssa)
+            },
+            HSEK::PrimOp { ref name, ref args } if name == &Atom::from("match_fail") => {
                 let mut main_cont = in_block;
 
                 // TODO:

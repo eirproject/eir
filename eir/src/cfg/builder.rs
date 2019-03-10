@@ -74,14 +74,14 @@ impl<'a> FunctionCfgBuilder<'a> {
 
         let add_new = if let Some(inner) =
             block.phi_nodes.iter_mut().find(|p| p.ssa == to_ssa) {
-                inner.entries.push((edge, Source::Variable(from_ssa)));
+                inner.entries.push((edge, from_ssa));
                 false
             } else {
                 true
             };
         if add_new {
             block.phi_nodes.push(Phi {
-                entries: vec![(edge, Source::Variable(from_ssa))],
+                entries: vec![(edge, from_ssa)],
                 ssa: to_ssa,
             });
         }

@@ -16,6 +16,7 @@ pub mod text;
 pub mod pattern;
 pub use pattern::{ Clause, Pattern };
 
+#[derive(Debug)]
 pub struct Module {
     pub name: Atom,
     pub lambda_envs: HashMap<LambdaEnvIdx, LambdaEnv>,
@@ -98,11 +99,45 @@ pub enum ConstantTerm {
     Atomic(AtomicTerm),
     List(Vec<ConstantTerm>, Box<ConstantTerm>),
 }
+impl ConstantTerm {
+
+    pub fn atom(&self) -> Option<Atom> {
+        if let ConstantTerm::Atomic(atomic) = self {
+            if let AtomicTerm::Atom(atom) = atomic {
+                Some(atom.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Source {
     Variable(SSAVariable),
     Constant(ConstantTerm),
+}
+impl Source {
+
+    pub fn is_constant(&self) -> bool {
+        if let Source::Constant(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn constant(&self) -> Option<ConstantTerm> {
+        if let Source::Constant(constant) = self {
+            Some(constant.clone())
+        } else {
+            None
+        }
+    }
+
 }
 impl From<SSAVariable> for Source {
     fn from(val: SSAVariable) -> Self {

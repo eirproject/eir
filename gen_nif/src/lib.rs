@@ -2,7 +2,7 @@ use llvm_sys as llvm;
 use std::ptr;
 use std::collections::HashMap;
 
-use eir::SSAVariable;
+use eir::{ SSAVariable, Module as EirModule };
 use eir::op::OpKind;
 
 use inkwell::AddressSpace;
@@ -28,6 +28,8 @@ use eir::{ FunctionIdent, Function };
 fn gen_wrapper(context: &Context, module: &Module, nif_refs: &NifTypes,
                ident: &FunctionIdent, inner: FunctionValue) -> FunctionValue {
     let i64_type = context.i64_type();
+    let i8_type = context.i8_type();
+    let i8_ptr = i8_type.ptr_type(AddressSpace::Generic);
 
     let fn_val = module.add_function("nif_wrapper", nif_refs.nif_fun_type, None);
 
@@ -39,6 +41,12 @@ fn gen_wrapper(context: &Context, module: &Module, nif_refs: &NifTypes,
 
     // Main block
     builder.position_at_end(&entry_bb);
+
+    let string_const = crate::primitives::make_c_string_const(
+        context, module, &format!("NIF\n"));
+    let string_const_ptr = string_const.as_pointer_value()
+        .const_cast(i8_ptr);
+    builder.build_call(nif_refs.printf, &[string_const_ptr.into()], "debug print");
 
     let env_arg = fn_val.get_nth_param(0).unwrap();
     let arr_arg = fn_val.get_nth_param(2).unwrap();
@@ -113,17 +121,15 @@ fn gen_prototypes(context: &Context, module: &Module, nif_refs: &NifTypes,
     }
 }
 
-fn main() {
+pub fn gen_module(eir: &EirModule, funs: &[FunctionIdent]) {
 
-    let eir = {
-        let mut text = String::new();
-        std::fs::File::open("testing.core").unwrap()
-            .read_to_string(&mut text).unwrap();
-        let res = core_erlang_compiler::parser::parse(&text).unwrap();
-        core_erlang_compiler::ir::from_parsed(&res.0)
-    };
-
-    let mut path = Path::new("module.bc");
+    //let eir = {
+    //    let mut text = String::new();
+    //    std::fs::File::open("testing.core").unwrap()
+    //        .read_to_string(&mut text).unwrap();
+    //    let res = core_erlang_compiler::parser::parse(&text).unwrap();
+    //    core_erlang_compiler::ir::from_parsed(&res.0)
+    //};
 
     let context = Context::create();
     let module = context.create_module("my_module");
@@ -133,18 +139,21 @@ fn main() {
     let i64_type = context.i64_type();
     let i32_type = context.i32_type();
 
-    let mut target = None;
+    let mut funcs = Vec::new();
 
     let mut protos = HashMap::new();
-    for fun in eir.functions.iter() {
-        let mangled = mangle_ident(fun.0);
-        println!("{}: {}", fun.0, mangled);
-        if mangled == "GNIF7_testing3_woo1_n_n" {
-            gen_prototypes(&context, &module, &nif_types, &fun.1, &mut protos);
-            println!("{:?}", protos);
-            emit_eir_fun(&context, &module, &nif_types, &fun.1, protos[&fun.1.ident]);
-            target = Some((fun.1.ident.clone(), protos[&fun.1.ident]));
-        }
+    for fun_ident in funs {
+        let mangled = mangle_ident(fun_ident);
+        println!("{}: {}", fun_ident, mangled);
+
+        let fun = &eir.functions[fun_ident];
+        gen_prototypes(&context, &module, &nif_types, fun, &mut protos);
+        emit_eir_fun(&context, &module, &nif_types, fun, protos[fun_ident]);
+
+        let wrapper = gen_wrapper(&context, &module, &nif_types,
+                                  fun_ident, protos[fun_ident]);
+
+        funcs.push((fun_ident.clone(), wrapper));
     }
 
     //let fn_type = i64_type.fn_type(&[
@@ -158,20 +167,15 @@ fn main() {
     let entry_t = EnifEntryT {
         major: 2,
         minor: 14,
-        name: "Elixir.Something.Nif".into(),
-        funcs: vec![
+        name: eir.name.as_str().into(),
+        funcs: funcs.iter().map(|(ident, fun)| {
             EnifFuncT {
-                name: "woohoo".into(),
-                arity: 1,
-                fun: {
-                    let tar = target.unwrap();
-                    gen_wrapper(&context, &module, &nif_types,
-                                &tar.0, tar.1)
-                        .as_global_value().as_pointer_value()
-                },
-                flags: 0
-            },
-        ],
+                name: ident.name.as_str().to_string(),
+                arity: ident.arity as u32,
+                fun: fun.as_global_value().as_pointer_value(),
+                flags: 0,
+            }
+        }).collect(),
         load: None,
         reload: None,
         upgrade: None,
@@ -184,9 +188,9 @@ fn main() {
     let nif_entry = make_enif_entry_t(&context, &module, &entry_t);
     let nif_entry_pointer = nif_entry.as_pointer_value();
 
+    // Make nif init
     let nif_init_fn_type = (nif_entry_pointer.get_type()).fn_type(&[], false);
     let nif_init_fn_val = module.add_function("nif_init", nif_init_fn_type, None);
-
     let builder = context.create_builder();
     {
         let basic_block = context.append_basic_block(&nif_init_fn_val, "entry");
@@ -195,8 +199,8 @@ fn main() {
         builder.build_return(Some(&nif_entry_pointer));
     }
 
-
     println!("{:?}", module.verify());
 
+    let path = Path::new("module.bc");
     module.write_bitcode_to_path(&path);
 }
