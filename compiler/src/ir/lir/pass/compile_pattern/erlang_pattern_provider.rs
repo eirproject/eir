@@ -161,28 +161,16 @@ impl PatternProvider for ErlangPatternProvider {
                     nodes: vec![],
                 };
 
-                println!("yay start");
                 for node in clause_nodes.iter() {
                     for value in values.iter() {
                         if let Some(child_id) = values_map.get(&(*node, *value)) {
-                            println!("AAA: {:?} {:?}", child_id,
-                                     self.pattern[child_id.0]);
                             exp.nodes.push(*child_id);
                         } else {
-                            println!("AAB: wildcard");
                             exp.nodes.push(self.wildcard());
                         }
-                        // if node has MapValue(value) as child
-                        //     add MapValue(value)
-                        // else
-                        //     add Wildcard
                     }
                 }
-                println!("yay end");
 
-                println!("{:?}", exp);
-
-                //unimplemented!();
                 exp
             }
             _ => {
@@ -210,7 +198,6 @@ impl PatternProvider for ErlangPatternProvider {
                     }
                 }
 
-                //println!("Exp: {:?}", exp);
                 exp
             }
         }
