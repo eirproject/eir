@@ -81,7 +81,10 @@ pub fn emit_read(context: &Context, module: &Module, builder: &Builder,
 }
 
 pub fn emit_eir_fun(context: &Context, module: &Module,
-                    nif_refs: &NifTypes, fun: &Function, fn_val: FunctionValue) {
+                    nif_refs: &NifTypes,
+                    protos: &HashMap<FunctionIdent, FunctionValue>,
+                    eir_mod: &eir::Module, fun: &Function,
+                    fn_val: FunctionValue) {
     let name = mangle_ident(&fun.ident);
 
     let mut fn_args = vec![
@@ -92,6 +95,7 @@ pub fn emit_eir_fun(context: &Context, module: &Module,
 
     let bool_type = context.bool_type();
     let i64_type = context.i64_type();
+    let i32_type = context.i32_type();
     let i8_type = context.i8_type();
     let i8_ptr = i8_type.ptr_type(AddressSpace::Generic);
 
@@ -301,10 +305,60 @@ pub fn emit_eir_fun(context: &Context, module: &Module,
                                         env, &bindings, &op.reads[0]);
                     bindings.insert(op.writes[0], arg);
                 }
+                OpKind::MakeClosureEnv { env_idx } => {
+                    let lambda_env = &eir_mod.lambda_envs[&env_idx];
+
+                    let module_const = crate::primitives::make_c_string_const(
+                        context, module, fun.ident.module.as_str());
+                    let name_const = crate::primitives::make_c_string_const(
+                        context, module, fun.ident.name.as_str());
+                    let env_num_const = i32_type.const_int(
+                        env_idx.num_repr() as u64, false);
+                    let num_captures_const = i64_type.const_int(
+                        lambda_env.num_captures as u64, false);
+
+                    let captures_arr = builder.build_alloca(
+                        nif_refs.term_type, "return term");
+
+                    for (idx, read) in op.reads.iter().enumerate() {
+                        let elem_ptr = unsafe {
+                            builder.build_gep(
+                                captures_arr,
+                                &[i64_type.const_int(idx as u64, false)],
+                                "")
+                        };
+                        let value = emit_read(context, module, &builder,
+                                              nif_refs, env, &bindings, read);
+                        builder.build_store(elem_ptr, value);
+                    }
+
+                    let args: Vec<BasicValueEnum> = vec![
+                        env.into(),
+                        module_const.as_pointer_value().into(),
+                        name_const.as_pointer_value().into(),
+                        env_num_const.into(),
+                        num_captures_const.into(),
+                        captures_arr.into(),
+                    ];
+                    let call = builder.build_call(nif_refs.enif_get_long,
+                                                  &args, "funcall");
+
+                    bindings.insert(op.writes[0], call.try_as_basic_value()
+                                    .left().unwrap());
+                }
+                OpKind::BindClosure { ref ident } => {
+                    let lambda_info = ident.lambda.unwrap();
+                    let lambda_env = &eir_mod.lambda_envs[&lambda_info.0];
+
+                    let fn_val = &protos[&ident];
+
+                    println!("{:?}", op);
+                    unimplemented!();
+                }
                 _ => {
                     println!("{:?}", op.kind);
                     unimplemented!();
-                },
+                }
             }
         }
 

@@ -235,6 +235,8 @@ fn case_structure(
     b.finish(match_body_label);
 
     // === Entry block ===
+    let mut entry_reads = vec![def.match_val.into()];
+    entry_reads.extend(def.values.iter().map(|v| (*v).into()));
     b.basic_op(
         main_cont,
         OpKind::CaseStart {
@@ -242,7 +244,7 @@ fn case_structure(
             clauses: clauses,
             value_vars: def.values.clone(),
         },
-        vec![def.match_val.into()],
+        entry_reads,
         vec![case_structure_ssa]
     );
     // Jump to match body

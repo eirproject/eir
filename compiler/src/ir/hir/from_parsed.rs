@@ -62,10 +62,10 @@ fn pat_node_from_parsed(node: &::parser::Pattern,
     match *node {
         PP::Atomic(ref a) => PatternNode::Atomic(a.clone()),
         PP::Wildcard => PatternNode::Wildcard,
-        PP::BindVar(ref var, ref pat) if *var == wildcard =>
+        PP::BindVar(ref var, ref pat) if var.0 == wildcard =>
             pat_node_from_parsed(&pat.0, values, fun_ident),
         PP::BindVar(ref var, ref pat) =>
-            PatternNode::BindVar(var.clone(), Box::new(
+            PatternNode::BindVar(var.0.clone(), Box::new(
                 pat_node_from_parsed(&pat.0, values, fun_ident))),
         PP::Binary(ref elems) => {
             PatternNode::Binary(
@@ -88,10 +88,10 @@ fn pat_node_from_parsed(node: &::parser::Pattern,
             PatternNode::Map(
                 kvs.iter().map(|kv| {
                     let curr_val_num = values.len();
-                    values.push(SingleExpression::from_parsed_single(&kv.0, fun_ident));
+                    values.push(SingleExpression::from_parsed_single(&((kv.0).0).0, fun_ident));
                     (
                         curr_val_num,
-                        Box::new(pat_node_from_parsed(&(kv.1).0, values, fun_ident))
+                        Box::new(pat_node_from_parsed(&((kv.0).1).0, values, fun_ident))
                     )
                 }).collect(),
             )

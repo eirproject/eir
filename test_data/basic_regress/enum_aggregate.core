@@ -1,0 +1,278 @@
+module 'Elixir.Enum' ['aggregate'/3] attributes []
+
+'aggregate'/3 =
+    %% Line 2815
+    fun (_2,_1,_0) ->
+	case <_2,_1,_0> of
+	  <[_X_head@1|_X_tail@1],_X_fun@1,_X__empty@1> when 'true' ->
+	      letrec
+		  'lists^foldl'/2 =
+		      fun (Xs,_15) ->
+			  case Xs of
+			    <[X|_16]> when 'true' ->
+				%% Line 2816
+				apply 'lists^foldl'/2
+				    (_16, apply _X_fun@1
+					      (X, _15))
+			    <[]>
+				when call 'erlang':'is_function'
+				      (%% Line 2816
+				       _X_fun@1,
+				       2) ->
+				_15
+			    <_17> when 'true' ->
+				%% Line 2816
+				( primop 'match_fail'
+				      ({'function_clause',_X_fun@1,_15,_17})
+				  -| [{'function_name',{'lists^foldl',2}}] )
+			  end
+	      in  %% Line 2816
+		  apply 'lists^foldl'/2
+		      (_X_tail@1, _X_head@1)
+	  %% Line 2819
+	  <[],_X__fun@1,_X_empty@1> when 'true' ->
+	      %% Line 2820
+	      apply _X_empty@1
+		  ()
+	  %% Line 2823
+	  <~{'last':=_X_last@1,'first':=_X_first@1,'__struct__':='Elixir.Range'}~,_X_fun@1,_X__empty@1> when 'true' ->
+	      %% Line 2824
+	      apply _X_fun@1
+		  (_X_first@1, _X_last@1)
+	  %% Line 2827
+	  <_X_enumerable@1,_X_fun@1,_X_empty@1> when 'true' ->
+	      let <_X_ref@1> =
+		  call 'erlang':%% Line 2828
+				'make_ref'
+		      ()
+	      in  let <_8> =
+		      fun (_5,_4) ->
+			  %% Line 2831
+			  case <_5,_4> of
+			    %% Line 2832
+			    <_X_element@1,_X_ref@2>
+				when ( call ( 'erlang'
+					   -| ['compiler_generated'] ):( '=:='
+									 -| ['compiler_generated'] )
+					(( _X_ref@1
+					   -| ['compiler_generated'] ),
+					 _X_ref@2)
+				    -| ['compiler_generated'] ) ->
+				_X_element@1
+			    %% Line 2833
+			    <_X_element@2,_X_acc@1> when 'true' ->
+				apply _X_fun@1
+				    (_X_element@2, _X_acc@1)
+			  end
+		  in  %% Line 2835
+		      case ( case ( <( _X_enumerable@1
+				       -| ['compiler_generated'] ),( _X_ref@1
+								     -| ['compiler_generated'] ),( _8
+												   -| ['compiler_generated'] )>
+				    -| ['compiler_generated'] ) of
+			       ( <_21,( _X_acc@1
+					-| ['compiler_generated'] ),_22>
+				     when ( call ( 'erlang'
+						-| ['compiler_generated'] ):( 'is_list'
+									      -| ['compiler_generated'] )
+					     (_21)
+					 -| ['compiler_generated'] ) ->
+				     letrec
+					 'lists^foldl'/2 =
+					     fun (Xs,_23) ->
+						 case Xs of
+						   <[X|_24]> when 'true' ->
+						       ( apply 'lists^foldl'/2
+							     (_24, ( apply _22
+									 (X, _23)
+								     -| ['compiler_generated'] ))
+							 -| ['compiler_generated'] )
+						   <[]>
+						       when call 'erlang':'is_function'
+							     (_22,
+							      2) ->
+						       _23
+						   <_25> when 'true' ->
+						       ( primop 'match_fail'
+							     ({'function_clause',_22,_23,_25})
+							 -| [{'function_name',{'lists^foldl',2}},'compiler_generated'] )
+						 end
+				     in  ( apply 'lists^foldl'/2
+					       (_21, ( _X_acc@1
+						       -| ['compiler_generated'] ))
+					   -| ['compiler_generated'] )
+				 -| ['compiler_generated'] )
+			       ( <( ~{( ( 'last'
+					  -| ['compiler_generated'] ):=( _X_last@1
+								      -| ['compiler_generated'] )
+				       -| ['compiler_generated'] ),( ( 'first'
+									-| ['compiler_generated'] ):=( _X_first@1
+												    -| ['compiler_generated'] )
+								     -| ['compiler_generated'] ),( ( '__struct__'
+												      -| ['compiler_generated'] ):=( 'Elixir.Range'
+																  -| ['compiler_generated'] )
+												   -| ['compiler_generated'] )}~
+				    -| ['compiler_generated'] ),( _X_acc@1
+								  -| ['compiler_generated'] ),_26> when ( 'true'
+													  -| ['compiler_generated'] ) ->
+				     ( case <> of
+					 ( <>
+					       when ( call ( 'erlang'
+							  -| ['compiler_generated'] ):( '=<'
+											-| ['compiler_generated'] )
+						       (( _X_first@1
+							  -| ['compiler_generated'] ),
+							( _X_last@1
+							  -| ['compiler_generated'] ))
+						   -| ['compiler_generated'] ) ->
+					       ( apply ( 'reduce_range_inc'/4
+							 -| ['compiler_generated'] )
+						     (( _X_first@1
+							-| ['compiler_generated'] ), ( _X_last@1
+										       -| ['compiler_generated'] ), ( _X_acc@1
+														      -| ['compiler_generated'] ), _26)
+						 -| ['compiler_generated'] )
+					   -| ['compiler_generated'] )
+					 ( <> when ( 'true'
+						     -| ['compiler_generated'] ) ->
+					       ( apply ( 'reduce_range_dec'/4
+							 -| ['compiler_generated'] )
+						     (( _X_first@1
+							-| ['compiler_generated'] ), ( _X_last@1
+										       -| ['compiler_generated'] ), ( _X_acc@1
+														      -| ['compiler_generated'] ), _26)
+						 -| ['compiler_generated'] )
+					   -| ['compiler_generated'] )
+				       end
+				       -| ['compiler_generated'] )
+				 -| ['compiler_generated'] )
+			       ( <( _27 = ( ~{( ( '__struct__'
+						  -| ['compiler_generated'] ):=( ( _X__@1
+										-| ['compiler_generated'] ) = ( _14
+														-| ['compiler_generated'] )
+									      -| ['compiler_generated'] )
+					       -| ['compiler_generated'] )}~
+					    -| ['compiler_generated'] )
+				    -| ['compiler_generated'] ),( _X_acc@1
+								  -| ['compiler_generated'] ),_28>
+				     when ( call ( 'erlang'
+						-| ['compiler_generated'] ):( 'is_atom'
+									      -| ['compiler_generated'] )
+					     (( _X__@1
+						-| ['compiler_generated'] ))
+					 -| ['compiler_generated'] ) ->
+				     ( let <_37> =
+					   fun (( _5
+						  -| ['compiler_generated'] ),( _4
+										-| ['compiler_generated'] )) ->
+					       ( let <_3> =
+						     apply _28
+							 (( _5
+							    -| ['compiler_generated'] ), ( _4
+											   -| ['compiler_generated'] ))
+						 in  ( {( 'cont'
+							  -| ['compiler_generated'] ),( _3
+											-| ['compiler_generated'] )}
+						       -| ['compiler_generated'] )
+						 -| ['compiler_generated'] )
+				       in  ( let <_9> =
+						 call ( 'Elixir.Enumerable'
+							-| ['compiler_generated'] ):%% Line 3015
+										    ( 'reduce'
+										      -| ['compiler_generated'] )
+						     (_27, ( {( 'cont'
+								-| ['compiler_generated'] ),( _X_acc@1
+											      -| ['compiler_generated'] )}
+							     -| ['compiler_generated'] ), _37)
+					     in  %% Line 3015
+						 ( call ( 'erlang'
+							  -| ['compiler_generated'] ):( 'element'
+											-| ['compiler_generated'] )
+						       (( 2
+							  -| ['compiler_generated'] ), ( _9
+											 -| ['compiler_generated'] ))
+						   -| ['compiler_generated'] )
+					     -| ['compiler_generated'] )
+				       -| ['compiler_generated'] )
+				 -| ['compiler_generated'] )
+			       ( <( _41 = ( ~{}~
+					    -| ['compiler_generated'] )
+				    -| ['compiler_generated'] ),( _X_acc@1
+								  -| ['compiler_generated'] ),_42> when ( 'true'
+													  -| ['compiler_generated'] ) ->
+				     ( let <_10> =
+					   fun (( _6
+						  -| ['compiler_generated'] ),( _5
+										-| ['compiler_generated'] ),( _4
+													      -| ['compiler_generated'] )) ->
+					       ( apply _42
+						     (( {( _6
+							   -| ['compiler_generated'] ),( _5
+											 -| ['compiler_generated'] )}
+							-| ['compiler_generated'] ), ( _4
+										       -| ['compiler_generated'] ))
+						 -| ['compiler_generated'] )
+				       in  ( call ( 'maps'
+						    -| ['compiler_generated'] ):( 'fold'
+										  -| ['compiler_generated'] )
+						 (( _10
+						    -| ['compiler_generated'] ), ( _X_acc@1
+										   -| ['compiler_generated'] ), _41)
+					     -| ['compiler_generated'] )
+				       -| ['compiler_generated'] )
+				 -| ['compiler_generated'] )
+			       ( <_46,( _X_acc@1
+					-| ['compiler_generated'] ),_47> when ( 'true'
+										-| ['compiler_generated'] ) ->
+				     ( let <_56> =
+					   fun (( _5
+						  -| ['compiler_generated'] ),( _4
+										-| ['compiler_generated'] )) ->
+					       ( let <_3> =
+						     apply _47
+							 (( _5
+							    -| ['compiler_generated'] ), ( _4
+											   -| ['compiler_generated'] ))
+						 in  ( {( 'cont'
+							  -| ['compiler_generated'] ),( _3
+											-| ['compiler_generated'] )}
+						       -| ['compiler_generated'] )
+						 -| ['compiler_generated'] )
+				       in  ( let <_9> =
+						 call ( 'Elixir.Enumerable'
+							-| ['compiler_generated'] ):%% Line 3015
+										    ( 'reduce'
+										      -| ['compiler_generated'] )
+						     (_46, ( {( 'cont'
+								-| ['compiler_generated'] ),( _X_acc@1
+											      -| ['compiler_generated'] )}
+							     -| ['compiler_generated'] ), _56)
+					     in  %% Line 3015
+						 ( call ( 'erlang'
+							  -| ['compiler_generated'] ):( 'element'
+											-| ['compiler_generated'] )
+						       (( 2
+							  -| ['compiler_generated'] ), ( _9
+											 -| ['compiler_generated'] ))
+						   -| ['compiler_generated'] )
+					     -| ['compiler_generated'] )
+				       -| ['compiler_generated'] )
+				 -| ['compiler_generated'] )
+			     end
+			     -| ['compiler_generated'] ) of
+			%% Line 2836
+			<_13>
+			    when ( call 'erlang':'=:='
+				    (_13,
+				     ( _X_ref@1
+				       -| ['compiler_generated'] ))
+				-| ['compiler_generated'] ) ->
+			    apply _X_empty@1
+				()
+			%% Line 2837
+			<_X_result@1> when 'true' ->
+			    _X_result@1
+		      end
+	end
+
+end

@@ -28,16 +28,15 @@ It should be noted that everything here is under construction and subject to cha
     * `n-tuple`
   * `nil`
   * `mapclass`
-  * `tupclass`
   * `contlist`
   
 ### Pseudo-types
   
-#### The `mapclass` and `tupclass` pseudo-types
+#### The `mapclass` pseudo-type
   
-`mapclass` and `tupclass` are special "pseudo-types". When the compiler infers or gets informed that a map or a tuple will always adhere to a given type signature at a location, it can promote the given `map` or `tuple` into there pseudo-types. When these types leave the locations where their type can be inferred, they get transparently demoted into their normal types.
+`mapclass` is a special "pseudo-type". When the compiler infers or gets informed that a map will always adhere to a given type signature at a location, it can promote the given `map` into its pseudo-type. When these types leave the locations where their type can be inferred, they get transparently demoted into their normal types.
 
-A normal use-case for `mapclass` would be Elixirs structs, and `tupclass` would be Erlangs records.
+A normal use-case for `mapclass` would be Elixirs structs.
 
 From the host language, these look completely identical to their non-pseudo counterparts.
 
@@ -74,6 +73,6 @@ It should be noted that no intrinsics are dynamically callable.
 
  * `assert_type(Variable, EirTypeSpec)`
    Same as above, but the compiler is required to insert assertions.
-   This can potentially result in a performance impact.
+   This can potentially result in a performance impact over `annotate_type`.
 
    The second argument is required to be known at compile-time.

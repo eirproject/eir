@@ -134,6 +134,7 @@ pub enum OpKind {
     IsMap,
     UnpackMapItem,
     EqualAtomic(AtomicTerm),
+    MapGet,
 
     /// Indicates the start of a receive structure, must jump to a block
     /// containing a single ReceiveWait.
@@ -234,6 +235,7 @@ impl OpKind {
             OpKind::IsMap => Some(2),
             OpKind::UnpackMapItem => Some(2),
             OpKind::EqualAtomic(_) => Some(2),
+            OpKind::MapGet => Some(2),
 
             _ => None,
         }

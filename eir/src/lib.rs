@@ -35,6 +35,9 @@ impl LambdaEnvIdx {
     pub fn parse_from_str(string: &str) -> Self {
         LambdaEnvIdx(string.parse().unwrap())
     }
+    pub fn num_repr(self) -> usize {
+        self.0
+    }
 }
 impl Display for LambdaEnvIdx {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {

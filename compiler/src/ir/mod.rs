@@ -159,6 +159,10 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
         ::ir::lir::pass::remove_orphan_blocks(lir_mut);
         if hardass_validate { lir_mut.validate(&function.ident) }
 
+        //let mut out = ::std::fs::File::create("immediate1.dot").unwrap();
+        //::ir::lir::to_dot::function_to_dot(
+        //    fun_ident, lir_mut, &mut out).unwrap();
+
         ::ir::lir::pass::compile_pattern(&function.ident, lir_mut);
         ::ir::lir::pass::propagate_atomics(lir_mut);
         ::ir::lir::pass::simplify_branches(lir_mut);

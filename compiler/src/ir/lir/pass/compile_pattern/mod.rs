@@ -21,11 +21,6 @@ use ::pattern_compiler::{ PatternProvider, ExpandedClauseNodes, PatternCfg, CfgN
 mod erlang_pattern_provider;
 use self::erlang_pattern_provider::{ ErlangPatternProvider, PatternValueCollector, PatternVar };
 
-// ??
-//#[derive(Copy, Clone, Hash, PartialEq, Eq)]
-//struct CfgVar(usize);
-// ??
-
 struct CaseClauseDef {
     out_edge: EdgeN,
     fail_edges: HashSet<EdgeN>,
@@ -99,6 +94,7 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
                             collector: &PatternValueCollector,
                             builder: &mut ::eir::cfg::FunctionCfgBuilder,
                             mappings: &mut HashMap<PatternVar, SSAVariable>,
+                            value_vars: &[Source],
                             destinations: &DecisionTreeDestinations,
                             block: LabelN,
                             cfg_node: CfgNodeIndex) {
@@ -137,7 +133,7 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
                         );
                         block_cont = nok_block;
                         decision_tree_to_cfg_rec(
-                            dec, collector, builder, mappings,
+                            dec, collector, builder, mappings, value_vars,
                             destinations, ok_block, outgoing.target()
                         );
                     },
@@ -154,7 +150,7 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
                         );
                         block_cont = nok_block;
                         decision_tree_to_cfg_rec(
-                            dec, collector, builder, mappings,
+                            dec, collector, builder, mappings, value_vars,
                             destinations, ok_block, outgoing.target()
                         );
                     },
@@ -174,8 +170,46 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
                         );
                         block_cont = nok_block;
                         decision_tree_to_cfg_rec(
-                            dec, collector, builder, mappings,
+                            dec, collector, builder, mappings, value_vars,
                             destinations, ok_block, outgoing.target()
+                        );
+                    },
+                    MatchKind::Map => {
+                        let map_bind = weight.variable_binds[0];
+                        for var_bind in weight.variable_binds.iter() {
+                            assert!(map_bind == *var_bind);
+                        }
+
+                        let ok_block = builder.add_block();
+                        let nok_block = builder.add_block();
+                        mappings.insert(map_bind, match_ssa);
+                        builder.op_is_map(
+                            block_cont,
+                            match_ssa.into(),
+                            ok_block, nok_block,
+                        );
+                        block_cont = nok_block;
+                        decision_tree_to_cfg_rec(
+                            dec, collector, builder, mappings, value_vars,
+                            destinations, ok_block, outgoing.target(),
+                        );
+                    },
+                    MatchKind::MapItem(key_value_var) => {
+                        let ok_block = builder.add_block();
+                        let nok_block = builder.add_block();
+                        let value_ssa = builder.new_ssa();
+                        mappings.insert(weight.variable_binds[0], value_ssa);
+                        builder.op_map_get(
+                            block_cont,
+                            match_ssa.into(),
+                            value_vars[key_value_var].clone(),
+                            value_ssa,
+                            ok_block, nok_block,
+                        );
+                        block_cont = nok_block;
+                        decision_tree_to_cfg_rec(
+                            dec, collector, builder, mappings, value_vars,
+                            destinations, ok_block, outgoing.target(),
                         );
                     },
                     _ => {
@@ -188,7 +222,7 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
             let wildcard_edge = wildcard_node.unwrap();
             assert!(wildcard_edge.weight().variable_binds.len() == 0);
             decision_tree_to_cfg_rec(
-                dec, collector, builder, mappings,
+                dec, collector, builder, mappings, value_vars,
                 destinations, block_cont, wildcard_edge.target()
             );
         },
@@ -210,7 +244,7 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
             let edges: Vec<_> = dec.graph.edges(cfg_node).collect();
             assert!(edges.len() == 1);
             decision_tree_to_cfg_rec(
-                dec, collector, builder, mappings,
+                dec, collector, builder, mappings, value_vars,
                 destinations, destinations.guard_fails[num], edges[0].target()
             );
         },
@@ -222,6 +256,7 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
 fn decision_tree_to_cfg(dec: &PatternCfg<ErlangPatternProvider>,
                         collector: &PatternValueCollector,
                         builder: &mut ::eir::cfg::FunctionCfgBuilder,
+                        value_vars: &[Source],
                         num_clauses: usize,
                         entry: LabelN,
                         val: SSAVariable)
@@ -286,7 +321,7 @@ fn decision_tree_to_cfg(dec: &PatternCfg<ErlangPatternProvider>,
         guard_fails: (0..num_clauses).map(|_| builder.add_block()).collect(),
     };
 
-    decision_tree_to_cfg_rec(dec, collector, builder, &mut mappings, &destinations, entry, start_node);
+    decision_tree_to_cfg_rec(dec, collector, builder, &mut mappings, value_vars, &destinations, entry, start_node);
 
     destinations
 }
@@ -306,7 +341,7 @@ pub fn compile_pattern(ident: &FunctionIdent, lir: &mut ::eir::cfg::FunctionCfg)
 
     for start_label in case_starts.iter() {
         // Start node
-        let (clause_edges, collector, decision_tree, match_val, num_clauses, fail_edge, entry_edge, case_ssa) = {
+        let (clause_edges, collector, decision_tree, match_val, num_clauses, fail_edge, entry_edge, case_ssa, value_vars) = {
             let start_node = lir.graph.node(*start_label);
             let start_inner = start_node.inner.borrow();
             assert!(start_node.outgoing.len() == 1);
@@ -317,7 +352,7 @@ pub fn compile_pattern(ident: &FunctionIdent, lir: &mut ::eir::cfg::FunctionCfg)
                 &start_op.kind { (vars, clauses, value_vars) } else { panic!() };
             assert!(start_op.writes.len() == 1);
             let case_ssa = start_op.writes[0];
-            assert!(start_op.reads.len() == 1);
+            assert!(start_op.reads.len() == (1 + value_vars.len()));
             let match_val = start_op.reads[0].clone();
 
             // Body node
@@ -345,11 +380,16 @@ pub fn compile_pattern(ident: &FunctionIdent, lir: &mut ::eir::cfg::FunctionCfg)
                 }
             }
 
+            println!("{:?}", clauses);
+
             let (collector, mut provider) =
                 erlang_pattern_provider::pattern_to_provider(clauses);
             let decision_tree = ::pattern_compiler::to_decision_tree(&mut provider);
 
-            (clause_edges, collector, decision_tree, match_val, clauses.len(), fail_edge, entry_edge, case_ssa)
+            let value_vars_reads: Vec<_> = start_op.reads.iter().skip(1)
+                .cloned().collect();
+
+            (clause_edges, collector, decision_tree, match_val, clauses.len(), fail_edge, entry_edge, case_ssa, value_vars_reads)
         };
 
         let mut builder = ::eir::cfg::FunctionCfgBuilder::new(lir);
@@ -358,7 +398,7 @@ pub fn compile_pattern(ident: &FunctionIdent, lir: &mut ::eir::cfg::FunctionCfg)
         builder.op_move(entry, match_val, match_ssa);
         let destinations =
             decision_tree_to_cfg(&decision_tree, &collector, &mut builder,
-                                 num_clauses, entry, match_ssa);
+                                 &value_vars, num_clauses, entry, match_ssa);
 
         // Graft new CFG into matching construct
 

@@ -148,12 +148,20 @@ pub fn gen_module(eir: &EirModule, funs: &[FunctionIdent]) {
 
         let fun = &eir.functions[fun_ident];
         gen_prototypes(&context, &module, &nif_types, fun, &mut protos);
-        emit_eir_fun(&context, &module, &nif_types, fun, protos[fun_ident]);
+    }
 
+    for key in protos.keys() {
+        println!("{:?}", key);
+    }
+
+    for (ident, proto) in protos.iter() {
+        let fun = &eir.functions[ident];
+
+        emit_eir_fun(&context, &module, &nif_types, &protos, eir,
+                     fun, protos[ident]);
         let wrapper = gen_wrapper(&context, &module, &nif_types,
-                                  fun_ident, protos[fun_ident]);
-
-        funcs.push((fun_ident.clone(), wrapper));
+                                  ident, *proto);
+        funcs.push((ident.clone(), wrapper));
     }
 
     //let fn_type = i64_type.fn_type(&[
@@ -176,7 +184,9 @@ pub fn gen_module(eir: &EirModule, funs: &[FunctionIdent]) {
                 flags: 0,
             }
         }).collect(),
-        load: None,
+        load: Some(
+            nif_types.on_load
+                .as_global_value().as_pointer_value()),
         reload: None,
         upgrade: None,
         unload: None,

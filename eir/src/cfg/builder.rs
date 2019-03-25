@@ -215,6 +215,31 @@ impl<'a> FunctionCfgBuilder<'a> {
         self.finish(block);
     }
 
+    pub fn op_is_map(&mut self, block: LabelN, value: Source, ok_jump: LabelN, fail_jump: LabelN) {
+        self.basic_op(
+            block,
+            OpKind::IsMap,
+            vec![value],
+            vec![],
+        );
+        self.add_jump(block, ok_jump);
+        self.add_jump(block, fail_jump);
+        self.finish(block);
+    }
+
+    pub fn op_map_get(&mut self, block: LabelN, map: Source, key: Source,
+                      result_ssa: SSAVariable, ok_jump: LabelN, fail_jump: LabelN) {
+        self.basic_op(
+            block,
+            OpKind::MapGet,
+            vec![map, key],
+            vec![result_ssa],
+        );
+        self.add_jump(block, ok_jump);
+        self.add_jump(block, fail_jump);
+        self.finish(block);
+    }
+
     pub fn finish(&mut self, block: LabelN) {
         self.finished.insert(block);
     }

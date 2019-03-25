@@ -1,4 +1,4 @@
-use super::{ Module, Annotated, FunctionName, Constant, 
+use super::{ Module, Annotated, FunctionName, Constant,  
 Function, FunctionDefinition, Expression, SingleExpression, Pattern,
 CaseClause, PrimOpCall, MapExactAssoc, ConstantOrVariable, AVariable };
 use super::lex::Tok;
@@ -151,19 +151,25 @@ Patterns: Vec<Annotated<Pattern>> = {
 
 AnnotatedPattern: Annotated<Pattern> = <p:Annotated<Pattern>> => p;
 
-PatternMapEntry: (SingleExpression, Annotated<Pattern>) = {
-    <k:SingleExpression> ":=" <v:AnnotatedPattern> => (k, v),
+PatternMapEntry: (Annotated<SingleExpression>, Annotated<Pattern>) = {
+    <k:Annotated<SingleExpression>> ":=" <v:AnnotatedPattern> => (k, v),
+};
+AnnotatedPatternMapEntry: Annotated<(Annotated<SingleExpression>, Annotated<Pattern>)> = {
+    <Annotated<PatternMapEntry>> => <>,
 };
 
+#[inline]
 Pattern: Pattern = {
-    <v:Variable> "=" <p:AnnotatedPattern> => Pattern::BindVar(v, Box::new(p)),
-    <v:Variable> => Pattern::BindVar(v, Box::new(Annotated::empty(Pattern::Wildcard))),
+    <v:Annotated<Variable>> "=" <p:AnnotatedPattern> =>
+        Pattern::BindVar(v, Box::new(p)),
+    <v:Variable> =>
+        Pattern::BindVar(Annotated::empty(v), Box::new(Annotated::empty(Pattern::Wildcard))),
     <a:AtomicTerm> => Pattern::Atomic(a),
     <b:PatternBinary> => Pattern::Binary(b),
 
     "{" <t:Comma<AnnotatedPattern>> "}" => Pattern::Tuple(t),
 
-    "~{" <m:Comma<PatternMapEntry>> "}~" => Pattern::Map(m),
+    "~{" <m:Comma<AnnotatedPatternMapEntry>> "}~" => Pattern::Map(m),
 
     "[" <l:Comma<AnnotatedPattern>> <t:("|" <AnnotatedPattern>)?> "]" => 
         Pattern::List(l, Box::new(t.unwrap_or(Pattern::nil()))),

@@ -183,12 +183,12 @@ pub struct CaseClause {
 #[derive(Debug, Clone)]
 pub enum Pattern {
     Wildcard,
-    BindVar(Variable, Box<Annotated<Pattern>>),
+    BindVar(Annotated<Variable>, Box<Annotated<Pattern>>),
     Atomic(AtomicLiteral),
     Binary(Vec<(Annotated<Pattern>, Vec<Annotated<ConstantOrVariable>>)>),
     Tuple(Vec<Annotated<Pattern>>),
     List(Vec<Annotated<Pattern>>, Box<Annotated<Pattern>>),
-    Map(Vec<(SingleExpression, Annotated<Pattern>)>),
+    Map(Vec<Annotated<(Annotated<SingleExpression>, Annotated<Pattern>)>>),
 }
 impl Pattern {
     fn nil() -> Annotated<Pattern> {

@@ -1,7 +1,7 @@
 use ::pattern_compiler::{ PatternProvider, ExpandedClauseNodes };
 use ::eir::{ AtomicTerm, SSAVariable };
 use ::eir::pattern::{ Clause, Pattern, PatternNode };
-use ::std::collections::HashMap;
+use ::std::collections::{ HashMap, HashSet };
 
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
 pub enum NodeKind {
@@ -39,6 +39,7 @@ pub struct ErlangPatternProvider {
     roots: Vec<PatternRef>,
     root_var: PatternVar,
     next_var: PatternVar,
+    root_ref: PatternRef,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -50,10 +51,11 @@ impl ErlangPatternProvider {
 
     pub fn new() -> Self {
         ErlangPatternProvider {
-            pattern: Vec::new(),
+            pattern: vec![Node { kind: NodeKind::Wildcard, children: vec![]}],
             roots: Vec::new(),
             root_var: PatternVar(0),
             next_var: PatternVar(1),
+            root_ref: PatternRef(0),
         }
     }
 
@@ -75,6 +77,10 @@ impl ErlangPatternProvider {
         });
         self.roots.push(var);
         var
+    }
+
+    fn wildcard(&self) -> PatternRef {
+        PatternRef(0)
     }
 
 }
@@ -115,35 +121,100 @@ impl PatternProvider for ErlangPatternProvider {
             };
         }
 
+        println!("ClauseNodes: {:?}", clause_nodes);
+
         let typ = &self.pattern[clause_nodes[0].0];
+        let kind = typ.kind;
         let base_len = typ.children.len();
         for node in &clause_nodes {
-            assert!(self.pattern[node.0].children.len() == base_len);
-            assert!(self.pattern[node.0].kind == typ.kind);
+            assert!(self.pattern[node.0].kind == kind);
         }
 
-        let mut next_var = self.next_var;
-        let mut exp = ExpandedClauseNodes {
-            clauses: clause_nodes.len(),
-            variables: self.pattern[clause_nodes[0].0]
-                .children.iter()
-                .map(|_| {
-                    let r = next_var;
-                    next_var.0 += 1;
-                    r
-                }).collect(),
-            nodes: vec![],
-        };
-        self.next_var = next_var;
+        match kind {
+            NodeKind::Map => {
+                // Map is a special case in expansion.
+                // We want to expand each value into a separate column.
 
-        for node in clause_nodes {
-            for child in self.pattern[node.0].children.iter() {
-                exp.nodes.push(*child);
+                let mut values_map = HashMap::new();
+                for node in &clause_nodes {
+                    let sub = &self.pattern[node.0];
+                    for child_id in sub.children.iter() {
+                        let child = &self.pattern[child_id.0];
+                        if let NodeKind::MapItem(idx) = child.kind {
+                            values_map.insert((*node, idx), *child_id);
+                        } else {
+                            unreachable!();
+                        }
+                    }
+                }
+
+                let mut values: Vec<_> = values_map.iter().map(|v| (v.0).1).collect();
+                values.sort();
+                values.dedup();
+
+                let map_var = self.next_var;
+                self.next_var.0 += 1;
+
+                let mut exp = ExpandedClauseNodes {
+                    clauses: clause_nodes.len(),
+                    variables: (0..values.len()).map(|_| map_var).collect(),
+                    nodes: vec![],
+                };
+
+                println!("yay start");
+                for node in clause_nodes.iter() {
+                    for value in values.iter() {
+                        if let Some(child_id) = values_map.get(&(*node, *value)) {
+                            println!("AAA: {:?} {:?}", child_id,
+                                     self.pattern[child_id.0]);
+                            exp.nodes.push(*child_id);
+                        } else {
+                            println!("AAB: wildcard");
+                            exp.nodes.push(self.wildcard());
+                        }
+                        // if node has MapValue(value) as child
+                        //     add MapValue(value)
+                        // else
+                        //     add Wildcard
+                    }
+                }
+                println!("yay end");
+
+                println!("{:?}", exp);
+
+                //unimplemented!();
+                exp
+            }
+            _ => {
+                for node in &clause_nodes {
+                    assert!(self.pattern[node.0].children.len() == base_len);
+                }
+
+                let mut next_var = self.next_var;
+                let mut exp = ExpandedClauseNodes {
+                    clauses: clause_nodes.len(),
+                    variables: self.pattern[clause_nodes[0].0]
+                        .children.iter()
+                        .map(|_| {
+                            let r = next_var;
+                            next_var.0 += 1;
+                            r
+                        }).collect(),
+                    nodes: vec![],
+                };
+                self.next_var = next_var;
+
+                for node in clause_nodes {
+                    for child in self.pattern[node.0].children.iter() {
+                        exp.nodes.push(*child);
+                    }
+                }
+
+                //println!("Exp: {:?}", exp);
+                exp
             }
         }
 
-        //println!("Exp: {:?}", exp);
-        exp
     }
 
 }

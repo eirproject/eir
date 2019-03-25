@@ -35,6 +35,8 @@ pub struct FunctionCfg {
     pub ssa_gen: SSAVariableGenerator,
 }
 
+
+
 #[derive(Debug, Clone)]
 pub struct BasicBlockEdge {
     writes: Vec<SSAVariable>,
@@ -196,6 +198,9 @@ impl FunctionCfg {
                     }
                 }
                 OpKind::CaptureNamedFunction(ref ident) => {
+                    calls.insert(ident.clone());
+                }
+                OpKind::BindClosure { ref ident } => {
                     calls.insert(ident.clone());
                 }
                 _ => (),
