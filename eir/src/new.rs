@@ -792,6 +792,14 @@ impl<'a> FunctionBuilder<'a> {
         unimplemented!()
     }
 
+    pub fn op_unreachable(&mut self) {
+        unimplemented!()
+    }
+
+    pub fn op_exc_trace(&mut self, val: Value) -> Value {
+        unimplemented!()
+    }
+
 }
 
 

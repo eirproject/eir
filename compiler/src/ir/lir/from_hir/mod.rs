@@ -132,7 +132,6 @@ impl FunctionDefinition {
 //}
 
 struct CaseStructureDef<'a> {
-    entry_ebb: Ebb,
     match_val: SSAVariable,
     clauses: Vec<CaseStructureClauseDef<'a>>,
     values: Vec<SSAVariable>,
@@ -141,9 +140,9 @@ struct CaseStructureDef<'a> {
 }
 struct CaseStructureClauseDef<'a> {
     patterns: Vec<::ir::hir::Pattern>,
-    guard: Box<Fn(&mut FunctionBuilder, &mut LirLowerState, &[SSAVariable])
+    guard: Box<Fn(&mut FunctionBuilder, &mut LirLowerState, Value, &[SSAVariable])
                   -> SSAVariable + 'a>,
-    body: Box<Fn(&mut FunctionBuilder, &mut LirLowerState, &[SSAVariable])
+    body: Box<Fn(&mut FunctionBuilder, &mut LirLowerState, Value, &[SSAVariable])
                  -> SSAVariable + 'a>,
 }
 
@@ -152,7 +151,6 @@ fn case_structure(
     st: &mut LirLowerState,
     def: &CaseStructureDef,
 ) -> SSAVariable {
-    let entry = def.entry_ebb;
 
     // The central block of the Case structure. Contains only one
     // operation, the OpKind::Case.
@@ -244,7 +242,8 @@ fn case_structure(
         // ==== Main path ====
         // Guard
         st.exc_stack.push_handler(guard_fail_ebb);
-        let guard_ret_ssa = (clause.guard)(b, st, &case_values_ssa);
+        let guard_ret_ssa = (clause.guard)(b, st, case_structure_value,
+                                           &case_values_ssa);
         st.exc_stack.pop_handler();
 
         // Guard value chech
@@ -255,7 +254,8 @@ fn case_structure(
         b.op_case_guard_ok(case_structure_value);
 
         // Body
-        let body_ssa = (clause.body)(b, st, &case_values_ssa);
+        let body_ssa = (clause.body)(b, st, case_structure_value,
+                                     &case_values_ssa);
 
         // Jump to merging Ebb
         let finish_call = b.create_ebb_call(done_ebb, &[st.bindings[&body_ssa]]);
@@ -417,145 +417,116 @@ impl hir::SingleExpression {
 
                 self.ssa
             },
-            //HSEK::Catch { ref body } => {
-            //    let mut catch_block = b.add_block();
-            //    let catch_ssa = b.new_ssa();
+            HSEK::Catch { ref body } => {
 
-            //    let ret_block = b.add_block();
+                let catch_ebb = b.insert_ebb();
+                let catch_val = b.add_ebb_argument(catch_ebb);
+                let catch_ssa = st.ssa_gen.next();
+                st.bindings.insert(catch_ssa, catch_val);
 
-            //    // Main path
-            //    exc_stack.push_catch(catch_block, catch_ssa);
-            //    let body_ssa = lower_chain!(body, b, env, exc_stack, main_cont);
-            //    exc_stack.pop_catch();
+                let ret_ebb = b.insert_ebb();
+                let ret_val = b.add_ebb_argument(ret_ebb);
 
-            //    let ret_jump = b.op_jump(main_cont, ret_block);
-            //    b.add_phi(ret_jump, body_ssa, self.ssa);
+                // Main path
+                st.exc_stack.push_handler(catch_ebb);
+                let body_ssa = body.lower(b, st);
+                st.exc_stack.pop_handler();
 
-            //    // Exception path
+                let ret_call = b.create_ebb_call(ret_ebb, &[st.bindings[&body_ssa]]);
+                b.op_jump(ret_call);
 
-            //    // Unpack exception
-            //    let e1_ssa = b.new_ssa();
-            //    let e2_ssa = b.new_ssa();
-            //    let e3_ssa = b.new_ssa();
-            //    b.op_unpack_value_list(
-            //        catch_block,
-            //        catch_ssa,
-            //        vec![e1_ssa, e2_ssa, e3_ssa]
-            //    );
+                // Exception path
 
-            //    let case_main_block = b.add_block();
-            //    let case_structure_ssa = b.new_ssa();
-            //    b.basic_op(
-            //        catch_block,
-            //        OpKind::CaseStart {
-            //            vars: catch_ssa,
-            //            clauses: vec![
-            //                Clause {
-            //                    patterns: vec![
-            //                        ::eir::pattern::Pattern {
-            //                            binds: HashSet::new(),
-            //                            node: ::eir::pattern::PatternNode::Atomic(
-            //                                Atom::from("throw").into()),
-            //                        },
-            //                    ]
-            //                },
-            //                Clause {
-            //                    patterns: vec![
-            //                        ::eir::pattern::Pattern {
-            //                            binds: HashSet::new(),
-            //                            node: ::eir::pattern::PatternNode::Atomic(
-            //                                Atom::from("exit").into()),
-            //                        },
-            //                    ]
-            //                },
-            //                Clause {
-            //                    patterns: vec![
-            //                        ::eir::pattern::Pattern {
-            //                            binds: HashSet::new(),
-            //                            node: ::eir::pattern::PatternNode::Atomic(
-            //                                Atom::from("error").into()),
-            //                        },
-            //                    ]
-            //                },
-            //            ],
-            //            value_vars: vec![],
-            //        },
-            //        vec![catch_ssa.into()],
-            //        vec![case_structure_ssa]
-            //    );
-            //    b.add_jump(catch_block, case_main_block);
+                // Unpack exception
+                b.position_at_end(ret_ebb);
+                b.op_unpack_value_list(catch_val, 3, &mut st.val_buf);
+                let e1_ssa = st.val_buf[0];
+                let e2_ssa = st.val_buf[1];
+                let e3_ssa = st.val_buf[2];
 
-            //    b.basic_op(
-            //        case_main_block,
-            //        OpKind::Case(3),
-            //        vec![case_structure_ssa.into()],
-            //        vec![]
-            //    );
+                let entry = b.current_ebb();
+                b.assert_at_end();
 
-            //    // Failure block. Since this is the value returned
-            //    // from the exception, this realistically never
-            //    // happen.
-            //    let fail_block = b.add_block();
-            //    b.add_jump(case_main_block, fail_block);
-            //    b.op_unreachable(fail_block);
+                let fail_ebb = b.insert_ebb();
 
-            //    // Throw case
-            //    let throw_block = b.add_block();
-            //    b.add_jump(case_main_block, throw_block);
-            //    b.op_case_values(throw_block, case_structure_ssa, vec![]);
-            //    b.op_case_guard_ok(throw_block, case_structure_ssa);
-            //    let ret_jump = b.op_jump(throw_block, ret_block);
-            //    b.add_phi(ret_jump, e2_ssa, self.ssa);
+                let true_ssa = st.ssa_gen.next();
+                let true_const = b.create_atomic(
+                    Atom::from("true").into());
+                st.bindings.insert(true_ssa, true_const);
 
-            //    // Exit case
-            //    let exit_block = b.add_block();
-            //    b.add_jump(case_main_block, exit_block);
-            //    b.op_case_values(exit_block, case_structure_ssa, vec![]);
-            //    b.op_case_guard_ok(exit_block, case_structure_ssa);
-            //    let exit_res_ssa = b.new_ssa();
-            //    b.op_make_tuple(
-            //        exit_block,
-            //        vec![
-            //            Atom::from("EXIT").into(),
-            //            Source::Variable(e2_ssa),
-            //        ],
-            //        exit_res_ssa
-            //    );
-            //    let ret_jump = b.op_jump(exit_block, ret_block);
-            //    b.add_phi(ret_jump, exit_res_ssa, self.ssa);
+                let case_ret_ssa = {
+                    let case_def = CaseStructureDef {
+                        match_val: catch_ssa,
+                        clauses: vec![
+                            CaseStructureClauseDef {
+                                patterns: vec![
+                                    ::ir::hir::Pattern {
+                                        binds: Vec::new(),
+                                        node: ::ir::hir::PatternNode::Atomic(
+                                            Atom::from("throw").into()),
+                                    },
+                                ],
+                                guard: Box::new(|b, st, match_val, _matches| true_ssa),
+                                body: Box::new(|b, st, case, _matches| {
+                                    let ssa = st.ssa_gen.next();
+                                    st.bindings.insert(ssa, e2_ssa);
+                                    ssa
+                                }),
+                            },
+                            CaseStructureClauseDef {
+                                patterns: vec![
+                                    ::ir::hir::Pattern {
+                                        binds: Vec::new(),
+                                        node: ::ir::hir::PatternNode::Atomic(
+                                            Atom::from("exit").into()),
+                                    }
+                                ],
+                                guard: Box::new(|b, st, match_val, _matches| true_ssa),
+                                body: Box::new(|b, st, case, _matches| {
+                                    let exit_const = b.create_atomic(
+                                        Atom::from("EXIT").into());
+                                    let ret = b.op_make_tuple(&[exit_const, e2_ssa]);
+                                    let ssa = st.ssa_gen.next();
+                                    st.bindings.insert(ssa, e2_ssa);
+                                    ssa
+                                }),
+                            },
+                            CaseStructureClauseDef {
+                                patterns: vec![
+                                    ::ir::hir::Pattern {
+                                        binds: Vec::new(),
+                                        node: ::ir::hir::PatternNode::Atomic(
+                                            Atom::from("error").into()),
+                                    }
+                                ],
+                                guard: Box::new(|b, st, match_val, _matches| true_ssa),
+                                body: Box::new(|b, st, case, _matches| {
+                                    let trace = b.op_exc_trace(e3_ssa);
+                                    let desc = b.op_make_tuple(&[e2_ssa, trace]);
+                                    let exit_const = b.create_atomic(
+                                        Atom::from("EXIT").into());
+                                    let res = b.op_make_tuple(&[exit_const, desc]);
 
-            //    // Error case
-            //    let error_block = b.add_block();
-            //    b.add_jump(case_main_block, error_block);
-            //    b.op_case_values(error_block, case_structure_ssa, vec![]);
-            //    b.op_case_guard_ok(error_block, case_structure_ssa);
-            //    let error_stacktrace_ssa = b.new_ssa();
-            //    b.op_primop(error_block, Atom::from("exc_trace"),
-            //                vec![Source::Variable(e3_ssa)],
-            //                vec![error_stacktrace_ssa]);
-            //    let error_int_res_ssa = b.new_ssa();
-            //    b.op_make_tuple(
-            //        error_block,
-            //        vec![
-            //            Source::Variable(e2_ssa),
-            //            Source::Variable(error_stacktrace_ssa),
-            //        ],
-            //        error_int_res_ssa,
-            //    );
-            //    let error_res_ssa = b.new_ssa();
-            //    b.op_make_tuple(
-            //        error_block,
-            //        vec![
-            //            Atom::from("EXIT").into(),
-            //            Source::Variable(error_int_res_ssa),
-            //        ],
-            //        error_res_ssa
-            //    );
-            //    let ret_jump = b.op_jump(error_block, ret_block);
-            //    b.add_phi(ret_jump, error_res_ssa, self.ssa);
+                                    let ssa = st.ssa_gen.next();
+                                    st.bindings.insert(ssa, res);
+                                    ssa
+                                }),
+                            },
+                        ],
+                        return_ssa: self.ssa,
+                        match_fail: Some(fail_ebb),
+                        values: vec![],
+                    };
+                };
 
-            //    (ret_block, self.ssa)
-            //},
+                // Failure block. Since this is the value returned
+                // from the exception, this realistically never
+                // happen.
+                b.position_at_end(fail_ebb);
+                b.op_unreachable();
+
+                self.ssa
+            },
             HSEK::Case { ref val, ref clauses, ref values } => {
                 // Lower values in the expression we match on
                 let val_ssa = val.lower(b, st);
@@ -574,18 +545,17 @@ impl hir::SingleExpression {
                 // Construct structure
                 let case_ret_ssa = {
                     let case_def = CaseStructureDef {
-                        entry_ebb: entry,
                         match_val: val_ssa,
                         clauses: clauses.iter().map(|cl| {
                             let body = cl.body.clone();
                             let guard = cl.guard.clone();
                             CaseStructureClauseDef {
                                 body: Box::new(
-                                    move |b, st, _matches|
+                                    move |b, st, _case, _matches|
                                     body.lower(b, st)
                                 ),
                                 guard: Box::new(
-                                    move |b, st, _matches|
+                                    move |b, st, _case, _matches|
                                     guard.lower(b, st)
                                 ),
                                 patterns: cl.patterns.clone(),
@@ -877,20 +847,19 @@ impl hir::SingleExpression {
                             let body = c.body.clone();
                             CaseStructureClauseDef {
                                 patterns: c.patterns.clone(),
-                                guard: Box::new(|b, st, _matches| {
+                                guard: Box::new(|b, st, _case, _matches| {
                                     let val = b.create_atomic(
                                         AtomicTerm::Atom(Atom::from("true")));
                                     let ssa = st.ssa_gen.next();
                                     st.bindings.insert(ssa, val);
                                     ssa
                                 }),
-                                body: Box::new(
-                                    move |b, st, _matches| body.lower(b, st)),
+                                body: Box::new(move |b, st, _case, _matches|
+                                               body.lower(b, st)),
                             }
                         }).collect();
                     let def = CaseStructureDef {
                         clauses: r_clauses,
-                        entry_ebb: match_body_ebb,
                         match_fail: Some(receive_loop_ebb),
                         match_val: message_ssa,
                         values: value_vars.clone(),
