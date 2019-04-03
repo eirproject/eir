@@ -178,35 +178,39 @@ impl FunctionCfg {
         let mut calls = HashSet::new();
         for node in self.graph.nodes() {
             let node_inner = node.inner.borrow();
-            let op_last = node_inner.ops.last().unwrap();
-            match op_last.kind {
-                OpKind::Call { .. } => {
-                    let arity = op_last.reads.len() - 2;
-                    let module = op_last.reads[0].constant()
-                        .map_or(None, |c| c.atom());
-                    let name = op_last.reads[1].constant()
-                        .map_or(None, |c| c.atom());
-                    if module.is_some() && name.is_some() {
-                        let module = module.unwrap();
-                        let name = name.unwrap();
-                        calls.insert(FunctionIdent {
-                            module: module,
-                            name: name,
-                            arity: arity,
-                            lambda: None,
-                        });
+            for op in node_inner.ops.iter() {
+                match op.kind {
+                    OpKind::Call { .. } => {
+                        let arity = op.reads.len() - 2;
+                        let module = op.reads[0].constant()
+                            .map_or(None, |c| c.atom());
+                        let name = op.reads[1].constant()
+                            .map_or(None, |c| c.atom());
+                        if module.is_some() && name.is_some() {
+                            let module = module.unwrap();
+                            let name = name.unwrap();
+                            calls.insert(FunctionIdent {
+                                module: module,
+                                name: name,
+                                arity: arity,
+                                lambda: None,
+                            });
+                        }
                     }
+                    OpKind::CaptureNamedFunction(ref ident) => {
+                        calls.insert(ident.clone());
+                    }
+                    OpKind::BindClosure { ref ident } => {
+                        calls.insert(ident.clone());
+                    }
+                    _ => (),
                 }
-                OpKind::CaptureNamedFunction(ref ident) => {
-                    calls.insert(ident.clone());
-                }
-                OpKind::BindClosure { ref ident } => {
-                    calls.insert(ident.clone());
-                }
-                _ => (),
             }
         }
         calls
     }
 
 }
+
+
+

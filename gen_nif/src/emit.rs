@@ -230,6 +230,9 @@ pub fn emit_eir_fun(context: &Context, module: &Module,
                         unimplemented!();
                     }
                 },
+                //OpKind::Apply { tail_call } => {
+                //
+                //},
                 OpKind::EqualAtomic(ref atomic) => {
                     let arg = emit_read(context, module, &builder, nif_refs,
                                         env, &bindings, &op.reads[0]);
@@ -340,7 +343,7 @@ pub fn emit_eir_fun(context: &Context, module: &Module,
                         num_captures_const.into(),
                         captures_arr.into(),
                     ];
-                    let call = builder.build_call(nif_refs.enif_get_long,
+                    let call = builder.build_call(nif_refs.make_lambda_environment,
                                                   &args, "funcall");
 
                     bindings.insert(op.writes[0], call.try_as_basic_value()
@@ -352,8 +355,26 @@ pub fn emit_eir_fun(context: &Context, module: &Module,
 
                     let fn_val = &protos[&ident];
 
-                    println!("{:?}", op);
-                    unimplemented!();
+                    let fun_num_const = i32_type.const_int(
+                        lambda_info.1 as u64, false);
+                    let lambda_env = emit_read(
+                        context, module, &builder,
+                        nif_refs, env, &bindings, &op.reads[0]);
+
+                    let args: Vec<BasicValueEnum> = vec![
+                        env.into(),
+                        fun_num_const.into(),
+                        fn_val.as_global_value().as_pointer_value().into(),
+                        lambda_env.into(),
+                    ];
+                    let call = builder.build_call(nif_refs.make_bound_lambda,
+                                                  &args, "funcall");
+
+                    bindings.insert(op.writes[0], call.try_as_basic_value()
+                                    .left().unwrap());
+
+                    //println!("{:?}", op);
+                    //unimplemented!();
                 }
                 _ => {
                     println!("{:?}", op.kind);

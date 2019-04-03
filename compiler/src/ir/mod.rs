@@ -11,7 +11,7 @@ mod fmt;
 use ::{ Atom, Variable };
 use ::parser;
 
-use ::eir::ssa::{ SSAVariable, INVALID_SSA };
+use ::ssa::{ SSAVariable, INVALID_SSA };
 
 pub struct Module {
     pub name: Atom,
@@ -28,11 +28,7 @@ impl Module {
             name: self.name,
             functions: self.functions.drain(..)
                 .map(|f| {
-                    let fun = ::eir::Function {
-                        ident: f.ident.clone(),
-                        lir: f.lir_function.unwrap(),
-                    };
-                    (f.ident, fun)
+                    (f.ident, f.eir_fun.unwrap())
                 }).collect(),
             lambda_envs: self.lambda_envs.unwrap(),
         }
@@ -44,8 +40,8 @@ pub struct FunctionDefinition {
     pub ident: FunctionIdent,
     pub visibility: FunctionVisibility,
     pub hir_fun: hir::Function,
-    pub lir_function: Option<lir::FunctionCfg>,
     pub lambda_env_idx: Option<LambdaEnvIdx>,
+    pub eir_fun: Option<::eir::Function>,
 }
 #[derive(Debug)]
 pub enum FunctionVisibility {
@@ -135,42 +131,43 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
     println!("STAGE: Functionwise");
     for fun_ident in fun_idents.iter() {
         let function = eir_module.functions.get_mut(fun_ident).unwrap();
-        let lir_mut = &mut function.lir;
-        println!("Function: {}", function.ident);
+        println!("Function: {}", function.ident());
 
-        if hardass_validate { lir_mut.validate(&function.ident) }
+        if hardass_validate { function.validate() }
 
         // Remove orphans in generated LIR
-        ::ir::lir::pass::remove_orphan_blocks(lir_mut);
-        if hardass_validate { lir_mut.validate(&function.ident) }
+        //::ir::lir::pass::remove_orphan_blocks(function);
+        //if hardass_validate { function.validate() }
 
         // Propagate atomics
-        ::ir::lir::pass::propagate_atomics(lir_mut);
-        if hardass_validate { lir_mut.validate(&function.ident) }
+        //::ir::lir::pass::propagate_atomics(function);
+        //if hardass_validate { function.validate() }
 
         // Promote tail calls
         // AFTER propagate atomics
-        ::ir::lir::pass::promote_tail_calls(lir_mut);
+        //::ir::lir::pass::promote_tail_calls(function);
         // REQUIRED after promote tail calls
-        ::ir::lir::pass::remove_orphan_blocks(lir_mut);
-        if hardass_validate { lir_mut.validate(&function.ident) }
+        //::ir::lir::pass::remove_orphan_blocks(function);
+        //if hardass_validate { function.validate() }
 
-        ::ir::lir::pass::simplify_branches(lir_mut);
-        ::ir::lir::pass::remove_orphan_blocks(lir_mut);
-        if hardass_validate { lir_mut.validate(&function.ident) }
+        //::ir::lir::pass::simplify_branches(function);
+        //::ir::lir::pass::remove_orphan_blocks(function);
+        //if hardass_validate { function.validate() }
 
         //let mut out = ::std::fs::File::create("immediate1.dot").unwrap();
         //::ir::lir::to_dot::function_to_dot(
         //    fun_ident, lir_mut, &mut out).unwrap();
 
-        ::ir::lir::pass::compile_pattern(&function.ident, lir_mut);
-        ::ir::lir::pass::propagate_atomics(lir_mut);
-        ::ir::lir::pass::simplify_branches(lir_mut);
-        ::ir::lir::pass::remove_orphan_blocks(lir_mut);
-        if hardass_validate { lir_mut.validate(&function.ident) }
+        //::ir::lir::pass::compile_pattern(function);
+        //::ir::lir::pass::propagate_atomics(function);
+        //::ir::lir::pass::simplify_branches(function);
+        //::ir::lir::pass::remove_orphan_blocks(function);
+        //if hardass_validate { function.validate() }
 
-        lir_mut.compress_numbering();
-        lir_mut.validate(&function.ident)
+        //lir_mut.compress_numbering();
+        function.validate();
+
+        //println!("Calls: {:?}", lir_mut.get_all_calls());
 
     }
 

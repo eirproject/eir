@@ -24,9 +24,9 @@ impl LambdaCollector {
         self.lambdas.push(FunctionDefinition {
             ident: ident.clone(),
             hir_fun: fun,
-            lir_function: None,
             visibility: FunctionVisibility::Lambda,
             lambda_env_idx: Some(env_idx),
+            eir_fun: None,
         });
     }
 

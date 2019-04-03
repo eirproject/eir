@@ -24,12 +24,6 @@ fn parse_otp_compiler_compile() {
     parse(&s).unwrap();
 }
 
-#[derive(Debug, Clone)]
-pub enum ConstantOrVariable {
-    Constant(Constant),
-    Variable(AVariable),
-}
-
 #[derive(Debug, Copy, Clone)]
 pub enum MapExactAssoc {
     Exact,
@@ -185,7 +179,7 @@ pub enum Pattern {
     Wildcard,
     BindVar(Annotated<Variable>, Box<Annotated<Pattern>>),
     Atomic(AtomicLiteral),
-    Binary(Vec<(Annotated<Pattern>, Vec<Annotated<ConstantOrVariable>>)>),
+    Binary(Vec<(Annotated<Pattern>, Vec<Annotated<SingleExpression>>)>),
     Tuple(Vec<Annotated<Pattern>>),
     List(Vec<Annotated<Pattern>>, Box<Annotated<Pattern>>),
     Map(Vec<Annotated<(Annotated<SingleExpression>, Annotated<Pattern>)>>),
@@ -212,7 +206,7 @@ pub struct Function {
 
 #[derive(Debug, Clone)]
 pub struct PrimOpCall {
-    pub name: Atom,
+    pub name: Annotated<Atom>,
     pub args: Vec<Expression>,
 }
 

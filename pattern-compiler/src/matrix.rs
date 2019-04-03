@@ -1,5 +1,6 @@
 use ::std::collections::HashSet;
 
+#[cfg(feature = "debug_table_print")]
 use ::prettytable::Table;
 
 use ::petgraph::graph::NodeIndex;
@@ -244,6 +245,7 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
         }
     }
 
+    #[cfg(feature = "debug_table_print")]
     pub fn to_table(&self, pat: &P) -> Table {
         use ::prettytable::Cell;
 

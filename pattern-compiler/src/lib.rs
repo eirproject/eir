@@ -2,6 +2,7 @@
 // http://www.cs.tufts.edu/~nr/cs257/archive/luc-maranget/jun08.pdf
 
 extern crate petgraph;
+#[cfg(feature = "debug_table_print")]
 extern crate prettytable;
 extern crate either;
 //extern crate util;

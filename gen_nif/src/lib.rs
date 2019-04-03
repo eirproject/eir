@@ -110,15 +110,18 @@ fn gen_prototypes(context: &Context, module: &Module, nif_refs: &NifTypes,
                   fun: &Function, protos: &mut HashMap<FunctionIdent, FunctionValue>) {
     let all_calls = fun.lir.get_all_calls();
 
-    let val = gen_prototype(context, module, nif_refs, &fun.ident);
-    protos.insert(fun.ident.clone(), val);
+    if !protos.contains_key(&fun.ident) {
+        let val = gen_prototype(context, module, nif_refs, &fun.ident);
+        protos.insert(fun.ident.clone(), val);
 
-    for call in all_calls.iter() {
-        if !protos.contains_key(call) {
-            let val = gen_prototype(context, module, nif_refs, call);
-            protos.insert(call.clone(), val);
+        for call in all_calls.iter() {
+            if !protos.contains_key(call) {
+                let val = gen_prototype(context, module, nif_refs, call);
+                protos.insert(call.clone(), val);
+            }
         }
     }
+
 }
 
 pub fn gen_module(eir: &EirModule, funs: &[FunctionIdent]) {
@@ -149,12 +152,14 @@ pub fn gen_module(eir: &EirModule, funs: &[FunctionIdent]) {
         let fun = &eir.functions[fun_ident];
         gen_prototypes(&context, &module, &nif_types, fun, &mut protos);
     }
+    println!("{:?}", protos);
 
     for key in protos.keys() {
         println!("{:?}", key);
     }
 
     for (ident, proto) in protos.iter() {
+        println!("{:?}", ident);
         let fun = &eir.functions[ident];
 
         emit_eir_fun(&context, &module, &nif_types, &protos, eir,

@@ -346,16 +346,17 @@ pub fn assign_ssa_pattern_node(env: &mut ScopeTracker, node: &mut PatternNode) {
         PatternNode::Atomic(_) => (),
         PatternNode::BindVar(_var, node) => assign_ssa_pattern_node(env, node),
         PatternNode::Binary(entries) => {
-            for (_bind, args) in entries.iter_mut() {
-                for arg in args.iter_mut() {
-                    match arg {
-                        ::parser::ConstantOrVariable::Variable(var) =>
-                            var.ssa = env.get(
-                                &ScopeDefinition::Variable(var.var.clone()))
-                            .unwrap(),
-                        _ => (),
-                    }
-                }
+            for (node, _args) in entries.iter_mut() {
+                assign_ssa_pattern_node(env, node);
+                //for arg in args.iter_mut() {
+                //    //match arg {
+                //    //    ::parser::ConstantOrVariable::Variable(var) =>
+                //    //        var.ssa = env.get(
+                //    //            &ScopeDefinition::Variable(var.var.clone()))
+                //    //        .unwrap(),
+                //    //    _ => (),
+                //    //}
+                //}
             }
         },
         PatternNode::Tuple(nodes) => {

@@ -6,8 +6,8 @@ impl fmt::Display for PatternNode {
         match self {
             PatternNode::Wildcard =>
                 write!(f, "_")?,
-            PatternNode::Bind(var, pat) =>
-                write!(f, "({} = {})", var, pat)?,
+            PatternNode::Assign(var, pat) =>
+                write!(f, "({:?} = {})", var, pat)?,
             PatternNode::Atomic(lit) =>
                 write!(f, "{:?}", lit)?,
             PatternNode::Tuple(nodes) => {
@@ -28,7 +28,7 @@ impl fmt::Display for PatternNode {
             PatternNode::Map(values) => {
                 write!(f, "~{{")?;
                 for (key_num, val) in values {
-                    write!(f, "{}; {}, ", key_num, val)?;
+                    write!(f, "V{}; {}, ", key_num.0, val)?;
                 }
                 write!(f, "}}~")?;
             },

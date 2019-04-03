@@ -175,14 +175,15 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
                         );
                     },
                     MatchKind::Map => {
-                        let map_bind = weight.variable_binds[0];
-                        for var_bind in weight.variable_binds.iter() {
-                            assert!(map_bind == *var_bind);
+                        if let Some(map_bind) = weight.variable_binds.get(0) {
+                            for var_bind in weight.variable_binds.iter() {
+                                assert!(map_bind == var_bind);
+                            }
+                            mappings.insert(*map_bind, match_ssa);
                         }
 
                         let ok_block = builder.add_block();
                         let nok_block = builder.add_block();
-                        mappings.insert(map_bind, match_ssa);
                         builder.op_is_map(
                             block_cont,
                             match_ssa.into(),

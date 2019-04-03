@@ -1,8 +1,6 @@
 extern crate itertools;
-extern crate string_intern;
 extern crate petgraph;
 extern crate either;
-extern crate prettytable;
 extern crate pretty;
 #[macro_use] extern crate lazy_static;
 extern crate regex;
@@ -26,6 +24,7 @@ pub type Variable = Atom;
 pub mod parser;
 pub mod ir;
 pub mod util;
+mod ssa;
 
 //#[cfg(test)]
 //mod erl_tests;

@@ -5,6 +5,7 @@ Cargo.lock
 *.dot
 *.dot.pdf
 *.core
+*.eir
 
 !test_data/**/*.core
 test_data/**/.*.core

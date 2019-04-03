@@ -2,7 +2,7 @@ use ::std::collections::HashMap;
 use ::Atom;
 use ::eir::FunctionIdent;
 use ::eir::{ LambdaEnv, LambdaEnvIdx, LambdaEnvIdxGenerator };
-use ::eir::ssa::{ SSAVariable, SSAVariableGenerator };
+use ::ssa::{ SSAVariable, SSAVariableGenerator };
 
 //#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 //pub struct LambdaEnvIdx(pub usize);

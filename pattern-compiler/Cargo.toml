@@ -7,8 +7,11 @@ description = "Utilities for compiling pattern matches into optimal decision tre
 license = "MIT/Apache-2.0"
 repository = "https://github.com/hansihe/core_erlang/tree/master/pattern-compiler"
 
+[features]
+debug_table_print = ["prettytable-rs"]
+
 [dependencies]
 either = "1.5"
 petgraph = "0.4"
-prettytable-rs = "0.8"
 derivative = "1.0"
+prettytable-rs = { version = "0.8", optional = true }

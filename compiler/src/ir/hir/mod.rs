@@ -1,9 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
 use ::std::fmt;
 use super::{ AVariable, AFunctionName, SSAVariable, FunctionIdent };
 use ::{ Atom, Variable };
+use ::eir::FunctionBuilder;
 use ::eir::LambdaEnvIdx;
-use ::parser::{ MapExactAssoc, ConstantOrVariable };
+use ::eir::Value;
+use ::parser::{ MapExactAssoc };
 
 pub mod from_parsed;
 pub mod pass;
@@ -296,6 +298,62 @@ impl Closure {
     }
 }
 
+use ::eir::pattern::{ ValueAssign, ValueRef };
+
+pub struct PatternLowerUtil<'a, 'b> {
+    builder: &'a mut FunctionBuilder<'b>,
+    bindings: &'a HashMap<SSAVariable, Value>,
+    assigns: HashMap<ValueAssign, SSAVariable>,
+    clause_assigns: Vec<ValueAssign>,
+    //values: Vec<Value>,
+}
+
+impl<'a, 'b> PatternLowerUtil<'a, 'b> {
+
+    pub fn new(builder: &'a mut FunctionBuilder<'b>,
+               bindings: &'a HashMap<SSAVariable, Value>) -> Self {
+        PatternLowerUtil {
+            builder: builder,
+            bindings: bindings,
+            assigns: HashMap::new(),
+            clause_assigns: Vec::new(),
+            //values: Vec::new(),
+        }
+    }
+
+    fn assign(&mut self, binds: &HashMap<Variable, SSAVariable>,
+              var: &Variable) -> ValueAssign {
+        let value_assign = ValueAssign(self.assigns.len());
+        self.assigns.insert(value_assign, binds[var]);
+        self.clause_assigns.push(value_assign);
+        value_assign
+    }
+
+    //fn const_or_var(&mut self, value: &ConstantOrVariable) -> ValueRef {
+    //    println!("add value");
+    //    let value = match value {
+    //        ConstantOrVariable::Variable(var) =>
+    //            self.bindings[&var.ssa],
+    //        ConstantOrVariable::Constant(constant) =>
+    //            self.builder.create_constant(constant.to_eir()),
+    //    };
+    //    let value_ref = ValueRef(self.values.len());
+    //    self.values.push(value);
+    //    value_ref
+    //}
+
+    pub fn finish_clause(&mut self) -> Vec<ValueAssign> {
+        let mut assign_vars = Vec::new();
+        ::std::mem::swap(&mut assign_vars, &mut self.clause_assigns);
+        assign_vars
+    }
+
+    pub fn finish(self) -> HashMap<ValueAssign, SSAVariable> {
+        self.assigns
+    }
+
+}
+
 #[derive(Debug, Clone)]
 pub struct Clause {
     /// Each of these patterns represents a single entry in the
@@ -326,11 +384,11 @@ impl Pattern {
             node: PatternNode::Wildcard,
         }
     }
-    pub fn to_eir(&self) -> ::eir::pattern::Pattern {
-        let binds_map: HashMap<_, _> = self.binds.iter().cloned().collect();
+    pub fn to_eir(&self, util: &mut PatternLowerUtil) -> ::eir::pattern::Pattern {
+        let pat_binds: HashMap<_, _> = self.binds.iter().cloned().collect();
+        let node = self.node.to_eir(&pat_binds, util);
         ::eir::pattern::Pattern {
-            binds: self.binds.iter().map(|(_var, ssa)| *ssa).collect(),
-            node: self.node.to_eir(&binds_map),
+            node: node,
         }
     }
 }
@@ -340,46 +398,44 @@ pub enum PatternNode {
     Wildcard,
     BindVar(Variable, Box<PatternNode>),
     Atomic(::eir::AtomicTerm),
-    Binary(Vec<(PatternNode, Vec<ConstantOrVariable>)>),
+    Binary(Vec<(PatternNode, Vec<usize>)>),
     Tuple(Vec<PatternNode>),
     List(Vec<PatternNode>, Box<PatternNode>),
     Map(Vec<(usize, Box<PatternNode>)>),
 }
 impl PatternNode {
-    fn to_eir(&self, binds: &HashMap<Variable, SSAVariable>) -> ::eir::pattern::PatternNode {
+    fn to_eir(&self, pat_binds: &HashMap<Variable, SSAVariable>,
+              util: &mut PatternLowerUtil) -> ::eir::pattern::PatternNode {
+
         use ::eir::pattern::PatternNode as EPN;
         match self {
             PatternNode::Wildcard => EPN::Wildcard,
             PatternNode::BindVar(var, node) =>
-                EPN::Bind(binds[var], Box::new(node.to_eir(binds))),
+                EPN::Assign(util.assign(pat_binds, var),
+                            Box::new(node.to_eir(pat_binds, util))),
             PatternNode::Atomic(atomic) => EPN::Atomic(atomic.clone()),
             PatternNode::Binary(entries) => {
                 let entries_n = entries.iter()
                     .map(|(pat, args)| {
                         ::eir::pattern::BinaryPatternElem {
-                            node: pat.to_eir(binds),
+                            node: pat.to_eir(pat_binds, util),
                             args: args.iter()
-                                .map(|a| {
-                                    match a {
-                                        ConstantOrVariable::Variable(var) =>
-                                            ::eir::pattern::ConstantOrSSA::SSA(var.ssa),
-                                        ConstantOrVariable::Constant(constant) =>
-                                            ::eir::pattern::ConstantOrSSA::Constant(constant.to_eir()),
-                                    }
-                                }).collect(),
+                                .map(|a| ValueRef(*a)).collect(),
                         }
                     }).collect();
                 EPN::Binary(entries_n)
             },
             PatternNode::Tuple(nodes) =>
-                EPN::Tuple(nodes.iter().map(|n| n.to_eir(binds)).collect()),
+                EPN::Tuple(nodes.iter()
+                           .map(|n| n.to_eir(pat_binds, util))
+                           .collect()),
             PatternNode::List(head, tail) =>
                 EPN::List(
-                    head.iter().map(|n| n.to_eir(binds)).collect(),
-                    Box::new(tail.to_eir(binds))),
+                    head.iter().map(|n| n.to_eir(pat_binds, util)).collect(),
+                    Box::new(tail.to_eir(pat_binds, util))),
             PatternNode::Map(nodes) =>
                 EPN::Map(nodes.iter()
-                         .map(|n| (n.0, Box::new(n.1.to_eir(binds))))
+                         .map(|n| (ValueRef(n.0), Box::new(n.1.to_eir(pat_binds, util))))
                          .collect()),
         }
     }

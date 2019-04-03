@@ -1,12 +1,12 @@
-use crate::{ SSAVariable, FunctionIdent, LambdaEnvIdx, Atom, Clause };
-use crate::{ Source, AtomicTerm };
+use crate::{ FunctionIdent, LambdaEnvIdx, Atom, Clause };
+use crate::{ Value, AtomicTerm };
 
-#[derive(Debug, Clone)]
-pub struct Op {
-    pub kind: OpKind,
-    pub reads: Vec<Source>,
-    pub writes: Vec<SSAVariable>,
-}
+//#[derive(Debug, Clone)]
+//pub struct Op {
+//    pub kind: OpKind,
+//    pub reads: Vec<Source>,
+//    pub writes: Vec<SSAVariable>,
+//}
 
 #[derive(Debug, Clone)]
 pub enum ComparisonOperation {
@@ -100,9 +100,9 @@ pub enum OpKind {
     ComparisonOperation(ComparisonOperation),
 
     CaseStart {
-        vars: SSAVariable,
+        //vars: Value,
         clauses: Vec<Clause>,
-        value_vars: Vec<SSAVariable>,
+        //value_vars: Vec<Value>,
     },
     /// High level matching construct, lowered to explicit control flow
     /// in a LIR compiler pass.
@@ -201,7 +201,7 @@ pub enum OpKind {
     /// Assists with CFG validation.
     /// Has a single read, indicates that the read variable should never be
     /// used after this point in the CFG.
-    TombstoneSSA(SSAVariable),
+    TombstoneSSA(Value),
 
     Unreachable,
 }
@@ -248,6 +248,19 @@ impl OpKind {
             OpKind::ReturnOk => false,
             OpKind::ReturnThrow => false,
             _ => true,
+        }
+    }
+
+    pub fn is_block_terminator(&self) -> bool {
+        match self {
+            OpKind::Call { tail_call: true } => true,
+            OpKind::Apply { tail_call: true } => true,
+            OpKind::Jump => true,
+            OpKind::CaseStart { .. } => true,
+            OpKind::Case(_) => true,
+            OpKind::ReturnOk => true,
+            OpKind::ReturnThrow => true,
+            _ => false,
         }
     }
 

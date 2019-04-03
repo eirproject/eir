@@ -6,7 +6,7 @@ use ::ir::{ Module, AVariable, AFunctionName, FunctionDefinition,
 use ::ir::hir::{ SingleExpression, SingleExpressionKind,
                  Function, Pattern, PatternNode, Closure };
 
-use ::eir::ssa::INVALID_SSA;
+use ::ssa::INVALID_SSA;
 
 impl Module {
     fn from_parsed(module: &::parser::Module) -> Self {
@@ -34,8 +34,8 @@ impl Module {
                         },
                         hir_fun: ::ir::hir::Function::from_parsed(&f.fun.0, &fun_ident),
                         ident: fun_ident,
-                        lir_function: None,
                         lambda_env_idx: None,
+                        eir_fun: None,
                     }
                 }).collect(),
             lambda_envs: None,
@@ -70,7 +70,11 @@ fn pat_node_from_parsed(node: &::parser::Pattern,
         PP::Binary(ref elems) => {
             PatternNode::Binary(
                 elems.iter().map(|(pat, opts)| {
-                    let opts_n = opts.iter().map(|o| o.0.clone()).collect();
+                    let opts_n = opts.iter().map(|o| {
+                        let curr_val_num = values.len();
+                        values.push(SingleExpression::from_parsed_single(&o.0, fun_ident));
+                        curr_val_num
+                    }).collect();
                     (pat_node_from_parsed(&pat.0, values, fun_ident), opts_n)
                 }).collect(),
             )
@@ -202,7 +206,7 @@ impl SingleExpression {
             },
             PSE::PrimOpCall(ref op) => {
                 SingleExpressionKind::PrimOp {
-                    name: op.name.clone(),
+                    name: op.name.0.clone(),
                     args: op.args.iter()
                         .map(|a| SingleExpression::from_parsed(a, fun_ident))
                         .collect(),

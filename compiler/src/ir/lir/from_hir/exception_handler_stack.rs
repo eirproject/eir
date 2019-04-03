@@ -1,35 +1,36 @@
-use ::eir::SSAVariable;
-use ::eir::cfg::{ FunctionCfgBuilder, LabelN };
+use ::ssa::SSAVariable;
+//use ::eir::cfg::{ FunctionCfgBuilder, LabelN };
+use ::eir::{ FunctionBuilder, Value, Ebb, EbbCall };
 
 pub struct ExceptionHandlerStack {
-    stack: Vec<(LabelN, Option<SSAVariable>)>,
+    stack: Vec<(Ebb, bool)>,
 }
 impl ExceptionHandlerStack {
 
-    pub fn new(root_label: LabelN, root_ssa: SSAVariable) -> Self {
-        ExceptionHandlerStack{
-            stack: vec![(root_label, Some(root_ssa))],
+    pub fn new(root_handler: Ebb) -> Self {
+        ExceptionHandlerStack {
+            stack: vec![(root_handler, true)],
         }
     }
 
-    pub fn push_catch(&mut self, label: LabelN, phi_ssa: SSAVariable) {
-        self.stack.push((label, Some(phi_ssa)));
+    pub fn push_handler(&mut self, ebb: Ebb) {
+        self.stack.push((ebb, true));
     }
-    pub fn push_catch_novalue(&mut self, label: LabelN) {
-        self.stack.push((label, None));
-    }
+    //pub fn push_handler_novalue(&mut self, ebb: Ebb) {
+    //    self.stack.push((ebb, false));
+    //}
 
-    pub fn pop_catch(&mut self) {
+    pub fn pop_handler(&mut self) {
         assert!(self.stack.len() > 1);
         self.stack.pop();
     }
 
-    pub fn add_error_jump(&self, b: &mut FunctionCfgBuilder,
-                      from_label: LabelN, exception_ssa: SSAVariable) {
-        let (handler_label, handler_ssa) = self.stack.last().unwrap();
-        let handler_jump = b.add_jump(from_label, *handler_label);
-        if let Some(ssa) = handler_ssa {
-            b.add_phi(handler_jump, exception_ssa, *ssa);
+    pub fn make_error_jump(&self, b: &mut FunctionBuilder, value: Value) -> EbbCall {
+        let (handler, has_arg) = self.stack.last().unwrap();
+        if *has_arg {
+            b.create_ebb_call(*handler, &[value])
+        } else {
+            b.create_ebb_call(*handler, &[])
         }
     }
 

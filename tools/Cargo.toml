@@ -11,6 +11,10 @@ path = "src/run_fun.rs"
 name = "gen_cfg"
 path = "src/gen_cfg.rs"
 
+[[bin]]
+name = "gen_eir"
+path = "src/gen_eir.rs"
+
 [dependencies]
 core_erlang_compiler = { path = "../compiler" }
 #core_erlang_interpreter = { path = "../interpreter" }

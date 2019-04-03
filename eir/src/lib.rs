@@ -6,15 +6,18 @@ pub use intern::Atom;
 
 pub mod op;
 
-pub mod ssa;
-pub use ssa::{ SSAVariable, SSAVariableGenerator };
+//pub mod ssa;
+//pub use ssa::{ SSAVariable, SSAVariableGenerator };
 
-pub mod cfg;
+//pub mod cfg;
 
 pub mod text;
 
 pub mod pattern;
 pub use pattern::{ Clause, Pattern };
+
+mod new;
+pub use new::{ Function, FunctionBuilder, EbbCall, Ebb, Op, Value };
 
 #[derive(Debug)]
 pub struct Module {
@@ -23,11 +26,11 @@ pub struct Module {
     pub functions: HashMap<FunctionIdent, Function>,
 }
 
-#[derive(Debug, Clone)]
-pub struct Function {
-    pub ident: FunctionIdent,
-    pub lir: cfg::FunctionCfg,
-}
+//#[derive(Debug, Clone)]
+//pub struct Function {
+//    pub ident: FunctionIdent,
+//    pub lir: cfg::FunctionCfg,
+//}
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub struct LambdaEnvIdx(usize);
@@ -118,47 +121,47 @@ impl ConstantTerm {
 
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Source {
-    Variable(SSAVariable),
-    Constant(ConstantTerm),
-}
-impl Source {
-
-    pub fn is_constant(&self) -> bool {
-        if let Source::Constant(_) = self {
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn constant(&self) -> Option<ConstantTerm> {
-        if let Source::Constant(constant) = self {
-            Some(constant.clone())
-        } else {
-            None
-        }
-    }
-
-}
-impl From<SSAVariable> for Source {
-    fn from(val: SSAVariable) -> Self {
-        Source::Variable(val)
-    }
-}
-impl From<ConstantTerm> for Source {
-    fn from(val: ConstantTerm) -> Self {
-        Source::Constant(val)
-    }
-}
-impl From<AtomicTerm> for Source {
-    fn from(val: AtomicTerm) -> Self {
-        Source::Constant(ConstantTerm::Atomic(val))
-    }
-}
-impl From<Atom> for Source {
-    fn from(val: Atom) -> Self {
-        Source::Constant(ConstantTerm::Atomic(AtomicTerm::Atom(val)))
-    }
-}
+//#[derive(Debug, Clone, PartialEq, Eq)]
+//pub enum Source {
+//    Variable(SSAVariable),
+//    Constant(ConstantTerm),
+//}
+//impl Source {
+//
+//    pub fn is_constant(&self) -> bool {
+//        if let Source::Constant(_) = self {
+//            true
+//        } else {
+//            false
+//        }
+//    }
+//
+//    pub fn constant(&self) -> Option<ConstantTerm> {
+//        if let Source::Constant(constant) = self {
+//            Some(constant.clone())
+//        } else {
+//            None
+//        }
+//    }
+//
+//}
+//impl From<SSAVariable> for Source {
+//    fn from(val: SSAVariable) -> Self {
+//        Source::Variable(val)
+//    }
+//}
+//impl From<ConstantTerm> for Source {
+//    fn from(val: ConstantTerm) -> Self {
+//        Source::Constant(val)
+//    }
+//}
+//impl From<AtomicTerm> for Source {
+//    fn from(val: AtomicTerm) -> Self {
+//        Source::Constant(ConstantTerm::Atomic(val))
+//    }
+//}
+//impl From<Atom> for Source {
+//    fn from(val: Atom) -> Self {
+//        Source::Constant(ConstantTerm::Atomic(AtomicTerm::Atom(val)))
+//    }
+//}

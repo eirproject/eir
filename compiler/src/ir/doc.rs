@@ -27,48 +27,48 @@ impl ToDoc for Module {
 
             let hir = Doc::newline().append(fun.hir_fun.body.to_doc());
 
-            let lir = {
-                let lir = fun.lir_function.as_ref().unwrap();
-                let lir_blocks = lir.graph.node_labels().map(|node_idx| {
-                    let head = Doc::newline()
-                        .append(Doc::text(format!("block #{}:", node_idx)));
+            //let lir = {
+            //    let lir = fun.lir_function.as_ref().unwrap();
+            //    let lir_blocks = lir.graph.node_labels().map(|node_idx| {
+            //        let head = Doc::newline()
+            //            .append(Doc::text(format!("block #{}:", node_idx)));
 
-                    let block_container = &lir.graph[node_idx];
-                    let block = block_container.inner.borrow();
+            //        let block_container = &lir.graph[node_idx];
+            //        let block = block_container.inner.borrow();
 
-                    let phis = block.phi_nodes.iter().map(|phi| {
-                        Doc::newline().append(Doc::text(format!("{:?}", phi)))
-                    });
+            //        let phis = block.phi_nodes.iter().map(|phi| {
+            //            Doc::newline().append(Doc::text(format!("{:?}", phi)))
+            //        });
 
-                    let block_ops = block.ops.iter().map(|op| {
-                        Doc::newline().append(Doc::text(format!("{:?}", op)))
-                    });
+            //        let block_ops = block.ops.iter().map(|op| {
+            //            Doc::newline().append(Doc::text(format!("{:?}", op)))
+            //        });
 
-                    let branches_vec = lir.graph[node_idx].outgoing.iter()
-                        .map(|branch| Doc::text(format!("{:?}", branch)));
-                    let branches = Doc::newline()
-                        .append(Doc::text("branch ["))
-                        .append(Doc::intersperse(branches_vec, Doc::text(",").append(Doc::space()))
-                                .nest(2).group())
-                        .append(Doc::text("]"));
+            //        let branches_vec = lir.graph[node_idx].outgoing.iter()
+            //            .map(|branch| Doc::text(format!("{:?}", branch)));
+            //        let branches = Doc::newline()
+            //            .append(Doc::text("branch ["))
+            //            .append(Doc::intersperse(branches_vec, Doc::text(",").append(Doc::space()))
+            //                    .nest(2).group())
+            //            .append(Doc::text("]"));
 
-                    Doc::concat(vec![
-                        head,
-                        Doc::concat(phis).nest(2),
-                        Doc::concat(block_ops).nest(2),
-                        branches.nest(2),
-                    ])
-                });
+            //        Doc::concat(vec![
+            //            head,
+            //            Doc::concat(phis).nest(2),
+            //            Doc::concat(block_ops).nest(2),
+            //            branches.nest(2),
+            //        ])
+            //    });
 
-                Doc::concat(lir_blocks)
-            };
+            //    Doc::concat(lir_blocks)
+            //};
 
             Doc::concat(vec![
                 signature,
                 Doc::newline().append(Doc::text("hir:")).nest(2),
                 hir.nest(4),
-                Doc::newline().append(Doc::text("lir:")).nest(2),
-                lir.nest(4),
+                //Doc::newline().append(Doc::text("lir:")).nest(2),
+                //lir.nest(4),
             ])
         });
         let funs_doc = Doc::concat(funs).nest(2);

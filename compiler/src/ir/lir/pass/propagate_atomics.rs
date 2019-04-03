@@ -1,10 +1,10 @@
-use ::ir::SSAVariable;
-use ::eir::{ Source, ConstantTerm };
+
+use ::eir::{ Value, ConstantTerm };
 use ::eir::op::OpKind;
-use ::eir::cfg::FunctionCfg;
+use ::eir::FunctionBuilder;
 use ::std::collections::{ HashMap, HashSet };
 
-pub fn propagate_atomics(cfg: &mut FunctionCfg) {
+pub fn propagate_atomics(builder: &mut FunctionBuilder) {
 
     // Write => Read
     let mut constants: HashMap<SSAVariable, ConstantTerm> = HashMap::new();
