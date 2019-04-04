@@ -1,4 +1,5 @@
 extern crate core_erlang_compiler;
+extern crate eir;
 
 use core_erlang_compiler::parser::Atom;
 use core_erlang_compiler::ir::LambdaEnvIdx;
@@ -47,8 +48,9 @@ fn main() {
 
         println!("Writing to {}.dot", infile);
         let mut out = ::std::fs::File::create(infile + ".dot").unwrap();
-        core_erlang_compiler::ir::lir::to_dot::function_to_dot(
-            &fun.0, &fun.1.lir, &mut out).unwrap();
+        ::eir::text::function_to_dot(&fun.1, &mut out).unwrap();
+        //core_erlang_compiler::ir::lir::to_dot::function_to_dot(
+        //    &fun.0, &fun.1.lir, &mut out).unwrap();
 
     } else {
         println!("No function name provided");

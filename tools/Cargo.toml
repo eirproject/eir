@@ -17,4 +17,5 @@ path = "src/gen_eir.rs"
 
 [dependencies]
 core_erlang_compiler = { path = "../compiler" }
+eir = { path = "../eir" }
 #core_erlang_interpreter = { path = "../interpreter" }
