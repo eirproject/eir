@@ -247,7 +247,8 @@ fn case_structure(
         st.exc_stack.pop_handler();
 
         // Guard value chech
-        let fail_call = b.create_ebb_call(guard_fail_ebb, &[]);
+        let no_value = b.op_make_no_value();
+        let fail_call = b.create_ebb_call(guard_fail_ebb, &[no_value]);
         b.op_branch_not_truthy(st.bindings[&guard_ret_ssa], fail_call);
 
         // CaseGuardOk
@@ -357,10 +358,15 @@ impl hir::SingleExpression {
                 let val_ssa = val.lower(b, st);
                 assert!(val.ssa == val_ssa);
 
-                b.op_unpack_value_list(st.bindings[&val_ssa],
-                                       vars.len(), &mut st.val_buf);
-                for (var, value) in vars.iter().zip(st.val_buf.iter()) {
-                    st.bindings.insert(var.ssa, *value);
+                if vars.len() == 1 {
+                    let val = st.bindings[&val_ssa];
+                    st.bindings.insert(vars[0].ssa, val);
+                } else {
+                    b.op_unpack_value_list(st.bindings[&val_ssa],
+                                           vars.len(), &mut st.val_buf);
+                    for (var, value) in vars.iter().zip(st.val_buf.iter()) {
+                        st.bindings.insert(var.ssa, *value);
+                    }
                 }
 
                 let body_ssa = body.lower(b, st);
@@ -438,7 +444,7 @@ impl hir::SingleExpression {
                 // Exception path
 
                 // Unpack exception
-                b.position_at_end(ret_ebb);
+                b.position_at_end(catch_ebb);
                 b.op_unpack_value_list(catch_val, 3, &mut st.val_buf);
                 let e1_ssa = st.val_buf[0];
                 let e2_ssa = st.val_buf[1];
@@ -466,8 +472,9 @@ impl hir::SingleExpression {
                                             Atom::from("throw").into()),
                                     },
                                 ],
-                                guard: Box::new(|b, st, match_val, _matches| true_ssa),
-                                body: Box::new(|b, st, case, _matches| {
+                                guard: Box::new(
+                                    |_b, _st, _match_val, _matches| true_ssa),
+                                body: Box::new(|_b, st, _case, _matches| {
                                     let ssa = st.ssa_gen.next();
                                     st.bindings.insert(ssa, e2_ssa);
                                     ssa
@@ -481,13 +488,14 @@ impl hir::SingleExpression {
                                             Atom::from("exit").into()),
                                     }
                                 ],
-                                guard: Box::new(|b, st, match_val, _matches| true_ssa),
-                                body: Box::new(|b, st, case, _matches| {
+                                guard: Box::new(
+                                    |_b, _st, _match_val, _matches| true_ssa),
+                                body: Box::new(|b, st, _case, _matches| {
                                     let exit_const = b.create_atomic(
                                         Atom::from("EXIT").into());
                                     let ret = b.op_make_tuple(&[exit_const, e2_ssa]);
                                     let ssa = st.ssa_gen.next();
-                                    st.bindings.insert(ssa, e2_ssa);
+                                    st.bindings.insert(ssa, ret);
                                     ssa
                                 }),
                             },
@@ -499,8 +507,9 @@ impl hir::SingleExpression {
                                             Atom::from("error").into()),
                                     }
                                 ],
-                                guard: Box::new(|b, st, match_val, _matches| true_ssa),
-                                body: Box::new(|b, st, case, _matches| {
+                                guard: Box::new(
+                                    |_b, _st, _match_val, _matches| true_ssa),
+                                body: Box::new(|b, st, _case, _matches| {
                                     let trace = b.op_exc_trace(e3_ssa);
                                     let desc = b.op_make_tuple(&[e2_ssa, trace]);
                                     let exit_const = b.create_atomic(
@@ -517,13 +526,23 @@ impl hir::SingleExpression {
                         match_fail: Some(fail_ebb),
                         values: vec![],
                     };
+
+                    case_structure(b, st, &case_def)
                 };
+                let ret_jmp = b.create_ebb_call(
+                    ret_ebb, &[st.bindings[&case_ret_ssa]]);
+                b.op_jump(ret_jmp);
+
+                assert!(case_ret_ssa == self.ssa);
+                st.bindings.insert(self.ssa, ret_val);
 
                 // Failure block. Since this is the value returned
                 // from the exception, this realistically never
                 // happen.
                 b.position_at_end(fail_ebb);
                 b.op_unreachable();
+
+                b.position_at_end(ret_ebb);
 
                 self.ssa
             },
@@ -538,9 +557,6 @@ impl hir::SingleExpression {
                     assert!(value_ssa == value.ssa);
                 }
                 let value_vars: Vec<_> = values.iter().map(|v| v.ssa).collect();
-
-                let entry = b.current_ebb();
-                b.assert_at_end();
 
                 // Construct structure
                 let case_ret_ssa = {
@@ -631,16 +647,6 @@ impl hir::SingleExpression {
                     st.val_buf.push(st.bindings[&value.ssa]);
                 }
 
-                // TODO INCORRECT CONTROL FLOW: Merge!
-                //main_cont = merge.as_ref()
-                //    .map_or(
-                //        main_cont,
-                //        |m| m.lower(b, env, exc_stack, main_cont).0);
-
-                //b.basic_op(main_cont,
-                //           OpKind::MakeMap,
-                //           reads, vec![self.ssa]);
-
                 let value = b.op_make_map(
                     merge.as_ref().map(|m| st.bindings[&m.ssa]),
                     &st.val_buf,
@@ -658,7 +664,6 @@ impl hir::SingleExpression {
 
                     assert!(opts.len() == 4);
                     for opt in opts {
-                        //let n_ssa = lower_chain!(opt, b, env, exc_stack, main_cont);
                         let n_ssa = opt.lower(b, st);
                         assert!(opt.ssa == n_ssa);
                     }
@@ -671,13 +676,6 @@ impl hir::SingleExpression {
                         st.val_buf.push(st.bindings[&opt.ssa]);
                     }
                 }
-
-                //b.basic_op(
-                //    main_cont,
-                //    OpKind::MakeBinary,
-                //    reads,
-                //    vec![self.ssa]
-                //);
 
                 let value = b.op_make_binary(&st.val_buf);
                 st.bindings.insert(self.ssa, value);
@@ -698,11 +696,6 @@ impl hir::SingleExpression {
                 }
 
                 // TODO:
-                //let mut reads = Vec::new();
-                //for arg in args.iter() {
-                //    let n_ssa = lower_chain!(arg, b, env, exc_stack, main_cont);
-                //    reads.push(Source::Variable(n_ssa));
-                //}
 
                 let exc_value = b.op_make_tuple(&st.val_buf);
                 let exc_jump = st.exc_stack.make_error_jump(b, exc_value);
@@ -744,27 +737,22 @@ impl hir::SingleExpression {
             HSEK::PrimOp { ref name, ref args } => {
                 //println!("PrimOp: {}", name);
 
-                //for arg in args.iter() {
-                //    let n_ssa = arg.lower(b, st);
-                //    assert!(arg.ssa == n_ssa);
-                //}
+                for arg in args.iter() {
+                    let n_ssa = arg.lower(b, st);
+                    assert!(arg.ssa == n_ssa);
+                }
 
-                //st.val_buf.clear();
-                //for arg in args.iter() {
-                //    st.val_buf.push(st.bindings[arg.ssa]);
-                //}
+                st.val_buf.clear();
+                for arg in args.iter() {
+                    st.val_buf.push(st.bindings[&arg.ssa]);
+                }
 
-                //b.
+                let val = b.op_primop(name.clone(), &st.val_buf);
+                st.bindings.insert(self.ssa, val);
 
-                //b.basic_op(
-                //    main_cont,
-                //    OpKind::PrimOp(name.clone()),
-                //    args.iter().map(|a| a.ssa.into()).collect(),
-                //    vec![self.ssa]);
+                //unimplemented!("PrimOp: {}", name);
 
-                //(main_cont, self.ssa)
-
-                unimplemented!("PrimOp: {}", name);
+                self.ssa
             },
             HSEK::Do(ref d1, ref d2) => {
                 let d1_ssa = d1.lower(b, st);
@@ -802,9 +790,7 @@ impl hir::SingleExpression {
 
                 // Entry to receive structure (#start)
                 let receive_loop_var = b.op_receive_start(
-                    st.bindings[&timeout_time_ssa]);
-                let loop_ebb_call = b.create_ebb_call(receive_loop_ebb, &[]);
-                b.op_jump(loop_ebb_call);
+                    st.bindings[&timeout_time_ssa], receive_loop_ebb);
 
                 // Receive loop block (#receive_loop)
                 b.position_at_end(receive_loop_ebb);
@@ -820,22 +806,12 @@ impl hir::SingleExpression {
                 let case_exit_call = b.create_ebb_call(
                     expression_exit_ebb, &[st.bindings[&case_ret_ssa]]);
                 b.op_jump(case_exit_call);
-                //b.basic_op(clause_ret_block, OpKind::Jump, vec![], vec![]);
-                //let exit_jump = b.add_jump(clause_ret_block, expression_exit_label);
-                //b.add_phi(exit_jump, clause_ret_ssa, self.ssa);
 
                 // Match logic (#match_body)
+                b.position_at_end(match_body_ebb);
                 let message_val = b.op_receive_get_message(receive_loop_var);
                 let message_ssa = st.ssa_gen.next();
                 st.bindings.insert(message_ssa, message_val);
-                //let message_label = b.new_ssa();
-                //let case_ret_label = b.new_ssa();
-                //b.basic_op(
-                //    match_body_label,
-                //    OpKind::ReceiveGetMessage,
-                //    vec![Source::Variable(receive_structure_ssa)],
-                //    vec![message_label]
-                //);
 
                 let case_ret_ssa = st.ssa_gen.next();
 

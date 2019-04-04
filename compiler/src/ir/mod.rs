@@ -4,6 +4,7 @@ pub mod hir;
 use ::ir::hir::scope_tracker::{ ScopeTracker, ScopeDefinition };
 pub use ::eir::{ LambdaEnv, LambdaEnvIdx };
 use ::eir::FunctionIdent;
+use ::eir::FunctionBuilder;
 pub mod lir;
 mod doc;
 mod fmt;
@@ -130,14 +131,15 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
 
     println!("STAGE: Functionwise");
     for fun_ident in fun_idents.iter() {
-        let function = eir_module.functions.get_mut(fun_ident).unwrap();
+        let mut function = eir_module.functions.get_mut(fun_ident).unwrap();
         println!("Function: {}", function.ident());
+        let mut builder = FunctionBuilder::new(&mut function);
 
-        if hardass_validate { function.validate() }
+        //if hardass_validate { builder.function().validate() }
 
         // Remove orphans in generated LIR
-        //::ir::lir::pass::remove_orphan_blocks(function);
-        //if hardass_validate { function.validate() }
+        ::ir::lir::pass::remove_orphan_blocks(&mut builder);
+        if hardass_validate { builder.function().validate() }
 
         // Propagate atomics
         //::ir::lir::pass::propagate_atomics(function);
@@ -165,7 +167,7 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
         //if hardass_validate { function.validate() }
 
         //lir_mut.compress_numbering();
-        function.validate();
+        builder.function().validate();
 
         //println!("Calls: {:?}", lir_mut.get_all_calls());
 

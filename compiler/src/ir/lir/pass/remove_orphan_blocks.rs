@@ -1,4 +1,5 @@
-use ::ir::lir::{ FunctionCfg, LabelN };
+//use ::ir::lir::{ FunctionCfg, LabelN };
+use ::eir::{ FunctionBuilder, Ebb };
 use ::std::collections::HashSet;
 
 /// This pass removes blocks which have no predecessors.
@@ -8,28 +9,33 @@ use ::std::collections::HashSet;
 /// An example is the `promote_tail_calls` pass which can produce
 /// an orphaned chain of blocks which end in a PHI which references
 /// a nonexistent SSA variable.
-pub fn remove_orphan_blocks(cfg: &mut FunctionCfg) {
+pub fn remove_orphan_blocks(builder: &mut FunctionBuilder) {
+    let fun = builder.function_mut();
+
+    let mut all_labels: HashSet<Ebb> = HashSet::new();
+    let mut jump_targets: HashSet<Ebb> = HashSet::new();
+
     loop {
+        all_labels.clear();
+        jump_targets.clear();
 
-        let mut all_labels: HashSet<LabelN> = HashSet::new();
-        let mut jump_targets: HashSet<LabelN> = HashSet::new();
-        jump_targets.insert(cfg.entry());
+        jump_targets.insert(fun.ebb_entry());
 
-        for block_container in cfg.graph.nodes() {
-            all_labels.insert(block_container.label);
-            for (_edge, dest) in block_container.outgoing.iter() {
-                jump_targets.insert(*dest);
+        for ebb in fun.iter_ebb() {
+            all_labels.insert(ebb);
+            for op in fun.iter_op(ebb) {
+                for branch in fun.op_branches(op) {
+                    jump_targets.insert(fun.ebb_call_target(*branch));
+                }
             }
         }
-
-        //println!("ALL: {:?}", all_labels);
-        //println!("ALIVE: {:?}", jump_targets);
 
         let mut found = false;
         for orphan in all_labels.difference(&jump_targets) {
             //println!("Removing orphan: {}", orphan);
             found = true;
-            cfg.remove_block(*orphan);
+            fun.ebb_remove(*orphan);
+            //cfg.remove_block(*orphan);
         }
         if !found { break; }
 

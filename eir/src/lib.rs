@@ -16,8 +16,8 @@ pub mod text;
 pub mod pattern;
 pub use pattern::{ Clause, Pattern };
 
-mod new;
-pub use new::{ Function, FunctionBuilder, EbbCall, Ebb, Op, Value };
+mod fun;
+pub use fun::{ Function, FunctionBuilder, EbbCall, Ebb, Op, Value };
 
 #[derive(Debug)]
 pub struct Module {

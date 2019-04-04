@@ -41,6 +41,8 @@ pub enum OpKind {
     /// Move r[0] into w[0]
     Move,
 
+    ExcTrace,
+
     /// Calls r[0]:r[1] with args r[2..]
     /// Jumps to branch slot 0 on return, 1 on exception
     Call { tail_call: bool },
