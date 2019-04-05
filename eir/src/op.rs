@@ -260,6 +260,7 @@ impl OpKind {
             OpKind::Jump => true,
             OpKind::CaseStart { .. } => true,
             OpKind::Case(_) => true,
+            OpKind::CaseGuardFail { .. } => true,
             OpKind::ReturnOk => true,
             OpKind::ReturnThrow => true,
             _ => false,

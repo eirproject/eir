@@ -5,7 +5,7 @@ use std::io::Write;
 use matches::assert_matches;
 
 use crate::{ Function, FunctionIdent, Atom, Value };
-use crate::op::{ OpKind };
+use crate::op::{ OpKind, ComparisonOperation };
 use crate::{ Ebb, Op, EbbCall };
 use crate::fun::ValueType;
 use crate::pattern::PatternNode;
@@ -358,7 +358,7 @@ impl ToEirTextFun for Ebb {
                     write!(out, "case_guard_ok")?;
                 },
                 OpKind::CaseGuardFail { .. } => {
-                    assert_matches!(sig, (1, 0, 0));
+                    assert_matches!(sig, (1, 0, 1));
                     write!(out, "case_guard_fail")?;
                 },
                 OpKind::IfTruthy => {
@@ -373,6 +373,10 @@ impl ToEirTextFun for Ebb {
                 OpKind::MakeTuple => {
                     assert_matches!(sig, (_, 1, 0));
                     write!(out, "make_tuple")?;
+                },
+                OpKind::UnpackTuple => {
+                    assert_matches!(sig, (1, _, 1));
+                    write!(out, "unpack_tuple")?;
                 },
                 OpKind::MakeList => {
                     assert_matches!(sig, (_, 1, 0));
@@ -484,6 +488,20 @@ impl ToEirTextFun for Ebb {
                     assert_matches!(sig, (0, 0, 0));
                     write!(out, "unreachable")?;
                 },
+                OpKind::ComparisonOperation(oper) => {
+                    assert_matches!(sig, (2, 0, 1));
+                    write!(out, "compare ")?;
+                    match oper {
+                        ComparisonOperation::Equal => {
+                            write!(out, "equal")?;
+                        }
+                        _ => unimplemented!(),
+                    }
+                },
+                OpKind::Move => {
+                    assert_matches!(sig, (1, 1, 0));
+                    write!(out, "move")?;
+                }
                 _ => {
                     unimplemented!("ToEirText unimplemented for: {:?}", kind);
                 },

@@ -102,6 +102,29 @@ impl Layout {
         }
     }
 
+    pub fn remove_op(&mut self, op: Op) {
+        let prev = self.ops[op].prev;
+        let next = self.ops[op].next;
+        let ebb = self.ops[op].ebb.unwrap();
+
+        if let Some(next) = next {
+            assert!(self.ops[next].prev == Some(op));
+            self.ops[next].prev = prev;
+        } else {
+            assert!(self.ebbs[ebb].last_op == Some(op));
+            self.ebbs[ebb].last_op = prev;
+        }
+
+        if let Some(prev) = prev {
+            assert!(self.ops[prev].next == Some(op));
+            self.ops[prev].next = next;
+        } else {
+            assert!(self.ebbs[ebb].first_op == Some(op));
+            self.ebbs[ebb].first_op = next;
+        }
+
+    }
+
     pub fn insert_ebb_after(&mut self, prev: Ebb, ebb: Ebb) {
         // TODO: Validate not inserted
         let next = self.ebbs[prev].next;
@@ -226,6 +249,9 @@ impl<'a> Iterator for OpIter<'a> {
 }
 
 #[derive(Debug)]
+pub struct WriteToken(Value);
+
+#[derive(Debug)]
 pub struct Function {
 
     ident: FunctionIdent,
@@ -266,10 +292,6 @@ impl Function {
         }
     }
 
-    pub fn ebb_remove(&mut self, ebb: Ebb) {
-        self.layout.remove_ebb(ebb)
-    }
-
     pub fn new_variable(&mut self) -> Value {
         self.values.push(ValueType::Variable)
     }
@@ -298,16 +320,20 @@ impl Function {
     pub fn ebb_entry(&self) -> Ebb {
         self.layout.first_ebb.unwrap()
     }
-
     pub fn ebb_args<'a>(&'a self, ebb: Ebb) -> &'a [Value] {
         self.ebbs[ebb].arguments.as_slice(&self.value_pool)
     }
-
     pub fn ebb_call_target<'a>(&'a self, ebb: EbbCall) -> Ebb {
         self.ebb_calls[ebb].block
     }
     pub fn ebb_call_args<'a>(&'a self, ebb: EbbCall) -> &'a [Value] {
         self.ebb_calls[ebb].values.as_slice(&self.value_pool)
+    }
+    pub fn ebb_call_set_target(&mut self, call: EbbCall, ebb: Ebb) {
+        self.ebb_calls[call].block = ebb;
+    }
+    pub fn ebb_remove(&mut self, ebb: Ebb) {
+        self.layout.remove_ebb(ebb)
     }
 
     pub fn op_kind<'a>(&'a self, op: Op) -> &'a OpKind {
@@ -321,6 +347,19 @@ impl Function {
     }
     pub fn op_branches<'a>(&'a self, op: Op) -> &[EbbCall] {
         self.ops[op].ebb_calls.as_slice(&self.ebb_call_pool)
+    }
+    pub fn op_ebb(&self, op: Op) -> Ebb {
+        self.layout.ops[op].ebb.unwrap()
+    }
+    pub fn op_remove(&mut self, op: Op) {
+        self.layout.remove_op(op);
+    }
+    pub fn op_remove_take_writes(&mut self, op: Op, writes: &mut Vec<WriteToken>) {
+        writes.clear();
+        for write in self.op_writes(op) {
+            writes.push(WriteToken(*write));
+        }
+        self.op_remove(op);
     }
 
     pub fn value<'a>(&'a self, value: Value) -> &'a ValueType {

@@ -1,6 +1,6 @@
 use ::pattern_compiler::{ PatternProvider, ExpandedClauseNodes };
-use ::eir::{ AtomicTerm, SSAVariable };
-use ::eir::pattern::{ Clause, Pattern, PatternNode };
+use ::eir::{ AtomicTerm, Value };
+use ::eir::pattern::{ Clause, Pattern, PatternNode, ValueRef, ValueAssign };
 use ::std::collections::{ HashMap, HashSet };
 
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
@@ -20,7 +20,7 @@ pub enum NodeKind {
     Map,
     // A map is matched by an interned value.
     // This matches only a single k=>v mapping in a map.
-    MapItem(usize),
+    MapItem(ValueRef),
 
     // Meta
     ValueList,
@@ -121,7 +121,7 @@ impl PatternProvider for ErlangPatternProvider {
             };
         }
 
-        println!("ClauseNodes: {:?}", clause_nodes);
+        //println!("ClauseNodes: {:?}", clause_nodes);
 
         let typ = &self.pattern[clause_nodes[0].0];
         let kind = typ.kind;
@@ -148,9 +148,8 @@ impl PatternProvider for ErlangPatternProvider {
                     }
                 }
 
-                let mut values: Vec<_> = values_map.iter().map(|v| (v.0).1).collect();
-                values.sort();
-                values.dedup();
+                let mut values: HashSet<_> = values_map.iter()
+                    .map(|v| (v.0).1).collect();
 
                 let map_var = self.next_var;
                 self.next_var.0 += 1;
@@ -208,13 +207,15 @@ impl PatternProvider for ErlangPatternProvider {
 
 pub struct PatternValueCollector {
     pub atomic_terms: Vec<AtomicTerm>,
-    pub node_bindings: HashMap<PatternRef, SSAVariable>,
+    pub node_bindings: HashMap<PatternRef, ValueAssign>,
+    pub clause_assigns: Vec<Vec<ValueAssign>>,
 }
 impl PatternValueCollector {
     fn new() -> Self {
         PatternValueCollector {
             atomic_terms: Vec::new(),
             node_bindings: HashMap::new(),
+            clause_assigns: Vec::new(),
         }
     }
 }
@@ -227,9 +228,9 @@ fn pattern_node_to_provider(provider: &mut ErlangPatternProvider,
         PatternNode::Wildcard => {
             provider.add_child(parent, NodeKind::Wildcard)
         }
-        PatternNode::Bind(ssa, inner) => {
+        PatternNode::Assign(assign, inner) => {
             let child = pattern_node_to_provider(provider, collector, inner, parent);
-            collector.node_bindings.insert(child, *ssa);
+            collector.node_bindings.insert(child, *assign);
             child
         }
         PatternNode::Atomic(atomic_term) => {
@@ -278,6 +279,8 @@ pub fn pattern_to_provider(clauses: &[Clause]) -> (PatternValueCollector, Erlang
     for clause in clauses {
         let node = provider.add_clause();
         roots.push(node);
+
+        collector.clause_assigns.push(clause.assigns.clone());
 
         for value in clause.patterns.iter() {
             pattern_node_to_provider(&mut provider, &mut collector,

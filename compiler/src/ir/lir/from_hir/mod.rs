@@ -264,10 +264,7 @@ fn case_structure(
 
         // ==== Fail path ====
         b.position_at_end(guard_fail_ebb);
-        b.op_case_guard_fail(case_structure_value, idx);
-
-        let case_body_call = b.create_ebb_call(match_body_ebb, &[]);
-        b.op_jump(case_body_call);
+        b.op_case_guard_fail(case_structure_value, idx, match_body_ebb);
     }
 
     b.position_at_end(done_ebb);
@@ -390,10 +387,15 @@ impl hir::SingleExpression {
 
                 // == Then clause ==
                 // Unpack the result value list of the body
-                b.op_unpack_value_list(st.bindings[&body_ssa],
-                                       then_vars.len(), &mut st.val_buf);
-                for (ssa, val) in then_vars.iter().zip(st.val_buf.iter()) {
-                    st.bindings.insert(ssa.ssa, *val);
+                if then_vars.len() == 1 {
+                    let val = st.bindings[&body_ssa];
+                    st.bindings.insert(then_vars[0].ssa, val);
+                } else {
+                    b.op_unpack_value_list(st.bindings[&body_ssa],
+                                           then_vars.len(), &mut st.val_buf);
+                    for (ssa, val) in then_vars.iter().zip(st.val_buf.iter()) {
+                        st.bindings.insert(ssa.ssa, *val);
+                    }
                 }
 
                 // Then block

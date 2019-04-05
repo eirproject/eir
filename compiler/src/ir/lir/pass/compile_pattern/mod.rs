@@ -3,6 +3,8 @@ use ::ir::lir;
 use ::petgraph::{ Graph, Direction };
 use ::petgraph::graph::NodeIndex;
 
+use ::matches::assert_matches;
+
 use std::collections::{ HashSet, HashMap };
 
 use ::ir::SSAVariable;
@@ -12,91 +14,213 @@ use ::ir::hir::Clause;
 use ::ir::hir::PatternNode;
 
 use ::eir::{ ConstantTerm, AtomicTerm };
-use ::eir::{ Source, FunctionIdent };
+//use ::eir::{ Source, FunctionIdent };
 use ::eir::op::OpKind;
-use ::eir::cfg::{ LabelN, EdgeN };
+//use ::eir::cfg::{ LabelN, EdgeN };
+use ::eir::{ Ebb, Op, EbbCall, Value };
+use ::eir::{ Function, FunctionBuilder };
+use ::eir::pattern::ValueAssign;
 
 use ::pattern_compiler::{ PatternProvider, ExpandedClauseNodes, PatternCfg, CfgNodeIndex };
 
 mod erlang_pattern_provider;
 use self::erlang_pattern_provider::{ ErlangPatternProvider, PatternValueCollector, PatternVar };
 
-struct CaseClauseDef {
-    out_edge: EdgeN,
-    fail_edges: HashSet<EdgeN>,
-    success_edges: HashSet<EdgeN>,
-}
-
 struct CaseDef {
-    entry: LabelN,
-    main: LabelN,
-    fail_edge: EdgeN,
-    clauses: Vec<CaseClauseDef>,
+    start_op: Op,
+    match_on: Value,
+    match_values: Vec<Value>,
+    body_ebb: Ebb,
+    body_op: Op,
+    guard_branches: Vec<EbbCall>,
+    fail_branch: EbbCall,
+    ok_ops: HashSet<Op>,
+    fail_ops: HashSet<(usize, Op)>,
 }
 
-fn find_exits(lir: &::eir::cfg::FunctionCfg, case_body: LabelN, case_ssa: SSAVariable, initial: (EdgeN, LabelN)) -> Option<(HashSet<EdgeN>, HashSet<EdgeN>)> {
-    let mut visited: HashSet<LabelN> = HashSet::new();
-    let mut to_visit = vec![initial];
+fn map_case_structure(fun: &Function, start: Op) -> CaseDef {
 
-    let mut ok_exits = HashSet::new();
-    let mut fail_exits = HashSet::new();
+    // Start Op
+    let start_kind = fun.op_kind(start);
+    let clauses = if let OpKind::CaseStart { clauses } = start_kind { clauses }
+    else { panic!() };
+    let case_val = fun.op_writes(start)[0];
+    let case_reads = fun.op_reads(start);
+    let case_on = case_reads[0];
+    let case_values = &case_reads[1..];
 
-    'outer: while to_visit.len() > 0 {
-        let (in_edge, in_label) = to_visit.pop().unwrap();
-        if visited.contains(&in_label) { continue };
+    // Start branch
+    let branches = fun.op_branches(start);
+    assert!(branches.len() == 1);
+    assert!(fun.ebb_call_args(branches[0]).len() == 0);
 
-        let node = &lir.graph[in_label];
-        let node_inner = node.inner.borrow();
+    // Body Ebb
+    let body_ebb = fun.ebb_call_target(branches[0]);
+    assert!(fun.ebb_args(body_ebb).len() == 0);
 
-        visited.insert(in_label);
-        for op in node_inner.ops.iter() {
-            let v = Source::Variable(case_ssa);
-            match op.kind {
-                OpKind::CaseGuardOk if op.reads[0] == v => {
-                    ok_exits.insert(in_edge);
-                    continue 'outer;
-                },
-                OpKind::CaseGuardFail { .. } if op.reads[0] == v => {
-                    assert!(node.outgoing.len() == 1);
-                    assert!(node.outgoing[0].1 == case_body);
-                    fail_exits.insert(node.outgoing[0].0);
-                    continue 'outer;
-                },
-                _ => ()
-            }
-        }
-        let op = node_inner.ops.last().unwrap();
-        match op.kind {
-            ref kind if kind.num_jumps() == Some(0) => {
-                return None;
-            }
-            OpKind::CaseStart { .. } if op.writes[0] == case_ssa => {
-                return None;
-            }
-            _ => {
-                for out in node.outgoing.iter() {
-                    to_visit.push(*out);
+    // Body Op
+    let mut body_op_iter = fun.iter_op(body_ebb);
+    let body_op = body_op_iter.next().unwrap();
+    assert!(body_op_iter.next().is_none());
+    assert_matches!(fun.op_kind(body_op), OpKind::Case(num) if *num == clauses.len());
+
+    // Body branches
+    let body_branches = fun.op_branches(body_op);
+    assert!(body_branches.len() == clauses.len() + 1);
+
+    let mut visited = HashSet::new();
+    let mut to_visit = Vec::new();
+
+    for (idx, branch) in body_branches[1..].iter().enumerate() {
+        assert!(fun.ebb_call_args(*branch).len() == 0);
+        to_visit.push((idx, fun.ebb_call_target(*branch)));
+    }
+    let guard_branches = body_branches.iter().skip(1).cloned().collect();
+
+    let mut ok_ops = HashSet::new();
+    let mut fail_ops = HashSet::new();
+
+    while to_visit.len() > 0 {
+        let (clause_num, block) = to_visit.pop().unwrap();
+        if visited.contains(&(clause_num, block)) { continue; }
+
+        'ops: for op in fun.iter_op(block) {
+            match fun.op_kind(op) {
+                OpKind::CaseGuardOk => {
+                    if fun.op_reads(op)[0] != case_val { continue 'ops; }
+                    ok_ops.insert(op);
+                    break 'ops;
                 }
+                OpKind::CaseGuardFail { clause_num: cnum } => {
+                    if fun.op_reads(op)[0] != case_val { continue 'ops; }
+                    assert!(clause_num == *cnum);
+
+                    let branches = fun.op_branches(op);
+                    assert!(branches.len() == 1);
+                    let branch = branches[0];
+                    assert!(fun.ebb_call_target(branch) == body_ebb);
+
+                    fail_ops.insert((clause_num, op));
+                }
+                OpKind::ReturnOk => panic!(),
+                OpKind::ReturnThrow => panic!(),
+                _ => {
+                    for branch in fun.op_branches(op) {
+                        let next = fun.ebb_call_target(*branch);
+                        to_visit.push((clause_num, next));
+                    }
+                },
             }
         }
+        visited.insert((clause_num, block));
     }
 
-    Some((ok_exits, fail_exits))
+    CaseDef {
+        start_op: start,
+        match_on: case_on,
+        match_values: case_values.to_vec(),
+        body_ebb: body_ebb,
+        body_op: body_op,
+        guard_branches: guard_branches,
+        fail_branch: body_branches[0],
+        ok_ops: ok_ops,
+        fail_ops: fail_ops,
+    }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//struct CaseClauseDef {
+//    out_edge: EdgeN,
+//    fail_edges: HashSet<EdgeN>,
+//    success_edges: HashSet<EdgeN>,
+//}
+//
+//struct CaseDef {
+//    entry: LabelN,
+//    main: LabelN,
+//    fail_edge: EdgeN,
+//    clauses: Vec<CaseClauseDef>,
+//}
+//
+//fn find_exits(lir: &Function, case_body: Ebb, case_ssa: Value, initial: (EdgeN, LabelN)) -> Option<(HashSet<EdgeN>, HashSet<EdgeN>)> {
+//    let mut visited: HashSet<LabelN> = HashSet::new();
+//    let mut to_visit = vec![initial];
+//
+//    let mut ok_exits = HashSet::new();
+//    let mut fail_exits = HashSet::new();
+//
+//    'outer: while to_visit.len() > 0 {
+//        let (in_edge, in_label) = to_visit.pop().unwrap();
+//        if visited.contains(&in_label) { continue };
+//
+//        let node = &lir.graph[in_label];
+//        let node_inner = node.inner.borrow();
+//
+//        visited.insert(in_label);
+//        for op in node_inner.ops.iter() {
+//            let v = Source::Variable(case_ssa);
+//            match op.kind {
+//                OpKind::CaseGuardOk if op.reads[0] == v => {
+//                    ok_exits.insert(in_edge);
+//                    continue 'outer;
+//                },
+//                OpKind::CaseGuardFail { .. } if op.reads[0] == v => {
+//                    assert!(node.outgoing.len() == 1);
+//                    assert!(node.outgoing[0].1 == case_body);
+//                    fail_exits.insert(node.outgoing[0].0);
+//                    continue 'outer;
+//                },
+//                _ => ()
+//            }
+//        }
+//        let op = node_inner.ops.last().unwrap();
+//        match op.kind {
+//            ref kind if kind.num_jumps() == Some(0) => {
+//                return None;
+//            }
+//            OpKind::CaseStart { .. } if op.writes[0] == case_ssa => {
+//                return None;
+//            }
+//            _ => {
+//                for out in node.outgoing.iter() {
+//                    to_visit.push(*out);
+//                }
+//            }
+//        }
+//    }
+//
+//    Some((ok_exits, fail_exits))
+//}
+
 struct DecisionTreeDestinations {
-    fail: LabelN,
-    guard_fails: Vec<LabelN>,
-    leaves: Vec<LabelN>,
+    fail: Ebb,
+    guard_fails: Vec<Ebb>,
+    leaves: Vec<Ebb>,
 }
 
 fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
                             collector: &PatternValueCollector,
-                            builder: &mut ::eir::cfg::FunctionCfgBuilder,
-                            mappings: &mut HashMap<PatternVar, SSAVariable>,
-                            value_vars: &[Source],
+                            b: &mut FunctionBuilder,
+                            mappings: &mut HashMap<PatternVar, Value>,
                             destinations: &DecisionTreeDestinations,
-                            block: LabelN,
+                            value_bindings: &mut HashMap<ValueAssign, Value>,
+                            case_map: &CaseDef,
                             cfg_node: CfgNodeIndex) {
     use ::pattern_compiler::CfgNodeKind;
     use self::erlang_pattern_provider::NodeKind as MatchKind;
@@ -105,8 +229,7 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
     match dec.graph[cfg_node] {
         CfgNodeKind::Root => unreachable!(),
         CfgNodeKind::Match(var) => {
-            let match_ssa = mappings[&var];
-            let mut block_cont = block;
+            let match_val = mappings[&var];
             let mut wildcard_node = None;
             for outgoing in dec.graph.edges(cfg_node) {
                 let weight = outgoing.weight();
@@ -118,100 +241,91 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
                     },
                     MatchKind::TupleSize(size) => {
                         assert!(size == weight.variable_binds.len());
-                        let ssa_binds: Vec<_> = (0..size)
-                            .map(|_| builder.new_ssa()).collect();
-                        for (ssa, var) in ssa_binds.iter().zip(
-                            weight.variable_binds.iter()) {
-                            mappings.insert(*var, *ssa);
+
+                        let nok_ebb = b.insert_ebb();
+
+                        let mut values = Vec::new();
+                        let call = b.create_ebb_call(nok_ebb, &[]);
+                        b.op_unpack_tuple(match_val, size, &mut values, call);
+
+                        assert!(values.len() == weight.variable_binds.len());
+
+                        for (var, val) in weight.variable_binds.iter().zip(values.iter()) {
+                            mappings.insert(*var, *val);
                         }
-                        let ok_block = builder.add_block();
-                        let nok_block = builder.add_block();
-                        builder.op_unpack_tuple(
-                            block_cont,
-                            match_ssa.into(), ssa_binds,
-                            ok_block, nok_block
-                        );
-                        block_cont = nok_block;
+
                         decision_tree_to_cfg_rec(
-                            dec, collector, builder, mappings, value_vars,
-                            destinations, ok_block, outgoing.target()
+                            dec, collector, b, mappings, destinations,
+                            value_bindings, case_map, outgoing.target()
                         );
+
+                        b.position_at_end(nok_ebb);
                     },
                     MatchKind::Atomic(num) => {
                         assert!(weight.variable_binds.len() == 0);
                         let atomic_val = collector.atomic_terms[num].clone();
-                        let ok_block = builder.add_block();
-                        let nok_block = builder.add_block();
-                        builder.op_equal_atomic(
-                            block_cont,
-                            match_ssa.into(),
-                            atomic_val,
-                            ok_block, nok_block
-                        );
-                        block_cont = nok_block;
+
+                        let nok_ebb = b.insert_ebb();
+                        let call = b.create_ebb_call(nok_ebb, &[]);
+                        let constant = b.create_atomic(atomic_val);
+                        b.op_equal(match_val, constant, call);
+
                         decision_tree_to_cfg_rec(
-                            dec, collector, builder, mappings, value_vars,
-                            destinations, ok_block, outgoing.target()
+                            dec, collector, b, mappings, destinations,
+                            value_bindings, case_map, outgoing.target()
                         );
+
+                        b.position_at_end(nok_ebb);
                     },
                     MatchKind::ListCell => {
                         assert!(weight.variable_binds.len() == 2);
-                        let ok_block = builder.add_block();
-                        let nok_block = builder.add_block();
-                        let head_ssa = builder.new_ssa();
-                        let tail_ssa = builder.new_ssa();
-                        mappings.insert(weight.variable_binds[0], head_ssa);
-                        mappings.insert(weight.variable_binds[1], tail_ssa);
-                        builder.op_unpack_list_cell(
-                            block_cont,
-                            match_ssa.into(),
-                            head_ssa, tail_ssa,
-                            ok_block, nok_block
-                        );
-                        block_cont = nok_block;
+
+                        let nok_ebb = b.insert_ebb();
+                        let call = b.create_ebb_call(nok_ebb, &[]);
+                        let (head, tail) = b.op_unpack_list_cell(match_val, call);
+
+                        mappings.insert(weight.variable_binds[0], head);
+                        mappings.insert(weight.variable_binds[1], tail);
+
                         decision_tree_to_cfg_rec(
-                            dec, collector, builder, mappings, value_vars,
-                            destinations, ok_block, outgoing.target()
+                            dec, collector, b, mappings, destinations,
+                            value_bindings, case_map, outgoing.target()
                         );
+
+                        b.position_at_end(nok_ebb);
                     },
                     MatchKind::Map => {
                         if let Some(map_bind) = weight.variable_binds.get(0) {
                             for var_bind in weight.variable_binds.iter() {
                                 assert!(map_bind == var_bind);
                             }
-                            mappings.insert(*map_bind, match_ssa);
+                            mappings.insert(*map_bind, match_val);
                         }
 
-                        let ok_block = builder.add_block();
-                        let nok_block = builder.add_block();
-                        builder.op_is_map(
-                            block_cont,
-                            match_ssa.into(),
-                            ok_block, nok_block,
-                        );
-                        block_cont = nok_block;
+                        let nok_ebb = b.insert_ebb();
+                        let call = b.create_ebb_call(nok_ebb, &[]);
+                        b.op_is_map(match_val, call);
+
                         decision_tree_to_cfg_rec(
-                            dec, collector, builder, mappings, value_vars,
-                            destinations, ok_block, outgoing.target(),
+                            dec, collector, b, mappings, destinations,
+                            value_bindings, case_map, outgoing.target()
                         );
+
+                        b.position_at_end(nok_ebb);
                     },
                     MatchKind::MapItem(key_value_var) => {
-                        let ok_block = builder.add_block();
-                        let nok_block = builder.add_block();
-                        let value_ssa = builder.new_ssa();
-                        mappings.insert(weight.variable_binds[0], value_ssa);
-                        builder.op_map_get(
-                            block_cont,
-                            match_ssa.into(),
-                            value_vars[key_value_var].clone(),
-                            value_ssa,
-                            ok_block, nok_block,
-                        );
-                        block_cont = nok_block;
+                        let nok_ebb = b.insert_ebb();
+                        let call = b.create_ebb_call(nok_ebb, &[]);
+                        let value = b.op_map_get(
+                            match_val, case_map.match_values[key_value_var.0], call);
+                        mappings.insert(weight.variable_binds[0], value);
+
                         decision_tree_to_cfg_rec(
-                            dec, collector, builder, mappings, value_vars,
-                            destinations, ok_block, outgoing.target(),
+                            dec, collector, b, mappings, destinations,
+                            value_bindings, case_map, outgoing.target()
                         );
+
+                        b.position_at_end(nok_ebb);
                     },
                     _ => {
                         println!("{:?}", kind);
@@ -223,30 +337,34 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
             let wildcard_edge = wildcard_node.unwrap();
             assert!(wildcard_edge.weight().variable_binds.len() == 0);
             decision_tree_to_cfg_rec(
-                dec, collector, builder, mappings, value_vars,
-                destinations, block_cont, wildcard_edge.target()
+                dec, collector, b, mappings, destinations,
+                value_bindings, case_map, wildcard_edge.target()
             );
         },
         CfgNodeKind::Fail => {
-            builder.op_jump(block, destinations.fail);
+            let call = b.create_ebb_call(destinations.fail, &[]);
+            b.op_jump(call);
         },
         CfgNodeKind::Leaf(num) => {
             let dest_leaf = destinations.leaves[num];
-            builder.op_jump(block, dest_leaf);
+            let dest_call = b.create_ebb_call(dest_leaf, &[]);
+            b.op_jump(dest_call);
+
             let leaf_binding = &dec.leaf_bindings[&cfg_node];
             for (cfg_var, pattern_ref) in leaf_binding.iter() {
                 if collector.node_bindings.contains_key(pattern_ref) {
-                    let from_ssa = mappings[cfg_var];
-                    let to_ssa = collector.node_bindings[pattern_ref];
-                    builder.op_move(dest_leaf, from_ssa, to_ssa);
+                    let from_var = mappings[cfg_var];
+                    let to_assign = collector.node_bindings[pattern_ref];
+                    value_bindings.insert(to_assign, from_var);
                 }
             }
 
             let edges: Vec<_> = dec.graph.edges(cfg_node).collect();
             assert!(edges.len() == 1);
+            b.position_at_end(destinations.guard_fails[num]);
             decision_tree_to_cfg_rec(
-                dec, collector, builder, mappings, value_vars,
-                destinations, destinations.guard_fails[num], edges[0].target()
+                dec, collector, b, mappings, destinations,
+                value_bindings, case_map, edges[0].target()
             );
         },
         CfgNodeKind::Guard => unreachable!(),
@@ -256,11 +374,9 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
 
 fn decision_tree_to_cfg(dec: &PatternCfg<ErlangPatternProvider>,
                         collector: &PatternValueCollector,
-                        builder: &mut ::eir::cfg::FunctionCfgBuilder,
-                        value_vars: &[Source],
-                        num_clauses: usize,
-                        entry: LabelN,
-                        val: SSAVariable)
+                        b: &mut FunctionBuilder,
+                        case_map: &CaseDef,
+                        value_bindings: &mut HashMap<ValueAssign, Value>)
                         -> DecisionTreeDestinations {
 
     use ::pattern_compiler::CfgNodeKind;
@@ -270,7 +386,7 @@ fn decision_tree_to_cfg(dec: &PatternCfg<ErlangPatternProvider>,
     let entry_dec = &dec.graph[dec.entry];
     assert!(*entry_dec == CfgNodeKind::Root);
 
-    let mut mappings: HashMap<PatternVar, SSAVariable> = HashMap::new();
+    let mut mappings: HashMap<PatternVar, Value> = HashMap::new();
 
     // First node is just a dummy node
     let value_list_node = {
@@ -282,7 +398,7 @@ fn decision_tree_to_cfg(dec: &PatternCfg<ErlangPatternProvider>,
         assert!(weight.kind == Some(MatchKind::Wildcard));
         assert!(weight.variable_binds.len() == 1);
 
-        mappings.insert(weight.variable_binds[0], val);
+        mappings.insert(weight.variable_binds[0], case_map.match_on);
 
         let outgoing_n: Vec<_> = dec.graph.neighbors(dec.entry).collect();
         assert!(outgoing_n.len() == 1);
@@ -301,165 +417,135 @@ fn decision_tree_to_cfg(dec: &PatternCfg<ErlangPatternProvider>,
             .unwrap();
 
         let mut unpacked = Vec::new();
-        for var in real_target.weight().variable_binds.iter() {
-            let ssa = builder.new_ssa();
-            mappings.insert(*var, ssa);
-            unpacked.push(ssa);
-        }
 
         if let CfgNodeKind::Match(var) = dec.graph[value_list_node] {
-            builder.op_unpack_value_list(entry, mappings[&var], unpacked);
+            b.op_unpack_value_list(mappings[&var],
+                                   real_target.weight().variable_binds.len(),
+                                   &mut unpacked);
         } else {
             panic!();
+        }
+
+        for (var, val) in real_target.weight().variable_binds.iter().zip(unpacked.iter()) {
+            mappings.insert(*var, *val);
         }
 
         real_target.target()
     };
 
+    let num_clauses = case_map.guard_branches.len();
     let destinations = DecisionTreeDestinations {
-        fail: builder.add_block(),
-        leaves: (0..num_clauses).map(|_| builder.add_block()).collect(),
-        guard_fails: (0..num_clauses).map(|_| builder.add_block()).collect(),
+        fail: b.insert_ebb(),
+        leaves: (0..num_clauses).map(|_| b.insert_ebb()).collect(),
+        guard_fails: (0..num_clauses).map(|_| b.insert_ebb()).collect(),
     };
 
-    decision_tree_to_cfg_rec(dec, collector, builder, &mut mappings, value_vars, &destinations, entry, start_node);
+    decision_tree_to_cfg_rec(dec, collector, b, &mut mappings,
+                             &destinations, value_bindings, case_map, start_node);
 
     destinations
 }
 
 
 
-pub fn compile_pattern(ident: &FunctionIdent, lir: &mut ::eir::cfg::FunctionCfg) {
+pub fn compile_pattern(b: &mut FunctionBuilder) {
 
     // Find all pattern matching constructs
-    let mut case_starts = Vec::new();
-    for node in lir.graph.nodes() {
-        let inner = node.inner.borrow();
-        if let OpKind::CaseStart { .. } = inner.ops.last().unwrap().kind {
-            case_starts.push(node.label);
-        }
-    }
+    let case_starts = {
+        let fun = b.function();
+        let mut case_starts = Vec::new();
 
-    for start_label in case_starts.iter() {
-        // Start node
-        let (clause_edges, collector, decision_tree, match_val, num_clauses, fail_edge, entry_edge, case_ssa, value_vars) = {
-            let start_node = lir.graph.node(*start_label);
-            let start_inner = start_node.inner.borrow();
-            assert!(start_node.outgoing.len() == 1);
-            let entry_edge = start_node.outgoing[0].0;
-            let start_op = start_inner.ops.last().unwrap();
-            let (vars, clauses, value_vars) =
-                if let OpKind::CaseStart { vars, clauses, value_vars } =
-                &start_op.kind { (vars, clauses, value_vars) } else { panic!() };
-            assert!(start_op.writes.len() == 1);
-            let case_ssa = start_op.writes[0];
-            assert!(start_op.reads.len() == (1 + value_vars.len()));
-            let match_val = start_op.reads[0].clone();
-
-            // Body node
-            let body_node = lir.graph.node(start_node.outgoing[0].1);
-            let body_inner = body_node.inner.borrow();
-            assert!(body_inner.ops.len() == 1);
-            assert!(body_inner.phi_nodes.len() == 0);
-            //assert!(body_node.)
-            let body_op = &body_inner.ops[0];
-            if let OpKind::Case(n) = body_op.kind { n } else { panic!() };
-            assert!(body_op.reads[0] == Source::Variable(case_ssa));
-
-            // Fail edge
-            let (fail_edge, fail_node) = body_node.outgoing[0];
-
-            let mut clause_edges: Vec<(EdgeN, HashSet<EdgeN>, HashSet<EdgeN>)> =
-                Vec::new();
-            // Clauses
-            for (clause_edge, clause_start_label) in body_node.outgoing.iter().skip(1) {
-                if let Some((ok_exits, fail_exits)) = find_exits(
-                    lir, body_node.label, case_ssa, (*clause_edge, *clause_start_label)) {
-                    clause_edges.push((*clause_edge, ok_exits, fail_exits));
-                } else {
-                    panic!("Exit inside of pattern guard");
+        for ebb in fun.iter_ebb() {
+            for op in fun.iter_op(ebb) {
+                if matches!(fun.op_kind(op), OpKind::CaseStart { .. }) {
+                    case_starts.push(op);
                 }
             }
+        }
 
-            println!("{:?}", clauses);
+        case_starts
+    };
+
+    for start_op in case_starts.iter() {
+
+        let (case_map, collector, provider, decision_tree) = {
+            let fun = b.function();
+            let case_map = map_case_structure(fun, *start_op);
+
+            let start_kind = fun.op_kind(case_map.start_op);
+            let clauses = if let OpKind::CaseStart { clauses } = start_kind { clauses }
+            else { panic!() };
 
             let (collector, mut provider) =
                 erlang_pattern_provider::pattern_to_provider(clauses);
             let decision_tree = ::pattern_compiler::to_decision_tree(&mut provider);
 
-            let value_vars_reads: Vec<_> = start_op.reads.iter().skip(1)
-                .cloned().collect();
-
-            (clause_edges, collector, decision_tree, match_val, clauses.len(), fail_edge, entry_edge, case_ssa, value_vars_reads)
+            (case_map, collector, provider, decision_tree)
         };
 
-        let mut builder = ::eir::cfg::FunctionCfgBuilder::new(lir);
-        let entry = builder.add_block();
-        let match_ssa = builder.new_ssa();
-        builder.op_move(entry, match_val, match_ssa);
-        let destinations =
-            decision_tree_to_cfg(&decision_tree, &collector, &mut builder,
-                                 &value_vars, num_clauses, entry, match_ssa);
+        b.position_at_end(case_map.body_ebb);
+
+        let mut value_bindings = HashMap::new();
+
+        let match_start = b.insert_ebb();
+        b.position_at_end(match_start);
+        let destinations = decision_tree_to_cfg(
+            &decision_tree, &collector, b, &case_map, &mut value_bindings);
 
         // Graft new CFG into matching construct
 
         // Fail jump
-        builder.basic_op(destinations.fail, OpKind::Jump, vec![], vec![]);
-        builder.target.graph.reparent_edge(fail_edge, destinations.fail);
+        b.position_at_end(destinations.fail);
+        let fail_node = b.function().ebb_call_target(case_map.fail_branch);
+        let fail_call = b.create_ebb_call(fail_node, &[]);
+        b.op_jump(fail_call);
 
-        // Entry
-        builder.target.graph.rechild_edge(entry_edge, entry);
-        {
-            let entry_from = builder.target.graph.edge_from(entry_edge);
-            let entry_node = builder.target.graph.node(entry_from);
-            let mut entry_inner = entry_node.inner.borrow_mut();
-            let mut last_op = entry_inner.ops.last_mut().unwrap();
-            assert_matches!(last_op.kind, OpKind::CaseStart { .. });
-            last_op.kind = OpKind::Jump;
-            last_op.writes = vec![];
-            last_op.reads = vec![];
+        // Remove case_start op
+        let start_block = b.function().op_ebb(case_map.start_op);
+        b.function_mut().op_remove(case_map.start_op);
+        // Insert jump to new control flow instead
+        b.position_at_end(start_block);
+        let start_call = b.create_ebb_call(match_start, &[]);
+        b.op_jump(start_call);
+
+        let mut write_tokens = Vec::new();
+
+        // Change guard entry points
+        for (idx, guard_branch) in case_map.guard_branches.iter().enumerate() {
+            let leaf_ebb = destinations.leaves[idx];
+            let guard_entry = b.function().ebb_call_target(*guard_branch);
+
+            b.position_at_end(leaf_ebb);
+            let call = b.create_ebb_call(guard_entry, &[]);
+            b.op_jump(call);
+
+            let case_values_op = b.function().iter_op(guard_entry).next().unwrap();
+            assert_matches!(b.function().op_kind(case_values_op), OpKind::CaseValues);
+
+            b.function_mut().op_remove_take_writes(case_values_op, &mut write_tokens);
+            b.position_at_start(guard_entry);
+            assert!(write_tokens.len() == collector.clause_assigns[idx].len());
+            for (tok, assign) in write_tokens.drain(..).zip(collector.clause_assigns[idx].iter()) {
+                b.op_move_write_token(value_bindings[assign], tok);
+            }
         }
 
-        // Clauses
-        for ((clause_node, guard_fail_node), (entry_edge, _ok_edges, fail_edges)) in destinations.leaves.iter().zip(destinations.guard_fails.iter()).zip(clause_edges.iter()) {
-
-            {
-                let entry_label = builder.target.graph.edge_to(*entry_edge);
-                let entry_node = builder.target.graph.node(entry_label);
-                let mut entry_inner = entry_node.inner.borrow_mut();
-                //println!("{:?}", entry_label);
-                //println!("{:?}", entry_inner);
-                assert_matches!(entry_inner.ops.first().unwrap().kind,
-                                OpKind::CaseValues);
-                entry_inner.ops.remove(0);
-            }
-
-            builder.basic_op(*clause_node, OpKind::Jump, vec![], vec![]);
-            builder.target.graph.reparent_edge(*entry_edge, *clause_node);
-
-            for fail_edge in fail_edges.iter() {
-                builder.target.graph.rechild_edge(*fail_edge, *guard_fail_node);
-            }
-
+        // Change guard fails
+        for (clause_num, fail_op) in case_map.fail_ops.iter() {
+            let source_ebb = b.function().op_ebb(*fail_op);
+            let target_ebb = destinations.guard_fails[*clause_num];
+            b.function_mut().op_remove(*fail_op);
+            b.position_at_end(source_ebb);
+            let call = b.create_ebb_call(target_ebb, &[]);
+            b.op_jump(call);
         }
 
-        // Remove remaining operations referencing case SSA
-        for node in builder.target.graph.nodes_mut() {
-            let mut inner = node.inner.borrow_mut();
-            inner.ops.retain(|op| {
-                match op.kind {
-                    OpKind::CaseGuardFail { .. } if
-                        op.reads[0] == Source::Variable(case_ssa)
-                        => false,
-                    OpKind::CaseGuardOk { .. } if
-                        op.reads[0] == Source::Variable(case_ssa)
-                        => false,
-                    OpKind::TombstoneSSA(ssa) if
-                        ssa == case_ssa
-                        => false,
-                    _ => true,
-                }
-            });
+        // Remove case body Ebb
+        b.function_mut().ebb_remove(case_map.body_ebb);
+
+        // Remove CaseGuardOk
+        for op in case_map.ok_ops {
+            b.function_mut().op_remove(op);
         }
 
     }

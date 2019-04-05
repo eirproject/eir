@@ -1,11 +1,11 @@
 use super::{ Ebb, Op, Value, EbbCall };
 use super::{ OpData, EbbData, EbbCallData };
-use super::{ ValueType };
+use super::{ ValueType, WriteToken };
 use super::{ Function };
 
 use crate::{ FunctionIdent, ConstantTerm, AtomicTerm, LambdaEnvIdx };
 use crate::Clause;
-use crate::op::OpKind;
+use crate::op::{ OpKind, ComparisonOperation };
 
 use ::cranelift_entity::{ EntityList };
 
@@ -62,9 +62,7 @@ impl<'a> FunctionBuilder<'a> {
         assert!(!self.fun.ebbs[self.current_ebb.unwrap()].finished);
         // If we are not at the beginning, the last Op can't be a unconditional Jump
         if let Some(op) = self.current_op {
-            if let OpKind::Jump = self.fun.ops[op].kind {
-                panic!()
-            }
+            assert!(!self.fun.ops[op].kind.is_block_terminator());
         }
 
         let op = self.fun.ops.push(data);
@@ -111,9 +109,12 @@ impl<'a> FunctionBuilder<'a> {
         self.current_ebb = Some(ebb);
         let last_op = self.fun.layout.ebbs[ebb].last_op;
         self.current_op = last_op;
-        if let Some(last_op) = last_op {
-            assert!(!self.fun.ops[last_op].kind.is_block_terminator())
-        }
+    }
+
+    pub fn position_at_start(&mut self, ebb: Ebb) {
+        assert!(self.state == BuilderState::Build);
+        self.current_ebb = Some(ebb);
+        self.current_op = None;
     }
 
     pub fn current_ebb(&self) -> Ebb {
@@ -189,6 +190,20 @@ impl<'a> FunctionBuilder<'a> {
     //        ebb_calls: EntityList::new(),
     //    })
     //}
+
+    pub fn op_move_write_token(&mut self, value: Value, token: WriteToken) -> Value {
+        let writes = EntityList::from_slice(&[token.0], &mut self.fun.value_pool);
+        let reads = EntityList::from_slice(&[value], &mut self.fun.value_pool);
+
+        self.insert_op(OpData {
+            kind: OpKind::Move,
+            reads: reads,
+            writes: writes,
+            ebb_calls: EntityList::new(),
+        });
+
+        token.0
+    }
 
     pub fn op_move(&mut self, value: Value) -> Value {
         let result = self.fun.new_variable();
@@ -416,6 +431,64 @@ impl<'a> FunctionBuilder<'a> {
         result
     }
 
+    pub fn op_unpack_tuple(&mut self, value: Value, num: usize, ret: &mut Vec<Value>, fail: EbbCall) {
+        self.gen_variables(num, ret);
+
+        let writes = EntityList::from_slice(ret, &mut self.fun.value_pool);
+        let reads = EntityList::from_slice(&[value], &mut self.fun.value_pool);
+        let calls = EntityList::from_slice(&[fail], &mut self.fun.ebb_call_pool);
+        self.insert_op(OpData {
+            kind: OpKind::UnpackTuple,
+            reads: reads,
+            writes: writes,
+            ebb_calls: calls,
+        });
+    }
+
+    pub fn op_unpack_list_cell(&mut self, value: Value, fail: EbbCall) -> (Value, Value) {
+        let head = self.fun.new_variable();
+        let tail = self.fun.new_variable();
+        let writes = EntityList::from_slice(&[head, tail], &mut self.fun.value_pool);
+
+        let reads = EntityList::from_slice(&[value], &mut self.fun.value_pool);
+
+        let calls = EntityList::from_slice(&[fail], &mut self.fun.ebb_call_pool);
+
+        self.insert_op(OpData {
+            kind: OpKind::UnpackListCell,
+            reads: reads,
+            writes: writes,
+            ebb_calls: calls,
+        });
+
+        (head, tail)
+    }
+
+    pub fn op_is_map(&mut self, value: Value, fail: EbbCall) {
+        let reads = EntityList::from_slice(&[value], &mut self.fun.value_pool);
+        let calls = EntityList::from_slice(&[fail], &mut self.fun.ebb_call_pool);
+        self.insert_op(OpData {
+            kind: OpKind::UnpackListCell,
+            reads: reads,
+            writes: EntityList::new(),
+            ebb_calls: calls,
+        });
+    }
+
+    pub fn op_map_get(&mut self, map: Value, key: Value, fail: EbbCall) -> Value {
+        let result = self.fun.new_variable();
+        let writes = EntityList::from_slice(&[result], &mut self.fun.value_pool);
+        let reads = EntityList::from_slice(&[map, key], &mut self.fun.value_pool);
+        let calls = EntityList::from_slice(&[fail], &mut self.fun.ebb_call_pool);
+        self.insert_op(OpData {
+            kind: OpKind::MapGet,
+            reads: reads,
+            writes: writes,
+            ebb_calls: calls,
+        });
+        result
+    }
+
     pub fn op_primop(&mut self, name: crate::Atom, values: &[Value]) -> Value {
         let result = self.fun.new_variable();
         let writes = EntityList::from_slice(&[result], &mut self.fun.value_pool);
@@ -518,13 +591,15 @@ impl<'a> FunctionBuilder<'a> {
             ebb_calls: EntityList::new(),
         });
     }
-    pub fn op_case_guard_fail(&mut self, case_val: Value, clause_num: usize) {
+    pub fn op_case_guard_fail(&mut self, case_val: Value, clause_num: usize, ebb: Ebb) {
         let reads = EntityList::from_slice(&[case_val], &mut self.fun.value_pool);
+        let branch = self.create_ebb_call(ebb, &[]);
+        let branches = EntityList::from_slice(&[branch], &mut self.fun.ebb_call_pool);
         self.insert_op(OpData {
             kind: OpKind::CaseGuardFail { clause_num },
             reads: reads,
             writes: EntityList::new(),
-            ebb_calls: EntityList::new(),
+            ebb_calls: branches,
         });
     }
 
@@ -611,6 +686,17 @@ impl<'a> FunctionBuilder<'a> {
         });
 
         result
+    }
+
+    pub fn op_equal(&mut self, lhs: Value, rhs: Value, call: EbbCall) {
+        let reads = EntityList::from_slice(&[lhs, rhs], &mut self.fun.value_pool);
+        let branches = EntityList::from_slice(&[call], &mut self.fun.ebb_call_pool);
+        self.insert_op(OpData {
+            kind: OpKind::ComparisonOperation(ComparisonOperation::Equal),
+            reads: reads,
+            writes: EntityList::new(),
+            ebb_calls: branches,
+        });
     }
 
 }

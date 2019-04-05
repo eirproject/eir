@@ -133,6 +133,7 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
     for fun_ident in fun_idents.iter() {
         let mut function = eir_module.functions.get_mut(fun_ident).unwrap();
         println!("Function: {}", function.ident());
+
         let mut builder = FunctionBuilder::new(&mut function);
 
         //if hardass_validate { builder.function().validate() }
@@ -160,7 +161,7 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
         //::ir::lir::to_dot::function_to_dot(
         //    fun_ident, lir_mut, &mut out).unwrap();
 
-        //::ir::lir::pass::compile_pattern(function);
+        ::ir::lir::pass::compile_pattern(&mut builder);
         //::ir::lir::pass::propagate_atomics(function);
         //::ir::lir::pass::simplify_branches(function);
         //::ir::lir::pass::remove_orphan_blocks(function);
