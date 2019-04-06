@@ -3,6 +3,9 @@ use super::Function;
 use super::{ Ebb, EbbCall, Op, Value };
 use super::graph::{ FunctionCfg, CfgNode, CfgEdge };
 
+use util::pooled_entity_set::{ PooledSetValue, PooledEntitySet };
+use cranelift_entity::ListPool;
+
 use std::collections::{ HashMap, HashSet };
 use petgraph::{ Direction };
 use petgraph::graph::{ Graph, NodeIndex };
@@ -90,22 +93,24 @@ fn validate_entry_invariants(fun: &Function, cfg: &FunctionCfg) {
 ///   references live variables.
 fn validate_ssa_visibility(fun: &Function, cfg: &FunctionCfg,
                            doms: &Dominators<NodeIndex>) {
-
     let entry_ebb = fun.ebb_entry();
 
+    let mut pool: ListPool<PooledSetValue> = ListPool::new();
+
     // Live variables on block entry and exit
-    let mut live_variables_ops: HashMap<Op, HashSet<Value>>
+    let mut live_variables_ops: HashMap<Op, PooledEntitySet<Value>>
         = HashMap::new();
-    let mut live_variables_ebbs: HashMap<Ebb, HashSet<Value>>
+    let mut live_variables_ebbs: HashMap<Ebb, PooledEntitySet<Value>>
         = HashMap::new();
 
     // Seed entry node
-    let mut entry_vals = HashSet::new();
+    let mut entry_vals = PooledEntitySet::new();
     for const_val in fun.iter_constants() {
-        entry_vals.insert(*const_val);
+        entry_vals.insert(*const_val, &mut pool);
     }
 
     insert_live_for_node(fun, entry_ebb, entry_vals,
+                         &mut pool,
                          &mut live_variables_ops,
                          &mut live_variables_ebbs);
 
@@ -138,8 +143,9 @@ fn validate_ssa_visibility(fun: &Function, cfg: &FunctionCfg,
 
             // If the immediate dominator is already processed, process this Ebb.
             if live_variables_ops.contains_key(&idom_op) {
-                let live = live_variables_ops[&idom_op].clone();
-                insert_live_for_node(fun, *node, live, &mut live_variables_ops,
+                let live = live_variables_ops[&idom_op].make_copy(&mut pool);
+                insert_live_for_node(fun, *node, live, &mut pool,
+                                     &mut live_variables_ops,
                                      &mut live_variables_ebbs);
                 processed.push(*node);
             }
@@ -174,7 +180,8 @@ fn validate_ssa_visibility(fun: &Function, cfg: &FunctionCfg,
                 last_valset = &live_variables_ops[&op];
             }
             for read in fun.op_reads(op) {
-                if !last_valset.contains(read) && !aux_values.contains(read) {
+                if !last_valset.contains(*read, &mut pool)
+                    && !aux_values.contains(read) {
                     println!("ERROR: Value not visible at location {}", read);
                 }
             }
@@ -183,7 +190,8 @@ fn validate_ssa_visibility(fun: &Function, cfg: &FunctionCfg,
             }
             for branch in fun.op_branches(op) {
                 for arg in fun.ebb_call_args(*branch) {
-                    if !last_valset.contains(arg) && !aux_values.contains(arg) {
+                    if !last_valset.contains(*arg, &mut pool)
+                        && !aux_values.contains(arg) {
                         println!("ERROR: Value not visible at location {}", arg);
                     }
                 }
@@ -194,23 +202,24 @@ fn validate_ssa_visibility(fun: &Function, cfg: &FunctionCfg,
 
 }
 
-fn insert_live_for_node(fun: &Function, ebb: Ebb, base: HashSet<Value>,
-                        live_ops: &mut HashMap<Op, HashSet<Value>>,
-                        live_ebbs: &mut HashMap<Ebb, HashSet<Value>>) {
+fn insert_live_for_node(fun: &Function, ebb: Ebb, base: PooledEntitySet<Value>,
+                        pool: &mut ListPool<PooledSetValue>,
+                        live_ops: &mut HashMap<Op, PooledEntitySet<Value>>,
+                        live_ebbs: &mut HashMap<Ebb, PooledEntitySet<Value>>) {
     let mut base = base;
 
     for arg in fun.ebb_args(ebb) {
-        base.insert(*arg);
+        base.insert(*arg, pool);
     }
 
-    live_ebbs.insert(ebb, base.clone());
+    live_ebbs.insert(ebb, base.make_copy(pool));
 
     for op in fun.iter_op(ebb) {
         for write in fun.op_writes(op) {
-            base.insert(*write);
+            base.insert(*write, pool);
         }
         if fun.op_branches(op).len() > 0 {
-            live_ops.insert(op, base.clone());
+            live_ops.insert(op, base.make_copy(pool));
         }
     }
 }
