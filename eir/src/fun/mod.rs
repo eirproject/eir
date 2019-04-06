@@ -15,6 +15,10 @@ mod validate;
 
 mod graph;
 pub use graph::{ FunctionCfg, CfgNode, CfgEdge };
+pub use petgraph::Direction;
+
+mod layout;
+pub use layout::Layout;
 
 /// Basic block in function
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -41,154 +45,7 @@ entity_impl!(EbbCall, "ebb_call");
 pub struct FunRef(u32);
 entity_impl!(FunRef, "fun_ref");
 
-#[derive(Clone, Debug, Default)]
-pub struct EbbNode {
-    prev: Option<Ebb>,
-    next: Option<Ebb>,
-    first_op: Option<Op>,
-    last_op: Option<Op>,
-}
 
-#[derive(Clone, Debug, Default)]
-pub struct OpNode {
-    ebb: Option<Ebb>,
-    prev: Option<Op>,
-    next: Option<Op>,
-}
-
-#[derive(Debug)]
-pub struct Layout {
-    ebbs: SecondaryMap<Ebb, EbbNode>,
-    ops: SecondaryMap<Op, OpNode>,
-    first_ebb: Option<Ebb>,
-    last_ebb: Option<Ebb>,
-}
-impl Layout {
-
-    pub fn new() -> Self {
-        Layout {
-            ebbs: SecondaryMap::new(),
-            ops: SecondaryMap::new(),
-            first_ebb: None,
-            last_ebb: None,
-        }
-    }
-
-    pub fn insert_ebb_first(&mut self, ebb: Ebb) {
-        assert!(self.first_ebb.is_none());
-        assert!(self.last_ebb.is_none());
-        self.first_ebb = Some(ebb);
-        self.last_ebb = Some(ebb);
-    }
-
-    pub fn remove_ebb(&mut self, ebb: Ebb) {
-        let next = self.ebbs[ebb].next;
-        let prev = self.ebbs[ebb].prev;
-
-        if let Some(next) = next {
-            assert!(self.ebbs[next].prev == Some(ebb));
-            self.ebbs[next].prev = prev;
-        } else {
-            assert!(self.last_ebb == Some(ebb));
-            self.last_ebb = prev;
-        }
-
-        if let Some(prev) = prev {
-            assert!(self.ebbs[prev].next == Some(ebb));
-            self.ebbs[prev].next = next;
-        } else {
-            assert!(self.first_ebb == Some(ebb));
-            self.first_ebb = next;
-        }
-    }
-
-    pub fn remove_op(&mut self, op: Op) {
-        let prev = self.ops[op].prev;
-        let next = self.ops[op].next;
-        let ebb = self.ops[op].ebb.unwrap();
-
-        if let Some(next) = next {
-            assert!(self.ops[next].prev == Some(op));
-            self.ops[next].prev = prev;
-        } else {
-            assert!(self.ebbs[ebb].last_op == Some(op));
-            self.ebbs[ebb].last_op = prev;
-        }
-
-        if let Some(prev) = prev {
-            assert!(self.ops[prev].next == Some(op));
-            self.ops[prev].next = next;
-        } else {
-            assert!(self.ebbs[ebb].first_op == Some(op));
-            self.ebbs[ebb].first_op = next;
-        }
-
-    }
-
-    pub fn insert_ebb_after(&mut self, prev: Ebb, ebb: Ebb) {
-        // TODO: Validate not inserted
-        let next = self.ebbs[prev].next;
-        self.ebbs[prev].next = Some(ebb);
-        self.ebbs[ebb].prev = Some(prev);
-        self.ebbs[ebb].next = next;
-        if let Some(next) = next {
-            self.ebbs[next].prev = Some(ebb);
-        }
-    }
-
-    pub fn insert_op_after(&mut self, ebb: Ebb, prev_op: Option<Op>, op: Op) {
-        assert!(self.ops[op].ebb == None);
-        self.ops[op].ebb = Some(ebb);
-
-        if let Some(prev_op) = prev_op {
-            // If a previous operation is selected,
-
-            let next = self.ops[prev_op].next;
-            // Update previous and next of current
-            self.ops[op].prev = Some(prev_op);
-            self.ops[op].next = next;
-
-            // Set the next of previous to current
-            self.ops[prev_op].next = Some(op);
-
-            // If there is a next operation,
-            // set it's previous to current
-            // else,
-            // set the last Ebb Op to current
-            if let Some(next) = next {
-                assert!(self.ops[next].prev == Some(prev_op));
-                self.ops[next].prev = Some(op);
-            } else {
-                assert!(self.ebbs[ebb].last_op == Some(prev_op));
-                self.ebbs[ebb].last_op = Some(op);
-            }
-        } else {
-            // No previous operation selected, insert at beginning
-
-            // Get the Op that is at block start
-            let next = self.ebbs[ebb].first_op;
-
-            // Set the next of the current Op to that
-            self.ops[op].next = next;
-
-            // Set the first Op of the Ebb to the current Op
-            self.ebbs[ebb].first_op = Some(op);
-
-            if let Some(next) = next {
-                // If there was an Op after this one, set its previous to current
-                assert!(self.ops[next].prev == None);
-                self.ops[next].prev = Some(op);
-            } else {
-                // If there was no Op after this one, set the last Op to current
-                assert!(self.ebbs[ebb].last_op == None);
-                self.ebbs[ebb].last_op = Some(op);
-            }
-
-        }
-
-    }
-
-}
 
 #[derive(Debug)]
 pub struct OpData {
@@ -268,7 +125,7 @@ pub struct Function {
     value_pool: ListPool<Value>,
 
     // Auxiliary information
-    constant_values: HashSet<Value>, // Use EntitySet?
+    pub constant_values: HashSet<Value>, // Use EntitySet?
 
 }
 
@@ -378,6 +235,11 @@ impl Function {
                 }
                 for write in self.op_writes(op) {
                     set.insert(*write);
+                }
+                for branch in self.op_branches(op) {
+                    for val in self.ebb_call_args(*branch) {
+                        set.insert(*val);
+                    }
                 }
             }
         }

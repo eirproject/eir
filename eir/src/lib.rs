@@ -18,6 +18,7 @@ pub use pattern::{ Clause, Pattern };
 
 mod fun;
 pub use fun::{ Function, FunctionBuilder, EbbCall, Ebb, Op, Value };
+pub use fun::{ FunctionCfg, CfgNode, CfgEdge, Direction };
 
 #[derive(Debug)]
 pub struct Module {

@@ -120,6 +120,29 @@ impl ToEirText for ConstantTerm {
     }
 }
 
+pub fn print_constants(fun: &Function, indent: usize, out: &mut Write) -> std::io::Result<()> {
+    let mut used_values = HashSet::new();
+    fun.used_values(&mut used_values);
+
+    let mut values: Vec<_> = used_values.iter().cloned().collect();
+    values.sort();
+
+    for value in values.iter() {
+        let typ = fun.value(*value);
+        match typ {
+            ValueType::Constant(cons) => {
+                write_indent(out, indent)?;
+                write!(out, "%{} = ", value.index())?;
+                cons.to_eir_text(indent+1, out)?;
+                write!(out, ";\n")?;
+            },
+            ValueType::Variable => (),
+        }
+    }
+
+    Ok(())
+}
+
 impl ToEirText for Function {
     fn to_eir_text(&self, indent: usize, out: &mut Write) -> std::io::Result<()> {
         let ident = self.ident();
@@ -133,25 +156,7 @@ impl ToEirText for Function {
         }
 
         // Constants
-        let mut used_values = HashSet::new();
-        self.used_values(&mut used_values);
-
-        let mut values: Vec<_> = used_values.iter().cloned().collect();
-        values.sort();
-
-        for value in values.iter() {
-            let typ = self.value(*value);
-            match typ {
-                ValueType::Constant(cons) => {
-                    write_indent(out, indent+1)?;
-                    write!(out, "%{} = ", value.index())?;
-                    cons.to_eir_text(indent+2, out)?;
-                    write!(out, ";\n")?;
-                },
-                ValueType::Variable => (),
-            }
-        }
-
+        print_constants(self, indent+1, out)?;
         write!(out, "\n")?;
 
         // EBBs
@@ -389,6 +394,9 @@ impl ToEirTextFun for Ebb {
                     write!(out, "]")?;
 
                     default_reads = false;
+                },
+                OpKind::UnpackListCell => {
+                    write!(out, "unpack_list_cell")?;
                 },
                 OpKind::MakeNoValue => {
                     write!(out, "make_no_value")?;

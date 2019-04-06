@@ -29,6 +29,13 @@ pub fn function_to_dot(fun: &Function, w: &mut Write) -> ::std::io::Result<()> {
 
     let mut buf = Vec::new();
 
+    write!(w, "constants [ label=<")?;
+    super::printer::print_constants(fun, 0, &mut buf)?;
+    let text = std::str::from_utf8(&buf).unwrap();
+    let text = format_label(text);
+    write!(w, "{}", text)?;
+    write!(w, "> ];\n")?;
+
     for ebb in fun.iter_ebb() {
         write!(w, "blk_{} [ label=<", ebb)?;
 

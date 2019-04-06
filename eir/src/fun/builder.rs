@@ -25,6 +25,8 @@ pub struct FunctionBuilder<'a> {
     current_op: Option<Op>,
 
     state: BuilderState,
+
+    val_buf: Option<Vec<Value>>,
 }
 
 impl<'a> FunctionBuilder<'a> {
@@ -37,6 +39,8 @@ impl<'a> FunctionBuilder<'a> {
             current_op: None,
 
             state: BuilderState::Build,
+
+            val_buf: Some(Vec::new()),
         }
     }
 
@@ -60,10 +64,9 @@ impl<'a> FunctionBuilder<'a> {
         // Must be in a block
         assert!(self.current_ebb.is_some());
         assert!(!self.fun.ebbs[self.current_ebb.unwrap()].finished);
+
         // If we are not at the beginning, the last Op can't be a unconditional Jump
-        if let Some(op) = self.current_op {
-            assert!(!self.fun.ops[op].kind.is_block_terminator());
-        }
+        self.assert_not_terminated();
 
         let op = self.fun.ops.push(data);
         self.fun.layout.insert_op_after(
@@ -72,6 +75,34 @@ impl<'a> FunctionBuilder<'a> {
         self.current_op = Some(op);
 
         op
+    }
+
+    pub fn assert_not_terminated(&self) {
+        if let Some(op) = self.current_op {
+            assert!(!self.fun.ops[op].kind.is_block_terminator());
+        }
+    }
+
+    pub fn ebb_concat(&mut self, next: Ebb, args: &[Value]) {
+        assert!(self.state == BuilderState::Build);
+        self.assert_at_end();
+        self.assert_not_terminated();
+
+        let current = self.current_ebb.unwrap();
+
+        let mut val_buf = self.val_buf.take().unwrap();
+        val_buf.clear();
+        val_buf.extend(self.fun.ebb_args(next).iter().cloned());
+
+        assert!(val_buf.len() == args.len());
+
+        for (src, dest) in args.iter().zip(val_buf.iter()) {
+            self.op_move_internal(*src, *dest);
+        }
+
+        self.val_buf = Some(val_buf);
+
+        self.fun.layout.concat_ebb(current, next);
     }
 
     /// Can only be called when there are no blocks in the function
@@ -192,24 +223,19 @@ impl<'a> FunctionBuilder<'a> {
     //}
 
     pub fn op_move_write_token(&mut self, value: Value, token: WriteToken) -> Value {
-        let writes = EntityList::from_slice(&[token.0], &mut self.fun.value_pool);
-        let reads = EntityList::from_slice(&[value], &mut self.fun.value_pool);
-
-        self.insert_op(OpData {
-            kind: OpKind::Move,
-            reads: reads,
-            writes: writes,
-            ebb_calls: EntityList::new(),
-        });
-
+        self.op_move_internal(value, token.0);
         token.0
     }
 
     pub fn op_move(&mut self, value: Value) -> Value {
         let result = self.fun.new_variable();
+        self.op_move_internal(value, result);
+        result
+    }
 
-        let writes = EntityList::from_slice(&[result], &mut self.fun.value_pool);
-        let reads = EntityList::from_slice(&[value], &mut self.fun.value_pool);
+    fn op_move_internal(&mut self, src: Value, dest: Value) {
+        let writes = EntityList::from_slice(&[dest], &mut self.fun.value_pool);
+        let reads = EntityList::from_slice(&[src], &mut self.fun.value_pool);
 
         self.insert_op(OpData {
             kind: OpKind::Move,
@@ -217,8 +243,6 @@ impl<'a> FunctionBuilder<'a> {
             writes: writes,
             ebb_calls: EntityList::new(),
         });
-
-        result
     }
 
     pub fn op_jump(&mut self, ebb_call: EbbCall) {

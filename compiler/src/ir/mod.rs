@@ -163,7 +163,7 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
 
         ::ir::lir::pass::compile_pattern(&mut builder);
         //::ir::lir::pass::propagate_atomics(function);
-        //::ir::lir::pass::simplify_branches(function);
+        ::ir::lir::pass::simplify_branches(&mut builder);
         //::ir::lir::pass::remove_orphan_blocks(function);
         //if hardass_validate { function.validate() }
 
