@@ -164,11 +164,18 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
         ::ir::lir::pass::compile_pattern(&mut builder);
         //::ir::lir::pass::propagate_atomics(function);
         ::ir::lir::pass::simplify_branches(&mut builder);
-        //::ir::lir::pass::remove_orphan_blocks(function);
+        ::ir::lir::pass::remove_orphan_blocks(&mut builder);
         //if hardass_validate { function.validate() }
 
         //lir_mut.compress_numbering();
         builder.function().validate();
+
+        let live = builder.function().live_values();
+        let entry = builder.function().ebb_entry();
+        let at_entry = &live.ebb_live[&entry];
+        for value in at_entry.iter(&live.pool) {
+            println!("{:?}", value);
+        }
 
         //println!("Calls: {:?}", lir_mut.get_all_calls());
 

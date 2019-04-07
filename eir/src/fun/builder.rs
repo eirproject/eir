@@ -72,9 +72,28 @@ impl<'a> FunctionBuilder<'a> {
         self.fun.layout.insert_op_after(
             self.current_ebb.unwrap(), self.current_op, op);
 
+        for branch in self.fun.ops[op].ebb_calls.as_slice(&self.fun.ebb_call_pool) {
+            assert!(self.fun.ebb_calls[*branch].source.is_none());
+            self.fun.ebb_calls[*branch].source = Some(op);
+        }
+
         self.current_op = Some(op);
 
         op
+    }
+
+    pub fn remove_op(&mut self, op: Op) {
+        assert!(self.state == BuilderState::Build);
+        if self.current_op == Some(op) {
+            self.current_op = self.fun.layout.ops[op].prev;
+        }
+
+        // Enable reuse of branches
+        for branch in self.fun.ops[op].ebb_calls.as_slice(&self.fun.ebb_call_pool) {
+            self.fun.ebb_calls[*branch].source = None;
+        }
+
+        self.fun.layout.remove_op(op);
     }
 
     pub fn assert_not_terminated(&self) {
@@ -103,6 +122,17 @@ impl<'a> FunctionBuilder<'a> {
         self.val_buf = Some(val_buf);
 
         self.fun.layout.concat_ebb(current, next);
+    }
+
+    pub fn ebb_split(&mut self) -> Ebb {
+        assert!(self.state == BuilderState::Build);
+        let op = self.current_op.unwrap();
+        assert!(!self.fun.op_kind(op).is_block_terminator());
+
+        let new_ebb = self.insert_ebb();
+        self.fun.layout.split_ebb_into(op, new_ebb);
+
+        new_ebb
     }
 
     /// Can only be called when there are no blocks in the function
@@ -148,6 +178,13 @@ impl<'a> FunctionBuilder<'a> {
         self.current_op = None;
     }
 
+    pub fn position_after(&mut self, op: Op) {
+        assert!(self.state == BuilderState::Build);
+        let ebb = self.fun.layout.ops[op].ebb.unwrap();
+        self.current_ebb = Some(ebb);
+        self.current_op = Some(op);
+    }
+
     pub fn current_ebb(&self) -> Ebb {
         self.current_ebb.unwrap()
     }
@@ -172,7 +209,8 @@ impl<'a> FunctionBuilder<'a> {
     pub fn create_ebb_call(&mut self, ebb: Ebb, values: &[Value]) -> EbbCall {
         let values_p = EntityList::from_slice(values, &mut self.fun.value_pool);
         let call = self.fun.ebb_calls.push(EbbCallData {
-            block: ebb,
+            source: None,
+            target: ebb,
             values: values_p,
         });
         call
@@ -181,8 +219,13 @@ impl<'a> FunctionBuilder<'a> {
     pub fn add_op_ebb_call(&mut self, call: EbbCall) {
         if let BuilderState::OutstandingEbbCalls(outstanding) = self.state {
             let outstanding = outstanding - 1;
-            self.fun.ops[self.current_op.unwrap()].ebb_calls
+
+            let op = self.current_op.unwrap();
+            self.fun.ops[op].ebb_calls
                 .push(call, &mut self.fun.ebb_call_pool);
+            assert!(self.fun.ebb_calls[call].source.is_none());
+            self.fun.ebb_calls[call].source = Some(op);
+
             if outstanding == 0 {
                 self.state = BuilderState::Build;
             } else {

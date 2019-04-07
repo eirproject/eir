@@ -15,6 +15,7 @@ extern crate num_traits;
 extern crate eir;
 extern crate pattern_compiler;
 extern crate util as util_c;
+extern crate cps_transform;
 
 //pub mod intern;
 //pub use self::intern::{ Atom, Variable };

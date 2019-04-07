@@ -263,6 +263,9 @@ impl OpKind {
             OpKind::CaseGuardFail { .. } => true,
             OpKind::ReturnOk => true,
             OpKind::ReturnThrow => true,
+            OpKind::ReceiveWait => true,
+            OpKind::ReceiveStart => true,
+            OpKind::Unreachable => true,
             _ => false,
         }
     }

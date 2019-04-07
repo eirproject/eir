@@ -8,4 +8,5 @@ members = [
     "tools",
     "eir",
     "gen_nif",
+    "cps_transform",
 ]

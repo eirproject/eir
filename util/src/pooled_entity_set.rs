@@ -4,6 +4,8 @@ use ::cranelift_entity::ListPool;
 use ::cranelift_entity::EntityList;
 use ::cranelift_entity::packed_option::ReservedValue;
 
+pub type EntitySetPool = ListPool<PooledSetValue>;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct PooledSetValue(u64);
 
@@ -53,7 +55,7 @@ where
         }
     }
 
-    pub fn contains(&self, k: K, pool: &ListPool<PooledSetValue>) -> bool {
+    pub fn contains(&self, k: K, pool: &EntitySetPool) -> bool {
         let index = k.index();
 
         let list_len = self.list.len(pool);
@@ -71,24 +73,30 @@ where
         self.list.is_empty()
     }
 
-    pub fn clear(&mut self, pool: &mut ListPool<PooledSetValue>) {
+    pub fn clear(&mut self, pool: &mut EntitySetPool) {
         self.list.clear(pool)
     }
 
     //pub fn keys(&self) -> Keys<K>
 
-    pub fn insert(&mut self, k: K, pool: &mut ListPool<PooledSetValue>) -> bool {
+    fn grow_to_pages(&mut self, pages: usize, pool: &mut EntitySetPool) {
+        let len = self.list.len(pool);
+        if len < pages {
+            // TODO: grow in one go
+            for _ in 0..(pages - len) {
+                self.list.push(PooledSetValue(0), pool);
+            }
+        }
+    }
+
+    pub fn insert(&mut self, k: K, pool: &mut EntitySetPool) -> bool {
         let index = k.index();
 
         let list_len = self.list.len(pool);
         let needed_list_len = (index / 63) + 1; //(index + 62) / 63;
 
         if list_len < needed_list_len {
-            //self.list.grow_at(list_len, needed_list_len - list_len, pool);
-            // TODO: grow in one go
-            for _ in 0..(needed_list_len - list_len) {
-                self.list.push(PooledSetValue(0), pool);
-            }
+            self.grow_to_pages(needed_list_len, pool);
         }
 
         let result = self.contains(k, pool);
@@ -99,7 +107,7 @@ where
         result
     }
 
-    pub fn remove(&mut self, k: K, pool: &mut ListPool<PooledSetValue>) -> bool {
+    pub fn remove(&mut self, k: K, pool: &mut EntitySetPool) -> bool {
         let index = k.index();
 
         let list_len = self.list.len(pool);
@@ -116,7 +124,7 @@ where
         }
     }
 
-    pub fn make_copy(&self, pool: &mut ListPool<PooledSetValue>) -> PooledEntitySet<K> {
+    pub fn make_copy(&self, pool: &mut EntitySetPool) -> PooledEntitySet<K> {
         let mut new_list = EntityList::new();
 
         let len = self.list.len(pool);
@@ -131,6 +139,68 @@ where
         }
     }
 
+    pub fn internal_list<'a>(&'a self) -> &EntityList<PooledSetValue> {
+        &self.list
+    }
+
+    pub fn union(&mut self, other: &PooledEntitySet<K>,
+                 pool: &mut EntitySetPool) {
+        let other_list = other.internal_list();
+        let other_pages_len = other_list.len(pool);
+        self.grow_to_pages(other_pages_len, pool);
+        for n in 0..other_pages_len {
+            let other_val = other_list.get(n, pool).unwrap();
+            let val_mut = self.list.get_mut(n, pool).unwrap();
+            debug_assert!(val_mut.0 != std::u64::MAX);
+            debug_assert!(other_val.0 != std::u64::MAX);
+            val_mut.0 |= other_val.0;
+        }
+    }
+
+    pub fn iter<'a>(&self, pool: &'a ListPool<PooledSetValue>) -> PooledEntitySetIter<'a, K> {
+        PooledEntitySetIter {
+            pool: pool,
+            list: self.list.clone(),
+            unused: PhantomData,
+            current_data: None,
+            current: 0,
+            finished: false,
+        }
+    }
+
+}
+
+pub struct PooledEntitySetIter<'a, T> where T: EntityRef {
+    pool: &'a ListPool<PooledSetValue>,
+    list: EntityList<PooledSetValue>,
+    unused: PhantomData<T>,
+    current_data: Option<PooledSetValue>,
+    current: usize,
+    finished: bool,
+}
+impl<'a, T> Iterator for PooledEntitySetIter<'a, T> where T: EntityRef {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        loop {
+            if self.finished { return None; }
+            let rem = self.current % 63;
+            if rem == 0 {
+                self.current_data = self.list.get(self.current / 63, self.pool);
+                if self.current_data.is_none() {
+                    self.finished = true;
+                    return None;
+                }
+            }
+
+            if (self.current_data.unwrap().0 & (1 << rem)) != 0 {
+                let ret = Some(T::new(self.current));
+                self.current += 1;
+                return ret;
+            } else {
+                self.current += 1;
+            }
+        }
+    }
 }
 
 
@@ -206,6 +276,51 @@ mod test {
         }
 
 
+    }
+
+    #[test]
+    fn test_iterator() {
+        let mut pool: ListPool<PooledSetValue> = ListPool::new();
+        let mut set1: PooledEntitySet<TestEntity> = PooledEntitySet::new();
+
+        set1.insert(TestEntity(5), &mut pool);
+        set1.insert(TestEntity(62), &mut pool);
+        set1.insert(TestEntity(63), &mut pool);
+        set1.insert(TestEntity(64), &mut pool);
+        set1.insert(TestEntity(500), &mut pool);
+        set1.insert(TestEntity(501), &mut pool);
+        set1.insert(TestEntity(502), &mut pool);
+        set1.insert(TestEntity(503), &mut pool);
+        set1.insert(TestEntity(504), &mut pool);
+        set1.insert(TestEntity(505), &mut pool);
+        set1.insert(TestEntity(506), &mut pool);
+        set1.insert(TestEntity(507), &mut pool);
+        set1.insert(TestEntity(508), &mut pool);
+        set1.insert(TestEntity(509), &mut pool);
+        set1.insert(TestEntity(510), &mut pool);
+        set1.insert(TestEntity(511), &mut pool);
+        set1.insert(TestEntity(512), &mut pool);
+
+        let mut iter = set1.iter(&pool);
+        assert!(iter.next() == Some(TestEntity(5)));
+        assert!(iter.next() == Some(TestEntity(62)));
+        assert!(iter.next() == Some(TestEntity(63)));
+        assert!(iter.next() == Some(TestEntity(64)));
+        assert!(iter.next() == Some(TestEntity(500)));
+        assert!(iter.next() == Some(TestEntity(501)));
+        assert!(iter.next() == Some(TestEntity(502)));
+        assert!(iter.next() == Some(TestEntity(503)));
+        assert!(iter.next() == Some(TestEntity(504)));
+        assert!(iter.next() == Some(TestEntity(505)));
+        assert!(iter.next() == Some(TestEntity(506)));
+        assert!(iter.next() == Some(TestEntity(507)));
+        assert!(iter.next() == Some(TestEntity(508)));
+        assert!(iter.next() == Some(TestEntity(509)));
+        assert!(iter.next() == Some(TestEntity(510)));
+        assert!(iter.next() == Some(TestEntity(511)));
+        assert!(iter.next() == Some(TestEntity(512)));
+        assert!(iter.next() == None);
+        assert!(iter.next() == None);
     }
 
 

@@ -83,6 +83,7 @@ impl Layout {
     }
 
     pub fn concat_ebb(&mut self, ebb1: Ebb, ebb2: Ebb) {
+        assert!(ebb1 != ebb2);
         //println!("concat_ebb {} {:?} {:?}", self.idx, ebb1, ebb2);
         let mut last_op = self.ebbs[ebb1].last_op;
         let mut curr_op = self.ebbs[ebb2].first_op;
@@ -116,6 +117,32 @@ impl Layout {
 
         // Remove ebb2 from layout
         self.remove_ebb(ebb2);
+    }
+
+    pub fn split_ebb_into(&mut self, op: Op, ebb2: Ebb) {
+        let ebb1 = self.ops[op].ebb.unwrap();
+        assert!(ebb1 != ebb2);
+
+        let next = self.ops[op].next;
+
+        self.ops[op].next = None;
+        self.ebbs[ebb1].last_op = Some(op);
+
+        let mut last_op = None;
+        let mut curr_op = next;
+
+        self.ebbs[ebb2].first_op = curr_op;
+
+        while curr_op.is_some() {
+            let curr_op_i = curr_op.unwrap();
+            assert!(self.ops[curr_op_i].ebb == Some(ebb1));
+            self.ops[curr_op_i].ebb = Some(ebb2);
+            self.ops[curr_op_i].prev = last_op;
+            last_op = curr_op;
+            curr_op = self.ops[curr_op_i].next;
+        }
+
+        self.ebbs[ebb2].last_op = last_op;
     }
 
     pub fn remove_op(&mut self, op: Op) {

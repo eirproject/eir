@@ -20,6 +20,8 @@ pub use petgraph::Direction;
 mod layout;
 pub use layout::Layout;
 
+pub mod live;
+
 /// Basic block in function
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Ebb(u32);
@@ -69,7 +71,8 @@ pub enum ValueType {
 
 #[derive(Debug)]
 pub struct EbbCallData {
-    block: Ebb,
+    source: Option<Op>,
+    target: Ebb,
     values: EntityList<Value>,
 }
 
@@ -102,6 +105,22 @@ impl<'a> Iterator for OpIter<'a> {
             None => (),
         }
         next
+    }
+}
+
+pub struct RevOpIter<'a> {
+    fun: &'a Function,
+    prev: Option<Op>,
+}
+impl<'a> Iterator for RevOpIter<'a> {
+    type Item = Op;
+    fn next(&mut self) -> Option<Self::Item> {
+        let prev = self.prev;
+        match self.prev {
+            Some(n) => self.prev = self.fun.layout.ops[n].prev,
+            None => (),
+        }
+        prev
     }
 }
 
@@ -169,6 +188,19 @@ impl Function {
             next: self.layout.ebbs[ebb].first_op,
         }
     }
+    pub fn iter_op_rev<'a>(&'a self, ebb: Ebb) -> RevOpIter<'a> {
+        RevOpIter {
+            fun: self,
+            prev: self.layout.ebbs[ebb].last_op,
+        }
+    }
+    pub fn iter_op_rev_from<'a>(&'a self, op: Op) -> RevOpIter<'a> {
+        assert!(self.layout.ops[op].ebb.is_some());
+        RevOpIter {
+            fun: self,
+            prev: Some(op),
+        }
+    }
 
     pub fn iter_constants<'a>(&'a self) -> std::collections::hash_set::Iter<'a, Value> {
         self.constant_values.iter()
@@ -181,13 +213,13 @@ impl Function {
         self.ebbs[ebb].arguments.as_slice(&self.value_pool)
     }
     pub fn ebb_call_target<'a>(&'a self, ebb: EbbCall) -> Ebb {
-        self.ebb_calls[ebb].block
+        self.ebb_calls[ebb].target
     }
     pub fn ebb_call_args<'a>(&'a self, ebb: EbbCall) -> &'a [Value] {
         self.ebb_calls[ebb].values.as_slice(&self.value_pool)
     }
     pub fn ebb_call_set_target(&mut self, call: EbbCall, ebb: Ebb) {
-        self.ebb_calls[call].block = ebb;
+        self.ebb_calls[call].target = ebb;
     }
     pub fn ebb_remove(&mut self, ebb: Ebb) {
         self.layout.remove_ebb(ebb)
@@ -221,6 +253,9 @@ impl Function {
 
     pub fn value<'a>(&'a self, value: Value) -> &'a ValueType {
         &self.values[value]
+    }
+    pub fn value_is_constant(&self, value: Value) -> bool {
+        self.constant_values.contains(&value)
     }
 
     pub fn used_values(&self, set: &mut HashSet<Value>) {
@@ -258,7 +293,7 @@ impl Function {
             let mut prev = idx;
 
             for op in self.iter_op(ebb) {
-                if self.op_branches(op).len() > 0 {
+                if self.op_branches(op).len() > 0 || self.op_kind(op).is_block_terminator() {
                     let op_node = graph.add_node(CfgNode::Op(op));
                     ops.insert(op, op_node);
                     graph.add_edge(prev, op_node, CfgEdge::Flow);
@@ -283,6 +318,10 @@ impl Function {
             ops: ops,
             ebbs: blocks,
         }
+    }
+
+    pub fn live_values(&self) -> self::live::LiveValues {
+        self::live::calculate_live_values(self)
     }
 
     pub fn to_text(&self) -> String {
