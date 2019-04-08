@@ -1,8 +1,8 @@
 extern crate core_erlang_compiler;
 extern crate eir;
 
+use eir::ClosureEnv;
 use core_erlang_compiler::parser::Atom;
-use core_erlang_compiler::ir::LambdaEnvIdx;
 
 use std::io::Read;
 use std::str::FromStr;
@@ -32,21 +32,21 @@ fn main() {
 
         let name_sym = Atom::from_str(&fun_name);
         let arity = arity.unwrap().parse().unwrap();
-        let lambda_env: Option<String> = lambda_env.map(|s| s);
+        let lambda_env: Option<usize> = lambda_env.map(|s| s.parse().unwrap());
         let lambda_num: Option<usize> = lambda_num.map(|s| s.parse().unwrap());
 
         let lambda_d = lambda_env.as_ref().map(|v| (
-            LambdaEnvIdx::parse_from_str(v), lambda_num.unwrap()));
+            ClosureEnv::from_num(*v), lambda_num.unwrap()));
 
-        let funs: Vec<_> = hir.functions.iter().map(|f| f.0.clone()).collect();
-        println!("{:?}", funs);
+        //let funs: Vec<_> = hir.functions.iter().map(|f| f.0.clone()).collect();
+        //println!("{:?}", funs);
         let fun = hir.functions.iter().find(|f| {
             f.0.name == name_sym
                 && f.0.arity == arity
                 && f.0.lambda == lambda_d
         }).unwrap();
 
-        println!("Writing to {}.dot", infile);
+        println!("Writing {} to {}.dot", fun.0, infile);
         let mut out = ::std::fs::File::create(infile + ".dot").unwrap();
         ::eir::text::function_to_dot(&fun.1, &mut out).unwrap();
         //core_erlang_compiler::ir::lir::to_dot::function_to_dot(

@@ -238,6 +238,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             closure.gen_ident(env_idx, 0);
             *lambda_env = Some(env_idx);
             env.add_lambda_env(env_idx, VerboseLambdaEnv {
+                env: env_idx,
                 captures: captures,
                 meta_binds: vec![],
                 //meta_binds: vec![(closure.ident.clone().unwrap(),
@@ -324,6 +325,7 @@ pub fn assign_ssa_single_expression(env: &mut ScopeTracker,
             captures.retain(|v| !meta_binds_vars.contains(&v.1));
 
             env.add_lambda_env(env_idx, VerboseLambdaEnv {
+                env: env_idx,
                 captures: captures,
                 meta_binds: meta_binds,
             });

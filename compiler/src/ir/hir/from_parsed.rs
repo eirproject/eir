@@ -38,7 +38,7 @@ impl Module {
                         eir_fun: None,
                     }
                 }).collect(),
-            lambda_envs: None,
+            envs: None,
         }
     }
 }

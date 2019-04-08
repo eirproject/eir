@@ -3,7 +3,7 @@ use ::std::fmt;
 use super::{ AVariable, AFunctionName, SSAVariable, FunctionIdent };
 use ::{ Atom, Variable };
 use ::eir::FunctionBuilder;
-use ::eir::LambdaEnvIdx;
+use ::eir::ClosureEnv;
 use ::eir::Value;
 use ::parser::{ MapExactAssoc };
 
@@ -225,9 +225,9 @@ pub enum SingleExpressionKind {
     },
 
     // Functions
-    BindClosure { closure: Closure, lambda_env: Option<LambdaEnvIdx>,
+    BindClosure { closure: Closure, lambda_env: Option<ClosureEnv>,
                   env_ssa: SSAVariable },
-    BindClosures { closures: Vec<Closure>, lambda_env: Option<LambdaEnvIdx>,
+    BindClosures { closures: Vec<Closure>, lambda_env: Option<ClosureEnv>,
                    body: Box<SingleExpression>, env_ssa: SSAVariable },
 
     // Value constructors
@@ -281,10 +281,10 @@ pub struct Closure {
     pub parent_ident: FunctionIdent,
     pub ident: Option<FunctionIdent>,
     pub fun: Option<Box<Function>>,
-    pub env: Option<LambdaEnvIdx>,
+    pub env: Option<ClosureEnv>,
 }
 impl Closure {
-    fn gen_ident(&mut self, env_idx: LambdaEnvIdx, lambda_num: usize) {
+    fn gen_ident(&mut self, env_idx: ClosureEnv, lambda_num: usize) {
         assert!(self.ident.is_none());
         assert!(self.env.is_none());
 

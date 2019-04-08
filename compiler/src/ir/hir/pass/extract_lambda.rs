@@ -1,7 +1,7 @@
 use ::ir::{ FunctionDefinition, FunctionIdent, FunctionVisibility };
 use ::ir::hir::Function;
 use ::ir::hir::EachSingleExpression;
-use ::eir::LambdaEnvIdx;
+use ::eir::ClosureEnv;
 
 pub struct LambdaCollector {
     num: u32,
@@ -16,7 +16,7 @@ impl LambdaCollector {
         }
     }
 
-    pub fn collect(&mut self, env_idx: LambdaEnvIdx, ident: FunctionIdent,
+    pub fn collect(&mut self, env_idx: ClosureEnv, ident: FunctionIdent,
                    mut fun: Function) {
         self.num += 1;
 

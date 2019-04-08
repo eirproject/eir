@@ -3,7 +3,7 @@ use super::{ OpData, EbbData, EbbCallData };
 use super::{ ValueType, WriteToken };
 use super::{ Function };
 
-use crate::{ FunctionIdent, ConstantTerm, AtomicTerm, LambdaEnvIdx };
+use crate::{ FunctionIdent, ConstantTerm, AtomicTerm, ClosureEnv };
 use crate::Clause;
 use crate::op::{ OpKind, ComparisonOperation };
 
@@ -349,47 +349,81 @@ impl<'a> FunctionBuilder<'a> {
 
     pub fn op_call(&mut self, module: Value, name: Value,
                    args: &[Value]) -> (Value, Value) {
+        self.op_call_internal(module, name, args, false).unwrap()
+    }
+    pub fn op_tail_call(&mut self, module: Value, name: Value,
+                        args: &[Value]) {
+        assert!(self.op_call_internal(module, name, args, true).is_none());
+    }
+
+    pub fn op_call_internal(&mut self, module: Value, name: Value,
+                            args: &[Value], tail: bool) -> Option<(Value, Value)> {
         let mut reads = EntityList::from_slice(
             &[module, name], &mut self.fun.value_pool);
         reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
 
-        let result_ok = self.fun.new_variable();
-        let result_err = self.fun.new_variable();
-        let writes = EntityList::from_slice(
-            &[result_ok, result_err], &mut self.fun.value_pool);
+        let result;
+        let writes = if tail {
+            result = None;
+            EntityList::new()
+        } else {
+            let result_ok = self.fun.new_variable();
+            let result_err = self.fun.new_variable();
+            result = Some((result_ok, result_err));
+            EntityList::from_slice(
+                &[result_ok, result_err], &mut self.fun.value_pool)
+        };
 
         self.insert_op(OpData {
-            kind: OpKind::Call { tail_call: false },
+            kind: OpKind::Call { tail_call: tail },
             reads: reads,
             writes: writes,
             ebb_calls: EntityList::new(),
         });
 
-        self.state = BuilderState::OutstandingEbbCalls(1);
+        if !tail {
+            self.state = BuilderState::OutstandingEbbCalls(1);
+        }
 
-        (result_ok, result_err)
+        result
     }
 
     pub fn op_apply(&mut self, fun: Value, args: &[Value]) -> (Value, Value) {
+        self.op_apply_internal(fun, args, false).unwrap()
+    }
+    pub fn op_tail_apply(&mut self, fun: Value, args: &[Value]) {
+        assert!(self.op_apply_internal(fun, args, true).is_none());
+    }
+
+    fn op_apply_internal(&mut self, fun: Value, args: &[Value], tail: bool) -> Option<(Value, Value)> {
         let mut reads = EntityList::from_slice(
             &[fun], &mut self.fun.value_pool);
         reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
 
-        let result_ok = self.fun.new_variable();
-        let result_err = self.fun.new_variable();
-        let writes = EntityList::from_slice(
-            &[result_ok, result_err], &mut self.fun.value_pool);
+        let result;
+        let writes = if tail {
+            result = None;
+            EntityList::new()
+        } else {
+            let result_ok = self.fun.new_variable();
+            let result_err = self.fun.new_variable();
+            result = Some((result_ok, result_err));
+            EntityList::from_slice(
+                &[result_ok, result_err], &mut self.fun.value_pool)
+        };
 
         self.insert_op(OpData {
-            kind: OpKind::Apply { tail_call: false },
+            kind: OpKind::Apply { tail_call: tail },
             reads: reads,
             writes: writes,
             ebb_calls: EntityList::new(),
         });
 
-        self.state = BuilderState::OutstandingEbbCalls(1);
+        if !tail {
+            self.state = BuilderState::OutstandingEbbCalls(1);
+        }
 
-        (result_ok, result_err)
+        result
     }
 
     pub fn op_capture_named_function(&mut self, name: FunctionIdent) -> Value {
@@ -634,7 +668,7 @@ impl<'a> FunctionBuilder<'a> {
         result
     }
 
-    pub fn op_make_closure_env(&mut self, lambda_env: LambdaEnvIdx, values: &[Value]) -> Value {
+    pub fn op_make_closure_env(&mut self, lambda_env: ClosureEnv, values: &[Value]) -> Value {
         let result = self.fun.new_variable();
         let writes = EntityList::from_slice(&[result], &mut self.fun.value_pool);
 

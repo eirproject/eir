@@ -31,7 +31,7 @@ struct LirLowerState<'a> {
 impl Module {
     fn lower(&mut self, env: &ScopeTracker) {
         for fun in &mut self.functions {
-            println!("{}", fun.ident);
+            //println!("{}", fun.ident);
             fun.lower(env);
         }
     }
@@ -711,6 +711,7 @@ impl hir::SingleExpression {
                 self.ssa
             },
             HSEK::PrimOp { ref name, ref args } if name == &Atom::from("match_fail") => {
+                // TODO: Make correct exception tuple
                 // Lower args
                 for arg in args.iter() {
                     let n_ssa = arg.lower(b, st);
@@ -736,6 +737,45 @@ impl hir::SingleExpression {
 
                 self.ssa
             },
+            HSEK::PrimOp { ref name, ref args } if name == &Atom::from("raw_raise") => {
+                assert!(args.len() == 3);
+
+                // Lower args
+                for arg in args.iter() {
+                    let n_ssa = arg.lower(b, st);
+                    assert!(arg.ssa == n_ssa);
+                }
+
+                // Construct value list
+                st.val_buf.clear();
+                for arg in args.iter() {
+                    st.val_buf.push(st.bindings[&arg.ssa]);
+                }
+
+                // Make exception tuple and jump to handler
+                let exc_value = b.op_make_tuple(&st.val_buf);
+                let exc_jump = st.exc_stack.make_error_jump(b, exc_value);
+                b.op_jump(exc_jump);
+
+                // Dummy continuation
+                let ret_dummy = b.insert_ebb();
+                b.position_at_end(ret_dummy);
+                let value = b.op_make_no_value();
+                st.bindings.insert(self.ssa, value);
+
+                self.ssa
+            },
+            HSEK::PrimOp { ref name, ref args } if name == &Atom::from("build_stacktrace") => {
+                assert!(args.len() == 1);
+
+                let raw_trace = args[0].lower(b, st);
+                assert!(args[0].ssa == raw_trace);
+
+                let trace = b.op_exc_trace(st.bindings[&raw_trace]);
+                st.bindings.insert(self.ssa, trace);
+
+                self.ssa
+            },
             HSEK::PrimOp { ref name, ref args } => {
                 //println!("PrimOp: {}", name);
 
@@ -752,7 +792,7 @@ impl hir::SingleExpression {
                 let val = b.op_primop(name.clone(), &st.val_buf);
                 st.bindings.insert(self.ssa, val);
 
-                //unimplemented!("PrimOp: {}", name);
+                unimplemented!("PrimOp: {} {:?}", name, args);
 
                 self.ssa
             },

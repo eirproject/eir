@@ -1,4 +1,4 @@
-use crate::{ FunctionIdent, ConstantTerm, AtomicTerm, LambdaEnvIdx };
+use crate::{ FunctionIdent, ConstantTerm, AtomicTerm, ClosureEnv };
 use crate::Clause;
 use crate::op::OpKind;
 use ::cranelift_entity::{ PrimaryMap, SecondaryMap, ListPool, EntityList,

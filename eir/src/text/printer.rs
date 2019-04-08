@@ -71,7 +71,7 @@ impl ToEirText for FunctionIdent {
         write_indent(out, indent)?;
         if let Some((env_num, fun_num)) = self.lambda {
             write!(out, "{}:{}@{}.{}/{}",
-                   self.module, self.name, env_num.0,
+                   self.module, self.name, env_num.index(),
                    fun_num, self.arity)?;
         } else {
             write!(out, "{}:{}/{}",
@@ -150,7 +150,7 @@ impl ToEirText for Function {
         write_indent(out, indent)?;
         if let Some((env_num, fun_num)) = ident.lambda {
             write!(out, "{}@{}.{}/{} {{\n",
-                   ident.name, env_num.0, fun_num, ident.arity)?;
+                   ident.name, env_num.index(), fun_num, ident.arity)?;
         } else {
             write!(out, "{}/{} {{\n", ident.name, ident.arity)?;
         }
@@ -395,6 +395,9 @@ impl ToEirTextFun for Ebb {
 
                     default_reads = false;
                 },
+                OpKind::MakeBinary => {
+                    write!(out, "make_binary")?;
+                },
                 OpKind::UnpackListCell => {
                     write!(out, "unpack_list_cell")?;
                 },
@@ -403,7 +406,7 @@ impl ToEirTextFun for Ebb {
                 },
                 OpKind::Call { tail_call } => {
                     if *tail_call {
-                        assert_matches!(sig, (_, 0, 2));
+                        assert_matches!(sig, (_, 0, 0));
                         write!(out, "tail_call")?;
                     } else {
                         assert_matches!(sig, (_, 2, 1));
@@ -419,15 +422,17 @@ impl ToEirTextFun for Ebb {
                     format_value_list(&reads[2..], fun, out)?;
                     write!(out, ")")?;
 
-                    write!(out, " except ")?;
-                    format_branches(branches, fun, indent, out)?;
+                    if !*tail_call {
+                        write!(out, " except ")?;
+                        format_branches(branches, fun, indent, out)?;
+                    }
 
                     default_reads = false;
                     default_branch = false;
                 },
                 OpKind::Apply { tail_call } => {
                     if *tail_call {
-                        assert_matches!(sig, (_, 0, 2));
+                        assert_matches!(sig, (_, 0, 0));
                         write!(out, "tail_apply")?;
                     } else {
                         assert_matches!(sig, (_, 2, 1));
@@ -441,8 +446,10 @@ impl ToEirTextFun for Ebb {
                     format_value_list(&reads[1..], fun, out)?;
                     write!(out, ")")?;
 
-                    write!(out, " except ")?;
-                    format_branches(branches, fun, indent, out)?;
+                    if !*tail_call {
+                        write!(out, " except ")?;
+                        format_branches(branches, fun, indent, out)?;
+                    }
 
                     default_reads = false;
                     default_branch = false;
@@ -465,7 +472,7 @@ impl ToEirTextFun for Ebb {
                 },
                 OpKind::MakeClosureEnv { env_idx } => {
                     assert_matches!(sig, (_, 1, 0));
-                    write!(out, "pack_env E{}", env_idx.0)?;
+                    write!(out, "pack_env E{}", env_idx.index())?;
                 },
                 OpKind::CaseValues =>
                     write!(out, "case_values")?,
@@ -509,7 +516,10 @@ impl ToEirTextFun for Ebb {
                 OpKind::Move => {
                     assert_matches!(sig, (1, 1, 0));
                     write!(out, "move")?;
-                }
+                },
+                OpKind::PrimOp(atom) => {
+                    write!(out, "prim_op {}", atom)?;
+                },
                 _ => {
                     unimplemented!("ToEirText unimplemented for: {:?}", kind);
                 },

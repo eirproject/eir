@@ -17,10 +17,9 @@
 use std::collections::{ HashMap, HashSet, VecDeque };
 
 use util::pooled_entity_set::PooledEntitySet;
-use eir::LambdaEnvIdx;
 use eir::{ Function, FunctionBuilder };
 use eir::op::OpKind;
-use eir::LambdaEnvIdxGenerator;
+use eir::{ ModuleEnvs, ClosureEnv };
 use eir::{ Ebb, Op, Value, EbbCall };
 use eir::fun::live::LiveValues;
 
@@ -84,20 +83,35 @@ enum ContSite {
     Op(Op),
 }
 
+fn copy_read(src_fun: &Function, b: &mut FunctionBuilder,
+             val_map: &HashMap<Value, Value>,
+             src_val: Value) -> Value {
+    if src_fun.value_is_constant(src_val) {
+        let value = b.create_constant(
+            src_fun.value_constant(src_val).clone());
+        value
+    } else {
+        val_map[&src_val]
+    }
+}
+
 fn gen_chunk(
     src_fun: &Function,
     site: ContSite,
     cont_sites: &HashSet<Op>,
     live: &LiveValues,
-    env_idx_gen: &mut LambdaEnvIdxGenerator,
-    needed_continuations: &mut Vec<ContSite>,
+    env_idx_gen: &mut ModuleEnvs,
+    needed_continuations: &mut Vec<(ContSite, ClosureEnv)>,
     // If this is false, this is an entry point
     // If this is true, this is a continuation
-    cont: bool,
+    cont: Option<ClosureEnv>,
 ) {
     let mut ident = src_fun.ident().clone();
-    // First two argument become ok and throw continuations
-    ident.arity += 2;
+    if let Some(env_idx) = cont {
+        // Continuations always have an arity of 1
+        ident.arity = 1;
+        ident.lambda = Some((env_idx, 0));
+    }
 
     let mut fun = Function::new(ident);
     let mut b = FunctionBuilder::new(&mut fun);
@@ -118,7 +132,7 @@ fn gen_chunk(
 
     let src_first_op;
 
-    if cont {
+    if cont.is_some() {
         // This is a continuation
 
         let result_src_val;
@@ -224,8 +238,8 @@ fn gen_chunk(
         if cont_sites.contains(&src_op) {
             let kind = src_fun.op_kind(src_op);
             match kind {
-                OpKind::Apply { .. } => (),
-                OpKind::Call { .. } => (),
+                OpKind::Apply { tail_call: false } => (),
+                OpKind::Call { tail_call: false } => (),
                 _ => panic!(),
             }
 
@@ -252,7 +266,8 @@ fn gen_chunk(
                 }
                 buf.push(val_map[&live]);
             }
-            let env_idx = env_idx_gen.next();
+            let env_idx = env_idx_gen.add();
+            env_idx_gen.env_set_captures_num(env_idx, buf.len());
             let env = b.op_make_closure_env(env_idx, &buf);
 
             // Bind closure for continuation
@@ -263,7 +278,7 @@ fn gen_chunk(
 
             // Schedule control flow edge for continuation generation
             let src_next_op = src_fun.op_after(src_op).unwrap();
-            needed_continuations.push(ContSite::Op(src_next_op));
+            needed_continuations.push((ContSite::Op(src_next_op), env_idx));
 
             // ============================
             // ==== Throw continuation ====
@@ -297,7 +312,8 @@ fn gen_chunk(
                 }
                 buf.push(val_map[&renamed]);
             }
-            let env_idx = env_idx_gen.next();
+            let env_idx = env_idx_gen.add();
+            env_idx_gen.env_set_captures_num(env_idx, buf.len());
             let env = b.op_make_closure_env(env_idx, &buf);
 
             // Bind closure for continuation
@@ -307,28 +323,75 @@ fn gen_chunk(
             let err_cont = b.op_bind_closure(ident, env);
 
             // Schedule exception edge for continuation generation
-            needed_continuations.push(ContSite::EbbCall(src_branch, renamed_nok_val));
+            needed_continuations.push((
+                ContSite::EbbCall(src_branch, renamed_nok_val), env_idx));
 
             // =======================
             // ==== Function call ====
             // =======================
 
-            // TODO
+            buf.clear();
+            buf.push(ok_cont);
+            buf.push(err_cont);
+            match kind {
+                OpKind::Apply { tail_call: false } => {
+                    let reads = src_fun.op_reads(src_op);
+
+                    for read in reads.iter().skip(1) {
+                        buf.push(copy_read(src_fun, &mut b, &val_map, *read));
+                    }
+
+                    b.op_tail_apply(val_map[&reads[0]], &buf);
+                },
+                OpKind::Call { tail_call: false } => {
+                    let reads = src_fun.op_reads(src_op);
+
+                    for read in reads.iter().skip(2) {
+                        buf.push(copy_read(src_fun, &mut b, &val_map, *read));
+                    }
+
+                    let name_val = copy_read(src_fun, &mut b, &val_map, reads[0]);
+                    let module_val = copy_read(src_fun, &mut b, &val_map, reads[1]);
+
+                    b.op_tail_call(name_val, module_val, &buf);
+                },
+                _ => panic!(),
+            }
 
             // Do not copy the current op, continue processing queue
             continue;
         }
 
-        copy_op(src_fun, src_op, &mut b, &mut val_map, &mut ebb_map);
+        let kind = src_fun.op_kind(src_op);
+        match kind {
+            // Call the return continuation
+            OpKind::ReturnOk => {
+                b.position_at_end(ebb_map[&src_ebb]);
+                let res = src_fun.op_reads(src_op)[0];
+                b.op_tail_apply(ok_ret_cont, &[val_map[&res]]);
+            },
+            // Call the throw continuation
+            OpKind::ReturnThrow => {
+                b.position_at_end(ebb_map[&src_ebb]);
+                let res = src_fun.op_reads(src_op)[0];
+                b.op_tail_apply(err_ret_cont, &[val_map[&res]]);
+            },
+            // If this is a normal Op, copy it and add outgoing edges to
+            // processing queue
+            _ => {
+                copy_op(src_fun, src_op, &mut b, &mut val_map, &mut ebb_map);
 
-        // Add outgoing edges to processing queue
-        if let Some(next_op) = src_fun.op_after(src_op) {
-            to_process.push_back(next_op);
-        }
-        for branch in src_fun.op_branches(src_op) {
-            let target = src_fun.ebb_call_target(*branch);
-            let first_op = src_fun.ebb_first_op(target);
-            to_process.push_back(first_op);
+                // Add outgoing edges to processing queue
+                if let Some(next_op) = src_fun.op_after(src_op) {
+                    to_process.push_back(next_op);
+                }
+                for branch in src_fun.op_branches(src_op) {
+                    let target = src_fun.ebb_call_target(*branch);
+                    let first_op = src_fun.ebb_first_op(target);
+                    to_process.push_back(first_op);
+                }
+
+            },
         }
 
     }
@@ -339,7 +402,7 @@ fn gen_chunk(
 
 pub fn cps_transform(
     src_fun: &Function,
-    env_idx_gen: &mut LambdaEnvIdxGenerator,
+    env_idx_gen: &mut ModuleEnvs,
 ) {
     let live = src_fun.live_values();
 
@@ -369,11 +432,11 @@ pub fn cps_transform(
         &live,
         env_idx_gen,
         &mut needed,
-        false,
+        None,
     );
 
     while needed.len() > 0 {
-        let site = needed.pop().unwrap();
+        let (site, env) = needed.pop().unwrap();
         if let ContSite::EbbCall(call, val) = site {
             if generated.contains(&(call, val)) { continue }
             generated.insert((call, val));
@@ -386,7 +449,7 @@ pub fn cps_transform(
             &live,
             env_idx_gen,
             &mut needed,
-            true,
+            Some(env),
         );
     }
 

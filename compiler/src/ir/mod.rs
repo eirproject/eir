@@ -2,12 +2,10 @@ use std::collections::HashMap;
 
 pub mod hir;
 use ::ir::hir::scope_tracker::{ ScopeTracker, ScopeDefinition };
-pub use ::eir::{ LambdaEnv, LambdaEnvIdx };
+pub use ::eir::{ ModuleEnvs, ClosureEnv };
 use ::eir::FunctionIdent;
 use ::eir::FunctionBuilder;
 pub mod lir;
-mod doc;
-mod fmt;
 
 use ::{ Atom, Variable };
 use ::parser;
@@ -18,12 +16,13 @@ pub struct Module {
     pub name: Atom,
     pub attributes: Vec<(Atom, parser::Constant)>,
     pub functions: Vec<FunctionDefinition>,
-    pub lambda_envs: Option<HashMap<LambdaEnvIdx, LambdaEnv>>,
+    pub envs: Option<ModuleEnvs>,
+    //pub lambda_envs: Option<HashMap<LambdaEnvIdx, LambdaEnv>>,
 }
 impl Module {
-    pub fn get_env<'a>(&'a self, env_idx: LambdaEnvIdx) -> &'a LambdaEnv {
-        &self.lambda_envs.as_ref().unwrap()[&env_idx]
-    }
+    //pub fn get_env<'a>(&'a self, env_idx: Closure) -> &'a LambdaEnv {
+    //    &self.lambda_envs.as_ref().unwrap()[&env_idx]
+    //}
     pub fn to_eir(mut self) -> ::eir::Module {
         ::eir::Module {
             name: self.name,
@@ -31,7 +30,7 @@ impl Module {
                 .map(|f| {
                     (f.ident, f.eir_fun.unwrap())
                 }).collect(),
-            lambda_envs: self.lambda_envs.unwrap(),
+            envs: self.envs.unwrap(),
         }
     }
 }
@@ -41,7 +40,7 @@ pub struct FunctionDefinition {
     pub ident: FunctionIdent,
     pub visibility: FunctionVisibility,
     pub hir_fun: hir::Function,
-    pub lambda_env_idx: Option<LambdaEnvIdx>,
+    pub lambda_env_idx: Option<ClosureEnv>,
     pub eir_fun: Option<::eir::Function>,
 }
 #[derive(Debug)]
@@ -88,7 +87,7 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
     println!("STAGE: Assign SSA");
     // Assign SSA variables
     for func in &mut module.functions {
-        println!("Fun: {}", func.ident);
+        //println!("Fun: {}", func.ident);
         let mut scope = HashMap::new();
         for arg in &mut func.hir_fun.args {
             arg.ssa = env.new_ssa();
@@ -105,7 +104,7 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
     // Extract lambdas
     let mut lambda_collector = ::ir::hir::pass::extract_lambda::LambdaCollector::new();
     for fun in module.functions.iter_mut() {
-        println!("Function: {}", fun.ident);
+        //println!("Function: {}", fun.ident);
         ::ir::hir::pass::extract_lambda::extract_lambdas(
             &mut fun.hir_fun, &mut lambda_collector);
     }
@@ -120,8 +119,8 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
     println!("STAGE: Lower to LIR");
     // Lower to LIR
     ::ir::lir::from_hir::do_lower(&mut module, &mut env);
-    let (lambda_envs, mut env_idx_generator) = env.finish();
-    module.lambda_envs = Some(lambda_envs);
+    let lambda_envs = env.finish();
+    module.envs = Some(lambda_envs);
 
     let fun_idents: Vec<_> = module.functions.iter()
         .map(|f| f.ident.clone()).collect();
@@ -171,7 +170,7 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
         //lir_mut.compress_numbering();
         builder.function().validate();
 
-        ::cps_transform::cps_transform(&builder.function(), &mut env_idx_generator);
+        ::cps_transform::cps_transform(&builder.function(), &mut eir_module.envs);
 
         //let live = builder.function().live_values();
         //let entry = builder.function().ebb_entry();

@@ -1,7 +1,7 @@
 use ::std::collections::HashMap;
 use ::Atom;
 use ::eir::FunctionIdent;
-use ::eir::{ LambdaEnv, LambdaEnvIdx, LambdaEnvIdxGenerator };
+use ::eir::{ ModuleEnvs, ClosureEnv };
 use ::ssa::{ SSAVariable, SSAVariableGenerator };
 
 //#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -19,6 +19,7 @@ enum Scope {
 
 #[derive(Debug)]
 pub struct VerboseLambdaEnv {
+    pub env: ClosureEnv,
     pub captures: Vec<(ScopeDefinition, SSAVariable, SSAVariable)>,
     pub meta_binds: Vec<(FunctionIdent, SSAVariable, Option<SSAVariable>)>,
 }
@@ -33,8 +34,8 @@ pub enum ScopeDefinition {
 pub struct ScopeTracker {
     scopes: Vec<Scope>,
     ssa_var_generator: SSAVariableGenerator,
-    lambda_env_idx_generator: LambdaEnvIdxGenerator,
-    lambda_envs: HashMap<LambdaEnvIdx, VerboseLambdaEnv>,
+    module_envs: ModuleEnvs,
+    lambda_envs: HashMap<ClosureEnv, VerboseLambdaEnv>,
 }
 impl ScopeTracker {
 
@@ -42,7 +43,7 @@ impl ScopeTracker {
         ScopeTracker {
             scopes: vec![],
             ssa_var_generator: SSAVariableGenerator::initial(),
-            lambda_env_idx_generator: LambdaEnvIdxGenerator::new(),
+            module_envs: ModuleEnvs::new(),
             lambda_envs: HashMap::new(),
         }
     }
@@ -111,29 +112,28 @@ impl ScopeTracker {
         }
     }
 
-    pub fn gen_env_idx(&mut self) -> LambdaEnvIdx {
-        self.lambda_env_idx_generator.next()
+    pub fn gen_env_idx(&mut self) -> ClosureEnv {
+        self.module_envs.add()
     }
 
-    pub fn add_lambda_env(&mut self, env_idx: LambdaEnvIdx, env: VerboseLambdaEnv) {
+    pub fn add_lambda_env(&mut self, env_idx: ClosureEnv, env: VerboseLambdaEnv) {
         assert!(!self.lambda_envs.contains_key(&env_idx));
         self.lambda_envs.insert(env_idx, env);
     }
 
-    pub fn get_lambda_env<'a>(&'a self, env_idx: LambdaEnvIdx)
+    pub fn get_lambda_env<'a>(&'a self, env_idx: ClosureEnv)
                           -> &'a VerboseLambdaEnv {
         &self.lambda_envs[&env_idx]
     }
 
-    pub fn finish(self) -> (HashMap<LambdaEnvIdx, LambdaEnv>, LambdaEnvIdxGenerator) {
-        let envs = self.lambda_envs.iter().map(|(k, v)| {
-            let nv = LambdaEnv {
-                num_captures: v.captures.len(),
-                meta_binds: v.meta_binds.iter().map(|v| v.0.clone()).collect(),
-            };
-            (*k, nv)
-        }).collect();
-        (envs, self.lambda_env_idx_generator)
+    pub fn finish(mut self) -> ModuleEnvs {
+        for (env, data) in self.lambda_envs {
+            self.module_envs.env_set_captures_num(env, data.captures.len());
+            for meta_bind in data.meta_binds {
+                self.module_envs.env_add_meta_bind(env, meta_bind.0.clone());
+            }
+        }
+        self.module_envs
     }
 
 }

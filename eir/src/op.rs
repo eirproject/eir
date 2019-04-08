@@ -1,12 +1,5 @@
-use crate::{ FunctionIdent, LambdaEnvIdx, Atom, Clause };
+use crate::{ FunctionIdent, ClosureEnv, Atom, Clause };
 use crate::{ Value, AtomicTerm };
-
-//#[derive(Debug, Clone)]
-//pub struct Op {
-//    pub kind: OpKind,
-//    pub reads: Vec<Source>,
-//    pub writes: Vec<SSAVariable>,
-//}
 
 #[derive(Debug, Clone)]
 pub enum ComparisonOperation {
@@ -41,6 +34,8 @@ pub enum OpKind {
     /// Move r[0] into w[0]
     Move,
 
+    // Raw exception handling.
+    // This gets the stack trace from a raw trace
     ExcTrace,
 
     /// Calls r[0]:r[1] with args r[2..]
@@ -76,7 +71,7 @@ pub enum OpKind {
     MakeNoValue,
 
     MakeClosureEnv {
-        env_idx: LambdaEnvIdx,
+        env_idx: ClosureEnv,
     },
     BindClosure {
         ident: FunctionIdent,
