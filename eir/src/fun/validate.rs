@@ -62,7 +62,10 @@ fn validate_ebb_calls(fun: &Function, cfg: &FunctionCfg) {
 fn validate_entry_invariants(fun: &Function, cfg: &FunctionCfg) {
     let entry_ebb = fun.ebb_entry();
 
-    if fun.ebb_args(entry_ebb).len() != fun.ident.arity {
+    let arity = fun.ident.arity;
+    let needed_entry_arity = if fun.ident.lambda.is_some() { arity + 1 } else { arity };
+
+    if fun.ebb_args(entry_ebb).len() != needed_entry_arity {
         println!("ERROR: Entry Ebb and identifier must be of same arity");
     }
 

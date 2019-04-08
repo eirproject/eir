@@ -212,6 +212,16 @@ impl Function {
     pub fn ebb_args<'a>(&'a self, ebb: Ebb) -> &'a [Value] {
         self.ebbs[ebb].arguments.as_slice(&self.value_pool)
     }
+    pub fn ebb_remove(&mut self, ebb: Ebb) {
+        self.layout.remove_ebb(ebb)
+    }
+    pub fn ebb_first_op(&self, ebb: Ebb) -> Op {
+        self.layout.ebbs[ebb].first_op.unwrap()
+    }
+
+    pub fn ebb_call_source<'a>(&'a self, ebb: EbbCall) -> Op {
+        self.ebb_calls[ebb].source.unwrap()
+    }
     pub fn ebb_call_target<'a>(&'a self, ebb: EbbCall) -> Ebb {
         self.ebb_calls[ebb].target
     }
@@ -220,9 +230,6 @@ impl Function {
     }
     pub fn ebb_call_set_target(&mut self, call: EbbCall, ebb: Ebb) {
         self.ebb_calls[call].target = ebb;
-    }
-    pub fn ebb_remove(&mut self, ebb: Ebb) {
-        self.layout.remove_ebb(ebb)
     }
 
     pub fn op_kind<'a>(&'a self, op: Op) -> &'a OpKind {
@@ -240,6 +247,12 @@ impl Function {
     pub fn op_ebb(&self, op: Op) -> Ebb {
         self.layout.ops[op].ebb.unwrap()
     }
+    pub fn op_after(&self, op: Op) -> Option<Op> {
+        self.layout.ops[op].next
+    }
+    pub fn op_before(&self, op: Op) -> Option<Op> {
+        self.layout.ops[op].prev
+    }
     pub fn op_remove(&mut self, op: Op) {
         self.layout.remove_op(op);
     }
@@ -256,6 +269,13 @@ impl Function {
     }
     pub fn value_is_constant(&self, value: Value) -> bool {
         self.constant_values.contains(&value)
+    }
+    pub fn value_constant<'a>(&'a self, value: Value) -> &'a ConstantTerm {
+        if let ValueType::Constant(con) = &self.values[value] {
+            con
+        } else {
+            panic!()
+        }
     }
 
     pub fn used_values(&self, set: &mut HashSet<Value>) {

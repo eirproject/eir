@@ -125,14 +125,15 @@ impl ScopeTracker {
         &self.lambda_envs[&env_idx]
     }
 
-    pub fn finish(self) -> HashMap<LambdaEnvIdx, LambdaEnv> {
-        self.lambda_envs.iter().map(|(k, v)| {
+    pub fn finish(self) -> (HashMap<LambdaEnvIdx, LambdaEnv>, LambdaEnvIdxGenerator) {
+        let envs = self.lambda_envs.iter().map(|(k, v)| {
             let nv = LambdaEnv {
                 num_captures: v.captures.len(),
                 meta_binds: v.meta_binds.iter().map(|v| v.0.clone()).collect(),
             };
             (*k, nv)
-        }).collect()
+        }).collect();
+        (envs, self.lambda_env_idx_generator)
     }
 
 }

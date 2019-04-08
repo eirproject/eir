@@ -7,6 +7,7 @@ use crate::{ FunctionIdent, ConstantTerm, AtomicTerm, LambdaEnvIdx };
 use crate::Clause;
 use crate::op::{ OpKind, ComparisonOperation };
 
+use matches::assert_matches;
 use ::cranelift_entity::{ EntityList };
 
 #[derive(Copy, Clone, Debug)]
@@ -15,7 +16,16 @@ pub struct BuilderPosition(Option<Ebb>, Option<Op>);
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum BuilderState {
     Build,
+    BuildingOp(Op),
     OutstandingEbbCalls(usize),
+}
+impl BuilderState {
+    fn building_op(&self) -> Op {
+        match self {
+            BuilderState::BuildingOp(op) => *op,
+            _ => panic!("Builder not in BuildingOp state"),
+        }
+    }
 }
 
 pub struct FunctionBuilder<'a> {
@@ -27,6 +37,44 @@ pub struct FunctionBuilder<'a> {
     state: BuilderState,
 
     val_buf: Option<Vec<Value>>,
+}
+
+// Manual operation builder interface
+impl<'a> FunctionBuilder<'a> {
+
+    pub fn op_build_start(&mut self, kind: OpKind) {
+        let op = self.insert_op(OpData {
+            kind: kind,
+            reads: EntityList::new(),
+            writes: EntityList::new(),
+            ebb_calls: EntityList::new(),
+        });
+        self.state = BuilderState::BuildingOp(op);
+    }
+
+    pub fn op_build_write(&mut self) -> Value {
+        let op = self.state.building_op();
+        let result = self.fun.new_variable();
+        self.fun.ops[op].writes.push(result, &mut self.fun.value_pool);
+        result
+    }
+
+    pub fn op_build_read(&mut self, val: Value) {
+        let op = self.state.building_op();
+        self.fun.ops[op].reads.push(val, &mut self.fun.value_pool);
+    }
+
+    pub fn op_build_ebb_call(&mut self, call: EbbCall) {
+        let op = self.state.building_op();
+        self.fun.ops[op].ebb_calls.push(call, &mut self.fun.ebb_call_pool);
+    }
+
+    pub fn op_build_end(&mut self) {
+        // TODO validate op
+        assert_matches!(self.state, BuilderState::BuildingOp(_));
+        self.state = BuilderState::Build;
+    }
+
 }
 
 impl<'a> FunctionBuilder<'a> {

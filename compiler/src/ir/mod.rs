@@ -120,7 +120,8 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
     println!("STAGE: Lower to LIR");
     // Lower to LIR
     ::ir::lir::from_hir::do_lower(&mut module, &mut env);
-    module.lambda_envs = Some(env.finish());
+    let (lambda_envs, mut env_idx_generator) = env.finish();
+    module.lambda_envs = Some(lambda_envs);
 
     let fun_idents: Vec<_> = module.functions.iter()
         .map(|f| f.ident.clone()).collect();
@@ -170,12 +171,14 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
         //lir_mut.compress_numbering();
         builder.function().validate();
 
-        let live = builder.function().live_values();
-        let entry = builder.function().ebb_entry();
-        let at_entry = &live.ebb_live[&entry];
-        for value in at_entry.iter(&live.pool) {
-            println!("{:?}", value);
-        }
+        ::cps_transform::cps_transform(&builder.function(), &mut env_idx_generator);
+
+        //let live = builder.function().live_values();
+        //let entry = builder.function().ebb_entry();
+        //let at_entry = &live.ebb_live[&entry];
+        //for value in at_entry.iter(&live.pool) {
+        //    println!("{:?}", value);
+        //}
 
         //println!("Calls: {:?}", lir_mut.get_all_calls());
 
