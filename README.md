@@ -1,11 +1,12 @@
 # core_erlang
 Core Erlang compiler implemented in Rust
 
-Current area of work: **NIF generation proof of concept ([niffy](https://github.com/eirproject/niffy))**
-
 Pictured below: CFG for `proplists:get_value/3`
-
 ![Example CFG](example_cfg.png)
+
+## Details
+
+Current area of work: NIF generation proof of concept ([niffy](https://github.com/eirproject/niffy))
 
 The project is split into several crates:
 * `eir` - Contains the core IR data structures, validation, printing

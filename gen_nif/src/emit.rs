@@ -8,13 +8,22 @@ use inkwell::values::{ FunctionValue, ArrayValue, StructValue, PointerValue,
 use inkwell::types::{ StructType, BasicType, BasicTypeEnum };
 use inkwell::module::{ Module };
 use inkwell::builder::Builder;
+use inkwell::basic_block::BasicBlock;
 
 use num_traits::cast::ToPrimitive;
 
-use crate::nif_types::NifTypes;
-use eir::{ Function, FunctionIdent, SSAVariable, Source, ConstantTerm, AtomicTerm };
-use eir::cfg::LabelN;
+use crate::target::nif::NifTypes;
+
+use eir::FunctionIdent;
+use eir::Module as EirModule;
+use eir::Function as EirFunction;
+use eir::{ Value, Ebb, Op };
+use eir::{ ConstantTerm, AtomicTerm };
+use eir::{ ValueType };
+use eir::AttributeKey;
 use eir::op::OpKind;
+use eir::op::ComparisonOperation;
+use eir::op::CallType;
 
 pub fn mangle_string(string: &str) -> String {
     string
@@ -35,40 +44,56 @@ pub fn mangle_ident(ident: &FunctionIdent) -> String {
     )
 }
 
-pub fn emit_read(context: &Context, module: &Module, builder: &Builder,
-                 nif_refs: &NifTypes,
-                 env: BasicValueEnum,
-                 bindings: &HashMap<SSAVariable, BasicValueEnum>,
-                 read: &Source) -> BasicValueEnum {
-    match read {
-        Source::Variable(ssa) => bindings[ssa],
-        Source::Constant(constant) => {
+struct LowerCtx<'a> {
+    context: &'a Context,
+    module: &'a Module,
+    builder: &'a Builder,
+    fn_val: FunctionValue,
+    protos: &'a HashMap<FunctionIdent, FunctionValue>,
+    nif_types: &'a NifTypes,
+    ebb_map: HashMap<Ebb, BasicBlock>,
+    phi_map: HashMap<(Ebb, usize), PhiValue>,
+    val_map: HashMap<Value, BasicValueEnum>,
+    loc_id: &'a mut u64,
+}
+
+fn emit_read(
+    ctx: &mut LowerCtx,
+    env: BasicValueEnum,
+    fun: &EirFunction,
+    read: Value,
+) -> BasicValueEnum
+{
+    let data = fun.value(read);
+    match data {
+        ValueType::Variable => ctx.val_map[&read],
+        ValueType::Constant(constant) => {
             match constant {
                 ConstantTerm::Atomic(AtomicTerm::Integer(num)) => {
-                    let i64_type = context.i64_type();
+                    let i64_type = ctx.context.i64_type();
                     let num_const = i64_type.const_int(
                         num.to_i64().unwrap() as u64, true);
-                    let cs = builder.build_call(
-                        nif_refs.enif_make_long,
+                    let cs = ctx.builder.build_call(
+                        ctx.nif_types.enif_make_long,
                         &[env, num_const.into()],
                         "make_int64"
                     );
                     cs.try_as_basic_value().left().unwrap()
                 }
                 ConstantTerm::Atomic(AtomicTerm::Atom(val)) => {
-                    let i8_type = context.i8_type();
+                    let i8_type = ctx.context.i8_type();
                     let i8_ptr = i8_type.ptr_type(AddressSpace::Generic);
                     let string_const = crate::primitives::make_c_string_const(
-                        context, module, val.as_str());
+                        ctx.context, ctx.module, val.as_str());
                     let string_const_ptr = string_const.as_pointer_value()
                         .const_cast(i8_ptr);
 
-                    let i64_type = context.i64_type();
+                    let i64_type = ctx.context.i64_type();
                     let string_len_val = i64_type.const_int(
                         val.as_str().bytes().len() as u64, true);
 
-                    let cs = builder.build_call(
-                        nif_refs.enif_make_atom_len,
+                    let cs = ctx.builder.build_call(
+                        ctx.nif_types.enif_make_atom_len,
                         &[env, string_const_ptr.into(), string_len_val.into()],
                         "make_atom_len"
                     );
@@ -80,323 +105,480 @@ pub fn emit_read(context: &Context, module: &Module, builder: &Builder,
     }
 }
 
-pub fn emit_eir_fun(context: &Context, module: &Module,
-                    nif_refs: &NifTypes,
-                    protos: &HashMap<FunctionIdent, FunctionValue>,
-                    eir_mod: &eir::Module, fun: &Function,
-                    fn_val: FunctionValue) {
-    let name = mangle_ident(&fun.ident);
+fn build_make_tuple(
+    ctx: &mut LowerCtx,
+    env: BasicValueEnum,
+    values: &[BasicValueEnum],
+) -> BasicValueEnum {
+    let i32_type = ctx.context.i32_type();
+    let i64_type = ctx.context.i64_type();
 
-    let mut fn_args = vec![
-        nif_refs.term_ptr_type,
-        nif_refs.env_ptr_type,
-    ];
-    fn_args.extend((0..fun.ident.arity).map(|_| nif_refs.term_type));
+    let values_len = i32_type.const_int(
+        values.len() as u64, false);
+    let values_arr = ctx.builder.build_array_alloca(
+        ctx.nif_types.term_type, values_len, "");
 
-    let bool_type = context.bool_type();
-    let i64_type = context.i64_type();
-    let i32_type = context.i32_type();
-    let i8_type = context.i8_type();
-    let i8_ptr = i8_type.ptr_type(AddressSpace::Generic);
+    for (idx, read) in values.iter().enumerate() {
+        let elem_ptr = unsafe {
+            ctx.builder.build_gep(
+                values_arr,
+                &[i64_type.const_int(idx as u64, false)],
+                "",
+            )
+        };
+        ctx.builder.build_store(elem_ptr, *read);
+    }
 
-    assert!(fn_val.count_basic_blocks() == 0);
-    //let fn_type = (nif_refs.bool_type).fn_type(&fn_args, false);
-    //let fn_val = module.add_function(&name, fn_type, None);
+    let call_ret = ctx.builder.build_call(
+        ctx.nif_types.enif_make_tuple_from_array,
+        &[
+            env.into(),
+            values_arr.into(),
+            values_len.into(),
+        ],
+        "",
+    );
+    call_ret.try_as_basic_value().left().unwrap()
+}
 
-    let fun_ret_term = fn_val.get_nth_param(0).unwrap();
-    let env = fn_val.get_nth_param(1).unwrap();
+fn build_unpack_tuple(
+    ctx: &mut LowerCtx,
+    env: BasicValueEnum,
+    tuple_val: BasicValueEnum,
+    arity: usize,
+    out_vals: &mut Vec<BasicValueEnum>,
+    err_bb: &BasicBlock,
+) -> BasicBlock {
+    let i32_type = ctx.context.i32_type();
+    let i64_type = ctx.context.i64_type();
 
-    // Create all basic blocks
-    let entry_label = fun.lir.entry;
-    let mut basic_blocks = HashMap::new();
-    basic_blocks.insert(entry_label, context.append_basic_block(&fn_val, "entry"));
-    for node in fun.lir.graph.nodes() {
-        if !basic_blocks.contains_key(&node.label) {
-            basic_blocks.insert(
-                node.label,
-                context.append_basic_block(&fn_val, &format!("{}", node.label))
+    let values_len_ptr = ctx.builder.build_alloca(
+        i32_type, "");
+    let values_arr_ptr = ctx.builder.build_alloca(
+        ctx.nif_types.term_ptr_type, "");
+
+    let call_ret = ctx.builder.build_call(
+        ctx.nif_types.enif_get_tuple,
+        &[
+            env.into(),
+            tuple_val.into(),
+            values_len_ptr.into(),
+            values_arr_ptr.into(),
+        ],
+        "",
+    );
+
+    let int_ok_bb = ctx.context.append_basic_block(&ctx.fn_val, "tuple_unpack_ok");
+    let ok_bb = ctx.context.append_basic_block(&ctx.fn_val, "tuple_arity_ok");
+
+    // Check return true
+    let cmp_res = ctx.builder.build_int_compare(
+        IntPredicate::EQ,
+        call_ret.try_as_basic_value().left().unwrap().into_int_value(),
+        i32_type.const_int(1, false).into(),
+        "",
+    );
+    ctx.builder.build_conditional_branch(cmp_res, &int_ok_bb, err_bb);
+
+    // Check arity
+    ctx.builder.position_at_end(&int_ok_bb);
+    let arity_val = ctx.builder.build_load(values_len_ptr, "");
+    let cmp_res = ctx.builder.build_int_compare(
+        IntPredicate::EQ,
+        arity_val.into_int_value(),
+        i32_type.const_int(arity as u64, false).into(),
+        "",
+    );
+    ctx.builder.build_conditional_branch(cmp_res, &ok_bb, err_bb);
+
+    ctx.builder.position_at_end(&ok_bb);
+    let values_arr = ctx.builder.build_load(values_arr_ptr, "");
+
+    out_vals.clear();
+    for idx in 0..arity {
+        let elem_ptr = unsafe {
+            ctx.builder.build_gep(
+                values_arr.into_pointer_value(),
+                &[i64_type.const_int(idx as u64, false)],
+                "",
+            )
+        };
+        let term = ctx.builder.build_load(elem_ptr, "");
+        out_vals.push(term);
+    }
+
+    ok_bb
+}
+
+fn add_branch_phis(
+    ctx: &mut LowerCtx,
+    env: BasicValueEnum,
+    fun: &EirFunction,
+    current: &BasicBlock,
+    target: Ebb,
+    in_args: &[Value],
+) {
+    for (idx, src_arg) in in_args.iter().enumerate() {
+        let phi = ctx.phi_map[&(target, idx)];
+        println!("BranchPhiRead {:?}", src_arg);
+        //let val = ctx.val_map[src_arg];
+        let val = emit_read(ctx, env, fun, *src_arg);
+        phi.add_incoming(&[(&val, current)]);
+    }
+}
+
+fn debug_printf(ctx: &mut LowerCtx, text: &str) {
+    let string_const = crate::primitives::make_c_string_const(
+        ctx.context, ctx.module, text);
+    let string_const_ptr = string_const.as_pointer_value()
+        .const_cast(ctx.nif_types.i8_ptr.into_pointer_type());
+    ctx.builder.build_call(
+        ctx.nif_types.printf, &[string_const_ptr.into()], "debug print");
+}
+
+fn emit_op(
+    ctx: &mut LowerCtx,
+    env: BasicValueEnum,
+    eir_mod: &EirModule,
+    fun: &EirFunction,
+    op: Op,
+) {
+    let mut read_buf = Vec::new();
+    let mut out_buf = Vec::new();
+
+    let i8_type = ctx.context.i8_type();
+    let i32_type = ctx.context.i32_type();
+    let i64_type = ctx.context.i64_type();
+
+    // Reads
+    read_buf.clear();
+    for read in fun.op_reads(op) {
+        let value = emit_read(
+            ctx,
+            env, fun,
+            *read,
+        );
+        read_buf.push(value);
+    }
+
+    let reads = fun.op_reads(op);
+    let writes = fun.op_writes(op);
+    let branches = fun.op_branches(op);
+
+    match fun.op_kind(op) {
+        OpKind::MakeClosureEnv { .. } => {
+            debug_printf(ctx, "MakeClosureEnv\n");
+            assert!(writes.len() == 1);
+            let value_enum = build_make_tuple(ctx, env, &read_buf);
+            ctx.val_map.insert(writes[0], value_enum);
+        },
+        OpKind::UnpackEnv { .. } => {
+            debug_printf(ctx, "UnpackEnv\n");
+            let err_bb = ctx.context.append_basic_block(&ctx.fn_val, "env_unpack_err");
+
+            let ok_bb = build_unpack_tuple(
+                ctx,
+                env,
+                read_buf[0],
+                writes.len(),
+                &mut out_buf,
+                &err_bb,
             );
-        }
-    }
 
-    let builder = context.create_builder();
+            ctx.builder.position_at_end(&err_bb);
+            ctx.builder.build_call(ctx.nif_types.unreachable_fail, &[
+                i64_type.const_int(*ctx.loc_id as u64, false).into(),
+            ], "");
+            *ctx.loc_id += 1;
+            ctx.builder.build_unreachable();
 
-    //let basic_block = context.append_basic_block(&fn_val, "entry");
+            ctx.builder.position_at_end(&ok_bb);
 
-    let mut bindings: HashMap<SSAVariable, BasicValueEnum> = HashMap::new();
-    let mut phis: HashMap<(LabelN, usize), PhiValue> = HashMap::new();
-
-    for node_label in fun.lir.graph.reverse_post_order(entry_label) {
-        let node = fun.lir.graph.node(node_label);
-        let node_inner = node.inner.borrow();
-
-        let basic_block = &basic_blocks[&node_label];
-        builder.position_at_end(basic_block);
-
-        for (idx, phi) in node_inner.phi_nodes.iter().enumerate() {
-            let l_phi = builder.build_phi(i64_type, "");
-            phis.insert((node.label, idx), l_phi);
-            bindings.insert(phi.ssa, l_phi.as_basic_value());
-        }
-
-        //let string_const = crate::primitives::make_c_string_const(
-        //    context, module, &format!("Label: {}\n", node_label));
-        //let string_const_ptr = string_const.as_pointer_value()
-        //    .const_cast(i8_ptr);
-        //builder.build_call(nif_refs.printf, &[string_const_ptr.into()], "debug print");
-
-        for op in node_inner.ops.iter() {
-            match op.kind {
-                OpKind::Arguments => {
-                    assert!(op.reads.len() == 0);
-                    assert!(op.writes.len() == fun.ident.arity);
-                    for (idx, write) in op.writes.iter().enumerate() {
-                        bindings.insert(
-                            *write,
-                            fn_val.get_nth_param(idx as u32 + 2).unwrap());
-                    }
-                },
-                OpKind::Call { tail_call } => {
-                    let all_resolved = op.reads.iter().take(2).all(|v| v.is_constant());
-                    if all_resolved {
-                        // Unwrap function name
-                        let module_a = op.reads[0].constant().unwrap().atom().unwrap();
-                        let name = op.reads[1].constant().unwrap().atom().unwrap();
-                        let arity = op.reads.len() - 2;
-
-                        // Construct EIR ident and mangle
-                        let ident = FunctionIdent {
-                            module: module_a,
-                            name: name,
-                            arity: arity,
-                            lambda: None,
-                        };
-                        let name_mangled = mangle_ident(&ident);
-
-                        // Make arguments, (ret_term, env, ..)
-                        let ret_term_ptr = builder.build_alloca(
-                            nif_refs.term_type, "return term");
-                        let mut args = vec![
-                            ret_term_ptr.into(),
-                            env,
-                        ];
-                        args.extend(op.reads.iter().skip(2)
-                                    .map(|r| emit_read(context, module, &builder,
-                                                       nif_refs, env, &bindings, r)));
-
-                        // Build function call
-                        let fun = module.get_function(&name_mangled).expect(&name_mangled);
-                        let call = builder.build_call(fun, &args, "funcall");
-
-                        // Insert return term into bindings for both Ok and Throw
-                        let ret_term = builder.build_load(ret_term_ptr, "return term");
-                        if tail_call {
-                            let bb_ok = context.append_basic_block(
-                                &fn_val, "tail_call_ok");
-                            let bb_exc = context.append_basic_block(
-                                &fn_val, "tail_call_exc");
-                            builder.build_conditional_branch(
-                                call.try_as_basic_value().left().unwrap().into_int_value(),
-                                &bb_ok,
-                                &bb_exc
-                            );
-
-                            let b2 = context.create_builder();
-                            b2.position_at_end(&bb_ok);
-                            b2.build_store(
-                                fun_ret_term.into_pointer_value(),
-                                ret_term
-                            );
-                            b2.build_return(Some(&bool_type.const_int(1, false)));
-
-                            b2.position_at_end(&bb_exc);
-                            b2.build_store(
-                                fun_ret_term.into_pointer_value(),
-                                ret_term
-                            );
-                            b2.build_return(Some(&bool_type.const_int(0, false)));
-                        } else {
-                            bindings.insert(op.writes[0], ret_term);
-                            bindings.insert(op.writes[1], ret_term);
-
-                            builder.build_conditional_branch(
-                                call.try_as_basic_value().left().unwrap().into_int_value(),
-                                &basic_blocks[&node.outgoing[0].1],
-                                &basic_blocks[&node.outgoing[1].1]
-                            );
-                        }
-
-                    } else {
-                        unimplemented!();
-                    }
-                },
-                //OpKind::Apply { tail_call } => {
-                //
-                //},
-                OpKind::EqualAtomic(ref atomic) => {
-                    let arg = emit_read(context, module, &builder, nif_refs,
-                                        env, &bindings, &op.reads[0]);
-                    match atomic {
-                        AtomicTerm::Integer(num) => {
-                            let ret_num_ptr = builder.build_alloca(
-                                i64_type, "return num");
-                            let args = vec![
-                                env,
-                                arg,
-                                ret_num_ptr.into(),
-                            ];
-                            let call = builder.build_call(nif_refs.enif_get_long,
-                                                          &args, "funcall");
-
-                            let bb_ok = context.append_basic_block(
-                                &fn_val, "value_type_ok");
-                            let ret_val = call.try_as_basic_value().left()
-                                .unwrap().into_int_value();
-                            builder.build_conditional_branch(
-                                ret_val,
-                                &bb_ok,
-                                &basic_blocks[&node.outgoing[1].1],
-                            );
-
-                            let b2 = context.create_builder();
-                            b2.position_at_end(&bb_ok);
-
-                            let num_const = i64_type.const_int(
-                                num.to_i64().unwrap() as u64, true);
-                            let ret_num = b2.build_load(ret_num_ptr, "return num");
-                            let cmp = b2.build_int_compare(
-                                IntPredicate::EQ,
-                                num_const,
-                                ret_num.into_int_value(),
-                                ""
-                            );
-
-                            b2.build_conditional_branch(
-                                cmp,
-                                &basic_blocks[&node.outgoing[0].1],
-                                &basic_blocks[&node.outgoing[1].1],
-                            );
-                        }
-                        _ => unimplemented!(),
-                    }
-                }
-                OpKind::Jump => {
-                    builder.build_unconditional_branch(
-                        &basic_blocks[&node.outgoing[0].1]);
-                }
-                OpKind::ReturnOk => {
-                    let arg = emit_read(context, module, &builder, nif_refs,
-                                        env, &bindings, &op.reads[0]);
-                    builder.build_store(
-                        fun_ret_term.into_pointer_value(),
-                        arg
-                    );
-                    builder.build_return(Some(&bool_type.const_int(1, false)));
-                }
-                OpKind::ReturnThrow => {
-                    let arg = emit_read(context, module, &builder, nif_refs,
-                                        env, &bindings, &op.reads[0]);
-                    builder.build_store(
-                        fun_ret_term.into_pointer_value(),
-                        arg
-                    );
-                    builder.build_return(Some(&bool_type.const_int(0, false)));
-                }
-                OpKind::TombstoneSSA(_) => (),
-                OpKind::Move => {
-                    let arg = emit_read(context, module, &builder, nif_refs,
-                                        env, &bindings, &op.reads[0]);
-                    bindings.insert(op.writes[0], arg);
-                }
-                OpKind::MakeClosureEnv { env_idx } => {
-                    let lambda_env = &eir_mod.lambda_envs[&env_idx];
-
-                    let module_const = crate::primitives::make_c_string_const(
-                        context, module, fun.ident.module.as_str());
-                    let name_const = crate::primitives::make_c_string_const(
-                        context, module, fun.ident.name.as_str());
-                    let env_num_const = i32_type.const_int(
-                        env_idx.num_repr() as u64, false);
-                    let num_captures_const = i64_type.const_int(
-                        lambda_env.num_captures as u64, false);
-
-                    let captures_arr = builder.build_alloca(
-                        nif_refs.term_type, "return term");
-
-                    for (idx, read) in op.reads.iter().enumerate() {
-                        let elem_ptr = unsafe {
-                            builder.build_gep(
-                                captures_arr,
-                                &[i64_type.const_int(idx as u64, false)],
-                                "")
-                        };
-                        let value = emit_read(context, module, &builder,
-                                              nif_refs, env, &bindings, read);
-                        builder.build_store(elem_ptr, value);
-                    }
-
-                    let args: Vec<BasicValueEnum> = vec![
-                        env.into(),
-                        module_const.as_pointer_value().into(),
-                        name_const.as_pointer_value().into(),
-                        env_num_const.into(),
-                        num_captures_const.into(),
-                        captures_arr.into(),
-                    ];
-                    let call = builder.build_call(nif_refs.make_lambda_environment,
-                                                  &args, "funcall");
-
-                    bindings.insert(op.writes[0], call.try_as_basic_value()
-                                    .left().unwrap());
-                }
-                OpKind::BindClosure { ref ident } => {
-                    let lambda_info = ident.lambda.unwrap();
-                    let lambda_env = &eir_mod.lambda_envs[&lambda_info.0];
-
-                    let fn_val = &protos[&ident];
-
-                    let fun_num_const = i32_type.const_int(
-                        lambda_info.1 as u64, false);
-                    let lambda_env = emit_read(
-                        context, module, &builder,
-                        nif_refs, env, &bindings, &op.reads[0]);
-
-                    let args: Vec<BasicValueEnum> = vec![
-                        env.into(),
-                        fun_num_const.into(),
-                        fn_val.as_global_value().as_pointer_value().into(),
-                        lambda_env.into(),
-                    ];
-                    let call = builder.build_call(nif_refs.make_bound_lambda,
-                                                  &args, "funcall");
-
-                    bindings.insert(op.writes[0], call.try_as_basic_value()
-                                    .left().unwrap());
-
-                    //println!("{:?}", op);
-                    //unimplemented!();
-                }
-                _ => {
-                    println!("{:?}", op.kind);
-                    unimplemented!();
-                }
+            for (out, write) in out_buf.iter().zip(writes.iter()) {
+                ctx.val_map.insert(*write, *out);
             }
-        }
+        },
+        OpKind::BindClosure { ident } => {
+            debug_printf(ctx, "BindClosure\n");
+            assert!(writes.len() == 1);
+            let fun_val = ctx.protos[ident];
 
-    }
+            assert!(ident.module == eir_mod.name);
+            let mut arity = eir_mod.functions[ident].entry_arg_num();
+            if ident.lambda.is_none() { arity += 1; }
 
-    for node in fun.lir.graph.nodes() {
-        let node_inner = node.inner.borrow();
-        for (idx, phi) in node_inner.phi_nodes.iter().enumerate() {
-            let l_phi = phis[&(node.label, idx)];
-            for entry in phi.entries.iter() {
-                let edge_label = entry.0;
-                let ssa = &entry.1;
-                let from = &basic_blocks[&fun.lir.graph.edge_from(edge_label)];
-                //println!("Phi Incoming: {:?} {:?}", bindings[ssa], from);
-                l_phi.add_incoming(&[(&bindings[ssa], from)]);
+            // First value in fun tuple: :native_fun
+            let string_const = crate::primitives::make_c_string_const(
+                ctx.context, ctx.module, "native_fun");
+            let string_const_ptr = string_const.as_pointer_value()
+                .const_cast(i8_type.ptr_type(AddressSpace::Generic));
+            let native_fun_call = ctx.builder.build_call(
+                ctx.nif_types.enif_make_atom_len,
+                &[
+                    env.into(),
+                    string_const_ptr.into(),
+                    i64_type.const_int(10, false).into(),
+                ],
+                ""
+            );
+            let native_fun_term = native_fun_call.try_as_basic_value().left().unwrap();
+
+            // Second value in fun tuple: Function ptr
+            let fun_ptr_value = fun_val.as_global_value().as_pointer_value();
+            let fun_ptr_value_casted = ctx.builder.build_pointer_cast(
+                fun_ptr_value, ctx.nif_types.i8_ptr.into_pointer_type(), "");
+            let args: Vec<BasicValueEnum> = vec![
+                env.into(),
+                fun_ptr_value_casted.into(),
+                i32_type.const_int(arity as u64, false).into(),
+            ];
+            let call = ctx.builder.build_call(
+                ctx.nif_types.make_fun_ptr_res, &args, "");
+            let fun_ptr_term = call.try_as_basic_value().left().unwrap();
+
+            // Third value in fun tuple: Env tuple
+            let env_tup_term = read_buf[0];
+
+            // Make tuple
+            out_buf.clear();
+            out_buf.push(native_fun_term);
+            out_buf.push(fun_ptr_term);
+            out_buf.push(env_tup_term);
+
+            let fun_tuple = build_make_tuple(ctx, env, &out_buf);
+            ctx.val_map.insert(writes[0], fun_tuple);
+        },
+        OpKind::Jump => {
+            debug_printf(ctx, "Jump\n");
+            assert!(writes.len() == 0);
+            let ebb_call = branches[0];
+            let target = fun.ebb_call_target(ebb_call);
+            let from_bb = ctx.builder.get_insert_block().unwrap();
+            add_branch_phis(ctx, env, fun, &from_bb, target,
+                            fun.ebb_call_args(ebb_call));
+            ctx.builder.build_unconditional_branch(&ctx.ebb_map[&target]);
+        },
+        OpKind::Move => {
+            assert!(writes.len() == 1);
+            ctx.val_map.insert(writes[0], read_buf[0]);
+        },
+        OpKind::PackValueList => {
+            debug_printf(ctx, "PackValueList\n");
+            assert!(writes.len() == 1);
+            let value_enum = build_make_tuple(ctx, env, &read_buf);
+            ctx.val_map.insert(writes[0], value_enum);
+        },
+        OpKind::UnpackValueList => {
+            debug_printf(ctx, "UnpackValueList\n");
+            let err_bb = ctx.context.append_basic_block(&ctx.fn_val, "val_unpack_err");
+
+            let ok_bb = build_unpack_tuple(ctx, env, read_buf[0], writes.len(),
+                                           &mut out_buf, &err_bb);
+
+            ctx.builder.position_at_end(&err_bb);
+            ctx.builder.build_call(ctx.nif_types.unreachable_fail, &[
+                i64_type.const_int(*ctx.loc_id as u64, false).into(),
+            ], "");
+            *ctx.loc_id += 1;
+            ctx.builder.build_unreachable();
+
+            ctx.builder.position_at_end(&ok_bb);
+
+            for (out, write) in out_buf.iter().zip(writes.iter()) {
+                ctx.val_map.insert(*write, *out);
             }
-        }
+        },
+        OpKind::Apply { call_type } => {
+            assert!(writes.len() == 0);
+            debug_printf(ctx, "Apply\n");
+            if *call_type == CallType::Cont {
+                assert!(reads.len() == 2);
+                ctx.builder.build_call(
+                    ctx.nif_types.nifrt_cont_call,
+                    &[
+                        env.into(),
+                        read_buf[0],
+                        read_buf[1],
+                    ],
+                    "",
+                );
+            } else {
+                unimplemented!()
+            }
+            ctx.builder.build_unreachable();
+        },
+        OpKind::Call { arity, call_type } => {
+            assert!(writes.len() == 0);
+            assert!(*call_type == CallType::Tail);
+            debug_printf(ctx, "Call\n");
+            if fun.value_is_constant(reads[0]) && fun.value_is_constant(reads[1]) {
+                let module = fun.value_constant(reads[0]).atom().unwrap();
+                let name = fun.value_constant(reads[1]).atom().unwrap();
+                let ident = FunctionIdent {
+                    module: module.clone(),
+                    name: name.clone(),
+                    lambda: None,
+                    arity: *arity,
+                };
+
+                let mut args = vec![
+                    env,
+                    read_buf[0], // TODO
+                ];
+                args.extend(read_buf[2..].iter().cloned());
+
+                let fun = ctx.protos[&ident];
+                ctx.builder.build_call(
+                    fun,
+                    &args,
+                    ""
+                );
+            } else {
+                unimplemented!()
+            }
+            ctx.builder.build_unreachable();
+        },
+        OpKind::ComparisonOperation(ComparisonOperation::Equal) => {
+            assert!(writes.len() == 0);
+            debug_printf(ctx, "ComparisonOperation\n");
+            let call = ctx.builder.build_call(
+                ctx.nif_types.enif_compare,
+                &[
+                    read_buf[0],
+                    read_buf[1],
+                ],
+                "",
+            );
+            let res = call.try_as_basic_value().left().unwrap();
+
+            let cmp_res = ctx.builder.build_int_compare(
+                IntPredicate::EQ,
+                res.into_int_value(),
+                i32_type.const_int(0, false).into(),
+                "",
+            );
+
+            let fail_call = branches[0];
+            let fail_target = fun.ebb_call_target(fail_call);
+
+            let from_bb = ctx.builder.get_insert_block().unwrap();
+
+            let ok_bb = ctx.context.append_basic_block(&ctx.fn_val, "compare_eq_ok");
+            ctx.builder.build_conditional_branch(cmp_res, &ok_bb, &ctx.ebb_map[&fail_target]);
+
+            add_branch_phis(ctx, env, fun, &from_bb, fail_target, fun.ebb_call_args(fail_call));
+
+            ctx.builder.position_at_end(&ok_bb);
+        },
+        OpKind::MakeNoValue => {
+            assert!(writes.len() == 1);
+            println!("NoValue {:?}", writes);
+        },
+        kind => unimplemented!("{:?}", kind),
     }
 
 }
+
+fn emit_ebb(
+    ctx: &mut LowerCtx,
+    env: BasicValueEnum,
+    eir_mod: &EirModule,
+    fun: &EirFunction,
+    ebb: Ebb,
+) {
+
+    let bb = &ctx.ebb_map[&ebb];
+    ctx.builder.position_at_end(bb);
+
+    for op in fun.iter_op(ebb) {
+        emit_op(ctx, env, eir_mod, fun, op);
+    }
+
+}
+
+pub fn emit_fun(
+    context: &Context,
+    module: &Module,
+    nif_types: &NifTypes,
+    protos: &HashMap<FunctionIdent, FunctionValue>,
+    loc_id: &mut u64,
+    eir_mod: &EirModule,
+    fun: &EirFunction,
+    fn_val: FunctionValue,
+) {
+    println!("{}", fun.ident());
+
+    let builder = context.create_builder();
+    let mut ctx = LowerCtx {
+        context: context,
+        module: module,
+        builder: &builder,
+        fn_val: fn_val,
+        protos: protos,
+        nif_types: nif_types,
+        ebb_map: HashMap::new(),
+        phi_map: HashMap::new(),
+        val_map: HashMap::new(),
+        loc_id: loc_id,
+    };
+
+    let entry_bb = context.append_basic_block(&fn_val, "entry");
+    let entry_ebb = fun.ebb_entry();
+
+    // Add llvm bbs corresponding to the entry of eir ebbs.
+    for ebb in fun.iter_ebb() {
+        let bb = context.append_basic_block(&fn_val, &format!("{}", ebb));
+        builder.position_at_end(&bb);
+        ctx.ebb_map.insert(ebb, bb);
+        for (idx, arg) in fun.ebb_args(ebb).iter().enumerate() {
+            let phi = builder.build_phi(ctx.nif_types.term_type, &format!("{}", arg));
+            ctx.phi_map.insert((ebb, idx), phi);
+            ctx.val_map.insert(*arg, phi.as_basic_value());
+        }
+    }
+
+    let ebb_args = fun.ebb_args(entry_ebb);
+
+    // Arguments and entry bb
+    builder.position_at_end(&entry_bb);
+    let env = fn_val.get_nth_param(0).unwrap();
+    let mut arg_offset = 1;
+    if fun.ident().lambda.is_none() {
+        arg_offset = 2;
+    }
+
+    for (n, _arg) in ebb_args.iter().enumerate() {
+        let value = fn_val.get_nth_param(n as u32 + arg_offset).unwrap();
+        ctx.phi_map[&(entry_ebb, n)].add_incoming(&[(&value, &entry_bb)]);
+    }
+
+    if fun.has_attribute(&AttributeKey::Continuation) {
+        let ebb_args = fun.ebb_args(entry_ebb);
+        assert!(fun.ident().lambda.is_some());
+        assert!(ebb_args.len() == 2);
+    } else {
+        if fun.ident().lambda.is_some() {
+            // env, ok_cont, err_cont
+            assert!(ebb_args.len() >= 3);
+        } else {
+            // ok_cont, err_cont
+            assert!(ebb_args.len() >= 2);
+        }
+    }
+
+    let string_const = crate::primitives::make_c_string_const(
+        ctx.context, ctx.module, &format!("Entry!\n"));
+    let string_const_ptr = string_const.as_pointer_value()
+        .const_cast(ctx.nif_types.i8_ptr.into_pointer_type());
+    ctx.builder.build_call(
+        ctx.nif_types.printf, &[string_const_ptr.into()], "debug print");
+
+    builder.build_unconditional_branch(&ctx.ebb_map[&entry_ebb]);
+
+    // ebbs in eir ir
+    for ebb in fun.iter_ebb() {
+        emit_ebb(&mut ctx, env, eir_mod, fun, ebb);
+    }
+
+}
+

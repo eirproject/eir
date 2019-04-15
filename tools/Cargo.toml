@@ -2,10 +2,7 @@
 name = "tools"
 version = "0.1.0"
 authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
-
-[[bin]]
-name = "run_fun"
-path = "src/run_fun.rs"
+edition = "2018"
 
 [[bin]]
 name = "gen_cfg"
@@ -15,7 +12,14 @@ path = "src/gen_cfg.rs"
 name = "gen_eir"
 path = "src/gen_eir.rs"
 
+[[bin]]
+name = "compile"
+path = "src/compile.rs"
+
 [dependencies]
 core_erlang_compiler = { path = "../compiler" }
+cps_transform = { path = "../cps_transform" }
 eir = { path = "../eir" }
 #core_erlang_interpreter = { path = "../interpreter" }
+
+clap = "2.33.0"

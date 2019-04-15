@@ -15,7 +15,7 @@ impl Validator for AtomSymbol {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Atom(Symbol<AtomSymbol>);
 
 impl Display for Atom {

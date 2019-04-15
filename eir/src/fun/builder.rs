@@ -2,10 +2,11 @@ use super::{ Ebb, Op, Value, EbbCall };
 use super::{ OpData, EbbData, EbbCallData };
 use super::{ ValueType, WriteToken };
 use super::{ Function };
+use super::{ AttributeKey, AttributeValue };
 
 use crate::{ FunctionIdent, ConstantTerm, AtomicTerm, ClosureEnv };
 use crate::Clause;
-use crate::op::{ OpKind, ComparisonOperation };
+use crate::op::{ OpKind, ComparisonOperation, CallType };
 
 use matches::assert_matches;
 use ::cranelift_entity::{ EntityList };
@@ -97,6 +98,10 @@ impl<'a> FunctionBuilder<'a> {
     }
     pub fn function_mut<'b>(&'b mut self) -> &'b mut Function {
         self.fun
+    }
+
+    pub fn put_attribute(&mut self, key: AttributeKey, val: AttributeValue) {
+        self.fun.attributes.insert(key, val);
     }
 
     pub fn gen_variables(&mut self, num: usize, args: &mut Vec<Value>) {
@@ -347,41 +352,49 @@ impl<'a> FunctionBuilder<'a> {
         });
     }
 
-    pub fn op_call(&mut self, module: Value, name: Value,
+    pub fn op_call(&mut self, module: Value, name: Value, arity: usize,
                    args: &[Value]) -> (Value, Value) {
-        self.op_call_internal(module, name, args, false).unwrap()
+        self.op_call_internal(module, name, args, arity, CallType::Normal).unwrap()
     }
-    pub fn op_tail_call(&mut self, module: Value, name: Value,
+    pub fn op_tail_call(&mut self, module: Value, name: Value, arity: usize,
                         args: &[Value]) {
-        assert!(self.op_call_internal(module, name, args, true).is_none());
+        assert!(self.op_call_internal(
+            module, name, args, arity, CallType::Tail).is_none());
+    }
+    pub fn op_cont_call(&mut self, module: Value, name: Value, arity: usize,
+                        args: &[Value]) {
+        assert!(self.op_call_internal(
+            module, name, args, arity, CallType::Cont).is_none());
     }
 
     pub fn op_call_internal(&mut self, module: Value, name: Value,
-                            args: &[Value], tail: bool) -> Option<(Value, Value)> {
+                            args: &[Value], arity: usize, call_type: CallType
+    ) -> Option<(Value, Value)>
+    {
         let mut reads = EntityList::from_slice(
             &[module, name], &mut self.fun.value_pool);
         reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
 
         let result;
-        let writes = if tail {
-            result = None;
-            EntityList::new()
-        } else {
+        let writes = if call_type == CallType::Normal {
             let result_ok = self.fun.new_variable();
             let result_err = self.fun.new_variable();
             result = Some((result_ok, result_err));
             EntityList::from_slice(
                 &[result_ok, result_err], &mut self.fun.value_pool)
+        } else {
+            result = None;
+            EntityList::new()
         };
 
         self.insert_op(OpData {
-            kind: OpKind::Call { tail_call: tail },
+            kind: OpKind::Call { call_type, arity: arity },
             reads: reads,
             writes: writes,
             ebb_calls: EntityList::new(),
         });
 
-        if !tail {
+        if call_type == CallType::Normal {
             self.state = BuilderState::OutstandingEbbCalls(1);
         }
 
@@ -389,37 +402,40 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn op_apply(&mut self, fun: Value, args: &[Value]) -> (Value, Value) {
-        self.op_apply_internal(fun, args, false).unwrap()
+        self.op_apply_internal(fun, args, CallType::Normal).unwrap()
     }
     pub fn op_tail_apply(&mut self, fun: Value, args: &[Value]) {
-        assert!(self.op_apply_internal(fun, args, true).is_none());
+        assert!(self.op_apply_internal(fun, args, CallType::Tail).is_none());
+    }
+    pub fn op_cont_apply(&mut self, fun: Value, args: &[Value]) {
+        assert!(self.op_apply_internal(fun, args, CallType::Cont).is_none());
     }
 
-    fn op_apply_internal(&mut self, fun: Value, args: &[Value], tail: bool) -> Option<(Value, Value)> {
+    fn op_apply_internal(&mut self, fun: Value, args: &[Value], call_type: CallType) -> Option<(Value, Value)> {
         let mut reads = EntityList::from_slice(
             &[fun], &mut self.fun.value_pool);
         reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
 
         let result;
-        let writes = if tail {
-            result = None;
-            EntityList::new()
-        } else {
+        let writes = if call_type == CallType::Normal {
             let result_ok = self.fun.new_variable();
             let result_err = self.fun.new_variable();
             result = Some((result_ok, result_err));
             EntityList::from_slice(
                 &[result_ok, result_err], &mut self.fun.value_pool)
+        } else {
+            result = None;
+            EntityList::new()
         };
 
         self.insert_op(OpData {
-            kind: OpKind::Apply { tail_call: tail },
+            kind: OpKind::Apply { call_type },
             reads: reads,
             writes: writes,
             ebb_calls: EntityList::new(),
         });
 
-        if !tail {
+        if call_type == CallType::Normal {
             self.state = BuilderState::OutstandingEbbCalls(1);
         }
 
@@ -443,34 +459,43 @@ impl<'a> FunctionBuilder<'a> {
 
     pub fn op_unpack_value_list(&mut self, val_list: Value, num: usize,
                                 result: &mut Vec<Value>) {
-        self.gen_variables(num, result);
+        if num == 1 {
+            result.clear();
+            result.push(val_list);
+        } else {
+            self.gen_variables(num, result);
 
-        let reads = EntityList::from_slice(&[val_list], &mut self.fun.value_pool);
-        let writes = EntityList::from_slice(result, &mut self.fun.value_pool);
+            let reads = EntityList::from_slice(&[val_list], &mut self.fun.value_pool);
+            let writes = EntityList::from_slice(result, &mut self.fun.value_pool);
 
-        self.insert_op(OpData {
-            kind: OpKind::UnpackValueList,
-            reads: reads,
-            writes: writes,
-            ebb_calls: EntityList::new(),
-        });
+            self.insert_op(OpData {
+                kind: OpKind::UnpackValueList,
+                reads: reads,
+                writes: writes,
+                ebb_calls: EntityList::new(),
+            });
+        }
     }
 
     pub fn op_pack_value_list(&mut self, values: &[Value]) -> Value {
-        let reads = EntityList::from_slice(values, &mut self.fun.value_pool);
+        if values.len() == 1 {
+            values[0]
+        } else {
+            let reads = EntityList::from_slice(values, &mut self.fun.value_pool);
 
-        let result = self.fun.new_variable();
-        let writes = EntityList::from_slice(
-            &[result], &mut self.fun.value_pool);
+            let result = self.fun.new_variable();
+            let writes = EntityList::from_slice(
+                &[result], &mut self.fun.value_pool);
 
-        self.insert_op(OpData {
-            kind: OpKind::PackValueList,
-            reads: reads,
-            writes: writes,
-            ebb_calls: EntityList::new(),
-        });
+            self.insert_op(OpData {
+                kind: OpKind::PackValueList,
+                reads: reads,
+                writes: writes,
+                ebb_calls: EntityList::new(),
+            });
 
-        result
+            result
+        }
     }
 
     pub fn op_return_throw(&mut self, value: Value) {
@@ -559,7 +584,23 @@ impl<'a> FunctionBuilder<'a> {
 
     pub fn op_make_map(&mut self, merge: Option<Value>, kv: &[Value]) -> Value {
         assert!(kv.len() % 2 == 0);
-        unimplemented!()
+        if merge.is_some() {
+            unimplemented!()
+        }
+
+        let result = self.fun.new_variable();
+        let writes = EntityList::from_slice(&[result], &mut self.fun.value_pool);
+
+        let reads = EntityList::from_slice(kv, &mut self.fun.value_pool);
+
+        self.insert_op(OpData {
+            kind: OpKind::MakeMap,
+            reads: reads,
+            writes: writes,
+            ebb_calls: EntityList::new(),
+        });
+
+        result
     }
 
     pub fn op_make_binary(&mut self, values: &[Value]) -> Value {

@@ -49,6 +49,12 @@ impl Function {
 fn validate_ebb_calls(fun: &Function, cfg: &FunctionCfg) {
     for ebb in fun.iter_ebb() {
         for op in fun.iter_op(ebb) {
+            let kind = fun.op_kind(op);
+            if !kind.allowed_in_dialect(fun.dialect) {
+                println!("ERROR: Operation {:?} not allowed in {:?} dialect",
+                         kind, fun.dialect);
+            }
+
             for branch in fun.op_branches(op) {
                 let target = fun.ebb_call_target(*branch);
                 if fun.ebb_call_args(*branch).len() != fun.ebb_args(target).len() {
@@ -65,9 +71,9 @@ fn validate_entry_invariants(fun: &Function, cfg: &FunctionCfg) {
     let arity = fun.ident.arity;
     let needed_entry_arity = if fun.ident.lambda.is_some() { arity + 1 } else { arity };
 
-    if fun.ebb_args(entry_ebb).len() != needed_entry_arity {
-        println!("ERROR: Entry Ebb and identifier must be of same arity");
-    }
+    //if fun.ebb_args(entry_ebb).len() != needed_entry_arity {
+    //    println!("ERROR: Entry Ebb and identifier must be of same arity");
+    //}
 
     if fun.ident.lambda.is_some() {
         let entry_first_op = fun.iter_op(entry_ebb).next().unwrap();

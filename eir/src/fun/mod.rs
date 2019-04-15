@@ -127,10 +127,33 @@ impl<'a> Iterator for RevOpIter<'a> {
 #[derive(Debug)]
 pub struct WriteToken(Value);
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Dialect {
+    /// Allows all operations, including high level pattern matching construct.
+    High,
+    /// High minus pattern matching construct.
+    Normal,
+    /// Continuation passing style.
+    /// Normal minus returning calls. Only tail calls allowed.
+    CPS,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum AttributeKey {
+    Continuation,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AttributeValue {
+    None,
+}
+
 #[derive(Debug)]
 pub struct Function {
 
+    // Meta
     ident: FunctionIdent,
+    dialect: Dialect,
+    attributes: HashMap<AttributeKey, AttributeValue>,
 
     layout: Layout,
 
@@ -150,9 +173,12 @@ pub struct Function {
 
 impl Function {
 
-    pub fn new(ident: FunctionIdent) -> Self {
+    pub fn new(ident: FunctionIdent, dialect: Dialect) -> Self {
         Function {
             ident: ident,
+            dialect: dialect,
+            attributes: HashMap::new(),
+
             layout: Layout::new(),
 
             ops: PrimaryMap::new(),
@@ -166,6 +192,13 @@ impl Function {
 
             constant_values: HashSet::new(),
         }
+    }
+
+    pub fn dialect(&self) -> Dialect {
+        self.dialect
+    }
+    pub fn set_dialect(&mut self, dialect: Dialect) {
+        self.dialect = dialect;
     }
 
     pub fn new_variable(&mut self) -> Value {
@@ -204,6 +237,10 @@ impl Function {
 
     pub fn iter_constants<'a>(&'a self) -> std::collections::hash_set::Iter<'a, Value> {
         self.constant_values.iter()
+    }
+
+    pub fn entry_arg_num(&self) -> usize {
+        self.ebb_args(self.ebb_entry()).len()
     }
 
     pub fn ebb_entry(&self) -> Ebb {
@@ -278,6 +315,10 @@ impl Function {
         }
     }
 
+    pub fn has_attribute(&self, key: &AttributeKey) -> bool {
+        self.attributes.contains_key(key)
+    }
+
     pub fn used_values(&self, set: &mut HashSet<Value>) {
         set.clear();
         for ebb in self.iter_ebb() {
@@ -342,6 +383,44 @@ impl Function {
 
     pub fn live_values(&self) -> self::live::LiveValues {
         self::live::calculate_live_values(self)
+    }
+
+    pub fn get_all_static_calls(&self) -> Vec<FunctionIdent> {
+        let mut res = Vec::new();
+        for ebb in self.iter_ebb() {
+            for op in self.iter_op(ebb) {
+                let kind = self.op_kind(op);
+                match kind {
+                    OpKind::CaptureNamedFunction(ident) => {
+                        res.push(ident.clone());
+                    },
+                    OpKind::Call { arity, .. } => {
+                        let reads = self.op_reads(op);
+                        match (self.value(reads[0]), self.value(reads[1])) {
+                            (
+                                ValueType::Constant(ConstantTerm::Atomic(
+                                    AtomicTerm::Atom(module))),
+                                ValueType::Constant(ConstantTerm::Atomic(
+                                    AtomicTerm::Atom(name))),
+                            ) => {
+                                res.push(FunctionIdent {
+                                    module: module.clone(),
+                                    name: name.clone(),
+                                    lambda: None,
+                                    arity: *arity,
+                                });
+                            },
+                            _ => (),
+                        }
+                    },
+                    OpKind::BindClosure { ident } => {
+                        res.push(ident.clone());
+                    },
+                    _ => (),
+                }
+            }
+        }
+        res
     }
 
     pub fn to_text(&self) -> String {

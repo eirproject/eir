@@ -9,6 +9,7 @@ use ::ir::hir::scope_tracker::ScopeTracker;
 
 use ::ssa::{ SSAVariable, SSAVariableGenerator };
 use ::eir::{ Function, FunctionBuilder, Ebb, Value, AtomicTerm, Clause };
+use ::eir::Dialect;
 use ::eir::intern::Atom;
 //use ::eir::cfg::{ FunctionCfgBuilder, LabelN };
 use ::eir::op::{ OpKind };
@@ -40,7 +41,7 @@ impl Module {
 impl FunctionDefinition {
     fn lower(&mut self, env: &ScopeTracker) {
         let mut ssa_gen = env.clone_ssa_generator();
-        let mut function = Function::new(self.ident.clone());
+        let mut function = Function::new(self.ident.clone(), Dialect::High);
         let mut bindings: HashMap<SSAVariable, Value> = HashMap::new();
 
         {
@@ -292,6 +293,7 @@ impl hir::SingleExpression {
                 let (ok_val, exc_val) = b.op_call(
                     st.bindings[&module_ssa],
                     st.bindings[&name_ssa],
+                    reads_val.len(),
                     &reads_val,
                 );
                 let exc_jump = st.exc_stack.make_error_jump(b, exc_val);

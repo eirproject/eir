@@ -78,7 +78,7 @@ impl AFunctionName {
     }
 }
 
-pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
+pub fn parsed_to_eir(parsed: &parser::Module) -> ::eir::Module {
     println!("STAGE: From parsed");
     let mut module = ::ir::hir::from_parsed::from_parsed(parsed);
 
@@ -122,16 +122,21 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
     let lambda_envs = env.finish();
     module.envs = Some(lambda_envs);
 
-    let fun_idents: Vec<_> = module.functions.iter()
-        .map(|f| f.ident.clone()).collect();
-    let mut eir_module = module.to_eir();
+    module.to_eir()
+}
+
+pub fn eir_normal_passes(eir: &mut ::eir::Module) {
+
+    let mut fun_idents: Vec<_> = eir.functions.iter()
+        .map(|(k, _v)| k.clone()).collect();
+    fun_idents.sort();
 
     // Validate CFG between each major pass.
     let hardass_validate = true;
 
     println!("STAGE: Functionwise");
     for fun_ident in fun_idents.iter() {
-        let mut function = eir_module.functions.get_mut(fun_ident).unwrap();
+        let mut function = eir.functions.get_mut(fun_ident).unwrap();
         println!("Function: {}", function.ident());
 
         let mut builder = FunctionBuilder::new(&mut function);
@@ -170,7 +175,9 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
         //lir_mut.compress_numbering();
         builder.function().validate();
 
-        ::cps_transform::cps_transform(&builder.function(), &mut eir_module.envs);
+        //let mut functions = Vec::new();
+        //::cps_transform::cps_transform(&builder.function(), &mut eir_module.envs,
+        //                               &mut functions);
 
         //let live = builder.function().live_values();
         //let entry = builder.function().ebb_entry();
@@ -183,5 +190,10 @@ pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
 
     }
 
-    eir_module
+}
+
+pub fn from_parsed(parsed: &parser::Module) -> ::eir::Module {
+    let mut eir = parsed_to_eir(parsed);
+    eir_normal_passes(&mut eir);
+    eir
 }

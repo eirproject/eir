@@ -20,3 +20,4 @@ cranelift-entity = "0.30.0"
 petgraph = "0.4.13"
 
 matches = "0.1.8"
+regex = "1"

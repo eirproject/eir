@@ -4,8 +4,9 @@ use std::io::Write;
 
 use matches::assert_matches;
 
+use crate::Module;
 use crate::{ Function, FunctionIdent, Atom, Value };
-use crate::op::{ OpKind, ComparisonOperation };
+use crate::op::{ OpKind, ComparisonOperation, CallType };
 use crate::{ Ebb, Op, EbbCall };
 use crate::fun::ValueType;
 use crate::pattern::PatternNode;
@@ -18,6 +19,8 @@ use std::collections::HashSet;
 // Desired syntax:
 
 // ```
+// something {
+//
 // something:something/2@1.1 {
 // entry(%0, %1):
 //     %2, %3 = call woo:hoo(%0) except l0(%3);
@@ -47,6 +50,8 @@ use std::collections::HashSet;
 // clause1():
 //     %7 = case_calues [$0];
 //     case_guard_ok %7;
+//
+// }
 //
 // }
 // ```
@@ -143,6 +148,27 @@ pub fn print_constants(fun: &Function, indent: usize, out: &mut Write) -> std::i
     Ok(())
 }
 
+impl ToEirText for Module {
+    fn to_eir_text(&self, indent: usize, out: &mut Write) -> std::io::Result<()> {
+        let mut funs: Vec<_> = self.functions.keys().collect();
+        funs.sort();
+
+        write_indent(out, indent)?;
+        write!(out, "{} {{\n\n", self.name)?;
+
+        for ident in funs.iter() {
+            let fun = &self.functions[ident];
+            fun.to_eir_text(indent+1, out)?;
+            write!(out, "\n\n")?;
+        }
+
+        write_indent(out, indent)?;
+        write!(out, "}}")?;
+
+        Ok(())
+    }
+}
+
 impl ToEirText for Function {
     fn to_eir_text(&self, indent: usize, out: &mut Write) -> std::io::Result<()> {
         let ident = self.ident();
@@ -161,7 +187,7 @@ impl ToEirText for Function {
 
         // EBBs
         for ebb in self.iter_ebb() {
-            ebb.to_eir_text_fun(self, indent, out)?;
+            ebb.to_eir_text_fun(self, indent+1, out)?;
             write!(out, "\n")?;
         }
 
@@ -404,25 +430,33 @@ impl ToEirTextFun for Ebb {
                 OpKind::MakeNoValue => {
                     write!(out, "make_no_value")?;
                 },
-                OpKind::Call { tail_call } => {
-                    if *tail_call {
-                        assert_matches!(sig, (_, 0, 0));
-                        write!(out, "tail_call")?;
-                    } else {
-                        assert_matches!(sig, (_, 2, 1));
-                        write!(out, "call")?;
+                OpKind::Call { call_type, arity } => {
+                    match call_type {
+                        CallType::Normal => {
+                            assert_matches!(sig, (_, 2, 1));
+                            write!(out, "call")?;
+                        },
+                        CallType::Tail => {
+                            assert_matches!(sig, (_, 0, 0));
+                            write!(out, "call tail")?;
+                        },
+                        CallType::Cont => {
+                            assert_matches!(sig, (_, 0, 0));
+                            write!(out, "call cont")?;
+                        },
                     }
 
                     write!(out, " ")?;
                     format_value(reads[0], fun, out)?;
                     write!(out, ":")?;
                     format_value(reads[1], fun, out)?;
+                    write!(out, "/{}", arity)?;
 
                     write!(out, "(")?;
                     format_value_list(&reads[2..], fun, out)?;
                     write!(out, ")")?;
 
-                    if !*tail_call {
+                    if *call_type == CallType::Normal {
                         write!(out, " except ")?;
                         format_branches(branches, fun, indent, out)?;
                     }
@@ -430,13 +464,20 @@ impl ToEirTextFun for Ebb {
                     default_reads = false;
                     default_branch = false;
                 },
-                OpKind::Apply { tail_call } => {
-                    if *tail_call {
-                        assert_matches!(sig, (_, 0, 0));
-                        write!(out, "tail_apply")?;
-                    } else {
-                        assert_matches!(sig, (_, 2, 1));
-                        write!(out, "apply")?;
+                OpKind::Apply { call_type } => {
+                    match call_type {
+                        CallType::Normal => {
+                            assert_matches!(sig, (_, 2, 1));
+                            write!(out, "apply")?;
+                        },
+                        CallType::Tail => {
+                            assert_matches!(sig, (_, 0, 0));
+                            write!(out, "apply tail")?;
+                        },
+                        CallType::Cont => {
+                            assert_matches!(sig, (_, 0, 0));
+                            write!(out, "apply cont")?;
+                        },
                     }
 
                     write!(out, " ")?;
@@ -446,7 +487,7 @@ impl ToEirTextFun for Ebb {
                     format_value_list(&reads[1..], fun, out)?;
                     write!(out, ")")?;
 
-                    if !*tail_call {
+                    if *call_type == CallType::Normal {
                         write!(out, " except ")?;
                         format_branches(branches, fun, indent, out)?;
                     }
@@ -473,6 +514,12 @@ impl ToEirTextFun for Ebb {
                 OpKind::MakeClosureEnv { env_idx } => {
                     assert_matches!(sig, (_, 1, 0));
                     write!(out, "pack_env E{}", env_idx.index())?;
+                },
+                OpKind::MakeMap => {
+                    write!(out, "make_map")?;
+                },
+                OpKind::MapGet => {
+                    write!(out, "map_get")?;
                 },
                 OpKind::CaseValues =>
                     write!(out, "case_values")?,

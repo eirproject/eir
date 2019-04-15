@@ -289,8 +289,6 @@ impl Closure {
         assert!(self.env.is_none());
 
         let mut ident = self.parent_ident.clone();
-        // + 1 for lambda env
-        ident.arity = self.fun.as_ref().unwrap().args.len();
         ident.lambda = Some((env_idx, lambda_num));
 
         self.ident = Some(ident);

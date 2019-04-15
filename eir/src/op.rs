@@ -1,5 +1,6 @@
 use crate::{ FunctionIdent, ClosureEnv, Atom, Clause };
 use crate::{ Value, AtomicTerm };
+use crate::{ Dialect };
 
 #[derive(Debug, Clone)]
 pub enum ComparisonOperation {
@@ -21,6 +22,17 @@ pub enum ComparisonOperation {
     ExactNotEqual,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum CallType {
+    /// Normal call.
+    Normal,
+    /// Required tail call.
+    Tail,
+    /// Call to a continuation. Only allowed in CPS dialect.
+    /// These are also terminators.
+    Cont,
+}
+
 #[derive(Debug, Clone)]
 pub enum OpKind {
     /// Must be the first OP in a function.
@@ -40,10 +52,18 @@ pub enum OpKind {
 
     /// Calls r[0]:r[1] with args r[2..]
     /// Jumps to branch slot 0 on return, 1 on exception
-    Call { tail_call: bool },
+    Call {
+        call_type: CallType,
+        /// Since the arity of the call may be affected
+        /// by transformations, this indicates the original
+        /// arity of the function.
+        arity: usize,
+    },
     /// Calls r[0] with args r[1..].
     /// Jumps to branch slot 0 on return, 1 on exception
-    Apply { tail_call: bool },
+    Apply {
+        call_type: CallType,
+    },
     /// Captures the function, and assigns it to w[0]
     CaptureNamedFunction(FunctionIdent),
 
@@ -205,53 +225,55 @@ pub enum OpKind {
 
 impl OpKind {
 
-    pub fn num_jumps(&self) -> Option<usize> {
-        match *self {
-            OpKind::Call { tail_call: false } => Some(2),
-            OpKind::Call { tail_call: true } => Some(0),
-            OpKind::Apply { tail_call: false } => Some(2),
-            OpKind::Apply { tail_call: true } => Some(0),
-            OpKind::Jump => Some(1),
-            OpKind::CaseStart { .. } => Some(1),
-            OpKind::Case(num_clauses) => Some(num_clauses + 1),
-            // One for each clause + failure leaf
-            //OpKind::Case { ref clauses, .. } => Some(clauses.len() + 1),
-            // TODO
-            //OpKind::Match { ref types } => Some(types.len()),
-            OpKind::ReturnOk => Some(0),
-            OpKind::ReturnThrow => Some(0),
-            //OpKind::ReceiveStart { .. } => Some(1),
-            OpKind::ReceiveWait => Some(2),
-            OpKind::IfTruthy => Some(2),
-            //OpKind::CaseGuardFail { .. } => Some(1),
-            OpKind::Unreachable => Some(0),
+    //pub fn num_jumps(&self) -> Option<usize> {
+    //    match *self {
+    //        OpKind::Call { tail_call: false, .. } => Some(2),
+    //        OpKind::Call { tail_call: true, .. } => Some(0),
+    //        OpKind::Apply { tail_call: false } => Some(2),
+    //        OpKind::Apply { tail_call: true } => Some(0),
+    //        OpKind::Jump => Some(1),
+    //        OpKind::CaseStart { .. } => Some(1),
+    //        OpKind::Case(num_clauses) => Some(num_clauses + 1),
+    //        // One for each clause + failure leaf
+    //        //OpKind::Case { ref clauses, .. } => Some(clauses.len() + 1),
+    //        // TODO
+    //        //OpKind::Match { ref types } => Some(types.len()),
+    //        OpKind::ReturnOk => Some(0),
+    //        OpKind::ReturnThrow => Some(0),
+    //        //OpKind::ReceiveStart { .. } => Some(1),
+    //        OpKind::ReceiveWait => Some(2),
+    //        OpKind::IfTruthy => Some(2),
+    //        //OpKind::CaseGuardFail { .. } => Some(1),
+    //        OpKind::Unreachable => Some(0),
 
-            // Value conditionals
-            OpKind::UnpackTuple => Some(2),
-            OpKind::UnpackListCell => Some(2),
-            OpKind::IsMap => Some(2),
-            OpKind::UnpackMapItem => Some(2),
-            OpKind::EqualAtomic(_) => Some(2),
-            OpKind::MapGet => Some(2),
+    //        // Value conditionals
+    //        OpKind::UnpackTuple => Some(2),
+    //        OpKind::UnpackListCell => Some(2),
+    //        OpKind::IsMap => Some(2),
+    //        OpKind::UnpackMapItem => Some(2),
+    //        OpKind::EqualAtomic(_) => Some(2),
+    //        OpKind::MapGet => Some(2),
 
-            _ => None,
-        }
-    }
+    //        _ => None,
+    //    }
+    //}
 
-    pub fn is_logic(&self) -> bool {
-        match *self {
-            OpKind::TombstoneSSA(_) => false,
-            OpKind::Jump => false,
-            OpKind::ReturnOk => false,
-            OpKind::ReturnThrow => false,
-            _ => true,
-        }
-    }
+    //pub fn is_logic(&self) -> bool {
+    //    match *self {
+    //        OpKind::TombstoneSSA(_) => false,
+    //        OpKind::Jump => false,
+    //        OpKind::ReturnOk => false,
+    //        OpKind::ReturnThrow => false,
+    //        _ => true,
+    //    }
+    //}
 
     pub fn is_block_terminator(&self) -> bool {
         match self {
-            OpKind::Call { tail_call: true } => true,
-            OpKind::Apply { tail_call: true } => true,
+            OpKind::Call { call_type: CallType::Tail, .. } => true,
+            OpKind::Call { call_type: CallType::Cont, .. } => true,
+            OpKind::Apply { call_type: CallType::Tail } => true,
+            OpKind::Apply { call_type: CallType::Cont } => true,
             OpKind::Jump => true,
             OpKind::CaseStart { .. } => true,
             OpKind::Case(_) => true,
@@ -262,6 +284,36 @@ impl OpKind {
             OpKind::ReceiveStart => true,
             OpKind::Unreachable => true,
             _ => false,
+        }
+    }
+
+    pub fn allowed_in_dialect(&self, dialect: Dialect) -> bool {
+        match (self, dialect) {
+
+            // Normal calls are not allowed in CPS dialect, but tail calls
+            // and cont calls are.
+            (OpKind::Call { call_type: CallType::Normal, .. }, Dialect::CPS) => false,
+            (OpKind::Call { .. }, Dialect::CPS) => true,
+            (OpKind::Apply { call_type: CallType::Normal }, Dialect::CPS) => false,
+            (OpKind::Apply { .. }, Dialect::CPS) => true,
+
+            // Cont calls are only allowed in CPS dialect
+            (OpKind::Call { call_type: CallType::Cont, .. }, _) => false,
+            (OpKind::Apply { call_type: CallType::Cont }, _) => false,
+
+            // Pattern matching construct is only allowed in High dialect
+            (OpKind::CaseStart { .. }, Dialect::High) => true,
+            (OpKind::CaseStart { .. }, _) => false,
+            (OpKind::Case(_), Dialect::High) => true,
+            (OpKind::Case(_), _) => false,
+            (OpKind::CaseValues, Dialect::High) => true,
+            (OpKind::CaseValues, _) => false,
+            (OpKind::CaseGuardOk, Dialect::High) => true,
+            (OpKind::CaseGuardOk, _) => false,
+            (OpKind::CaseGuardFail { .. }, Dialect::High) => true,
+            (OpKind::CaseGuardFail { .. }, _) => false,
+
+            _ => true,
         }
     }
 

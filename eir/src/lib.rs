@@ -16,6 +16,8 @@ pub use pattern::{ Clause, Pattern };
 pub mod fun;
 pub use fun::{ Function, FunctionBuilder, EbbCall, Ebb, Op, Value };
 pub use fun::{ FunctionCfg, CfgNode, CfgEdge, ValueType, Direction };
+pub use fun::{ Dialect };
+pub use fun::{ AttributeKey, AttributeValue };
 
 pub mod env;
 pub use env::{ ModuleEnvs, ClosureEnv };
@@ -30,7 +32,7 @@ pub struct Module {
     pub functions: HashMap<FunctionIdent, Function>,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, PartialOrd, Ord)]
 pub struct FunctionIdent {
     pub module: Atom,
     pub name: Atom,

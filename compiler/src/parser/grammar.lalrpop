@@ -118,7 +118,7 @@ SingleExpression: SingleExpression = {
             SingleExpression::Try { body: Box::new(t), then_vars: av, then: Box::new(a), 
                 catch_vars: cv, catch: Box::new(c) },
 
-    "receive" <c:Annotated<Clause>+> "after" <t:Expression> "->" <b:Expression> =>
+    "receive" <c:Annotated<Clause>*> "after" <t:Expression> "->" <b:Expression> =>
         SingleExpression::Receive { clauses: c, timeout_time: Box::new(t),
             timeout_body: Box::new(b) },
 

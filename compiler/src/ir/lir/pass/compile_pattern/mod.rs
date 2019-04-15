@@ -1,27 +1,13 @@
-use ::ir::lir;
-
-use ::petgraph::{ Graph, Direction };
-use ::petgraph::graph::NodeIndex;
-
 use ::matches::assert_matches;
 
 use std::collections::{ HashSet, HashMap };
 
-use ::ir::SSAVariable;
-use ::ir::hir::Expression;
-use ::ir::hir::Clause;
-
-use ::ir::hir::PatternNode;
-
-use ::eir::{ ConstantTerm, AtomicTerm };
-//use ::eir::{ Source, FunctionIdent };
 use ::eir::op::OpKind;
-//use ::eir::cfg::{ LabelN, EdgeN };
 use ::eir::{ Ebb, Op, EbbCall, Value };
-use ::eir::{ Function, FunctionBuilder };
+use ::eir::{ Function, FunctionBuilder, Dialect };
 use ::eir::pattern::ValueAssign;
 
-use ::pattern_compiler::{ PatternProvider, ExpandedClauseNodes, PatternCfg, CfgNodeIndex };
+use ::pattern_compiler::{ PatternCfg, CfgNodeIndex };
 
 mod erlang_pattern_provider;
 use self::erlang_pattern_provider::{ ErlangPatternProvider, PatternValueCollector, PatternVar };
@@ -328,29 +314,33 @@ fn decision_tree_to_cfg(dec: &PatternCfg<ErlangPatternProvider>,
     // Second node is always matching on value list in our case
     let start_node = {
         let outgoing: Vec<_> = dec.graph.edges(value_list_node).collect();
-        assert!(outgoing.len() == 2);
-        // Expect one branch going to fail
-        assert!(outgoing.iter()
-                .find(|o| o.weight().kind == Some(MatchKind::Wildcard)).is_some());
-        let real_target = outgoing.iter()
+        assert!(outgoing.len() == 2 || outgoing.len() == 0);
+
+        if let Some(real_target) = outgoing.iter()
             .find(|o| o.weight().kind == Some(MatchKind::ValueList))
-            .unwrap();
+        {
+            // Expect one branch going to fail
+            assert!(outgoing.iter()
+                    .find(|o| o.weight().kind == Some(MatchKind::Wildcard)).is_some());
 
-        let mut unpacked = Vec::new();
+            let mut unpacked = Vec::new();
 
-        if let CfgNodeKind::Match(var) = dec.graph[value_list_node] {
-            b.op_unpack_value_list(mappings[&var],
-                                   real_target.weight().variable_binds.len(),
-                                   &mut unpacked);
+            if let CfgNodeKind::Match(var) = dec.graph[value_list_node] {
+                b.op_unpack_value_list(mappings[&var],
+                                       real_target.weight().variable_binds.len(),
+                                       &mut unpacked);
+            } else {
+                panic!();
+            }
+
+            for (var, val) in real_target.weight().variable_binds.iter().zip(unpacked.iter()) {
+                mappings.insert(*var, *val);
+            }
+
+            Some(real_target.target())
         } else {
-            panic!();
+            None
         }
-
-        for (var, val) in real_target.weight().variable_binds.iter().zip(unpacked.iter()) {
-            mappings.insert(*var, *val);
-        }
-
-        real_target.target()
     };
 
     let num_clauses = case_map.guard_branches.len();
@@ -360,8 +350,13 @@ fn decision_tree_to_cfg(dec: &PatternCfg<ErlangPatternProvider>,
         guard_fails: (0..num_clauses).map(|_| b.insert_ebb()).collect(),
     };
 
-    decision_tree_to_cfg_rec(dec, collector, b, &mut mappings,
-                             &destinations, value_bindings, case_map, start_node);
+    if let Some(start_node) = start_node {
+        decision_tree_to_cfg_rec(dec, collector, b, &mut mappings,
+                                 &destinations, value_bindings, case_map, start_node);
+    } else {
+        let call = b.create_ebb_call(destinations.fail, &[]);
+        b.op_jump(call);
+    }
 
     destinations
 }
@@ -469,5 +464,7 @@ pub fn compile_pattern(b: &mut FunctionBuilder) {
         }
 
     }
+
+    b.function_mut().set_dialect(Dialect::Normal);
 
 }
