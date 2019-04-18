@@ -117,11 +117,16 @@ impl CompilationContext {
             let fun = &module.functions[ident];
             let fn_val = self.get_fun_value(fun);
 
+            let mut emit = target::nif::NifTargetEmit {
+                types: &self.data.types,
+                protos: &mut self.data.protos,
+                env: None,
+            };
+
             crate::emit::emit_fun(
+                &mut emit,
                 &self.data.context,
                 &self.data.module,
-                &self.data.types,
-                &self.data.protos,
                 &mut self.data.loc_id,
                 &module,
                 fun,
@@ -137,6 +142,7 @@ impl CompilationContext {
     }
 
     pub fn write_bitcode(&self, path: &Path) {
+        self.print_ir();
         println!("{:?}", self.data.module.verify());
         self.data.module.write_bitcode_to_path(&path);
     }
