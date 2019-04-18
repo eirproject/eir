@@ -89,7 +89,7 @@ SingleExpression: SingleExpression = {
 
     "{" <t:Comma<Expression>> "}" => SingleExpression::Tuple(t),
 
-    "~{" <v:Comma<(<Expression> <ExactAssoc> <Expression>)>> <m:("|" <Expression>)?> "}~" => 
+    "~{" <v:Comma<Annotated<(<Expression> <ExactAssoc> <Expression>)>>> <m:("|" <Expression>)?> "}~" => 
         SingleExpression::Map(v, m),
 
     "let" <v:Variables> "=" <e:Expression> "in" <i:Expression> =>

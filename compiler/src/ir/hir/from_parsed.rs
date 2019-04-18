@@ -290,7 +290,8 @@ impl SingleExpression {
             },
             PSE::Map(ref kv, ref merge) => {
                 let kv_h = kv.iter()
-                    .map(|&(ref k, assoc, ref v)| {
+                    .map(|ref ann| {
+                        let (ref k, assoc, ref v) = ann.0;
                         (SingleExpression::from_parsed(k, fun_ident),
                          SingleExpression::from_parsed(v, fun_ident),
                          assoc)

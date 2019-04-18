@@ -163,7 +163,7 @@ pub enum SingleExpression {
     AtomicLiteral(AtomicLiteral),
     Tuple(Vec<Expression>),
     List { head: Vec<Expression>, tail: Box<Expression> },
-    Map(Vec<(Expression, MapExactAssoc, Expression)>, Option<Expression>),
+    Map(Vec<Annotated<(Expression, MapExactAssoc, Expression)>>, Option<Expression>),
     Binary(Vec<(Expression, Vec<Expression>)>),
 }
 

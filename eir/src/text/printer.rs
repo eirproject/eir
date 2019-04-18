@@ -427,9 +427,6 @@ impl ToEirTextFun for Ebb {
                 OpKind::UnpackListCell => {
                     write!(out, "unpack_list_cell")?;
                 },
-                OpKind::MakeNoValue => {
-                    write!(out, "make_no_value")?;
-                },
                 OpKind::Call { call_type, arity } => {
                     match call_type {
                         CallType::Normal => {
@@ -515,8 +512,14 @@ impl ToEirTextFun for Ebb {
                     assert_matches!(sig, (_, 1, 0));
                     write!(out, "pack_env E{}", env_idx.index())?;
                 },
-                OpKind::MakeMap => {
-                    write!(out, "make_map")?;
+                OpKind::MapEmpty => {
+                    write!(out, "map_empty")?;
+                },
+                OpKind::MapPut { update } => {
+                    write!(out, "map_put")?;
+                    if *update {
+                        write!(out, " update")?;
+                    }
                 },
                 OpKind::MapGet => {
                     write!(out, "map_get")?;

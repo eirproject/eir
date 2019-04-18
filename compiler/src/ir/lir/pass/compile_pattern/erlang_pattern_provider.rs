@@ -207,7 +207,7 @@ impl PatternProvider for ErlangPatternProvider {
 
 pub struct PatternValueCollector {
     pub atomic_terms: Vec<AtomicTerm>,
-    pub node_bindings: HashMap<PatternRef, ValueAssign>,
+    pub node_bindings: HashMap<PatternRef, Vec<ValueAssign>>,
     pub clause_assigns: Vec<Vec<ValueAssign>>,
 }
 impl PatternValueCollector {
@@ -230,7 +230,10 @@ fn pattern_node_to_provider(provider: &mut ErlangPatternProvider,
         }
         PatternNode::Assign(assign, inner) => {
             let child = pattern_node_to_provider(provider, collector, inner, parent);
-            collector.node_bindings.insert(child, *assign);
+            if !collector.node_bindings.contains_key(&child) {
+                collector.node_bindings.insert(child, vec![]);
+            }
+            collector.node_bindings.get_mut(&child).unwrap().push(*assign);
             child
         }
         PatternNode::Atomic(atomic_term) => {

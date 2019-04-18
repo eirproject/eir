@@ -69,8 +69,10 @@ pub enum OpKind {
 
     MakeTuple,
     MakeList,
-    MakeMap,
     MakeBinary,
+
+    MapEmpty,
+    MapPut { update: bool },
 
     /// Value lists are not an actual type in the program.
     /// A value list of length 1 is semantically identical
@@ -78,17 +80,12 @@ pub enum OpKind {
     /// A value list may only exist as a SSA value directly,
     /// no other types may contain a value list. Value lists
     /// may not contain value lists.
+    ///
+    /// A value list of length 0 may be used as a empty set
+    /// value. It may not be used in any reads, except a
+    /// UnpackValueList with no writes.
     PackValueList,
     UnpackValueList,
-
-    /// Returns a SSA value that cannot exist in the control flow.
-    /// Used for things like the Raise PrimOp which can never
-    /// return through the main path.
-    /// This must be placed in basic blocks that can never be
-    /// reached through regular control flow.
-    /// For a CFG to be valid, it must contain no instances of this
-    /// operation.
-    MakeNoValue,
 
     MakeClosureEnv {
         env_idx: ClosureEnv,

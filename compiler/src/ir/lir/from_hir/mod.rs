@@ -409,8 +409,14 @@ impl hir::SingleExpression {
 
                 // == Catch clause ==
                 // Unpack the result value list from the error
+                let exc_unpack_fail_ebb = b.insert_ebb();
+                b.position_at_end(exc_unpack_fail_ebb);
+                b.op_unreachable();
+
                 b.position_at_end(catch_block);
-                b.op_unpack_value_list(catch_value, catch_vars.len(), &mut st.val_buf);
+                let fail_call = b.create_ebb_call(exc_unpack_fail_ebb, &[]);
+                b.op_unpack_tuple(catch_value, catch_vars.len(),
+                                  &mut st.val_buf, fail_call);
                 for (ssa, val) in catch_vars.iter().zip(st.val_buf.iter()) {
                     st.bindings.insert(ssa.ssa, *val);
                 }
@@ -630,14 +636,16 @@ impl hir::SingleExpression {
                 self.ssa
             },
             HSEK::Map { ref values, ref merge } => {
+                let mut map;
                 if let Some(merge) = merge {
-                    let merge_ssa = merge.lower(b, st);
-                    assert!(merge_ssa == merge.ssa);
+                    let merge_var = merge.lower(b, st);
+                    assert!(merge_var == merge.ssa);
+                    map = st.bindings[&merge_var];
+                } else {
+                    map = b.op_map_empty();
                 }
 
                 for &(ref key, ref value, _assoc) in values.iter() {
-                    // TODO: Handle Assoc
-
                     let key_ssa = key.lower(b, st);
                     assert!(key_ssa == key.ssa);
 
@@ -645,17 +653,25 @@ impl hir::SingleExpression {
                     assert!(value_ssa == value.ssa);
                 }
 
+                // TODO: Proper exception value
+                let exc_val = b.create_atomic(AtomicTerm::Nil);
+
                 st.val_buf.clear();
-                for &(ref key, ref value, _assoc) in values.iter() {
-                    st.val_buf.push(st.bindings[&key.ssa]);
-                    st.val_buf.push(st.bindings[&value.ssa]);
+                for &(ref key, ref value, assoc) in values.iter() {
+                    let key = st.bindings[&key.ssa];
+                    let val = st.bindings[&value.ssa];
+
+                    let exc_jump = st.exc_stack.make_error_jump(b, exc_val);
+
+                    match assoc {
+                        ::parser::MapExactAssoc::Assoc =>
+                            map = b.op_map_put(map, key, val, false, exc_jump),
+                        ::parser::MapExactAssoc::Exact =>
+                            map = b.op_map_put(map, key, val, true, exc_jump),
+                    }
                 }
 
-                let value = b.op_make_map(
-                    merge.as_ref().map(|m| st.bindings[&m.ssa]),
-                    &st.val_buf,
-                );
-                st.bindings.insert(self.ssa, value);
+                st.bindings.insert(self.ssa, map);
 
                 self.ssa
             },
@@ -687,17 +703,20 @@ impl hir::SingleExpression {
                 self.ssa
             },
             HSEK::PrimOp { ref name, ref args } if name == &Atom::from("raise") => {
-                //let mut main_cont = in_block;
+                assert!(args.len() == 2);
 
                 for arg in args.iter() {
                     let n_ssa = arg.lower(b, st);
                     assert!(arg.ssa == n_ssa);
                 }
 
+                let err_data_atom = b.create_atomic(
+                    AtomicTerm::Atom(Atom::from_str("internal_err_data")));
+
                 st.val_buf.clear();
-                for arg in args.iter() {
-                    st.val_buf.push(st.bindings[&arg.ssa]);
-                }
+                st.val_buf.push(st.bindings[&args[1].ssa]);
+                st.val_buf.push(st.bindings[&args[0].ssa]);
+                st.val_buf.push(err_data_atom);
 
                 // TODO:
 
@@ -713,6 +732,7 @@ impl hir::SingleExpression {
                 self.ssa
             },
             HSEK::PrimOp { ref name, ref args } if name == &Atom::from("match_fail") => {
+                assert!(args.len() == 1);
                 // TODO: Make correct exception tuple
                 // Lower args
                 for arg in args.iter() {
@@ -720,11 +740,16 @@ impl hir::SingleExpression {
                     assert!(arg.ssa == n_ssa);
                 }
 
+                let error_atom = b.create_atomic(
+                    AtomicTerm::Atom(Atom::from_str("error")));
+                let err_data_atom = b.create_atomic(
+                    AtomicTerm::Atom(Atom::from_str("internal_err_data")));
+
                 // Construct value list
                 st.val_buf.clear();
-                for arg in args.iter() {
-                    st.val_buf.push(st.bindings[&arg.ssa]);
-                }
+                st.val_buf.push(error_atom);
+                st.val_buf.push(st.bindings[&args[0].ssa]);
+                st.val_buf.push(err_data_atom);
 
                 // Make exception tuple and jump to handler
                 let exc_value = b.op_make_tuple(&st.val_buf);

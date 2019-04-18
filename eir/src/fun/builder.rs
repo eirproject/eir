@@ -582,22 +582,36 @@ impl<'a> FunctionBuilder<'a> {
         result
     }
 
-    pub fn op_make_map(&mut self, merge: Option<Value>, kv: &[Value]) -> Value {
-        assert!(kv.len() % 2 == 0);
-        if merge.is_some() {
-            unimplemented!()
-        }
-
+    pub fn op_map_empty(&mut self) -> Value {
         let result = self.fun.new_variable();
         let writes = EntityList::from_slice(&[result], &mut self.fun.value_pool);
 
-        let reads = EntityList::from_slice(kv, &mut self.fun.value_pool);
-
         self.insert_op(OpData {
-            kind: OpKind::MakeMap,
-            reads: reads,
+            kind: OpKind::MapEmpty,
+            reads: EntityList::new(),
             writes: writes,
             ebb_calls: EntityList::new(),
+        });
+
+        result
+    }
+
+    pub fn op_map_put(&mut self, map: Value, key: Value, val: Value,
+                      update: bool, fail_call: EbbCall) -> Value {
+        let result = self.fun.new_variable();
+        let writes = EntityList::from_slice(&[result], &mut self.fun.value_pool);
+
+        let reads = EntityList::from_slice(
+            &[map, key, val], &mut self.fun.value_pool);
+
+        let ebb_calls = EntityList::from_slice(
+            &[fail_call], &mut self.fun.ebb_call_pool);
+
+        self.insert_op(OpData {
+            kind: OpKind::MapPut { update },
+            reads: reads,
+            writes: writes,
+            ebb_calls: ebb_calls,
         });
 
         result
@@ -700,7 +714,7 @@ impl<'a> FunctionBuilder<'a> {
         let writes = EntityList::from_slice(&[result], &mut self.fun.value_pool);
 
         self.insert_op(OpData {
-            kind: OpKind::MakeNoValue,
+            kind: OpKind::PackValueList,
             reads: EntityList::new(),
             writes: writes,
             ebb_calls: EntityList::new(),

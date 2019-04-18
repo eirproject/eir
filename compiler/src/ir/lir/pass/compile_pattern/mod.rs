@@ -260,8 +260,10 @@ fn decision_tree_to_cfg_rec(dec: &PatternCfg<ErlangPatternProvider>,
             for (cfg_var, pattern_ref) in leaf_binding.iter() {
                 if collector.node_bindings.contains_key(pattern_ref) {
                     let from_var = mappings[cfg_var];
-                    let to_assign = collector.node_bindings[pattern_ref];
-                    value_bindings.insert(to_assign, from_var);
+                    let to_assign = &collector.node_bindings[pattern_ref];
+                    for to in to_assign {
+                        value_bindings.insert(*to, from_var);
+                    }
                 }
             }
 

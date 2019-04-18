@@ -132,9 +132,12 @@ impl CompilationContext {
         true
     }
 
+    pub fn print_ir(&self) {
+        self.data.module.print_to_stderr();
+    }
+
     pub fn write_bitcode(&self, path: &Path) {
         println!("{:?}", self.data.module.verify());
-        self.data.module.print_to_stderr();
         self.data.module.write_bitcode_to_path(&path);
     }
 

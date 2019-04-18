@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
 edition = "2018"
 
+[features]
+#default = ["print_trace"]
+print_trace = []
+
 [dependencies]
 llvm-sys = "70"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "llvm7-0" }

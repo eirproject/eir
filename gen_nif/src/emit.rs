@@ -4,7 +4,9 @@ use inkwell::AddressSpace;
 use inkwell::IntPredicate;
 use inkwell::context::Context;
 use inkwell::values::{ FunctionValue, ArrayValue, StructValue, PointerValue,
-                       GlobalValue, AnyValueEnum, BasicValueEnum, PhiValue };
+                       GlobalValue, AnyValueEnum, BasicValueEnum, PhiValue,
+                       IntValue };
+use inkwell::values::BasicValue;
 use inkwell::types::{ StructType, BasicType, BasicTypeEnum };
 use inkwell::module::{ Module };
 use inkwell::builder::Builder;
@@ -29,6 +31,9 @@ pub fn mangle_string(string: &str) -> String {
     string
         .replace("_", "__")
         .replace("+", "_p")
+        .replace("-", "_m")
+        .replace("<", "_l")
+        .replace(">", "_g")
 }
 
 pub fn mangle_ident(ident: &FunctionIdent) -> String {
@@ -44,29 +49,33 @@ pub fn mangle_ident(ident: &FunctionIdent) -> String {
     )
 }
 
-struct LowerCtx<'a> {
-    context: &'a Context,
-    module: &'a Module,
-    builder: &'a Builder,
-    fn_val: FunctionValue,
-    protos: &'a HashMap<FunctionIdent, FunctionValue>,
-    nif_types: &'a NifTypes,
+pub struct LowerCtx<'a> {
+    pub context: &'a Context,
+    pub module: &'a Module,
+    pub builder: &'a Builder,
+    pub fn_val: FunctionValue,
+    pub protos: &'a HashMap<FunctionIdent, FunctionValue>,
+    pub nif_types: &'a NifTypes,
     ebb_map: HashMap<Ebb, BasicBlock>,
     phi_map: HashMap<(Ebb, usize), PhiValue>,
     val_map: HashMap<Value, BasicValueEnum>,
-    loc_id: &'a mut u64,
+    pub loc_id: &'a mut u64,
+    pub env: Option<BasicValueEnum>,
+    pub eir_mod: &'a EirModule,
 }
 
 fn emit_read(
     ctx: &mut LowerCtx,
-    env: BasicValueEnum,
     fun: &EirFunction,
     read: Value,
 ) -> BasicValueEnum
 {
     let data = fun.value(read);
     match data {
-        ValueType::Variable => ctx.val_map[&read],
+        ValueType::Variable => {
+            println!("Read: {}", read);
+            ctx.val_map[&read]
+        },
         ValueType::Constant(constant) => {
             match constant {
                 ConstantTerm::Atomic(AtomicTerm::Integer(num)) => {
@@ -75,7 +84,7 @@ fn emit_read(
                         num.to_i64().unwrap() as u64, true);
                     let cs = ctx.builder.build_call(
                         ctx.nif_types.enif_make_long,
-                        &[env, num_const.into()],
+                        &[ctx.env.unwrap(), num_const.into()],
                         "make_int64"
                     );
                     cs.try_as_basic_value().left().unwrap()
@@ -94,10 +103,24 @@ fn emit_read(
 
                     let cs = ctx.builder.build_call(
                         ctx.nif_types.enif_make_atom_len,
-                        &[env, string_const_ptr.into(), string_len_val.into()],
+                        &[ctx.env.unwrap(), string_const_ptr.into(), string_len_val.into()],
                         "make_atom_len"
                     );
                     cs.try_as_basic_value().left().unwrap()
+                }
+                ConstantTerm::Atomic(AtomicTerm::Nil) => {
+                    let i32_type = ctx.context.i32_type();
+                    let call_ret = ctx.builder.build_call(
+                        ctx.nif_types.enif_make_list_from_array,
+                        &[
+                            ctx.env.unwrap(),
+                            ctx.nif_types.term_ptr_type.into_pointer_type()
+                                .const_null().into(),
+                            i32_type.const_int(0, false).into(),
+                        ],
+                        "",
+                    );
+                    call_ret.try_as_basic_value().left().unwrap()
                 }
                 _ => unimplemented!("{:?}", constant),
             }
@@ -105,13 +128,12 @@ fn emit_read(
     }
 }
 
-fn build_make_tuple(
+pub fn build_stack_arr(
     ctx: &mut LowerCtx,
-    env: BasicValueEnum,
     values: &[BasicValueEnum],
-) -> BasicValueEnum {
-    let i32_type = ctx.context.i32_type();
+) -> (PointerValue, IntValue) {
     let i64_type = ctx.context.i64_type();
+    let i32_type = ctx.context.i32_type();
 
     let values_len = i32_type.const_int(
         values.len() as u64, false);
@@ -129,90 +151,13 @@ fn build_make_tuple(
         ctx.builder.build_store(elem_ptr, *read);
     }
 
-    let call_ret = ctx.builder.build_call(
-        ctx.nif_types.enif_make_tuple_from_array,
-        &[
-            env.into(),
-            values_arr.into(),
-            values_len.into(),
-        ],
-        "",
-    );
-    call_ret.try_as_basic_value().left().unwrap()
+    (values_arr, values_len)
 }
 
-fn build_unpack_tuple(
-    ctx: &mut LowerCtx,
-    env: BasicValueEnum,
-    tuple_val: BasicValueEnum,
-    arity: usize,
-    out_vals: &mut Vec<BasicValueEnum>,
-    err_bb: &BasicBlock,
-) -> BasicBlock {
-    let i32_type = ctx.context.i32_type();
-    let i64_type = ctx.context.i64_type();
 
-    let values_len_ptr = ctx.builder.build_alloca(
-        i32_type, "");
-    let values_arr_ptr = ctx.builder.build_alloca(
-        ctx.nif_types.term_ptr_type, "");
-
-    let call_ret = ctx.builder.build_call(
-        ctx.nif_types.enif_get_tuple,
-        &[
-            env.into(),
-            tuple_val.into(),
-            values_len_ptr.into(),
-            values_arr_ptr.into(),
-        ],
-        "",
-    );
-
-    let int_ok_bb = ctx.context.append_basic_block(&ctx.fn_val, "tuple_unpack_ok");
-    let ok_bb = ctx.context.append_basic_block(&ctx.fn_val, "tuple_arity_ok");
-
-    // Check return true
-    let cmp_res = ctx.builder.build_int_compare(
-        IntPredicate::EQ,
-        call_ret.try_as_basic_value().left().unwrap().into_int_value(),
-        i32_type.const_int(1, false).into(),
-        "",
-    );
-    ctx.builder.build_conditional_branch(cmp_res, &int_ok_bb, err_bb);
-
-    // Check arity
-    ctx.builder.position_at_end(&int_ok_bb);
-    let arity_val = ctx.builder.build_load(values_len_ptr, "");
-    let cmp_res = ctx.builder.build_int_compare(
-        IntPredicate::EQ,
-        arity_val.into_int_value(),
-        i32_type.const_int(arity as u64, false).into(),
-        "",
-    );
-    ctx.builder.build_conditional_branch(cmp_res, &ok_bb, err_bb);
-
-    ctx.builder.position_at_end(&ok_bb);
-    let values_arr = ctx.builder.build_load(values_arr_ptr, "");
-
-    out_vals.clear();
-    for idx in 0..arity {
-        let elem_ptr = unsafe {
-            ctx.builder.build_gep(
-                values_arr.into_pointer_value(),
-                &[i64_type.const_int(idx as u64, false)],
-                "",
-            )
-        };
-        let term = ctx.builder.build_load(elem_ptr, "");
-        out_vals.push(term);
-    }
-
-    ok_bb
-}
 
 fn add_branch_phis(
     ctx: &mut LowerCtx,
-    env: BasicValueEnum,
     fun: &EirFunction,
     current: &BasicBlock,
     target: Ebb,
@@ -222,12 +167,13 @@ fn add_branch_phis(
         let phi = ctx.phi_map[&(target, idx)];
         println!("BranchPhiRead {:?}", src_arg);
         //let val = ctx.val_map[src_arg];
-        let val = emit_read(ctx, env, fun, *src_arg);
+        let val = emit_read(ctx, fun, *src_arg);
         phi.add_incoming(&[(&val, current)]);
     }
 }
 
-fn debug_printf(ctx: &mut LowerCtx, text: &str) {
+#[cfg(feature = "print_trace")]
+fn debug_trace_printf(ctx: &mut LowerCtx, text: &str) {
     let string_const = crate::primitives::make_c_string_const(
         ctx.context, ctx.module, text);
     let string_const_ptr = string_const.as_pointer_value()
@@ -235,17 +181,21 @@ fn debug_printf(ctx: &mut LowerCtx, text: &str) {
     ctx.builder.build_call(
         ctx.nif_types.printf, &[string_const_ptr.into()], "debug print");
 }
+#[cfg(not(feature = "print_trace"))]
+fn debug_trace_printf(_ctx: &mut LowerCtx, _text: &str) {}
+
+use crate::target::nif::emit as specific;
 
 fn emit_op(
     ctx: &mut LowerCtx,
-    env: BasicValueEnum,
     eir_mod: &EirModule,
     fun: &EirFunction,
     op: Op,
 ) {
     let mut read_buf = Vec::new();
-    let mut out_buf = Vec::new();
+    let mut out_buf: Vec<BasicValueEnum> = Vec::new();
 
+    let void_type = ctx.context.void_type();
     let i8_type = ctx.context.i8_type();
     let i32_type = ctx.context.i32_type();
     let i64_type = ctx.context.i64_type();
@@ -255,7 +205,7 @@ fn emit_op(
     for read in fun.op_reads(op) {
         let value = emit_read(
             ctx,
-            env, fun,
+            fun,
             *read,
         );
         read_buf.push(value);
@@ -267,94 +217,46 @@ fn emit_op(
 
     match fun.op_kind(op) {
         OpKind::MakeClosureEnv { .. } => {
-            debug_printf(ctx, "MakeClosureEnv\n");
+            debug_trace_printf(ctx, "MakeClosureEnv\n");
             assert!(writes.len() == 1);
-            let value_enum = build_make_tuple(ctx, env, &read_buf);
+            let value_enum = specific::emit_make_closure_env(ctx, &read_buf);
             ctx.val_map.insert(writes[0], value_enum);
         },
         OpKind::UnpackEnv { .. } => {
-            debug_printf(ctx, "UnpackEnv\n");
-            let err_bb = ctx.context.append_basic_block(&ctx.fn_val, "env_unpack_err");
+            debug_trace_printf(ctx, "UnpackEnv\n");
+            assert!(reads.len() == 1);
 
-            let ok_bb = build_unpack_tuple(
-                ctx,
-                env,
-                read_buf[0],
-                writes.len(),
-                &mut out_buf,
-                &err_bb,
-            );
+            out_buf.clear();
+            specific::emit_unpack_closure_env(
+                ctx, read_buf[0], &mut out_buf, writes.len());
+            assert!(out_buf.len() == writes.len());
 
-            ctx.builder.position_at_end(&err_bb);
-            ctx.builder.build_call(ctx.nif_types.unreachable_fail, &[
-                i64_type.const_int(*ctx.loc_id as u64, false).into(),
-            ], "");
-            *ctx.loc_id += 1;
-            ctx.builder.build_unreachable();
-
-            ctx.builder.position_at_end(&ok_bb);
-
-            for (out, write) in out_buf.iter().zip(writes.iter()) {
-                ctx.val_map.insert(*write, *out);
+            for (val, ssa) in out_buf.iter().zip(writes.iter()) {
+                ctx.val_map.insert(*ssa, *val);
             }
         },
-        OpKind::BindClosure { ident } => {
-            debug_printf(ctx, "BindClosure\n");
+        OpKind::CaptureNamedFunction(ident) => {
+            debug_trace_printf(ctx, "CaptureNamedFunction\n");
             assert!(writes.len() == 1);
-            let fun_val = ctx.protos[ident];
+            assert!(ident.lambda.is_none());
 
-            assert!(ident.module == eir_mod.name);
-            let mut arity = eir_mod.functions[ident].entry_arg_num();
-            if ident.lambda.is_none() { arity += 1; }
+            let fun_val = specific::emit_capture_named_function(ctx, ident);
+            ctx.val_map.insert(writes[0], fun_val);
+        },
+        OpKind::BindClosure { ident } => {
+            debug_trace_printf(ctx, "BindClosure\n");
+            assert!(writes.len() == 1);
 
-            // First value in fun tuple: :native_fun
-            let string_const = crate::primitives::make_c_string_const(
-                ctx.context, ctx.module, "native_fun");
-            let string_const_ptr = string_const.as_pointer_value()
-                .const_cast(i8_type.ptr_type(AddressSpace::Generic));
-            let native_fun_call = ctx.builder.build_call(
-                ctx.nif_types.enif_make_atom_len,
-                &[
-                    env.into(),
-                    string_const_ptr.into(),
-                    i64_type.const_int(10, false).into(),
-                ],
-                ""
-            );
-            let native_fun_term = native_fun_call.try_as_basic_value().left().unwrap();
-
-            // Second value in fun tuple: Function ptr
-            let fun_ptr_value = fun_val.as_global_value().as_pointer_value();
-            let fun_ptr_value_casted = ctx.builder.build_pointer_cast(
-                fun_ptr_value, ctx.nif_types.i8_ptr.into_pointer_type(), "");
-            let args: Vec<BasicValueEnum> = vec![
-                env.into(),
-                fun_ptr_value_casted.into(),
-                i32_type.const_int(arity as u64, false).into(),
-            ];
-            let call = ctx.builder.build_call(
-                ctx.nif_types.make_fun_ptr_res, &args, "");
-            let fun_ptr_term = call.try_as_basic_value().left().unwrap();
-
-            // Third value in fun tuple: Env tuple
-            let env_tup_term = read_buf[0];
-
-            // Make tuple
-            out_buf.clear();
-            out_buf.push(native_fun_term);
-            out_buf.push(fun_ptr_term);
-            out_buf.push(env_tup_term);
-
-            let fun_tuple = build_make_tuple(ctx, env, &out_buf);
-            ctx.val_map.insert(writes[0], fun_tuple);
+            let clo_val = specific::emit_bind_closure(ctx, ident, read_buf[0]);
+            ctx.val_map.insert(writes[0], clo_val);
         },
         OpKind::Jump => {
-            debug_printf(ctx, "Jump\n");
+            debug_trace_printf(ctx, "Jump\n");
             assert!(writes.len() == 0);
             let ebb_call = branches[0];
             let target = fun.ebb_call_target(ebb_call);
             let from_bb = ctx.builder.get_insert_block().unwrap();
-            add_branch_phis(ctx, env, fun, &from_bb, target,
+            add_branch_phis(ctx, fun, &from_bb, target,
                             fun.ebb_call_args(ebb_call));
             ctx.builder.build_unconditional_branch(&ctx.ebb_map[&target]);
         },
@@ -362,18 +264,22 @@ fn emit_op(
             assert!(writes.len() == 1);
             ctx.val_map.insert(writes[0], read_buf[0]);
         },
+        // TODO: These should be removed in a compilation pass,
+        // and should not exist in the IR at this point.
+        // For now we use tuples as a hack.
         OpKind::PackValueList => {
-            debug_printf(ctx, "PackValueList\n");
+            debug_trace_printf(ctx, "PackValueList\n");
             assert!(writes.len() == 1);
-            let value_enum = build_make_tuple(ctx, env, &read_buf);
+            let value_enum = specific::emit_make_tuple(ctx, &read_buf);
             ctx.val_map.insert(writes[0], value_enum);
         },
         OpKind::UnpackValueList => {
-            debug_printf(ctx, "UnpackValueList\n");
+            debug_trace_printf(ctx, "UnpackValueList\n");
             let err_bb = ctx.context.append_basic_block(&ctx.fn_val, "val_unpack_err");
 
-            let ok_bb = build_unpack_tuple(ctx, env, read_buf[0], writes.len(),
-                                           &mut out_buf, &err_bb);
+            let ok_bb = specific::emit_unpack_tuple(
+                ctx, read_buf[0], writes.len(),
+                &mut out_buf, &err_bb);
 
             ctx.builder.position_at_end(&err_bb);
             ctx.builder.build_call(ctx.nif_types.unreachable_fail, &[
@@ -390,27 +296,19 @@ fn emit_op(
         },
         OpKind::Apply { call_type } => {
             assert!(writes.len() == 0);
-            debug_printf(ctx, "Apply\n");
+            debug_trace_printf(ctx, "Apply\n");
             if *call_type == CallType::Cont {
                 assert!(reads.len() == 2);
-                ctx.builder.build_call(
-                    ctx.nif_types.nifrt_cont_call,
-                    &[
-                        env.into(),
-                        read_buf[0],
-                        read_buf[1],
-                    ],
-                    "",
-                );
+                specific::emit_apply_cont(ctx, read_buf[0], read_buf[1]);
             } else {
-                unimplemented!()
+                assert!(*call_type == CallType::Tail);
+                specific::emit_apply_norm(ctx, read_buf[0], &read_buf[1..]);
             }
             ctx.builder.build_unreachable();
         },
         OpKind::Call { arity, call_type } => {
             assert!(writes.len() == 0);
             assert!(*call_type == CallType::Tail);
-            debug_printf(ctx, "Call\n");
             if fun.value_is_constant(reads[0]) && fun.value_is_constant(reads[1]) {
                 let module = fun.value_constant(reads[0]).atom().unwrap();
                 let name = fun.value_constant(reads[1]).atom().unwrap();
@@ -421,58 +319,111 @@ fn emit_op(
                     arity: *arity,
                 };
 
-                let mut args = vec![
-                    env,
-                    read_buf[0], // TODO
-                ];
-                args.extend(read_buf[2..].iter().cloned());
+                debug_trace_printf(ctx, &format!("Call {}\n", ident));
+                specific::emit_call_const(ctx, &ident, &read_buf[2..]);
 
-                let fun = ctx.protos[&ident];
-                ctx.builder.build_call(
-                    fun,
-                    &args,
-                    ""
-                );
             } else {
-                unimplemented!()
+                debug_trace_printf(ctx, "CallDyn\n");
+                specific::emit_call_dyn(ctx, read_buf[0], read_buf[1], &read_buf[2..]);
             }
             ctx.builder.build_unreachable();
         },
-        OpKind::ComparisonOperation(ComparisonOperation::Equal) => {
+        OpKind::ComparisonOperation(comp_op) => {
             assert!(writes.len() == 0);
-            debug_printf(ctx, "ComparisonOperation\n");
-            let call = ctx.builder.build_call(
-                ctx.nif_types.enif_compare,
-                &[
-                    read_buf[0],
-                    read_buf[1],
-                ],
-                "",
-            );
-            let res = call.try_as_basic_value().left().unwrap();
+            debug_trace_printf(ctx, "ComparisonOperation\n");
 
-            let cmp_res = ctx.builder.build_int_compare(
-                IntPredicate::EQ,
-                res.into_int_value(),
-                i32_type.const_int(0, false).into(),
-                "",
-            );
+            let cmp_res = specific::emit_compare(
+                ctx, read_buf[0], read_buf[1], comp_op);
 
+            // Target independent branch on result
             let fail_call = branches[0];
             let fail_target = fun.ebb_call_target(fail_call);
 
             let from_bb = ctx.builder.get_insert_block().unwrap();
 
             let ok_bb = ctx.context.append_basic_block(&ctx.fn_val, "compare_eq_ok");
-            ctx.builder.build_conditional_branch(cmp_res, &ok_bb, &ctx.ebb_map[&fail_target]);
+            ctx.builder.build_conditional_branch(
+                cmp_res, &ok_bb, &ctx.ebb_map[&fail_target]);
 
-            add_branch_phis(ctx, env, fun, &from_bb, fail_target, fun.ebb_call_args(fail_call));
+            add_branch_phis(ctx, fun, &from_bb, fail_target,
+                            fun.ebb_call_args(fail_call));
 
             ctx.builder.position_at_end(&ok_bb);
         },
-        OpKind::MakeNoValue => {
+        OpKind::MakeTuple => {
             assert!(writes.len() == 1);
-            println!("NoValue {:?}", writes);
+            let fun_tuple = specific::emit_make_tuple(ctx, &read_buf);
+            ctx.val_map.insert(writes[0], fun_tuple);
+        },
+        OpKind::IfTruthy => {
+            let cond = specific::emit_is_truthy(ctx, read_buf[0]);
+
+            // Target independent branch
+            let fail_call = branches[0];
+            let fail_target = fun.ebb_call_target(fail_call);
+
+            let from_bb = ctx.builder.get_insert_block().unwrap();
+
+            let ok_bb = ctx.context.append_basic_block(&ctx.fn_val, "if_truthy_true");
+
+            ctx.builder.build_conditional_branch(
+                cond, &ok_bb, &ctx.ebb_map[&fail_target]);
+
+            add_branch_phis(ctx, fun, &from_bb, fail_target,
+                            fun.ebb_call_args(fail_call));
+
+            ctx.builder.position_at_end(&ok_bb);
+        },
+        // TODO: This really shouldn't be a OP, it should be a function call
+        OpKind::MapPut { update } => {
+            let map_val = read_buf[0];
+            let key_val = read_buf[1];
+            let val_val = read_buf[2];
+
+            //let n_fun = if *update {
+            //    ctx.nif_types.enif_make_map_update
+            //} else {
+            //    ctx.nif_types.enif_make_map_put
+            //};
+
+            //let ret_map_val = ctx.builder.build_alloca(ctx.nif_types.term_type, "");
+            //let call_ret = ctx.builder.build_call(
+            //    n_fun,
+            //    &[
+            //        ctx.env.unwrap(),
+            //        map_val,
+            //        key_val,
+            //        val_val,
+            //        ret_map_val.into(),
+            //    ],
+            //    ""
+            //);
+
+            let fail_call = branches[0];
+            let fail_target = fun.ebb_call_target(fail_call);
+
+            let from_bb = ctx.builder.get_insert_block().unwrap();
+            let ok_bb = ctx.context.append_basic_block(
+                &ctx.fn_val, "map_put_ok");
+
+            let (success, new_map) = specific::emit_map_put(
+                ctx, map_val, key_val, val_val, *update);
+
+            // Check return true
+            //let cmp_res = ctx.builder.build_int_compare(
+            //    IntPredicate::EQ,
+            //    call_ret.try_as_basic_value().left().unwrap().into_int_value(),
+            //    i32_type.const_int(1, false).into(),
+            //    "",
+            //);
+
+            add_branch_phis(ctx, fun, &from_bb, fail_target,
+                            fun.ebb_call_args(fail_call));
+            ctx.builder.build_conditional_branch(success, &ok_bb,
+                                                 &ctx.ebb_map[&fail_target]);
+
+            ctx.builder.position_at_end(&ok_bb);
+            ctx.val_map.insert(writes[0], new_map);
         },
         kind => unimplemented!("{:?}", kind),
     }
@@ -481,7 +432,6 @@ fn emit_op(
 
 fn emit_ebb(
     ctx: &mut LowerCtx,
-    env: BasicValueEnum,
     eir_mod: &EirModule,
     fun: &EirFunction,
     ebb: Ebb,
@@ -491,7 +441,7 @@ fn emit_ebb(
     ctx.builder.position_at_end(bb);
 
     for op in fun.iter_op(ebb) {
-        emit_op(ctx, env, eir_mod, fun, op);
+        emit_op(ctx, eir_mod, fun, op);
     }
 
 }
@@ -520,6 +470,8 @@ pub fn emit_fun(
         phi_map: HashMap::new(),
         val_map: HashMap::new(),
         loc_id: loc_id,
+        env: None,
+        eir_mod: eir_mod,
     };
 
     let entry_bb = context.append_basic_block(&fn_val, "entry");
@@ -542,6 +494,7 @@ pub fn emit_fun(
     // Arguments and entry bb
     builder.position_at_end(&entry_bb);
     let env = fn_val.get_nth_param(0).unwrap();
+    ctx.env = Some(env);
     let mut arg_offset = 1;
     if fun.ident().lambda.is_none() {
         arg_offset = 2;
@@ -566,18 +519,13 @@ pub fn emit_fun(
         }
     }
 
-    let string_const = crate::primitives::make_c_string_const(
-        ctx.context, ctx.module, &format!("Entry!\n"));
-    let string_const_ptr = string_const.as_pointer_value()
-        .const_cast(ctx.nif_types.i8_ptr.into_pointer_type());
-    ctx.builder.build_call(
-        ctx.nif_types.printf, &[string_const_ptr.into()], "debug print");
+    debug_trace_printf(&mut ctx, "Entry!\n");
 
     builder.build_unconditional_branch(&ctx.ebb_map[&entry_ebb]);
 
     // ebbs in eir ir
     for ebb in fun.iter_ebb() {
-        emit_ebb(&mut ctx, env, eir_mod, fun, ebb);
+        emit_ebb(&mut ctx, eir_mod, fun, ebb);
     }
 
 }
