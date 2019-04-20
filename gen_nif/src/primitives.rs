@@ -13,7 +13,7 @@ pub fn make_c_string_const(context: &Context, module: &Module, string: &str) -> 
         .collect();
     vals.push(i8_type.const_int(0, false));
     let arr = i8_type.const_array(&vals);
-    let val = module.add_global(arr.get_type(), Some(AddressSpace::Const),
+    let val = module.add_global(arr.get_type(), None,
                                 "const_str");
     val.set_initializer(&arr);
     val

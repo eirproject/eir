@@ -23,3 +23,5 @@ trace.json
 *.ll.old
 *.o
 *.s
+
+!gen_nif/src/target/

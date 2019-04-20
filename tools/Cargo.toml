@@ -5,15 +5,7 @@ authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
 edition = "2018"
 
 [[bin]]
-name = "gen_cfg"
-path = "src/gen_cfg.rs"
-
-[[bin]]
-name = "gen_eir"
-path = "src/gen_eir.rs"
-
-[[bin]]
-name = "compile"
+name = "eir_compile"
 path = "src/compile.rs"
 
 [dependencies]

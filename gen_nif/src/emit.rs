@@ -47,23 +47,22 @@ pub struct LowerCtx<'a> {
     pub module: &'a Module,
     pub builder: &'a Builder,
     pub fn_val: FunctionValue,
-    //pub protos: &'a HashMap<FunctionIdent, FunctionValue>,
+    pub protos: &'a HashMap<FunctionIdent, FunctionValue>,
     ebb_map: HashMap<Ebb, BasicBlock>,
     phi_map: HashMap<(Ebb, usize), PhiValue>,
     val_map: HashMap<Value, BasicValueEnum>,
     pub loc_id: &'a mut u64,
-    //pub env: Option<BasicValueEnum>,
     pub eir_mod: &'a EirModule,
     pub eir_fun: &'a EirFunction,
 }
 
-fn emit_read<'a, Target>(
+fn emit_read<Target>(
     target: &mut Target,
     ctx: &mut LowerCtx,
     fun: &EirFunction,
     read: Value,
 ) -> BasicValueEnum
-    where Target: TargetEmit<'a>
+    where Target: TargetEmit
 {
     let data = fun.value(read);
     match data {
@@ -106,14 +105,14 @@ pub fn build_stack_arr(
 
 
 
-fn add_branch_phis<'a, Target>(
+fn add_branch_phis<Target>(
     target: &mut Target,
     ctx: &mut LowerCtx,
     fun: &EirFunction,
     current: &BasicBlock,
     target_ebb: Ebb,
     in_args: &[Value],
-) where Target: TargetEmit<'a>
+) where Target: TargetEmit
 {
     for (idx, src_arg) in in_args.iter().enumerate() {
         let phi = ctx.phi_map[&(target_ebb, idx)];
@@ -136,12 +135,12 @@ fn debug_trace_printf(ctx: &mut LowerCtx, text: &str) {
 #[cfg(not(feature = "print_trace"))]
 fn debug_trace_printf(_ctx: &mut LowerCtx, _text: &str) {}
 
-fn emit_op<'a, Target>(
+fn emit_op<Target>(
     target: &mut Target,
     ctx: &mut LowerCtx,
     fun: &EirFunction,
     op: Op,
-) where Target: TargetEmit<'a>
+) where Target: TargetEmit
 {
     let mut read_buf = Vec::new();
     let mut out_buf: Vec<BasicValueEnum> = Vec::new();
@@ -346,12 +345,12 @@ fn emit_op<'a, Target>(
 
 }
 
-fn emit_ebb<'a, Target>(
+fn emit_ebb<Target>(
     target: &mut Target,
     ctx: &mut LowerCtx,
     fun: &EirFunction,
     ebb: Ebb,
-) where Target: TargetEmit<'a>
+) where Target: TargetEmit
 {
 
     let bb = &ctx.ebb_map[&ebb];
@@ -363,15 +362,16 @@ fn emit_ebb<'a, Target>(
 
 }
 
-pub fn emit_fun<'a, Target>(
-    target: &'a mut Target,
+pub fn emit_fun<Target>(
+    target: &mut Target,
     context: &Context,
     module: &Module,
+    protos: &mut HashMap<FunctionIdent, FunctionValue>,
     loc_id: &mut u64,
     eir_mod: &EirModule,
     fun: &EirFunction,
     fn_val: FunctionValue,
-) where Target: TargetEmit<'a>
+) where Target: TargetEmit
 {
     println!("{}", fun.ident());
 
@@ -387,6 +387,7 @@ pub fn emit_fun<'a, Target>(
         loc_id: loc_id,
         eir_mod: eir_mod,
         eir_fun: fun,
+        protos: protos,
     };
 
     let entry_bb = context.append_basic_block(&fn_val, "entry");
