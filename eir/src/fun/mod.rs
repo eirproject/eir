@@ -424,10 +424,23 @@ impl Function {
     }
 
     pub fn to_text(&self) -> String {
-        use crate::text::ToEirText;
+        use crate::text::{ ToEirText, ToEirTextContext };
+
+        let mut ctx = ToEirTextContext::new();
 
         let mut out = Vec::new();
-        self.to_eir_text(0, &mut out).unwrap();
+        self.to_eir_text(&mut ctx, 0, &mut out).unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    pub fn to_text_annotated_live_values(&self) -> String {
+        use crate::text::{ ToEirText, ToEirTextContext, EirLiveValuesAnnotator };
+
+        let mut ctx = ToEirTextContext::new();
+        ctx.add_annotator(EirLiveValuesAnnotator::new());
+
+        let mut out = Vec::new();
+        self.to_eir_text(&mut ctx, 0, &mut out).unwrap();
         String::from_utf8(out).unwrap()
     }
 

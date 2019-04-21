@@ -143,6 +143,8 @@ pub fn eir_normal_passes(eir: &mut ::eir::Module) {
 
         //if hardass_validate { builder.function().validate() }
 
+        ::ir::lir::pass::promote_tail_calls(&mut builder);
+
         // Remove orphans in generated LIR
         ::ir::lir::pass::remove_orphan_blocks(&mut builder);
         if hardass_validate { builder.function().validate() }

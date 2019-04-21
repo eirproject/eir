@@ -81,7 +81,8 @@ fn dataflow_pass(
                 let reads = fun.op_reads(op);
                 let writes = fun.op_writes(op);
 
-                let is_segment_fin = cfg.ops.contains_key(&op) && !first;
+                let is_cfg_node = cfg.ops.contains_key(&op);
+                let is_segment_fin = is_cfg_node && !first;
 
                 // If the current op branches/terminates,
                 // store live variables
@@ -127,6 +128,7 @@ fn dataflow_pass(
                     }
 
                 }
+
 
                 // Values that are written are not live before they are assigned
                 for write in writes {

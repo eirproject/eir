@@ -25,6 +25,11 @@ pub struct WasmTypes {
     pub whirlrt_call_cont: FunctionValue,
     pub whirlrt_term_make_atom_from_string: FunctionValue,
     pub whirlrt_module_register_function: FunctionValue,
+    pub whirlrt_term_unpack_closure_env: FunctionValue,
+    pub whirlrt_temp_hacky_transmute_tup_to_fun_env: FunctionValue,
+    pub whirlrt_term_make_fun: FunctionValue,
+    pub whirlrt_term_get_fun: FunctionValue,
+    pub whirlrt_term_make_smallint: FunctionValue,
 }
 
 impl WasmTypes {
@@ -93,6 +98,54 @@ impl WasmTypes {
                                 Some(Linkage::External))
         };
 
+        let whirlrt_term_unpack_closure_env = {
+            let typ = void_type.fn_type(&[
+                process_env_ptr_type.into(),
+                term_type.into(), // ClosureEnv
+                i32_type.into(), // NumFree
+                term_ptr_type.into(),
+            ], false);
+            module.add_function("whirlrt_term_unpack_closure_env", typ,
+                                Some(Linkage::External))
+        };
+
+        let whirlrt_temp_hacky_transmute_tup_to_fun_env = {
+            let typ = void_type.fn_type(&[
+                process_env_ptr_type.into(),
+                term_type.into(), // Env as tuple
+                i8_ptr_type.into(), // Function
+            ], false);
+            module.add_function("whirlrt_temp_hacky_transmute_tup_to_fun_env", typ,
+                                Some(Linkage::External))
+        };
+
+        let whirlrt_term_make_fun = {
+            let typ = term_type.fn_type(&[
+                process_env_ptr_type.into(),
+                i8_ptr_type.into(), // Function
+            ], false);
+            module.add_function("whirlrt_term_make_fun", typ,
+                                Some(Linkage::External))
+        };
+
+        let whirlrt_term_get_fun = {
+            let typ = i8_ptr_type.fn_type(&[
+                process_env_ptr_type.into(),
+                term_type.into(), // Function
+            ], false);
+            module.add_function("whirlrt_term_get_fun", typ,
+                                Some(Linkage::External))
+        };
+
+        let whirlrt_term_make_smallint = {
+            let typ = term_type.fn_type(&[
+                process_env_ptr_type.into(),
+                i64_type.into(),
+            ], false);
+            module.add_function("whirlrt_term_make_smallint", typ,
+                                Some(Linkage::External))
+        };
+
         WasmTypes {
             process_env_ptr_type: process_env_ptr_type.into(),
             void_type: void_type,
@@ -103,6 +156,11 @@ impl WasmTypes {
             whirlrt_call_cont: whirlrt_call_cont,
             whirlrt_term_make_atom_from_string: whirlrt_term_make_atom_from_string,
             whirlrt_module_register_function: whirlrt_module_register_function,
+            whirlrt_term_unpack_closure_env: whirlrt_term_unpack_closure_env,
+            whirlrt_temp_hacky_transmute_tup_to_fun_env: whirlrt_temp_hacky_transmute_tup_to_fun_env,
+            whirlrt_term_make_fun: whirlrt_term_make_fun,
+            whirlrt_term_get_fun: whirlrt_term_get_fun,
+            whirlrt_term_make_smallint: whirlrt_term_make_smallint,
         }
     }
 

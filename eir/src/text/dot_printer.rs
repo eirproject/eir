@@ -1,5 +1,5 @@
 use crate::Function;
-use super::printer::ToEirTextFun;
+use super::printer::{ ToEirTextFun, ToEirTextContext };
 
 const DOT_BREAK: &str = "<br align=\"left\" />";
 
@@ -17,6 +17,7 @@ fn format_label(label: &str) -> String {
 
 use std::io::Write;
 pub fn function_to_dot(fun: &Function, w: &mut Write) -> ::std::io::Result<()> {
+    let mut to_eir_ctx = ToEirTextContext::new();
 
     write!(w, "digraph g {{\n")?;
     write!(w, "node [labeljust=\"l\", shape=record, fontname=\"Courier New\"]\n")?;
@@ -30,7 +31,7 @@ pub fn function_to_dot(fun: &Function, w: &mut Write) -> ::std::io::Result<()> {
     let mut buf = Vec::new();
 
     write!(w, "constants [ label=<")?;
-    super::printer::print_constants(fun, 0, &mut buf)?;
+    super::printer::print_constants(&mut to_eir_ctx, fun, 0, &mut buf)?;
     let text = std::str::from_utf8(&buf).unwrap();
     let text = format_label(text);
     write!(w, "{}", text)?;
@@ -40,7 +41,7 @@ pub fn function_to_dot(fun: &Function, w: &mut Write) -> ::std::io::Result<()> {
         write!(w, "blk_{} [ label=<", ebb)?;
 
         buf.clear();
-        ebb.to_eir_text_fun(fun, 0, &mut buf).unwrap();
+        ebb.to_eir_text_fun(&mut to_eir_ctx, fun, 0, &mut buf).unwrap();
         let text = std::str::from_utf8(&buf).unwrap();
         let text = format_label(text);
         write!(w, "{}", text)?;

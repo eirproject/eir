@@ -177,6 +177,10 @@ impl<'a> FunctionBuilder<'a> {
         self.fun.layout.concat_ebb(current, next);
     }
 
+    /// Splits the current basic block at the location
+    /// after the currently cursored OP.
+    /// You will end up at the same OP, but it is now
+    /// the last one in its Ebb.
     pub fn ebb_split(&mut self) -> Ebb {
         assert!(self.state == BuilderState::Build);
         let op = self.current_op.unwrap();
@@ -285,6 +289,10 @@ impl<'a> FunctionBuilder<'a> {
                 self.state = BuilderState::OutstandingEbbCalls(outstanding);
             }
         }
+    }
+    pub fn remove_op_ebb_calls(&mut self) {
+        let op = self.current_op.unwrap();
+        self.fun.ops[op].ebb_calls = EntityList::new();
     }
 
     pub fn deposition(&mut self) {
@@ -440,6 +448,21 @@ impl<'a> FunctionBuilder<'a> {
         }
 
         result
+    }
+
+    pub fn change_op_make_tail_call(&mut self) {
+        let op = self.current_op.unwrap();
+        match &mut self.fun.ops[op].kind {
+            OpKind::Apply { ref mut call_type } => {
+                *call_type = CallType::Tail;
+            }
+            OpKind::Call { ref mut call_type, .. } => {
+                *call_type = CallType::Tail;
+            }
+            _ => panic!(),
+        }
+        self.fun.ops[op].writes = EntityList::new();
+        self.fun.ops[op].ebb_calls = EntityList::new();
     }
 
     pub fn op_capture_named_function(&mut self, name: FunctionIdent) -> Value {

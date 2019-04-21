@@ -4,7 +4,7 @@ use std::io::Read;
 use std::io::Write;
 
 use eir::FunctionIdent;
-use eir::text::ToEirText;
+use eir::text::{ ToEirText, ToEirTextContext, EirLiveValuesAnnotator };
 
 arg_enum!{
     #[derive(Debug, PartialEq, Eq)]
@@ -59,6 +59,7 @@ fn main() {
              .required(false)
              .case_insensitive(true)
              .possible_values(&CompileLevel::variants()))
+        .arg(Arg::from_usage("[ANNOTATE_LIVE] --annotate-live 'annotate calculated live variables in ir"))
         //.arg(Arg::from_usage("-p,--pass <PASS> 'run the given compilation pass'")
         //     .multiple(true)
         //     .possible_values(&CompilePass::variants()))
@@ -88,6 +89,11 @@ fn main() {
         .map(|val| FunctionIdent::parse_with_module(
             val, eir.name.clone()).unwrap());
 
+    let mut print_ctx = ToEirTextContext::new();
+    if matches.is_present("ANNOTATE_LIVE") {
+        print_ctx.add_annotator(EirLiveValuesAnnotator::new());
+    }
+
     let mut out_data = Vec::new();
     let out_ext;
     let out_type = value_t!(matches, "FORMAT", OutputType).unwrap();
@@ -95,9 +101,9 @@ fn main() {
         OutputType::Eir => {
             if let Some(selected) = selected_function {
                 let fun = &eir.functions[&selected];
-                fun.to_eir_text(0, &mut out_data).unwrap();
+                fun.to_eir_text(&mut print_ctx, 0, &mut out_data).unwrap();
             } else {
-                eir.to_eir_text(0, &mut out_data).unwrap();
+                eir.to_eir_text(&mut print_ctx, 0, &mut out_data).unwrap();
             }
             out_ext = "eir";
         },

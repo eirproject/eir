@@ -257,92 +257,118 @@ fn gen_chunk(
             // If we hit a continuation site
             if cont_sites.contains(&src_op) {
                 let kind = src_fun.op_kind(src_op);
+                println!("{:?}", kind);
+
+                let is_tail;
                 match kind {
-                    OpKind::Apply { call_type: CallType::Normal } => (),
-                    OpKind::Call { call_type: CallType::Normal, .. } => (),
+                    OpKind::Apply { call_type: CallType::Normal } => is_tail = false,
+                    OpKind::Call { call_type: CallType::Normal, .. } => is_tail = false,
+                    OpKind::Apply { call_type: CallType::Tail } => is_tail = true,
+                    OpKind::Call { call_type: CallType::Tail, .. } => is_tail = true,
                     _ => panic!(),
                 }
 
                 let mut buf = Vec::new();
 
                 let writes = src_fun.op_writes(src_op);
-                let ok_val = writes[0];
-                let nok_val = writes[1];
+                if is_tail {
+                    assert!(writes.len() == 0);
+                } else {
+                    assert!(writes.len() == 2);
+                }
 
-                // =========================
-                // ==== Ok continuation ====
-                // =========================
+                let ok_cont;
+                let err_cont;
 
-                // Live variables at the control flow edge
-                let ok_live = &live.flow_live[&src_op];
+                if !is_tail {
+                    let ok_val = writes[0];
+                    let nok_val = writes[1];
 
-                // Construct the closure environment for the continuation
-                buf.clear();
-                buf.push(ok_ret_cont);
-                buf.push(err_ret_cont);
-                for live in ok_live.iter(&live.pool) {
-                    if live == ok_val {
-                        continue;
+                    // =========================
+                    // ==== Ok continuation ====
+                    // =========================
+
+                    // Live variables at the control flow edge
+                    let ok_live = &live.flow_live[&src_op];
+
+                    // Construct the closure environment for the continuation
+                    buf.clear();
+                    buf.push(ok_ret_cont);
+                    buf.push(err_ret_cont);
+                    for live in ok_live.iter(&live.pool) {
+                        if live == ok_val {
+                            continue;
+                        }
+                        buf.push(val_map[&live]);
                     }
-                    buf.push(val_map[&live]);
-                }
-                let env_idx = env_idx_gen.add();
-                env_idx_gen.env_set_captures_num(env_idx, buf.len());
-                let env = b.op_make_closure_env(env_idx, &buf);
+                    let env_idx = env_idx_gen.add();
+                    env_idx_gen.env_set_captures_num(env_idx, buf.len());
+                    let env = b.op_make_closure_env(env_idx, &buf);
 
-                // Bind closure for continuation
-                let mut ident = src_fun.ident().clone();
-                ident.lambda = Some((env_idx, 0));
-                let ok_cont = b.op_bind_closure(ident, env);
+                    // Bind closure for continuation
+                    let mut ident = src_fun.ident().clone();
+                    ident.lambda = Some((env_idx, 0));
+                    ok_cont = b.op_bind_closure(ident, env);
 
-                // Schedule control flow edge for continuation generation
-                let src_next_op = src_fun.op_after(src_op).unwrap();
-                needed_continuations.push((ContSite::Op(src_next_op), env_idx));
+                    // Schedule control flow edge for continuation generation
+                    let src_next_op = src_fun.op_after(src_op).unwrap();
+                    needed_continuations.push((ContSite::Op(src_next_op), env_idx));
 
-                // ============================
-                // ==== Throw continuation ====
-                // ============================
+                    // ============================
+                    // ==== Throw continuation ====
+                    // ============================
 
-                // Live variables at the exception edge
-                let src_branch = src_fun.op_branches(src_op)[0];
-                let src_target = src_fun.ebb_call_target(src_branch);
-                let err_live = &live.ebb_live[&src_target];
+                    // Live variables at the exception edge
+                    // if this is not a tail call
+                    let err_live;
+                    let src_branch = src_fun.op_branches(src_op)[0];
+                    let src_target = src_fun.ebb_call_target(src_branch);
+                    err_live = &live.ebb_live[&src_target];
 
-                // Generate rename map.
-                // Maps values after the ebb call to values before
-                call_renames.clear();
-                for (from, to) in src_fun.ebb_call_args(src_branch).iter()
-                    .zip(src_fun.ebb_args(src_target).iter())
-                {
-                    call_renames.insert(*to, *from);
-                }
-
-                let mut renamed_nok_val = None;
-
-                // Construct the closure environment for the continuation
-                buf.clear();
-                buf.push(ok_ret_cont);
-                buf.push(err_ret_cont);
-                for live in err_live.iter(&live.pool) {
-                    let renamed = call_renames.get(&live).cloned().unwrap_or(live);
-                    if renamed == nok_val {
-                        renamed_nok_val = Some(live);
-                        continue;
+                    // Generate rename map.
+                    // Maps values after the ebb call to values before
+                    call_renames.clear();
+                    for (from, to) in src_fun.ebb_call_args(src_branch).iter()
+                        .zip(src_fun.ebb_args(src_target).iter())
+                    {
+                        call_renames.insert(*to, *from);
                     }
-                    buf.push(val_map[&renamed]);
+
+                    let mut renamed_nok_val = None;
+
+                    // Construct the closure environment for the continuation
+                    buf.clear();
+                    buf.push(ok_ret_cont);
+                    buf.push(err_ret_cont);
+                    for live in err_live.iter(&live.pool) {
+                        let renamed = call_renames.get(&live).cloned().unwrap_or(live);
+                        if renamed == nok_val {
+                            renamed_nok_val = Some(live);
+                            continue;
+                        }
+                        buf.push(val_map[&renamed]);
+                    }
+                    let env_idx = env_idx_gen.add();
+                    env_idx_gen.env_set_captures_num(env_idx, buf.len());
+                    let env = b.op_make_closure_env(env_idx, &buf);
+
+                    // Bind closure for continuation
+                    let mut ident = src_fun.ident().clone();
+                    ident.lambda = Some((env_idx, 0));
+                    err_cont = b.op_bind_closure(ident, env);
+
+                    // Schedule exception edge for continuation generation
+                    // only if this is not a tail call.
+                    needed_continuations.push((
+                        ContSite::EbbCall(src_branch, renamed_nok_val), env_idx));
+
+                } else {
+                    // In the case of a tail call, don't create a new return
+                    // continuation, instead do a tail call with the return
+                    // continuations passed to the function as arguments.
+                    ok_cont = ok_ret_cont;
+                    err_cont = err_ret_cont;
                 }
-                let env_idx = env_idx_gen.add();
-                env_idx_gen.env_set_captures_num(env_idx, buf.len());
-                let env = b.op_make_closure_env(env_idx, &buf);
-
-                // Bind closure for continuation
-                let mut ident = src_fun.ident().clone();
-                ident.lambda = Some((env_idx, 0));
-                let err_cont = b.op_bind_closure(ident, env);
-
-                // Schedule exception edge for continuation generation
-                needed_continuations.push((
-                    ContSite::EbbCall(src_branch, renamed_nok_val), env_idx));
 
                 // =======================
                 // ==== Function call ====
@@ -352,7 +378,9 @@ fn gen_chunk(
                 buf.push(ok_cont);
                 buf.push(err_cont);
                 match kind {
-                    OpKind::Apply { call_type: CallType::Normal } => {
+                    OpKind::Apply { call_type } => {
+                        assert!(*call_type == CallType::Normal
+                                || *call_type == CallType::Tail);
                         let reads = src_fun.op_reads(src_op);
 
                         for read in reads.iter().skip(1) {
@@ -361,10 +389,13 @@ fn gen_chunk(
 
                         b.op_tail_apply(val_map[&reads[0]], &buf);
                     },
-                    OpKind::Call { call_type: CallType::Normal, arity } => {
+                    OpKind::Call { call_type, arity } => {
+                        assert!(*call_type == CallType::Normal
+                                || *call_type == CallType::Tail);
                         let reads = src_fun.op_reads(src_op);
 
                         for read in reads.iter().skip(2) {
+                            println!("{:?}", read);
                             buf.push(copy_read(src_fun, &mut b, &val_map, *read));
                         }
 
@@ -446,20 +477,36 @@ pub fn transform_function(
 ) {
     let live = src_fun.live_values();
 
+    println!("{}", src_fun.ident());
+
     // Identify continuation sites
     let mut cont_sites = HashSet::new();
-    for op in live.flow_live.keys() {
-        let kind = src_fun.op_kind(*op);
-        match kind {
-            OpKind::Call { .. } => {
-                cont_sites.insert(*op);
-            },
-            OpKind::Apply { .. } => {
-                cont_sites.insert(*op);
-            },
-            _ => (),
+    for ebb in src_fun.iter_ebb() {
+        for op in src_fun.iter_op(ebb) {
+            let kind = src_fun.op_kind(op);
+            match kind {
+                OpKind::Call { .. } => {
+                    cont_sites.insert(op);
+                },
+                OpKind::Apply { .. } => {
+                    cont_sites.insert(op);
+                },
+                _ => (),
+            }
         }
     }
+    //for op in live.flow_live.keys() {
+    //    let kind = src_fun.op_kind(*op);
+    //    match kind {
+    //        OpKind::Call { .. } => {
+    //            cont_sites.insert(*op);
+    //        },
+    //        OpKind::Apply { .. } => {
+    //            cont_sites.insert(*op);
+    //        },
+    //        _ => (),
+    //    }
+    //}
 
     let mut generated = HashSet::new();
     let mut needed = Vec::new();

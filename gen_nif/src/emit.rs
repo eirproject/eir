@@ -27,6 +27,7 @@ pub fn mangle_string(string: &str) -> String {
         .replace("-", "_m")
         .replace("<", "_l")
         .replace(">", "_g")
+        .replace("!", "_x")
 }
 
 pub fn mangle_ident(ident: &FunctionIdent) -> String {

@@ -56,11 +56,80 @@ use std::collections::HashSet;
 // }
 // ```
 
+pub trait EirAnnotator {
+    fn annotate_function(&mut self, out: &mut String, fun: &Function);
+    fn annotate_op(&mut self, out: &mut String, fun: &Function, op: Op);
+    fn annotate_ebb(&mut self, out: &mut String, fun: &Function, ebb: Ebb);
+}
+
+pub struct EirLiveValuesAnnotator {
+    live: Option<crate::fun::live::LiveValues>,
+}
+impl EirLiveValuesAnnotator {
+    pub fn new() -> Self {
+        EirLiveValuesAnnotator {
+            live: None,
+        }
+    }
+}
+impl EirAnnotator for EirLiveValuesAnnotator {
+    fn annotate_function(&mut self, out: &mut String, fun: &Function) {
+        self.live = Some(fun.live_values());
+    }
+    fn annotate_op(&mut self, out: &mut String, fun: &Function, op: Op) {
+        let live = self.live.as_ref().unwrap();
+        if let Some(l) = live.flow_live.get(&op) {
+            out.push_str(" live:");
+            println!("LVLEN: {:?}", live);
+            for var in l.iter(&live.pool) {
+                out.push_str(&format!(" %{}", var.index()));
+            }
+        }
+    }
+    fn annotate_ebb(&mut self, out: &mut String, fun: &Function, ebb: Ebb) {
+        let live = self.live.as_ref().unwrap();
+        let l = &live.ebb_live[&ebb];
+        out.push_str("yay!");
+    }
+}
+
+pub struct ToEirTextContext {
+    out_buf: String,
+    annotators: Vec<Box<EirAnnotator>>,
+}
+impl ToEirTextContext {
+    pub fn new() -> Self {
+        ToEirTextContext {
+            out_buf: String::new(),
+            annotators: Vec::new(),
+        }
+    }
+    pub fn add_annotator<T>(&mut self, ann: T) where T: EirAnnotator + 'static {
+        self.annotators.push(Box::new(ann));
+    }
+    pub fn annotate_function(&mut self, fun: &Function) {
+        for ann in self.annotators.iter_mut() {
+            ann.annotate_function(&mut self.out_buf, fun);
+        }
+    }
+    pub fn annotate_op(&mut self, fun: &Function, op: Op) -> Option<String> {
+        self.out_buf.clear();
+        for ann in self.annotators.iter_mut() {
+            ann.annotate_op(&mut self.out_buf, fun, op);
+        }
+        if self.out_buf.len() > 0 {
+            Some(self.out_buf.to_string())
+        } else {
+            None
+        }
+    }
+}
+
 pub trait ToEirText {
-    fn to_eir_text(&self, indent: usize, out: &mut Write) -> std::io::Result<()>;
+    fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut Write) -> std::io::Result<()>;
 }
 pub trait ToEirTextFun {
-    fn to_eir_text_fun(&self, fun: &Function, indent: usize,
+    fn to_eir_text_fun(&self, ctx: &mut ToEirTextContext, fun: &Function, indent: usize,
                        out: &mut Write) -> std::io::Result<()>;
 }
 
@@ -72,7 +141,7 @@ fn write_indent(out: &mut Write, indent: usize) -> std::io::Result<()> {
 }
 
 impl ToEirText for FunctionIdent {
-    fn to_eir_text(&self, indent: usize, out: &mut Write) -> std::io::Result<()> {
+    fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut Write) -> std::io::Result<()> {
         write_indent(out, indent)?;
         if let Some((env_num, fun_num)) = self.lambda {
             write!(out, "{}:{}@{}.{}/{}",
@@ -87,7 +156,7 @@ impl ToEirText for FunctionIdent {
 }
 
 impl ToEirText for AtomicTerm {
-    fn to_eir_text(&self, indent: usize, out: &mut Write) -> std::io::Result<()> {
+    fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut Write) -> std::io::Result<()> {
         match self {
             AtomicTerm::Atom(atom) => {
                 write!(out, "a\"{}\"", atom)?;
@@ -105,19 +174,19 @@ impl ToEirText for AtomicTerm {
 }
 
 impl ToEirText for ConstantTerm {
-    fn to_eir_text(&self, indent: usize, out: &mut Write) -> std::io::Result<()> {
+    fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut Write) -> std::io::Result<()> {
         match self {
-            ConstantTerm::Atomic(atomic) => atomic.to_eir_text(indent, out)?,
+            ConstantTerm::Atomic(atomic) => atomic.to_eir_text(ctx, indent, out)?,
             ConstantTerm::List(head, tail) => {
                 write!(out, "[")?;
                 for (idx, entry) in head.iter().enumerate() {
                     if idx != 0 {
                         write!(out, ", ")?;
                     }
-                    entry.to_eir_text(indent, out)?;
+                    entry.to_eir_text(ctx, indent, out)?;
                 }
                 write!(out, " | ")?;
-                tail.to_eir_text(indent, out)?;
+                tail.to_eir_text(ctx, indent, out)?;
                 write!(out, "]")?;
             },
         }
@@ -125,7 +194,7 @@ impl ToEirText for ConstantTerm {
     }
 }
 
-pub fn print_constants(fun: &Function, indent: usize, out: &mut Write) -> std::io::Result<()> {
+pub fn print_constants(ctx: &mut ToEirTextContext, fun: &Function, indent: usize, out: &mut Write) -> std::io::Result<()> {
     let mut used_values = HashSet::new();
     fun.used_values(&mut used_values);
 
@@ -138,7 +207,7 @@ pub fn print_constants(fun: &Function, indent: usize, out: &mut Write) -> std::i
             ValueType::Constant(cons) => {
                 write_indent(out, indent)?;
                 write!(out, "%{} = ", value.index())?;
-                cons.to_eir_text(indent+1, out)?;
+                cons.to_eir_text(ctx, indent+1, out)?;
                 write!(out, ";\n")?;
             },
             ValueType::Variable => (),
@@ -149,7 +218,7 @@ pub fn print_constants(fun: &Function, indent: usize, out: &mut Write) -> std::i
 }
 
 impl ToEirText for Module {
-    fn to_eir_text(&self, indent: usize, out: &mut Write) -> std::io::Result<()> {
+    fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut Write) -> std::io::Result<()> {
         let mut funs: Vec<_> = self.functions.keys().collect();
         funs.sort();
 
@@ -158,7 +227,7 @@ impl ToEirText for Module {
 
         for ident in funs.iter() {
             let fun = &self.functions[ident];
-            fun.to_eir_text(indent+1, out)?;
+            fun.to_eir_text(ctx, indent+1, out)?;
             write!(out, "\n\n")?;
         }
 
@@ -170,7 +239,8 @@ impl ToEirText for Module {
 }
 
 impl ToEirText for Function {
-    fn to_eir_text(&self, indent: usize, out: &mut Write) -> std::io::Result<()> {
+    fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut Write) -> std::io::Result<()> {
+        ctx.annotate_function(self);
         let ident = self.ident();
 
         write_indent(out, indent)?;
@@ -182,12 +252,12 @@ impl ToEirText for Function {
         }
 
         // Constants
-        print_constants(self, indent+1, out)?;
+        print_constants(ctx, self, indent+1, out)?;
         write!(out, "\n")?;
 
         // EBBs
         for ebb in self.iter_ebb() {
-            ebb.to_eir_text_fun(self, indent+1, out)?;
+            ebb.to_eir_text_fun(ctx, self, indent+1, out)?;
             write!(out, "\n")?;
         }
 
@@ -215,7 +285,7 @@ fn format_value_list(values: &[Value], fun: &Function,
 }
 
 impl ToEirTextFun for EbbCall {
-    fn to_eir_text_fun(&self, fun: &Function, indent: usize, out: &mut Write) -> std::io::Result<()> {
+    fn to_eir_text_fun(&self, ctx: &mut ToEirTextContext, fun: &Function, indent: usize, out: &mut Write) -> std::io::Result<()> {
         write!(out, "B{}(", fun.ebb_call_target(*self).index())?;
         format_value_list(fun.ebb_call_args(*self), fun, out)?;
         write!(out, ")")?;
@@ -223,7 +293,7 @@ impl ToEirTextFun for EbbCall {
     }
 }
 
-fn format_ebb_label(ebb: Ebb, fun: &Function, out: &mut Write) -> std::io::Result<()> {
+fn format_ebb_label(ebb: Ebb, ctx: &mut ToEirTextContext, fun: &Function, out: &mut Write) -> std::io::Result<()> {
     write!(out, "B{}", ebb.index())?;
     let args = fun.ebb_args(ebb);
     if args.len() > 0 {
@@ -240,29 +310,29 @@ fn format_ebb_label(ebb: Ebb, fun: &Function, out: &mut Write) -> std::io::Resul
     Ok(())
 }
 
-fn format_branches(calls: &[EbbCall], fun: &Function, indent: usize,
+fn format_branches(ctx: &mut ToEirTextContext, calls: &[EbbCall], fun: &Function, indent: usize,
                    out: &mut Write) -> std::io::Result<()> {
     for (idx, ebb_call) in calls.iter().enumerate() {
         if idx != 0 {
             write!(out, ", ")?;
         }
-        ebb_call.to_eir_text_fun(fun, indent, out)?;
+        ebb_call.to_eir_text_fun(ctx, fun, indent, out)?;
     }
     Ok(())
 }
 
 impl ToEirText for PatternNode {
-    fn to_eir_text(&self, indent: usize, out: &mut Write) -> std::io::Result<()> {
+    fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut Write) -> std::io::Result<()> {
         match self {
             PatternNode::Atomic(atomic) => {
-                atomic.to_eir_text(indent, out)?;
+                atomic.to_eir_text(ctx, indent, out)?;
             },
             PatternNode::Wildcard => {
                 write!(out, "_")?;
             },
             PatternNode::Assign(assign, inner) => {
                 write!(out, "A{} = (", assign.0)?;
-                inner.to_eir_text(indent, out)?;
+                inner.to_eir_text(ctx, indent, out)?;
                 write!(out, ")")?;
             },
             PatternNode::List(head, tail) => {
@@ -272,11 +342,11 @@ impl ToEirText for PatternNode {
                     if idx != 0 {
                         write!(out, ", ")?;
                     }
-                    elem.to_eir_text(indent, out)?;
+                    elem.to_eir_text(ctx, indent, out)?;
                 }
 
                 write!(out, " | ")?;
-                tail.to_eir_text(indent, out)?;
+                tail.to_eir_text(ctx, indent, out)?;
                 write!(out, "]")?;
             },
             PatternNode::Map(entries) => {
@@ -286,7 +356,7 @@ impl ToEirText for PatternNode {
                         write!(out, ", ")?;
                     }
                     write!(out, "V{} => (", key.0)?;
-                    value.to_eir_text(indent, out)?;
+                    value.to_eir_text(ctx, indent, out)?;
                     write!(out, ")")?;
                 }
                 write!(out, "}}")?;
@@ -298,7 +368,7 @@ impl ToEirText for PatternNode {
                         write!(out, ", ")?;
                     }
                     write!(out, "(")?;
-                    value.to_eir_text(indent, out)?;
+                    value.to_eir_text(ctx, indent, out)?;
                     write!(out, ")")?;
                 }
                 write!(out, "}}")?;
@@ -310,9 +380,9 @@ impl ToEirText for PatternNode {
 }
 
 impl ToEirTextFun for Ebb {
-    fn to_eir_text_fun(&self, fun: &Function, indent: usize, out: &mut Write) -> std::io::Result<()> {
+    fn to_eir_text_fun(&self, ctx: &mut ToEirTextContext, fun: &Function, indent: usize, out: &mut Write) -> std::io::Result<()> {
         write_indent(out, indent)?;
-        format_ebb_label(*self, fun, out)?;
+        format_ebb_label(*self, ctx, fun, out)?;
 
         for op in fun.iter_op(*self) {
             write_indent(out, indent+1)?;
@@ -333,7 +403,7 @@ impl ToEirTextFun for Ebb {
                 OpKind::Jump => {
                     assert!(sig == (0, 0, 1));
                     write!(out, "jump ")?;
-                    branches[0].to_eir_text_fun(fun, indent, out)?;
+                    branches[0].to_eir_text_fun(ctx, fun, indent, out)?;
                     default_branch = false;
                 },
                 OpKind::PackValueList => {
@@ -367,7 +437,7 @@ impl ToEirTextFun for Ebb {
                         for pattern in clause.patterns.iter() {
                             write_indent(out, indent+3)?;
                             write!(out, "pattern ")?;
-                            pattern.node.to_eir_text(indent, out)?;
+                            pattern.node.to_eir_text(ctx, indent, out)?;
                             write!(out, ";\n")?;
                         }
 
@@ -397,7 +467,7 @@ impl ToEirTextFun for Ebb {
                     write!(out, "if_truthy ")?;
                     format_value(reads[0], fun, out)?;
                     write!(out, " else ")?;
-                    format_branches(branches, fun, indent, out)?;
+                    format_branches(ctx, branches, fun, indent, out)?;
                     default_reads = false;
                     default_branch = false;
                 },
@@ -455,7 +525,7 @@ impl ToEirTextFun for Ebb {
 
                     if *call_type == CallType::Normal {
                         write!(out, " except ")?;
-                        format_branches(branches, fun, indent, out)?;
+                        format_branches(ctx, branches, fun, indent, out)?;
                     }
 
                     default_reads = false;
@@ -486,7 +556,7 @@ impl ToEirTextFun for Ebb {
 
                     if *call_type == CallType::Normal {
                         write!(out, " except ")?;
-                        format_branches(branches, fun, indent, out)?;
+                        format_branches(ctx, branches, fun, indent, out)?;
                     }
 
                     default_reads = false;
@@ -537,13 +607,13 @@ impl ToEirTextFun for Ebb {
                 OpKind::BindClosure { ident } => {
                     assert_matches!(sig, (1, 1, 0));
                     write!(out, "bind_closure ")?;
-                    ident.to_eir_text(indent, out)?;
+                    ident.to_eir_text(ctx, indent, out)?;
                     write!(out, " with")?;
                 },
                 OpKind::CaptureNamedFunction(ident) => {
                     assert_matches!(sig, (0, 1, 0));
                     write!(out, "capture_function ")?;
-                    ident.to_eir_text(indent, out)?;
+                    ident.to_eir_text(ctx, indent, out)?;
                 },
                 OpKind::ExcTrace => {
                     assert_matches!(sig, (1, 1, 0));
@@ -588,10 +658,16 @@ impl ToEirTextFun for Ebb {
 
             if default_branch && branches.len() > 0 {
                 write!(out, " branch ")?;
-                format_branches(branches, fun, indent, out)?;
+                format_branches(ctx, branches, fun, indent, out)?;
             }
 
-            write!(out, ";\n")?;
+            write!(out, ";")?;
+
+            if let Some(annotation) = ctx.annotate_op(fun, op) {
+                write!(out, " //{}", annotation)?;
+            }
+            write!(out, "\n")?;
+
         }
 
         Ok(())

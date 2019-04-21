@@ -99,6 +99,11 @@ impl<Target> CompilationContext<Target> where Target: target::Target {
             let fun = &module.functions[ident];
             assert!(fun.dialect() == Dialect::CPS);
             self.get_fun_value(fun);
+
+            let static_calls = fun.get_all_static_calls();
+            for call in static_calls.iter() {
+                self.gen_proto(call);
+            }
         }
 
         for ident in funs.iter() {

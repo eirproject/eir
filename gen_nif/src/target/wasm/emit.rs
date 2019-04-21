@@ -1,10 +1,13 @@
 use crate::emit::LowerCtx;
 
+use inkwell::AddressSpace;
+use inkwell::IntPredicate;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::{ BasicValueEnum, IntValue, FunctionValue };
 use inkwell::basic_block::BasicBlock;
 
 use eir::Value;
+use eir::Atom;
 use eir::FunctionIdent;
 use eir::{ ConstantTerm, AtomicTerm };
 use eir::op::ComparisonOperation;
@@ -46,6 +49,26 @@ impl crate::target::TargetEmit for WasmTarget {
                 let atom_val = ctx.builder.build_load(atom_ptr, "");
                 atom_val
             }
+            ConstantTerm::Atomic(AtomicTerm::Integer(num)) => {
+                let i64_type = ctx.context.i64_type();
+
+                // TODO: Handle large
+                use num_traits::cast::ToPrimitive;
+                let num_sm = num.to_i64().unwrap();
+
+                let num_const = i64_type.const_int(num_sm as u64, true);
+
+                let call = ctx.builder.build_call(
+                    self.types.whirlrt_term_make_smallint,
+                    &[
+                        self.env.unwrap(),
+                        num_const.into(),
+                    ],
+                    ""
+                );
+
+                call.try_as_basic_value().left().unwrap()
+            },
             _ => unimplemented!("emit_constant {:?}", constant),
         }
     }
@@ -91,7 +114,22 @@ impl crate::target::TargetEmit for WasmTarget {
         vars: &[BasicValueEnum]
     ) -> BasicValueEnum
     {
-        unimplemented!();
+        // TODO: MakeClosureEnv and BindClosure should be made into a
+        // single OP!!
+        // This is really really hacky!
+        let (arr_ptr, arr_len) = crate::emit::build_stack_arr(
+            ctx, self.types.term_type, vars);
+
+        let call = ctx.builder.build_call(
+            self.types.whirlrt_term_make_tuple,
+            &[
+                self.env.unwrap(),
+                arr_len.into(),
+                arr_ptr.into(),
+            ],
+            "",
+        );
+        call.try_as_basic_value().left().unwrap()
     }
 
     fn emit_unpack_tuple(
@@ -112,7 +150,30 @@ impl crate::target::TargetEmit for WasmTarget {
         out: &mut Vec<BasicValueEnum>,
         num_free: usize,
     ) {
-        unimplemented!();
+        let i32_type = ctx.context.i32_type();
+        let buf_len = i32_type.const_int(num_free as u64, false);
+        let ret_buf = ctx.builder.build_array_alloca(
+            self.types.term_type,
+            buf_len.into(),
+            ""
+        );
+        ctx.builder.build_call(
+            self.types.whirlrt_term_unpack_closure_env,
+            &[
+                self.env.unwrap(),
+                env_val,
+                buf_len.into(),
+                ret_buf.into(),
+            ],
+            ""
+        );
+        out.clear();
+        for n in 0..num_free {
+            let n_val = i32_type.const_int(n as u64, false);
+            let ptr = unsafe { ctx.builder.build_gep(ret_buf, &[n_val], "") };
+            let val = ctx.builder.build_load(ptr, "");
+            out.push(val);
+        }
     }
 
     fn emit_capture_named_function(
@@ -121,7 +182,22 @@ impl crate::target::TargetEmit for WasmTarget {
         ident: &FunctionIdent,
     ) -> BasicValueEnum
     {
-        unimplemented!();
+        let i8_type = self.context.i8_type();
+
+        let fun_val = ctx.protos[ident];
+        let fun_ptr_value = fun_val.as_global_value().as_pointer_value();
+        let fun_ptr_value_casted = ctx.builder.build_pointer_cast(
+            fun_ptr_value, i8_type.ptr_type(AddressSpace::Generic), "");
+
+        let call = ctx.builder.build_call(
+            self.types.whirlrt_term_make_fun,
+            &[
+                self.env.unwrap(),
+                fun_ptr_value_casted.into(),
+            ],
+            ""
+        );
+        call.try_as_basic_value().left().unwrap()
     }
 
     fn emit_bind_closure(
@@ -130,7 +206,24 @@ impl crate::target::TargetEmit for WasmTarget {
         ident: &FunctionIdent,
         clo_env: BasicValueEnum,
     ) -> BasicValueEnum {
-        unimplemented!();
+        let fun_val = ctx.protos[ident];
+
+        let i8_type = self.context.i8_type();
+
+        let fun_ptr_value = fun_val.as_global_value().as_pointer_value();
+        let fun_ptr_value_casted = ctx.builder.build_pointer_cast(
+            fun_ptr_value, i8_type.ptr_type(AddressSpace::Generic), "");
+
+        ctx.builder.build_call(
+            self.types.whirlrt_temp_hacky_transmute_tup_to_fun_env,
+            &[
+                self.env.unwrap(),
+                clo_env,
+                fun_ptr_value_casted.into(),
+            ],
+            ""
+        );
+        clo_env
     }
 
     fn emit_apply_cont(
@@ -156,7 +249,40 @@ impl crate::target::TargetEmit for WasmTarget {
         fun: BasicValueEnum,
         args: &[BasicValueEnum],
     ) {
-        unimplemented!();
+        let void_type = ctx.context.void_type();
+
+        // TODO fail properly if value is not a function
+        let call = ctx.builder.build_call(
+            self.types.whirlrt_term_get_fun,
+            &[
+                self.env.unwrap(),
+                fun,
+            ],
+            ""
+        );
+        let fun_ptr_uncasted = call.try_as_basic_value().left().unwrap();
+
+        let mut args_typ = vec![
+            self.types.process_env_ptr_type,
+            self.types.term_type,
+        ];
+        args_typ.extend((0..(args.len())).map(|_| self.types.term_type));
+        let fun_typ = void_type.fn_type(&args_typ, false);
+        let fun_ptr_typ = fun_typ.ptr_type(AddressSpace::Generic);
+
+        let fun_ptr = ctx.builder.build_pointer_cast(
+            fun_ptr_uncasted.into_pointer_value(), fun_ptr_typ, "");
+
+        let mut c_args = vec![
+            self.env.unwrap(),
+            fun,
+        ];
+        c_args.extend(args.iter().cloned());
+        ctx.builder.build_call(
+            fun_ptr,
+            &c_args,
+            ""
+        );
     }
 
     fn emit_call_const(
@@ -165,7 +291,37 @@ impl crate::target::TargetEmit for WasmTarget {
         ident: &FunctionIdent,
         args: &[BasicValueEnum],
     ) {
-        unimplemented!();
+        let i8_type = ctx.context.i8_type();
+
+        println!("ConstCall: {:?}", ident);
+        for key in ctx.protos.keys() {
+            println!("{}", key);
+        }
+        let fun_val = ctx.protos[ident];
+
+        let fun_ptr_value = fun_val.as_global_value().as_pointer_value();
+        let fun_ptr_value_casted = ctx.builder.build_pointer_cast(
+            fun_ptr_value, i8_type.ptr_type(AddressSpace::Generic), "");
+
+        let call = ctx.builder.build_call(
+            self.types.whirlrt_term_make_fun,
+            &[
+                self.env.unwrap(),
+                fun_ptr_value_casted.into(),
+            ],
+            ""
+        );
+
+        let mut c_args = vec![
+            self.env.unwrap(),
+            call.try_as_basic_value().left().unwrap(),
+        ];
+        c_args.extend(args.iter().cloned());
+        ctx.builder.build_call(
+            fun_val,
+            &c_args,
+            ""
+        );
     }
 
     fn emit_call_dyn(
@@ -209,7 +365,18 @@ impl crate::target::TargetEmit for WasmTarget {
         ctx: &mut LowerCtx,
         val: BasicValueEnum,
     ) -> IntValue {
-        unimplemented!();
+        let nil_atom_ptr = self.get_atom(&ctx.module, &Atom::from_str("nil"));
+        let nil_atom = ctx.builder.build_load(nil_atom_ptr, "");
+        let false_atom_ptr = self.get_atom(&ctx.module, &Atom::from_str("false"));
+        let false_atom = ctx.builder.build_load(false_atom_ptr, "");
+
+        let a = ctx.builder.build_int_compare(
+            IntPredicate::EQ, val.into_int_value(), nil_atom.into_int_value(), "");
+        let b = ctx.builder.build_int_compare(
+            IntPredicate::EQ, val.into_int_value(), false_atom.into_int_value(), "");
+
+        let comb = ctx.builder.build_or(a, b, "");
+        ctx.builder.build_not(comb, "")
     }
 
     fn emit_map_put(
