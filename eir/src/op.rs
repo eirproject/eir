@@ -161,13 +161,12 @@ pub enum OpKind {
     ///          [ReceiveStart]
     ///                |
     ///                v
-    ///    ----------[ReceiveWait]<--------
-    ///    v                   |          |
-    /// [Timeout           ]   |          |
-    /// [Other control flow]   |          |
-    ///                        v          |
-    ///              [ReceiveGetMessage]  |
-    ///         -----[Match logic      ]---
+    ///    ----------[call eir_intrinsics:receive_wait()]<--------
+    ///    v                   |                                 |
+    /// [Timeout           ]   |                                 |
+    /// [Other control flow]   |                                 |
+    ///                        v                                 |
+    ///         -----[Match logic      ]--------------------------
     ///         v           |
     ///  [ReceiveFinish]    ----->[ReceiveFinish]
     ///  [Other        ]          [Other        ]
@@ -199,11 +198,11 @@ pub enum OpKind {
     /// Must be the only op in its basic block.
     /// Jumps to edge 0 when a message has been received.
     /// Jumps to edge 1 when a timeout has occured.
-    ReceiveWait,
+    //ReceiveWait,
     /// This must be the first instruction on edge 0 from ReceiveWait.
     /// Peeks at the message in the mailbox, not removed unless ReceiveFinish
     /// is passed through on this iteration
-    ReceiveGetMessage,
+    //ReceiveGetMessage,
     /// When jumped to from edge 0 from a ReceiveWait, control flow either
     /// needs to (eventually) return to ReceiveWait or needs to pass
     /// through ReceiveFinish on its way out. Returning while inside a receive
@@ -277,7 +276,7 @@ impl OpKind {
             OpKind::CaseGuardFail { .. } => true,
             OpKind::ReturnOk => true,
             OpKind::ReturnThrow => true,
-            OpKind::ReceiveWait => true,
+            //OpKind::ReceiveWait => true,
             OpKind::ReceiveStart => true,
             OpKind::Unreachable => true,
             _ => false,

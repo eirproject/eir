@@ -44,9 +44,10 @@ fn copy_op(
     b: &mut FunctionBuilder,
     // Map from source function => dest function
     val_map: &mut HashMap<Value, Value>,
-    ebb_map: &mut HashMap<Ebb, Ebb>,
+    ebb_map: &mut HashMap<Op, Ebb>,
 ) {
     let kind = src_fun.op_kind(src_op);
+    println!("Copy: {:?}", kind);
     b.op_build_start(kind.clone());
 
     for write in src_fun.op_writes(src_op) {
@@ -63,12 +64,16 @@ fn copy_op(
     }
     for branch in src_fun.op_branches(src_op) {
         let old_target = src_fun.ebb_call_target(*branch);
+        let old_target_op = src_fun.ebb_first_op(old_target);
 
-        let new = if let Some(ebb) = ebb_map.get(&old_target) {
+        //O: let new = if let Some(ebb) = ebb_map.get(&old_target) {
+        let new = if let Some(ebb) = ebb_map.get(&old_target_op) {
             *ebb
         } else {
             let new = b.insert_ebb();
-            ebb_map.insert(old_target, new);
+            //O: ebb_map.insert(old_target, new);
+            assert!(!ebb_map.contains_key(&old_target_op));
+            ebb_map.insert(old_target_op, new);
             for arg in src_fun.ebb_args(old_target) {
                 let val = b.add_ebb_argument(new);
                 val_map.insert(*arg, val);
@@ -89,10 +94,14 @@ fn copy_op(
         b.op_build_ebb_call(call);
     }
 
+    if let Some(op) = src_fun.op_after(src_op) {
+        ebb_map.insert(op, b.current_ebb());
+    }
+
     b.op_build_end();
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 enum ContSite {
     EbbCall(EbbCall, Option<Value>),
     Op(Op),
@@ -117,10 +126,12 @@ fn gen_chunk(
     live: &LiveValues,
     env_idx_gen: &mut ModuleEnvs,
     needed_continuations: &mut Vec<(ContSite, ClosureEnv)>,
+    continuaitons: &mut HashMap<ContSite, ClosureEnv>,
     // If this is false, this is an entry point
     // If this is true, this is a continuation
     cont: Option<ClosureEnv>,
 ) -> Function {
+    println!("Chunk");
 
     let mut ident = src_fun.ident().clone();
     if let Some(env_idx) = cont {
@@ -138,7 +149,7 @@ fn gen_chunk(
 
         let mut to_process = VecDeque::new();
         let mut val_map = HashMap::new();
-        let mut ebb_map = HashMap::new();
+        let mut ebb_map: HashMap<Op, Ebb> = HashMap::new();
         let mut handled_ops = HashSet::new();
         // Temp
         let mut call_renames: HashMap<Value, Value> = HashMap::new();
@@ -198,7 +209,8 @@ fn gen_chunk(
                 },
             };
             let src_first_ebb = src_fun.op_ebb(src_first_op);
-            ebb_map.insert(src_first_ebb, entry_ebb);
+            //C: ebb_map.insert(src_first_ebb, entry_ebb);
+            ebb_map.insert(src_first_op, entry_ebb);
 
             // Argument for environment
             let env_val = b.add_ebb_argument(entry_ebb);
@@ -228,7 +240,8 @@ fn gen_chunk(
             // Get Op and Ebb, insert binding
             src_first_op = if let ContSite::Op(op) = site { op } else { panic!() };
             let src_first_ebb = src_fun.op_ebb(src_first_op);
-            ebb_map.insert(src_first_ebb, entry_ebb);
+            //C: ebb_map.insert(src_first_ebb, entry_ebb);
+            ebb_map.insert(src_first_op, entry_ebb);
 
             // Arguments for continuations
             ok_ret_cont = b.add_ebb_argument(entry_ebb);
@@ -252,7 +265,8 @@ fn gen_chunk(
             handled_ops.insert(src_op);
 
             let src_ebb = src_fun.op_ebb(src_op);
-            b.position_at_end(ebb_map[&src_ebb]);
+            b.position_at_end(ebb_map[&src_op]);
+            println!("src: {:?} dst {:?}", src_ebb, ebb_map[&src_op]);
 
             // If we hit a continuation site
             if cont_sites.contains(&src_op) {
@@ -301,18 +315,31 @@ fn gen_chunk(
                         }
                         buf.push(val_map[&live]);
                     }
-                    let env_idx = env_idx_gen.add();
-                    env_idx_gen.env_set_captures_num(env_idx, buf.len());
+
+                    let src_next_op = src_fun.op_after(src_op).unwrap();
+                    let cont_site = ContSite::Op(src_next_op);
+                    let env_idx = if let Some(env_idx) =
+                        continuaitons.get(&cont_site)
+                    {
+                        *env_idx
+                    } else {
+                        let env_idx = env_idx_gen.add();
+                        env_idx_gen.env_set_captures_num(env_idx, buf.len());
+
+                        continuaitons.insert(cont_site, env_idx);
+
+                        // Schedule control flow edge for continuation generation
+                        needed_continuations.push(
+                            (ContSite::Op(src_next_op), env_idx));
+
+                        env_idx
+                    };
                     let env = b.op_make_closure_env(env_idx, &buf);
 
                     // Bind closure for continuation
                     let mut ident = src_fun.ident().clone();
                     ident.lambda = Some((env_idx, 0));
                     ok_cont = b.op_bind_closure(ident, env);
-
-                    // Schedule control flow edge for continuation generation
-                    let src_next_op = src_fun.op_after(src_op).unwrap();
-                    needed_continuations.push((ContSite::Op(src_next_op), env_idx));
 
                     // ============================
                     // ==== Throw continuation ====
@@ -348,19 +375,30 @@ fn gen_chunk(
                         }
                         buf.push(val_map[&renamed]);
                     }
-                    let env_idx = env_idx_gen.add();
-                    env_idx_gen.env_set_captures_num(env_idx, buf.len());
+
+                    let cont_site = ContSite::EbbCall(src_branch, renamed_nok_val);
+                    let env_idx = if let Some(env_idx) =
+                        continuaitons.get(&cont_site)
+                    {
+                        *env_idx
+                    } else {
+                        let env_idx = env_idx_gen.add();
+                        env_idx_gen.env_set_captures_num(env_idx, buf.len());
+
+                        continuaitons.insert(cont_site, env_idx);
+
+                        // Schedule exception edge for continuation generation
+                        needed_continuations.push((
+                            ContSite::EbbCall(src_branch, renamed_nok_val), env_idx));
+
+                        env_idx
+                    };
                     let env = b.op_make_closure_env(env_idx, &buf);
 
                     // Bind closure for continuation
                     let mut ident = src_fun.ident().clone();
                     ident.lambda = Some((env_idx, 0));
                     err_cont = b.op_bind_closure(ident, env);
-
-                    // Schedule exception edge for continuation generation
-                    // only if this is not a tail call.
-                    needed_continuations.push((
-                        ContSite::EbbCall(src_branch, renamed_nok_val), env_idx));
 
                 } else {
                     // In the case of a tail call, don't create a new return
@@ -387,6 +425,7 @@ fn gen_chunk(
                             buf.push(copy_read(src_fun, &mut b, &val_map, *read));
                         }
 
+                        println!("Apply");
                         b.op_tail_apply(val_map[&reads[0]], &buf);
                     },
                     OpKind::Call { call_type, arity } => {
@@ -402,6 +441,7 @@ fn gen_chunk(
                         let name_val = copy_read(src_fun, &mut b, &val_map, reads[0]);
                         let module_val = copy_read(src_fun, &mut b, &val_map, reads[1]);
 
+                        println!("Call");
                         b.op_tail_call(name_val, module_val, *arity, &buf);
                     },
                     _ => panic!(),
@@ -415,14 +455,16 @@ fn gen_chunk(
             match kind {
                 // Call the return continuation
                 OpKind::ReturnOk => {
-                    b.position_at_end(ebb_map[&src_ebb]);
+                    b.position_at_end(ebb_map[&src_op]);
                     let res = src_fun.op_reads(src_op)[0];
+                    println!("ReturnOk");
                     b.op_cont_apply(ok_ret_cont, &[val_map[&res]]);
                 },
                 // Call the throw continuation
                 OpKind::ReturnThrow => {
-                    b.position_at_end(ebb_map[&src_ebb]);
+                    b.position_at_end(ebb_map[&src_op]);
                     let res = src_fun.op_reads(src_op)[0];
+                    println!("ReturnErr");
                     b.op_cont_apply(err_ret_cont, &[val_map[&res]]);
                 },
                 // If this is a normal Op, copy it and add outgoing edges to
@@ -509,7 +551,10 @@ pub fn transform_function(
     //}
 
     let mut generated = HashSet::new();
+    let mut generated2 = HashSet::new();
+
     let mut needed = Vec::new();
+    let mut needed_map = HashMap::new();
 
     let entry = src_fun.ebb_entry();
     let fun = gen_chunk(
@@ -519,17 +564,27 @@ pub fn transform_function(
         &live,
         env_idx_gen,
         &mut needed,
+        &mut needed_map,
         None,
     );
     result_functions.insert(fun.ident().clone(), fun);
 
     while needed.len() > 0 {
         let (site, env) = needed.pop().unwrap();
+        println!("Site {:?}", site);
+        println!("Done {:?}", generated);
         if let ContSite::EbbCall(call, val) = site {
             if generated.contains(&(call, val)) { continue }
             generated.insert((call, val));
         }
+        if let ContSite::Op(op) = site {
+            if generated2.contains(&op) {
+                continue;
+            }
+            generated2.insert(op);
+        }
 
+        println!("StartChunk: {:?} {:?}", site, env);
         let fun = gen_chunk(
             src_fun,
             site,
@@ -537,6 +592,7 @@ pub fn transform_function(
             &live,
             env_idx_gen,
             &mut needed,
+            &mut needed_map,
             Some(env),
         );
         result_functions.insert(fun.ident().clone(), fun);

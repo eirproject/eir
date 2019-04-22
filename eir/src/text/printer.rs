@@ -566,14 +566,14 @@ impl ToEirTextFun for Ebb {
                     assert_matches!(sig, (1, 1, 1));
                     write!(out, "receive_start")?;
                 },
-                OpKind::ReceiveGetMessage => {
-                    assert_matches!(sig, (1, 1, 0));
-                    write!(out, "receive_get_message")?;
-                },
-                OpKind::ReceiveWait => {
-                    assert_matches!(sig, (1, 0, 2));
-                    write!(out, "receive_wait")?;
-                },
+                //OpKind::ReceiveGetMessage => {
+                //    assert_matches!(sig, (1, 1, 0));
+                //    write!(out, "receive_get_message")?;
+                //},
+                //OpKind::ReceiveWait => {
+                //    assert_matches!(sig, (1, 0, 2));
+                //    write!(out, "receive_wait")?;
+                //},
                 OpKind::UnpackEnv => {
                     assert_matches!(sig, (1, _, 0));
                     write!(out, "unpack_env")?;

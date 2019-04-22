@@ -848,6 +848,7 @@ impl hir::SingleExpression {
 
                 let receive_loop_ebb = b.insert_ebb();
                 let timeout_body_ebb = b.insert_ebb();
+                let _timeout_body_dummy = b.add_ebb_argument(timeout_body_ebb);
                 let match_body_ebb = b.insert_ebb();
 
                 let expression_exit_ebb = b.insert_ebb();
@@ -863,10 +864,21 @@ impl hir::SingleExpression {
 
                 // Receive loop block (#receive_loop)
                 b.position_at_end(receive_loop_ebb);
+
+                let rec_mod = b.create_atom(Atom::from_str("eir_intrinsics"));
+                let rec_name = b.create_atom(Atom::from_str("receive_wait"));
+                let (message_val, tim_val) = b.op_call(
+                    rec_mod, rec_name, 0, &[receive_loop_var]);
+
+                let timeout_body_call = b.create_ebb_call(
+                    timeout_body_ebb, &[tim_val]);
+                b.add_op_ebb_call(timeout_body_call);
+
                 let match_body_call = b.create_ebb_call(match_body_ebb, &[]);
-                let timeout_body_call = b.create_ebb_call(timeout_body_ebb, &[]);
-                b.op_receive_wait(receive_loop_var, match_body_call,
-                                  timeout_body_call);
+                b.op_jump(match_body_call);
+
+                //b.op_receive_wait(receive_loop_var, match_body_call,
+                //                  timeout_body_call);
 
                 // Timeout branch (#timeout_body)
                 b.position_at_end(timeout_body_ebb);
@@ -878,7 +890,7 @@ impl hir::SingleExpression {
 
                 // Match logic (#match_body)
                 b.position_at_end(match_body_ebb);
-                let message_val = b.op_receive_get_message(receive_loop_var);
+                //let message_val = b.op_receive_get_message(receive_loop_var);
                 let message_ssa = st.ssa_gen.next();
                 st.bindings.insert(message_ssa, message_val);
 

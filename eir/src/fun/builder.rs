@@ -4,6 +4,7 @@ use super::{ ValueType, WriteToken };
 use super::{ Function };
 use super::{ AttributeKey, AttributeValue };
 
+use crate::Atom;
 use crate::{ FunctionIdent, ConstantTerm, AtomicTerm, ClosureEnv };
 use crate::Clause;
 use crate::op::{ OpKind, ComparisonOperation, CallType };
@@ -300,6 +301,9 @@ impl<'a> FunctionBuilder<'a> {
         self.current_op = None;
     }
 
+    pub fn create_atom(&mut self, atom: Atom) -> Value {
+        self.create_atomic(AtomicTerm::Atom(atom))
+    }
     pub fn create_atomic(&mut self, atomic: AtomicTerm) -> Value {
         let val = self.fun.values.push(
             ValueType::Constant(ConstantTerm::Atomic(atomic)));
@@ -860,34 +864,14 @@ impl<'a> FunctionBuilder<'a> {
         result
     }
 
-    pub fn op_receive_wait(&mut self, structure: Value,
-                           match_call: EbbCall, timeout_call: EbbCall) {
-        let reads = EntityList::from_slice(&[structure], &mut self.fun.value_pool);
-        let branches = EntityList::from_slice(
-            &[match_call, timeout_call], &mut self.fun.ebb_call_pool);
-
+    pub fn op_receive_finish(&mut self, val: Value) {
+        let reads = EntityList::from_slice(&[val], &mut self.fun.value_pool);
         self.insert_op(OpData {
-            kind: OpKind::ReceiveWait,
+            kind: OpKind::ReceiveFinish,
             reads: reads,
             writes: EntityList::new(),
-            ebb_calls: branches,
-        });
-    }
-
-    pub fn op_receive_get_message(&mut self, structure: Value) -> Value {
-        let result = self.fun.new_variable();
-        let writes = EntityList::from_slice(&[result], &mut self.fun.value_pool);
-
-        let reads = EntityList::from_slice(&[structure], &mut self.fun.value_pool);
-
-        self.insert_op(OpData {
-            kind: OpKind::ReceiveGetMessage,
-            reads: reads,
-            writes: writes,
             ebb_calls: EntityList::new(),
         });
-
-        result
     }
 
     pub fn op_unreachable(&mut self) {
