@@ -47,7 +47,6 @@ fn copy_op(
     ebb_map: &mut HashMap<Op, Ebb>,
 ) {
     let kind = src_fun.op_kind(src_op);
-    println!("Copy: {:?}", kind);
     b.op_build_start(kind.clone());
 
     for write in src_fun.op_writes(src_op) {
@@ -266,12 +265,10 @@ fn gen_chunk(
 
             let src_ebb = src_fun.op_ebb(src_op);
             b.position_at_end(ebb_map[&src_op]);
-            println!("src: {:?} dst {:?}", src_ebb, ebb_map[&src_op]);
 
             // If we hit a continuation site
             if cont_sites.contains(&src_op) {
                 let kind = src_fun.op_kind(src_op);
-                println!("{:?}", kind);
 
                 let is_tail;
                 match kind {
@@ -425,7 +422,6 @@ fn gen_chunk(
                             buf.push(copy_read(src_fun, &mut b, &val_map, *read));
                         }
 
-                        println!("Apply");
                         b.op_tail_apply(val_map[&reads[0]], &buf);
                     },
                     OpKind::Call { call_type, arity } => {
@@ -434,14 +430,12 @@ fn gen_chunk(
                         let reads = src_fun.op_reads(src_op);
 
                         for read in reads.iter().skip(2) {
-                            println!("{:?}", read);
                             buf.push(copy_read(src_fun, &mut b, &val_map, *read));
                         }
 
                         let name_val = copy_read(src_fun, &mut b, &val_map, reads[0]);
                         let module_val = copy_read(src_fun, &mut b, &val_map, reads[1]);
 
-                        println!("Call");
                         b.op_tail_call(name_val, module_val, *arity, &buf);
                     },
                     _ => panic!(),
@@ -457,14 +451,12 @@ fn gen_chunk(
                 OpKind::ReturnOk => {
                     b.position_at_end(ebb_map[&src_op]);
                     let res = src_fun.op_reads(src_op)[0];
-                    println!("ReturnOk");
                     b.op_cont_apply(ok_ret_cont, &[val_map[&res]]);
                 },
                 // Call the throw continuation
                 OpKind::ReturnThrow => {
                     b.position_at_end(ebb_map[&src_op]);
                     let res = src_fun.op_reads(src_op)[0];
-                    println!("ReturnErr");
                     b.op_cont_apply(err_ret_cont, &[val_map[&res]]);
                 },
                 // If this is a normal Op, copy it and add outgoing edges to
@@ -519,8 +511,6 @@ pub fn transform_function(
 ) {
     let live = src_fun.live_values();
 
-    println!("{}", src_fun.ident());
-
     // Identify continuation sites
     let mut cont_sites = HashSet::new();
     for ebb in src_fun.iter_ebb() {
@@ -537,18 +527,6 @@ pub fn transform_function(
             }
         }
     }
-    //for op in live.flow_live.keys() {
-    //    let kind = src_fun.op_kind(*op);
-    //    match kind {
-    //        OpKind::Call { .. } => {
-    //            cont_sites.insert(*op);
-    //        },
-    //        OpKind::Apply { .. } => {
-    //            cont_sites.insert(*op);
-    //        },
-    //        _ => (),
-    //    }
-    //}
 
     let mut generated = HashSet::new();
     let mut generated2 = HashSet::new();
@@ -571,8 +549,6 @@ pub fn transform_function(
 
     while needed.len() > 0 {
         let (site, env) = needed.pop().unwrap();
-        println!("Site {:?}", site);
-        println!("Done {:?}", generated);
         if let ContSite::EbbCall(call, val) = site {
             if generated.contains(&(call, val)) { continue }
             generated.insert((call, val));
@@ -584,7 +560,6 @@ pub fn transform_function(
             generated2.insert(op);
         }
 
-        println!("StartChunk: {:?} {:?}", site, env);
         let fun = gen_chunk(
             src_fun,
             site,
