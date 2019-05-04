@@ -130,7 +130,6 @@ fn gen_chunk(
     // If this is true, this is a continuation
     cont: Option<ClosureEnv>,
 ) -> Function {
-    println!("Chunk");
 
     let mut ident = src_fun.ident().clone();
     if let Some(env_idx) = cont {

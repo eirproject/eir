@@ -152,8 +152,7 @@ impl crate::target::TargetEmit for NifTarget {
         tuple_val: BasicValueEnum,
         arity: usize,
         out_vals: &mut Vec<BasicValueEnum>,
-        err_bb: &BasicBlock,
-    ) -> BasicBlock {
+    ) -> (BasicBlock, BasicBlock) {
         let i32_type = ctx.context.i32_type();
         let i64_type = ctx.context.i64_type();
 
@@ -173,6 +172,7 @@ impl crate::target::TargetEmit for NifTarget {
             "",
         );
 
+        let err_bb = ctx.context.append_basic_block(&ctx.fn_val, "tuple_unpack_err");
         let int_ok_bb = ctx.context.append_basic_block(&ctx.fn_val, "tuple_unpack_ok");
         let ok_bb = ctx.context.append_basic_block(&ctx.fn_val, "tuple_arity_ok");
 
@@ -183,7 +183,7 @@ impl crate::target::TargetEmit for NifTarget {
             i32_type.const_int(1, false).into(),
             "",
         );
-        ctx.builder.build_conditional_branch(cmp_res, &int_ok_bb, err_bb);
+        ctx.builder.build_conditional_branch(cmp_res, &int_ok_bb, &err_bb);
 
         // Check arity
         ctx.builder.position_at_end(&int_ok_bb);
@@ -194,7 +194,7 @@ impl crate::target::TargetEmit for NifTarget {
             i32_type.const_int(arity as u64, false).into(),
             "",
         );
-        ctx.builder.build_conditional_branch(cmp_res, &ok_bb, err_bb);
+        ctx.builder.build_conditional_branch(cmp_res, &ok_bb, &err_bb);
 
         ctx.builder.position_at_end(&ok_bb);
         let values_arr = ctx.builder.build_load(values_arr_ptr, "");
@@ -212,7 +212,7 @@ impl crate::target::TargetEmit for NifTarget {
             out_vals.push(term);
         }
 
-        ok_bb
+        (ok_bb, err_bb)
     }
 
     fn emit_unpack_closure_env(
@@ -224,22 +224,20 @@ impl crate::target::TargetEmit for NifTarget {
     ) {
         let i64_type = ctx.context.i64_type();
 
-        let err_bb = ctx.context.append_basic_block(&ctx.fn_val, "env_unpack_err");
-
-        let ok_bb = self.emit_unpack_tuple(
+        let (ok_bb, err_bb) = self.emit_unpack_tuple(
             ctx,
             env_val,
             num_free,
             out,
-            &err_bb,
         );
 
         ctx.builder.position_at_end(&err_bb);
-        ctx.builder.build_call(self.types.unreachable_fail, &[
-            i64_type.const_int(*ctx.loc_id as u64, false).into(),
-        ], "");
-        *ctx.loc_id += 1;
-        ctx.builder.build_unreachable();
+        self.emit_unreachable_fail(ctx);
+        //ctx.builder.build_call(self.types.unreachable_fail, &[
+        //    i64_type.const_int(*ctx.loc_id as u64, false).into(),
+        //], "");
+        //*ctx.loc_id += 1;
+        //ctx.builder.build_unreachable();
 
         ctx.builder.position_at_end(&ok_bb);
     }

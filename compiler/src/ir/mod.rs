@@ -6,6 +6,7 @@ pub use ::eir::{ ModuleEnvs, ClosureEnv };
 use ::eir::FunctionIdent;
 use ::eir::FunctionBuilder;
 pub mod lir;
+//pub mod hir_new;
 
 use ::{ Atom, Variable };
 use ::parser;

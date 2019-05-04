@@ -3,7 +3,7 @@ use inkwell::context::Context;
 use inkwell::values::{ FunctionValue, ArrayValue, StructValue, PointerValue,
                        GlobalValue, AnyValueEnum, BasicValueEnum };
 use inkwell::types::{ StructType, BasicType, BasicTypeEnum };
-use inkwell::module::{ Module };
+use inkwell::module::{ Module, Linkage };
 
 pub fn make_c_string_const(context: &Context, module: &Module, string: &str) -> GlobalValue {
     let i8_type = context.i8_type();
@@ -16,5 +16,6 @@ pub fn make_c_string_const(context: &Context, module: &Module, string: &str) -> 
     let val = module.add_global(arr.get_type(), None,
                                 "const_str");
     val.set_initializer(&arr);
+    val.set_linkage(Linkage::Private);
     val
 }

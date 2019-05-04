@@ -30,6 +30,10 @@ pub struct WasmTypes {
     pub whirlrt_term_make_fun: FunctionValue,
     pub whirlrt_term_get_fun: FunctionValue,
     pub whirlrt_term_make_smallint: FunctionValue,
+    pub whirlrt_term_unpack_tuple: FunctionValue,
+    pub whirlrt_unreachable_fail: FunctionValue,
+    pub whirlrt_make_dynfun: FunctionValue,
+    pub whirlrt_call_dynfun: FunctionValue,
 }
 
 impl WasmTypes {
@@ -146,6 +150,48 @@ impl WasmTypes {
                                 Some(Linkage::External))
         };
 
+        let whirlrt_term_unpack_tuple = {
+            let typ = bool_type.fn_type(&[
+                process_env_ptr_type.into(),
+                term_type.into(), // In term
+                i32_type.into(), // Tuple length
+                term_ptr_type.into(), // Out buf pointer
+            ], false);
+            module.add_function("whirlrt_term_unpack_tuple", typ,
+                                Some(Linkage::External))
+        };
+
+        let whirlrt_unreachable_fail = {
+            let typ = void_type.fn_type(&[
+                process_env_ptr_type.into(),
+            ], false);
+            module.add_function("whirlrt_unreachable_fail", typ,
+                                Some(Linkage::External))
+        };
+
+        let whirlrt_make_dynfun = {
+            let typ = i32_type.fn_type(&[
+                i32_type.into(),
+                i8_ptr_type.into(),
+                i32_type.into(),
+                i8_ptr_type.into(),
+                i32_type.into(),
+            ], false);
+            module.add_function("whirlrt_make_dynfun", typ,
+                                Some(Linkage::External))
+        };
+
+        let whirlrt_call_dynfun = {
+            let typ = void_type.fn_type(&[
+                i32_type.into(),
+                process_env_ptr_type.into(),
+                term_ptr_type.into(),
+                i32_type.into(),
+            ], false);
+            module.add_function("whirlrt_call_dynfun", typ,
+                                Some(Linkage::External))
+        };
+
         WasmTypes {
             process_env_ptr_type: process_env_ptr_type.into(),
             void_type: void_type,
@@ -161,6 +207,10 @@ impl WasmTypes {
             whirlrt_term_make_fun: whirlrt_term_make_fun,
             whirlrt_term_get_fun: whirlrt_term_get_fun,
             whirlrt_term_make_smallint: whirlrt_term_make_smallint,
+            whirlrt_term_unpack_tuple: whirlrt_term_unpack_tuple,
+            whirlrt_unreachable_fail: whirlrt_unreachable_fail,
+            whirlrt_make_dynfun: whirlrt_make_dynfun,
+            whirlrt_call_dynfun: whirlrt_call_dynfun,
         }
     }
 

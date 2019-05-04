@@ -24,12 +24,11 @@ num-bigint = "0.2"
 
 matches = "0.1.8"
 
+cranelift-entity = "0.30.0"
+
 pattern-compiler = { path = "../pattern-compiler" }
 util = { path = "../util" }
 eir = { path = "../eir" }
-
-# TEMP
-cps_transform = { path = "../cps_transform" }
 
 [dev-dependencies]
 tempdir = "0.3"

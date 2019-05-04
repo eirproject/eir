@@ -93,8 +93,7 @@ pub trait TargetEmit {
         tuple_val: BasicValueEnum,
         arity: usize,
         out_vals: &mut Vec<BasicValueEnum>,
-        err_bb: &BasicBlock,
-    ) -> BasicBlock;
+    ) -> (BasicBlock, BasicBlock);
 
     fn emit_unpack_closure_env(
         &mut self,

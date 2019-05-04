@@ -845,35 +845,6 @@ impl<'a> FunctionBuilder<'a> {
         });
     }
 
-    pub fn op_receive_start(&mut self, timeout: Value, body: Ebb) -> Value {
-        let result = self.fun.new_variable();
-        let writes = EntityList::from_slice(&[result], &mut self.fun.value_pool);
-
-        let reads = EntityList::from_slice(&[timeout], &mut self.fun.value_pool);
-
-        let call = self.create_ebb_call(body, &[]);
-        let branches = EntityList::from_slice(&[call], &mut self.fun.ebb_call_pool);
-
-        self.insert_op(OpData {
-            kind: OpKind::ReceiveStart,
-            reads: reads,
-            writes: writes,
-            ebb_calls: branches,
-        });
-
-        result
-    }
-
-    pub fn op_receive_finish(&mut self, val: Value) {
-        let reads = EntityList::from_slice(&[val], &mut self.fun.value_pool);
-        self.insert_op(OpData {
-            kind: OpKind::ReceiveFinish,
-            reads: reads,
-            writes: EntityList::new(),
-            ebb_calls: EntityList::new(),
-        });
-    }
-
     pub fn op_unreachable(&mut self) {
         self.insert_op(OpData {
             kind: OpKind::Unreachable,
@@ -913,4 +884,60 @@ impl<'a> FunctionBuilder<'a> {
 }
 
 
+// Intrinsics
+impl<'a> FunctionBuilder<'a> {
+
+    // Receive
+    pub fn intrinsic_receive_start(&mut self, timeout: Value) -> Value {
+        let intr_module = self.create_atom(Atom::from_str("eir_intrinsics"));
+        let intr_name = self.create_atom(Atom::from_str("receive_start"));
+
+        let orig_pos = self.position_store();
+
+        let throw_ebb = self.insert_ebb();
+        self.add_ebb_argument(throw_ebb);
+        self.position_at_end(throw_ebb);
+        self.op_unreachable();
+
+        self.position_load(orig_pos);
+        let (struct_var, exc_var) = self.op_call(
+            intr_module, intr_name, 1, &[timeout]);
+
+        let exc_call = self.create_ebb_call(throw_ebb, &[exc_var]);
+        self.add_op_ebb_call(exc_call);
+
+        struct_var
+    }
+
+    pub fn intrinsic_receive_wait(&mut self, struct_var: Value,
+                                  timeout_call: EbbCall) -> Value {
+        let intr_module = self.create_atom(Atom::from_str("eir_intrinsics"));
+        let intr_name = self.create_atom(Atom::from_str("receive_wait"));
+
+        let (message, _) = self.op_call(
+            intr_module, intr_name, 1, &[struct_var]);
+        self.add_op_ebb_call(timeout_call);
+
+        message
+    }
+
+    pub fn intrinsic_receive_finish(&mut self, struct_var: Value) {
+        let intr_module = self.create_atom(Atom::from_str("eir_intrinsics"));
+        let intr_name = self.create_atom(Atom::from_str("receive_finish"));
+
+        let orig_pos = self.position_store();
+
+        let throw_ebb = self.insert_ebb();
+        self.position_at_end(throw_ebb);
+        self.op_unreachable();
+
+        self.position_load(orig_pos);
+        let _ = self.op_call(
+            intr_module, intr_name, 1, &[struct_var]);
+
+        let exc_call = self.create_ebb_call(throw_ebb, &[]);
+        self.add_op_ebb_call(exc_call);
+    }
+
+}
 

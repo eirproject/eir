@@ -6,11 +6,12 @@ edition = "2018"
 
 [features]
 #default = ["print_trace"]
+default = ["inkwell/llvm7-0"]
 print_trace = []
 
 [dependencies]
 llvm-sys = "70"
-inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "llvm7-0" }
+inkwell = { git = "https://github.com/hansihe/inkwell" }
 eir = { path = "../eir" }
 core_erlang_compiler = { path = "../compiler" }
 

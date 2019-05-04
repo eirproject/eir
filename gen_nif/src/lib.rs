@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
 
 use eir::{ Module as EirModule };
 use eir::FunctionIdent;
@@ -10,7 +10,9 @@ use inkwell::values::FunctionValue;
 use inkwell::module::Module;
 
 mod primitives;
+pub use primitives::make_c_string_const;
 mod emit;
+pub use emit::mangle_ident;
 mod nif_types;
 pub mod target;
 
@@ -35,6 +37,7 @@ pub struct Data {
     module: Module,
     protos: HashMap<FunctionIdent, FunctionValue>,
     loc_id: u64,
+    imports: HashSet<FunctionIdent>,
 }
 
 pub struct CompilationContext<Target> {
@@ -54,6 +57,7 @@ impl<Target> CompilationContext<Target> where Target: target::Target {
                 module: module,
                 protos: HashMap::new(),
                 loc_id: 1,
+                imports: HashSet::new(),
             },
             target: target,
         }
@@ -103,6 +107,9 @@ impl<Target> CompilationContext<Target> where Target: target::Target {
             let static_calls = fun.get_all_static_calls();
             for call in static_calls.iter() {
                 self.gen_proto(call);
+                if call.module != module.name {
+                    self.data.imports.insert(call.clone());
+                }
             }
         }
 
@@ -137,6 +144,10 @@ impl<Target> CompilationContext<Target> where Target: target::Target {
         self.print_ir();
         println!("{:?}", self.data.module.verify());
         self.data.module.write_bitcode_to_path(&path);
+    }
+
+    pub fn imports<'a>(&'a self) -> &'a HashSet<FunctionIdent> {
+        &self.data.imports
     }
 
 }

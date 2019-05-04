@@ -222,11 +222,11 @@ fn emit_op<Target>(
         },
         OpKind::UnpackValueList => {
             debug_trace_printf(ctx, "UnpackValueList\n");
-            let err_bb = ctx.context.append_basic_block(&ctx.fn_val, "val_unpack_err");
+            //let err_bb = ctx.context.append_basic_block(&ctx.fn_val, "val_unpack_err");
 
-            let ok_bb = target.emit_unpack_tuple(
+            let (ok_bb, err_bb) = target.emit_unpack_tuple(
                 ctx, read_buf[0], writes.len(),
-                &mut out_buf, &err_bb);
+                &mut out_buf);
 
             ctx.builder.position_at_end(&err_bb);
             target.emit_unreachable_fail(ctx);
@@ -340,6 +340,35 @@ fn emit_op<Target>(
 
             ctx.builder.position_at_end(&ok_bb);
             ctx.val_map.insert(writes[0], new_map);
+        },
+        OpKind::UnpackTuple => {
+            debug_trace_printf(ctx, "UnpackTuple\n");
+
+            let fail_call = branches[0];
+            let fail_target = fun.ebb_call_target(fail_call);
+            let err_ebb = fun.ebb_call_target(fail_call);
+
+            // TODO FIXME: EbbCall args
+            assert!(ctx.eir_fun.ebb_call_args(branches[0]).len() == 0);
+
+            let (ok_bb, err_bb) = target.emit_unpack_tuple(
+                ctx, read_buf[0], writes.len(),
+                &mut out_buf);
+
+            ctx.builder.position_at_end(&err_bb);
+            ctx.builder.build_unconditional_branch(&ctx.ebb_map[&err_ebb]);
+            add_branch_phis(target, ctx, fun, &err_bb, fail_target,
+                            fun.ebb_call_args(fail_call));
+
+            ctx.builder.position_at_end(&ok_bb);
+            for (out, write) in out_buf.iter().zip(writes.iter()) {
+                ctx.val_map.insert(*write, *out);
+            }
+
+        },
+        OpKind::Unreachable => {
+            debug_trace_printf(ctx, "UnpackTuple\n");
+            target.emit_unreachable_fail(ctx);
         },
         kind => unimplemented!("{:?}", kind),
     }

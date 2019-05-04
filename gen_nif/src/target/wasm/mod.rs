@@ -1,5 +1,6 @@
 mod emit;
 mod types;
+pub use types::WasmTypes;
 
 use eir::FunctionIdent;
 use eir::Function as EirFunction;

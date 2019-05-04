@@ -85,7 +85,14 @@ impl crate::target::TargetEmit for WasmTarget {
         &mut self,
         ctx: &mut LowerCtx,
     ) {
-        unimplemented!();
+        ctx.builder.build_call(
+            self.types.whirlrt_unreachable_fail,
+            &[
+                self.env.unwrap(),
+            ],
+            "unreachable_fail",
+        );
+        ctx.builder.build_unreachable();
     }
 
     fn emit_make_tuple(
@@ -137,10 +144,46 @@ impl crate::target::TargetEmit for WasmTarget {
         ctx: &mut LowerCtx,
         tuple_val: BasicValueEnum,
         arity: usize,
-        out_vals: &mut Vec<BasicValueEnum>,
-        err_bb: &BasicBlock,
-    ) -> BasicBlock {
-        unimplemented!();
+        out: &mut Vec<BasicValueEnum>,
+    ) -> (BasicBlock, BasicBlock) {
+        let i32_type = ctx.context.i32_type();
+        let buf_len = i32_type.const_int(arity as u64, false);
+        let ret_buf = ctx.builder.build_array_alloca(
+            self.types.term_type,
+            buf_len.into(),
+            ""
+        );
+        let call = ctx.builder.build_call(
+            self.types.whirlrt_term_unpack_tuple,
+            &[
+                self.env.unwrap(),
+                tuple_val,
+                buf_len.into(),
+                ret_buf.into(),
+            ],
+            ""
+        );
+
+        let call_ret = call.try_as_basic_value().left().unwrap();
+
+        let ok_bb = ctx.fn_val.append_basic_block("unpack_tuple_ok");
+        let err_bb = ctx.fn_val.append_basic_block("unpack_tuple_err");
+        ctx.builder.build_conditional_branch(
+            call_ret.into_int_value(),
+            &ok_bb,
+            &err_bb,
+        );
+
+        ctx.builder.position_at_end(&ok_bb);
+        out.clear();
+        for n in 0..arity {
+            let n_val = i32_type.const_int(n as u64, false);
+            let ptr = unsafe { ctx.builder.build_gep(ret_buf, &[n_val], "") };
+            let val = ctx.builder.build_load(ptr, "");
+            out.push(val);
+        }
+
+        (ok_bb, err_bb)
     }
 
     fn emit_unpack_closure_env(

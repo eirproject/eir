@@ -66,6 +66,7 @@ pub struct EbbData {
 #[derive(Debug, PartialEq, Eq)]
 pub enum ValueType {
     Variable,
+    //Abstraction(Ebb),
     Constant(ConstantTerm),
 }
 
