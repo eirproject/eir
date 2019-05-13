@@ -3,6 +3,7 @@ name = "diagnostics"
 version = "0.1.0"
 authors = ["Paul Schoenfelder <paulschoenfelder@gmail.com>", "Luke Imhoff <Kronic.Deth@gmail.com>"]
 edition = "2018"
+license = "../LICENSE.md"
 
 [dependencies]
 termcolor = "0.3"
