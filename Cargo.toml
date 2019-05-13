@@ -1,6 +1,8 @@
 [workspace]
 
 members = [
+    "diagnostics",
+    "frontend",
     "compiler",
     "pattern-compiler",
     "util",
