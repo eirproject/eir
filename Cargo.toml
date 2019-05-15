@@ -6,7 +6,9 @@ members = [
     "util",
     "interpreter",
     "tools",
-    "eir",
     "gen_nif",
     "cps_transform",
+    "eir",
+    "eir_passes",
+    "core_parser",
 ]

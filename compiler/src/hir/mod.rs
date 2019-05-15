@@ -1,13 +1,12 @@
 use std::collections::{ HashMap, HashSet };
 use ::std::fmt;
-use super::{ AVariable, AFunctionName, SSAVariable, FunctionIdent };
+use ::ir::{ AVariable, AFunctionName, SSAVariable, FunctionIdent };
 use ::{ Atom, Variable };
 use ::eir::FunctionBuilder;
 use ::eir::ClosureEnv;
 use ::eir::Value;
 use ::parser::{ MapExactAssoc };
 
-pub mod from_parsed;
 pub mod pass;
 pub mod scope_tracker;
 

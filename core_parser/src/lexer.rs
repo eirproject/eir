@@ -1,5 +1,6 @@
-use ::regex::Regex;
+use regex::Regex;
 use std::str::CharIndices;
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref TEST: Regex = Regex::new("...").unwrap();

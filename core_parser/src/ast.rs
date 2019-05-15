@@ -1,28 +1,4 @@
-pub use ::{ Variable, Atom };
-use ::ir::AVariable;
-use ::eir::FunctionIdent;
-
-mod grammar;
-mod lex;
-
-pub fn parse<'input>(text: &'input str) -> Result<Annotated<Module>,
-        ::lalrpop_util::ParseError<usize, lex::Tok<'input>, ()>> {
-
-    let tokenizer = lex::Tokenizer::new(text);
-    let parser = grammar::AnnotatedModuleParser::new();
-    parser.parse(text, tokenizer)
-}
-
-#[test]
-fn parse_otp_compiler_compile() {
-    use ::std::io::Read;
-
-    let mut f = ::std::fs::File::open("../test_data/compile.core").unwrap();
-    let mut s = String::new();
-    f.read_to_string(&mut s);
-
-    parse(&s).unwrap();
-}
+use eir::{ Atom, Variable };
 
 #[derive(Debug, Copy, Clone)]
 pub enum MapExactAssoc {
@@ -33,7 +9,7 @@ pub enum MapExactAssoc {
 #[derive(Debug, Clone)]
 pub struct Annotated<I>(pub I, pub Vec<()>);
 impl<I> Annotated<I> {
-    fn empty(inner: I) -> Self {
+    pub fn empty(inner: I) -> Self {
         Annotated(inner, Vec::new())
     }
 }
@@ -51,16 +27,16 @@ pub struct FunctionName {
     pub name: Atom,
     pub arity: usize,
 }
-impl FunctionName {
-    pub fn to_eir(&self, module: Atom) -> FunctionIdent {
-        FunctionIdent {
-            module: module,
-            name: self.name.clone(),
-            arity: self.arity,
-            lambda: None,
-        }
-    }
-}
+//impl FunctionName {
+//    pub fn to_eir(&self, module: Atom) -> FunctionIdent {
+//        FunctionIdent {
+//            module: module,
+//            name: self.name.clone(),
+//            arity: self.arity,
+//            lambda: None,
+//        }
+//    }
+//}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Integer {
@@ -68,17 +44,17 @@ pub struct Integer {
     pub digits: String,
 }
 impl Integer {
-    fn as_u32(&self) -> u32 {
+    pub fn as_u32(&self) -> u32 {
         assert!(self.sign);
         self.digits.parse().unwrap()
     }
-    fn as_usize(&self) -> usize {
+    pub fn as_usize(&self) -> usize {
         assert!(self.sign);
         self.digits.parse().unwrap()
     }
 }
 
-use eir::AtomicTerm;
+use eir::{ AtomicTerm, ConstantTerm };
 type AtomicLiteral = AtomicTerm;
 
 //#[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -105,19 +81,19 @@ pub enum Constant {
     Tuple(Vec<Constant>),
     List(Vec<Constant>, Box<Constant>),
 }
-impl Constant {
-    pub fn to_eir(&self) -> ::eir::ConstantTerm {
-        match self {
-            Constant::Atomic(atomic) => ::eir::ConstantTerm::Atomic(atomic.clone()),
-            Constant::List(head, tail) =>
-                ::eir::ConstantTerm::List(
-                    head.iter().map(|c| c.to_eir()).collect(),
-                    Box::new(tail.to_eir()),
-                ),
-            _ => unimplemented!(),
-        }
-    }
-}
+//impl Constant {
+//    pub fn to_eir(&self) -> ConstantTerm {
+//        match self {
+//            Constant::Atomic(atomic) => ConstantTerm::Atomic(atomic.clone()),
+//            Constant::List(head, tail) =>
+//                ConstantTerm::List(
+//                    head.iter().map(|c| c.to_eir()).collect(),
+//                    Box::new(tail.to_eir()),
+//                ),
+//            _ => unimplemented!(),
+//        }
+//    }
+//}
 //impl Display for Constant {
 //    fn fmt(&self, f: &mut Formatter) -> Result<(), ::std::fmt::Error> {
 //        match self {
@@ -185,14 +161,14 @@ pub enum Pattern {
     Map(Vec<Annotated<(Annotated<SingleExpression>, Annotated<Pattern>)>>),
 }
 impl Pattern {
-    fn nil() -> Annotated<Pattern> {
+    pub fn nil() -> Annotated<Pattern> {
         Annotated::empty(Pattern::Atomic(AtomicTerm::Nil))
     }
 }
 
 pub type Expression = Annotated<Vec<Annotated<SingleExpression>>>;
 impl Expression {
-    fn nil() -> Self {
+    pub fn nil() -> Self {
         Annotated::empty(vec![Annotated::empty(SingleExpression::AtomicLiteral(
             AtomicTerm::Nil))])
     }
@@ -209,4 +185,3 @@ pub struct PrimOpCall {
     pub name: Annotated<Atom>,
     pub args: Vec<Expression>,
 }
-

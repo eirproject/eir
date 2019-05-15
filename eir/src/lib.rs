@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use cranelift_entity::EntityRef;
 
 pub mod intern;
-pub use intern::Atom;
+pub use intern::{ Atom, Variable };
 
 pub mod op;
 
