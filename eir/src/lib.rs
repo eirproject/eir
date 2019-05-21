@@ -8,13 +8,13 @@ pub use intern::Atom;
 
 pub mod op;
 
-pub mod text;
+//pub mod text;
 
 pub mod pattern;
 pub use pattern::{ Clause, Pattern };
 
 pub mod fun;
-pub use fun::{ Function, FunctionBuilder, EbbCall, Ebb, Op, Value };
+pub use fun::{ Function, FunctionBuilder, Block, Op, Value };
 pub use fun::{ FunctionCfg, CfgNode, CfgEdge, ValueType, Direction };
 pub use fun::{ Dialect };
 pub use fun::{ AttributeKey, AttributeValue };

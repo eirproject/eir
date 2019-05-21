@@ -1,5 +1,6 @@
-use super::{ Ebb, Op, Value, EbbCall };
-use super::{ OpData, EbbData, EbbCallData };
+
+use super::{ Block, Op, Value };
+use super::{ OpData, BlockData };
 use super::{ ValueType, WriteToken };
 use super::{ Function };
 use super::{ AttributeKey, AttributeValue };
@@ -7,19 +8,19 @@ use super::{ AttributeKey, AttributeValue };
 use crate::Atom;
 use crate::{ FunctionIdent, ConstantTerm, AtomicTerm, ClosureEnv };
 use crate::Clause;
-use crate::op::{ OpKind, ComparisonOperation, CallType };
+use crate::op::{ OpKind, ComparisonOperation, TestOperation };
 
 use matches::assert_matches;
 use ::cranelift_entity::{ EntityList };
 
 #[derive(Copy, Clone, Debug)]
-pub struct BuilderPosition(Option<Ebb>, Option<Op>);
+pub struct BuilderPosition(Option<Block>, Option<Op>);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum BuilderState {
     Build,
     BuildingOp(Op),
-    OutstandingEbbCalls(usize),
+    RemainingArgs(usize),
 }
 impl BuilderState {
     fn building_op(&self) -> Op {
@@ -33,7 +34,7 @@ impl BuilderState {
 pub struct FunctionBuilder<'a> {
     fun: &'a mut Function,
 
-    current_ebb: Option<Ebb>,
+    current_block: Option<Block>,
     current_op: Option<Op>,
 
     state: BuilderState,
@@ -49,7 +50,6 @@ impl<'a> FunctionBuilder<'a> {
             kind: kind,
             reads: EntityList::new(),
             writes: EntityList::new(),
-            ebb_calls: EntityList::new(),
         });
         self.state = BuilderState::BuildingOp(op);
     }
@@ -66,10 +66,10 @@ impl<'a> FunctionBuilder<'a> {
         self.fun.ops[op].reads.push(val, &mut self.fun.value_pool);
     }
 
-    pub fn op_build_ebb_call(&mut self, call: EbbCall) {
-        let op = self.state.building_op();
-        self.fun.ops[op].ebb_calls.push(call, &mut self.fun.ebb_call_pool);
-    }
+    //pub fn op_build_ebb_call(&mut self, call: EbbCall) {
+    //    let op = self.state.building_op();
+    //    self.fun.ops[op].ebb_calls.push(call, &mut self.fun.ebb_call_pool);
+    //}
 
     pub fn op_build_end(&mut self) {
         // TODO validate op
@@ -85,7 +85,7 @@ impl<'a> FunctionBuilder<'a> {
         FunctionBuilder {
             fun: fun,
 
-            current_ebb: None,
+            current_block: None,
             current_op: None,
 
             state: BuilderState::Build,
@@ -116,20 +116,20 @@ impl<'a> FunctionBuilder<'a> {
         assert!(self.state == BuilderState::Build);
 
         // Must be in a block
-        assert!(self.current_ebb.is_some());
-        assert!(!self.fun.ebbs[self.current_ebb.unwrap()].finished);
+        assert!(self.current_block.is_some());
+        assert!(!self.fun.blocks[self.current_block.unwrap()].finished);
 
         // If we are not at the beginning, the last Op can't be a unconditional Jump
         self.assert_not_terminated();
 
         let op = self.fun.ops.push(data);
         self.fun.layout.insert_op_after(
-            self.current_ebb.unwrap(), self.current_op, op);
+            self.current_block.unwrap(), self.current_op, op);
 
-        for branch in self.fun.ops[op].ebb_calls.as_slice(&self.fun.ebb_call_pool) {
-            assert!(self.fun.ebb_calls[*branch].source.is_none());
-            self.fun.ebb_calls[*branch].source = Some(op);
-        }
+        //for branch in self.fun.ops[op].ebb_calls.as_slice(&self.fun.ebb_call_pool) {
+        //    assert!(self.fun.ebb_calls[*branch].source.is_none());
+        //    self.fun.ebb_calls[*branch].source = Some(op);
+        //}
 
         self.current_op = Some(op);
 
@@ -143,9 +143,9 @@ impl<'a> FunctionBuilder<'a> {
         }
 
         // Enable reuse of branches
-        for branch in self.fun.ops[op].ebb_calls.as_slice(&self.fun.ebb_call_pool) {
-            self.fun.ebb_calls[*branch].source = None;
-        }
+        //for branch in self.fun.ops[op].ebb_calls.as_slice(&self.fun.ebb_call_pool) {
+        //    self.fun.ebb_calls[*branch].source = None;
+        //}
 
         self.fun.layout.remove_op(op);
     }
@@ -156,16 +156,16 @@ impl<'a> FunctionBuilder<'a> {
         }
     }
 
-    pub fn ebb_concat(&mut self, next: Ebb, args: &[Value]) {
+    pub fn block_concat(&mut self, next: Block, args: &[Value]) {
         assert!(self.state == BuilderState::Build);
         self.assert_at_end();
         self.assert_not_terminated();
 
-        let current = self.current_ebb.unwrap();
+        let current = self.current_block.unwrap();
 
         let mut val_buf = self.val_buf.take().unwrap();
         val_buf.clear();
-        val_buf.extend(self.fun.ebb_args(next).iter().cloned());
+        val_buf.extend(self.fun.block_args(next).iter().cloned());
 
         assert!(val_buf.len() == args.len());
 
@@ -175,79 +175,83 @@ impl<'a> FunctionBuilder<'a> {
 
         self.val_buf = Some(val_buf);
 
-        self.fun.layout.concat_ebb(current, next);
+        self.fun.layout.concat_block(current, next);
     }
 
     /// Splits the current basic block at the location
     /// after the currently cursored OP.
     /// You will end up at the same OP, but it is now
     /// the last one in its Ebb.
-    pub fn ebb_split(&mut self) -> Ebb {
+    pub fn block_split(&mut self) -> Block {
         assert!(self.state == BuilderState::Build);
         let op = self.current_op.unwrap();
         assert!(!self.fun.op_kind(op).is_block_terminator());
 
-        let new_ebb = self.insert_ebb();
-        self.fun.layout.split_ebb_into(op, new_ebb);
+        let new_ebb = self.insert_block();
+        self.fun.layout.split_block_into(op, new_ebb);
 
         new_ebb
     }
 
     /// Can only be called when there are no blocks in the function
-    pub fn insert_ebb_entry(&mut self) -> Ebb {
-        let ebb = self.fun.ebbs.push(EbbData {
+    pub fn insert_block_entry(&mut self) -> Block {
+        let block = self.fun.blocks.push(BlockData {
+            predecessors: EntityList::new(),
+            successors: EntityList::new(),
             arguments: EntityList::new(),
             finished: false,
         });
-        self.fun.layout.insert_ebb_first(ebb);
-        ebb
+        self.fun.layout.insert_block_first(block);
+        block
     }
 
-    pub fn insert_ebb(&mut self) -> Ebb {
-        let ebb = self.fun.ebbs.push(EbbData {
+    pub fn insert_block(&mut self) -> Block {
+        let block = self.fun.blocks.push(BlockData {
+            predecessors: EntityList::new(),
+            successors: EntityList::new(),
             arguments: EntityList::new(),
             finished: false,
         });
-        self.fun.layout.insert_ebb_after(self.current_ebb.unwrap(), ebb);
-        ebb
+        self.fun.layout.insert_block_after(self.current_block.unwrap(), block);
+        block
     }
 
-    pub fn finish_ebb(&mut self, ebb: Ebb) {
-        self.fun.ebbs[ebb].finished = true;
+    pub fn finish_block(&mut self, block: Block) {
+        self.fun.blocks[block].finished = true;
     }
 
-    pub fn add_ebb_argument(&mut self, ebb: Ebb) -> Value {
-        assert!(!self.fun.ebbs[ebb].finished);
+    pub fn add_block_argument(&mut self, block: Block) -> Value {
+        assert!(!self.fun.blocks[block].finished);
         let value = self.fun.new_variable();
-        self.fun.ebbs[ebb].arguments.push(value, &mut self.fun.value_pool);
+        self.fun.blocks[block].arguments.push(value, &mut self.fun.value_pool);
         value
     }
 
-    pub fn position_at_end(&mut self, ebb: Ebb) {
+    pub fn position_at_end(&mut self, block: Block) {
         assert!(self.state == BuilderState::Build);
-        self.current_ebb = Some(ebb);
-        let last_op = self.fun.layout.ebbs[ebb].last_op;
+        self.current_block = Some(block);
+        let last_op = self.fun.layout.blocks[block].last_op;
         self.current_op = last_op;
     }
 
-    pub fn position_at_start(&mut self, ebb: Ebb) {
+    pub fn position_at_start(&mut self, block: Block) {
         assert!(self.state == BuilderState::Build);
-        self.current_ebb = Some(ebb);
+        self.current_block = Some(block);
         self.current_op = None;
     }
 
     pub fn position_after(&mut self, op: Op) {
         assert!(self.state == BuilderState::Build);
-        let ebb = self.fun.layout.ops[op].ebb.unwrap();
-        self.current_ebb = Some(ebb);
+        let block = self.fun.layout.ops[op].block.unwrap();
+        self.current_block = Some(block);
         self.current_op = Some(op);
     }
 
-    pub fn current_ebb(&self) -> Ebb {
-        self.current_ebb.unwrap()
+    pub fn current_block(&self) -> Block {
+        self.current_block.unwrap()
     }
     pub fn assert_at_end(&self) {
-        if let Some(inner) = self.fun.layout.ebbs[self.current_ebb.unwrap()].last_op {
+        if let Some(inner) = self.fun.layout.blocks[self.current_block.unwrap()].last_op {
             assert!(self.current_op.unwrap() == inner);
         } else {
             assert!(self.current_op.is_none());
@@ -256,48 +260,60 @@ impl<'a> FunctionBuilder<'a> {
 
     pub fn position_store(&self) -> BuilderPosition {
         assert!(self.state == BuilderState::Build);
-        BuilderPosition(self.current_ebb, self.current_op)
+        BuilderPosition(self.current_block, self.current_op)
     }
     pub fn position_load(&mut self, pos: BuilderPosition) {
         assert!(self.state == BuilderState::Build);
-        self.current_ebb = pos.0;
+        self.current_block = pos.0;
         self.current_op = pos.1;
     }
 
-    pub fn create_ebb_call(&mut self, ebb: Ebb, values: &[Value]) -> EbbCall {
-        let values_p = EntityList::from_slice(values, &mut self.fun.value_pool);
-        let call = self.fun.ebb_calls.push(EbbCallData {
-            source: None,
-            target: ebb,
-            values: values_p,
-        });
-        call
-    }
+    //pub fn create_ebb_call(&mut self, block: Block, values: &[Value]) -> EbbCall {
+    //    let values_p = EntityList::from_slice(values, &mut self.fun.value_pool);
+    //    let call = self.fun.ebb_calls.push(EbbCallData {
+    //        source: None,
+    //        target: ebb,
+    //        values: values_p,
+    //    });
+    //    call
+    //}
 
-    pub fn add_op_ebb_call(&mut self, call: EbbCall) {
-        if let BuilderState::OutstandingEbbCalls(outstanding) = self.state {
-            let outstanding = outstanding - 1;
+    //pub fn add_op_ebb_call(&mut self, call: EbbCall) {
+    //    if let BuilderState::OutstandingEbbCalls(outstanding) = self.state {
+    //        let outstanding = outstanding - 1;
+
+    //        let op = self.current_op.unwrap();
+    //        self.fun.ops[op].ebb_calls
+    //            .push(call, &mut self.fun.ebb_call_pool);
+    //        assert!(self.fun.ebb_calls[call].source.is_none());
+    //        self.fun.ebb_calls[call].source = Some(op);
+
+    //        if outstanding == 0 {
+    //            self.state = BuilderState::Build;
+    //        } else {
+    //            self.state = BuilderState::OutstandingEbbCalls(outstanding);
+    //        }
+    //    }
+    //}
+
+    pub fn add_op_arg_block(&mut self, block: Block) {
+        if let BuilderState::RemainingArgs(num) = self.state {
+            let remaining = num - 1;
 
             let op = self.current_op.unwrap();
-            self.fun.ops[op].ebb_calls
-                .push(call, &mut self.fun.ebb_call_pool);
-            assert!(self.fun.ebb_calls[call].source.is_none());
-            self.fun.ebb_calls[call].source = Some(op);
-
-            if outstanding == 0 {
-                self.state = BuilderState::Build;
-            } else {
-                self.state = BuilderState::OutstandingEbbCalls(outstanding);
-            }
+            unimplemented!()
+        } else {
+            panic!()
         }
     }
-    pub fn remove_op_ebb_calls(&mut self) {
-        let op = self.current_op.unwrap();
-        self.fun.ops[op].ebb_calls = EntityList::new();
-    }
+
+    //pub fn remove_op_ebb_calls(&mut self) {
+    //    let op = self.current_op.unwrap();
+    //    self.fun.ops[op].ebb_calls = EntityList::new();
+    //}
 
     pub fn deposition(&mut self) {
-        self.current_ebb = None;
+        self.current_block = None;
         self.current_op = None;
     }
 
@@ -349,136 +365,164 @@ impl<'a> FunctionBuilder<'a> {
             kind: OpKind::Move,
             reads: reads,
             writes: writes,
-            ebb_calls: EntityList::new(),
         });
     }
 
-    pub fn op_jump(&mut self, ebb_call: EbbCall) {
-        let ebb_calls = EntityList::from_slice(
-            &[ebb_call], &mut self.fun.ebb_call_pool);
+    pub fn op_call_block(&mut self, block: Block, args: &[Value]) {
+        // TODO update graph
+        let block_var = self.fun.new_variable_block(block);
+
+        let mut reads = EntityList::from_slice(&[block_var], &mut self.fun.value_pool);
+        reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
+
         self.insert_op(OpData {
-            kind: OpKind::Jump,
-            reads: EntityList::new(),
+            kind: OpKind::Call,
+            reads: reads,
             writes: EntityList::new(),
-            ebb_calls: ebb_calls,
         });
     }
 
-    pub fn op_call(&mut self, module: Value, name: Value, arity: usize,
-                   args: &[Value]) -> (Value, Value) {
-        self.op_call_internal(module, name, args, arity, CallType::Normal).unwrap()
-    }
-    pub fn op_tail_call(&mut self, module: Value, name: Value, arity: usize,
-                        args: &[Value]) {
-        assert!(self.op_call_internal(
-            module, name, args, arity, CallType::Tail).is_none());
-    }
-    pub fn op_cont_call(&mut self, module: Value, name: Value, arity: usize,
-                        args: &[Value]) {
-        assert!(self.op_call_internal(
-            module, name, args, arity, CallType::Cont).is_none());
+    pub fn op_call_value(&mut self, val: Value, args: &[Value]) {
+        let mut reads = EntityList::from_slice(&[val], &mut self.fun.value_pool);
+        reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
+
+        self.insert_op(OpData {
+            kind: OpKind::Call,
+            reads: reads,
+            writes: EntityList::new(),
+        });
     }
 
-    pub fn op_call_internal(&mut self, module: Value, name: Value,
-                            args: &[Value], arity: usize, call_type: CallType
-    ) -> Option<(Value, Value)>
+    //pub fn op_jump(&mut self, ebb_call: EbbCall) {
+    //    let ebb_calls = EntityList::from_slice(
+    //        &[ebb_call], &mut self.fun.ebb_call_pool);
+    //    self.insert_op(OpData {
+    //        kind: OpKind::Jump,
+    //        reads: EntityList::new(),
+    //        writes: EntityList::new(),
+    //        ebb_calls: ebb_calls,
+    //    });
+    //}
+
+    //pub fn op_call(&mut self, module: Value, name: Value, arity: usize,
+    //               args: &[Value]) -> (Value, Value) {
+    //    self.op_call_internal(module, name, args, arity, CallType::Normal).unwrap()
+    //}
+    //pub fn op_tail_call(&mut self, module: Value, name: Value, arity: usize,
+    //                    args: &[Value]) {
+    //    assert!(self.op_call_internal(
+    //        module, name, args, arity, CallType::Tail).is_none());
+    //}
+    //pub fn op_cont_call(&mut self, module: Value, name: Value, arity: usize,
+    //                    args: &[Value]) {
+    //    assert!(self.op_call_internal(
+    //        module, name, args, arity, CallType::Cont).is_none());
+    //}
+
+    //pub fn op_call_internal(&mut self, module: Value, name: Value,
+    //                        args: &[Value], arity: usize, call_type: CallType
+    //) -> Option<(Value, Value)>
+    //{
+    //    let mut reads = EntityList::from_slice(
+    //        &[module, name], &mut self.fun.value_pool);
+    //    reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
+
+    //    let result;
+    //    let writes = if call_type == CallType::Normal {
+    //        let result_ok = self.fun.new_variable();
+    //        let result_err = self.fun.new_variable();
+    //        result = Some((result_ok, result_err));
+    //        EntityList::from_slice(
+    //            &[result_ok, result_err], &mut self.fun.value_pool)
+    //    } else {
+    //        result = None;
+    //        EntityList::new()
+    //    };
+
+    //    self.insert_op(OpData {
+    //        kind: OpKind::Call { call_type, arity: arity },
+    //        reads: reads,
+    //        writes: writes,
+    //        ebb_calls: EntityList::new(),
+    //    });
+
+    //    if call_type == CallType::Normal {
+    //        self.state = BuilderState::OutstandingEbbCalls(1);
+    //    }
+
+    //    result
+    //}
+
+    //pub fn op_apply(&mut self, fun: Value, args: &[Value]) -> (Value, Value) {
+    //    self.op_apply_internal(fun, args, CallType::Normal).unwrap()
+    //}
+    //pub fn op_tail_apply(&mut self, fun: Value, args: &[Value]) {
+    //    assert!(self.op_apply_internal(fun, args, CallType::Tail).is_none());
+    //}
+    //pub fn op_cont_apply(&mut self, fun: Value, args: &[Value]) {
+    //    assert!(self.op_apply_internal(fun, args, CallType::Cont).is_none());
+    //}
+
+    //fn op_apply_internal(&mut self, fun: Value, args: &[Value], call_type: CallType) -> Option<(Value, Value)> {
+    //    let mut reads = EntityList::from_slice(
+    //        &[fun], &mut self.fun.value_pool);
+    //    reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
+
+    //    let result;
+    //    let writes = if call_type == CallType::Normal {
+    //        let result_ok = self.fun.new_variable();
+    //        let result_err = self.fun.new_variable();
+    //        result = Some((result_ok, result_err));
+    //        EntityList::from_slice(
+    //            &[result_ok, result_err], &mut self.fun.value_pool)
+    //    } else {
+    //        result = None;
+    //        EntityList::new()
+    //    };
+
+    //    self.insert_op(OpData {
+    //        kind: OpKind::Apply { call_type },
+    //        reads: reads,
+    //        writes: writes,
+    //        ebb_calls: EntityList::new(),
+    //    });
+
+    //    if call_type == CallType::Normal {
+    //        self.state = BuilderState::OutstandingEbbCalls(1);
+    //    }
+
+    //    result
+    //}
+
+    //pub fn change_op_make_tail_call(&mut self) {
+    //    let op = self.current_op.unwrap();
+    //    match &mut self.fun.ops[op].kind {
+    //        OpKind::Apply { ref mut call_type } => {
+    //            *call_type = CallType::Tail;
+    //        }
+    //        OpKind::Call { ref mut call_type, .. } => {
+    //            *call_type = CallType::Tail;
+    //        }
+    //        _ => panic!(),
+    //    }
+    //    self.fun.ops[op].writes = EntityList::new();
+    //    self.fun.ops[op].ebb_calls = EntityList::new();
+    //}
+
+    pub fn op_capture_named_function(
+        &mut self, module: Value, name: Value, arity: Value) -> Value
     {
-        let mut reads = EntityList::from_slice(
-            &[module, name], &mut self.fun.value_pool);
-        reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
-
-        let result;
-        let writes = if call_type == CallType::Normal {
-            let result_ok = self.fun.new_variable();
-            let result_err = self.fun.new_variable();
-            result = Some((result_ok, result_err));
-            EntityList::from_slice(
-                &[result_ok, result_err], &mut self.fun.value_pool)
-        } else {
-            result = None;
-            EntityList::new()
-        };
-
-        self.insert_op(OpData {
-            kind: OpKind::Call { call_type, arity: arity },
-            reads: reads,
-            writes: writes,
-            ebb_calls: EntityList::new(),
-        });
-
-        if call_type == CallType::Normal {
-            self.state = BuilderState::OutstandingEbbCalls(1);
-        }
-
-        result
-    }
-
-    pub fn op_apply(&mut self, fun: Value, args: &[Value]) -> (Value, Value) {
-        self.op_apply_internal(fun, args, CallType::Normal).unwrap()
-    }
-    pub fn op_tail_apply(&mut self, fun: Value, args: &[Value]) {
-        assert!(self.op_apply_internal(fun, args, CallType::Tail).is_none());
-    }
-    pub fn op_cont_apply(&mut self, fun: Value, args: &[Value]) {
-        assert!(self.op_apply_internal(fun, args, CallType::Cont).is_none());
-    }
-
-    fn op_apply_internal(&mut self, fun: Value, args: &[Value], call_type: CallType) -> Option<(Value, Value)> {
-        let mut reads = EntityList::from_slice(
-            &[fun], &mut self.fun.value_pool);
-        reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
-
-        let result;
-        let writes = if call_type == CallType::Normal {
-            let result_ok = self.fun.new_variable();
-            let result_err = self.fun.new_variable();
-            result = Some((result_ok, result_err));
-            EntityList::from_slice(
-                &[result_ok, result_err], &mut self.fun.value_pool)
-        } else {
-            result = None;
-            EntityList::new()
-        };
-
-        self.insert_op(OpData {
-            kind: OpKind::Apply { call_type },
-            reads: reads,
-            writes: writes,
-            ebb_calls: EntityList::new(),
-        });
-
-        if call_type == CallType::Normal {
-            self.state = BuilderState::OutstandingEbbCalls(1);
-        }
-
-        result
-    }
-
-    pub fn change_op_make_tail_call(&mut self) {
-        let op = self.current_op.unwrap();
-        match &mut self.fun.ops[op].kind {
-            OpKind::Apply { ref mut call_type } => {
-                *call_type = CallType::Tail;
-            }
-            OpKind::Call { ref mut call_type, .. } => {
-                *call_type = CallType::Tail;
-            }
-            _ => panic!(),
-        }
-        self.fun.ops[op].writes = EntityList::new();
-        self.fun.ops[op].ebb_calls = EntityList::new();
-    }
-
-    pub fn op_capture_named_function(&mut self, name: FunctionIdent) -> Value {
         let result = self.fun.new_variable();
         let writes = EntityList::from_slice(
             &[result], &mut self.fun.value_pool);
 
+        let reads = EntityList::from_slice(
+            &[module, name, arity], &mut self.fun.value_pool);
+
         self.insert_op(OpData {
-            kind: OpKind::CaptureNamedFunction(name),
-            reads: EntityList::new(),
+            kind: OpKind::CaptureFunction,
+            reads: reads,
             writes: writes,
-            ebb_calls: EntityList::new(),
         });
 
         result
@@ -499,7 +543,6 @@ impl<'a> FunctionBuilder<'a> {
                 kind: OpKind::UnpackValueList,
                 reads: reads,
                 writes: writes,
-                ebb_calls: EntityList::new(),
             });
         }
     }
@@ -518,62 +561,10 @@ impl<'a> FunctionBuilder<'a> {
                 kind: OpKind::PackValueList,
                 reads: reads,
                 writes: writes,
-                ebb_calls: EntityList::new(),
             });
 
             result
         }
-    }
-
-    pub fn op_return_throw(&mut self, value: Value) {
-        let reads = EntityList::from_slice(&[value], &mut self.fun.value_pool);
-        self.insert_op(OpData {
-            kind: OpKind::ReturnThrow,
-            reads: reads,
-            writes: EntityList::new(),
-            ebb_calls: EntityList::new(),
-        });
-    }
-
-    pub fn op_return_ok(&mut self, value: Value) {
-        let reads = EntityList::from_slice(&[value], &mut self.fun.value_pool);
-        self.insert_op(OpData {
-            kind: OpKind::ReturnOk,
-            reads: reads,
-            writes: EntityList::new(),
-            ebb_calls: EntityList::new(),
-        });
-    }
-
-    pub fn op_unpack_env(&mut self, value: Value, num_values: usize,
-                         results: &mut Vec<Value>) {
-        self.gen_variables(num_values, results);
-
-        let writes = EntityList::from_slice(results, &mut self.fun.value_pool);
-        let reads = EntityList::from_slice(&[value], &mut self.fun.value_pool);
-        self.insert_op(OpData {
-            kind: OpKind::UnpackEnv,
-            reads: reads,
-            writes: writes,
-            ebb_calls: EntityList::new(),
-        });
-    }
-
-    pub fn op_bind_closure(&mut self, ident: FunctionIdent, env: Value) -> Value {
-        let result = self.fun.new_variable();
-
-        let writes = EntityList::from_slice(&[result], &mut self.fun.value_pool);
-        let reads = EntityList::from_slice(&[env], &mut self.fun.value_pool);
-        self.insert_op(OpData {
-            kind: OpKind::BindClosure {
-                ident: ident,
-            },
-            reads: reads,
-            writes: writes,
-            ebb_calls: EntityList::new(),
-        });
-
-        result
     }
 
     pub fn op_make_tuple(&mut self, values: &[Value]) -> Value {
@@ -585,7 +576,6 @@ impl<'a> FunctionBuilder<'a> {
             kind: OpKind::MakeTuple,
             reads: reads,
             writes: writes,
-            ebb_calls: EntityList::new(),
         });
 
         result
@@ -603,7 +593,6 @@ impl<'a> FunctionBuilder<'a> {
             kind: OpKind::MakeList,
             reads: reads,
             writes: writes,
-            ebb_calls: EntityList::new(),
         });
 
         result
@@ -617,14 +606,26 @@ impl<'a> FunctionBuilder<'a> {
             kind: OpKind::MapEmpty,
             reads: EntityList::new(),
             writes: writes,
-            ebb_calls: EntityList::new(),
         });
 
         result
     }
 
+    pub fn op_test(&mut self, value: Value, test: TestOperation,
+                   ok: Value, fail: Value) {
+        let reads = EntityList::from_slice(&[
+            ok, fail, value,
+        ], &mut self.fun.value_pool);
+
+        self.insert_op(OpData {
+            kind: OpKind::Test(test),
+            reads: reads,
+            writes: EntityList::new(),
+        });
+    }
+
     pub fn op_map_put(&mut self, map: Value, key: Value, val: Value,
-                      update: bool, fail_call: EbbCall) -> Value {
+                      fail_call: EbbCall) -> Value {
         let result = self.fun.new_variable();
         let writes = EntityList::from_slice(&[result], &mut self.fun.value_pool);
 
@@ -656,7 +657,6 @@ impl<'a> FunctionBuilder<'a> {
             kind: OpKind::MakeBinary,
             reads: reads,
             writes: writes,
-            ebb_calls: EntityList::new(),
         });
 
         result
