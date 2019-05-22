@@ -14,8 +14,8 @@ pub mod pattern;
 pub use pattern::{ Clause, Pattern };
 
 pub mod fun;
-pub use fun::{ Function, FunctionBuilder, Block, Op, Value };
-pub use fun::{ FunctionCfg, CfgNode, CfgEdge, ValueType, Direction };
+pub use fun::{ Function, FunctionBuilder, Block, Value };
+pub use fun::{ ValueType };
 pub use fun::{ Dialect };
 pub use fun::{ AttributeKey, AttributeValue };
 

@@ -8,17 +8,22 @@ use std::collections::{ HashMap, HashSet };
 
 use petgraph::graph::{ Graph, NodeIndex };
 
+use util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
+
 //pub mod builder;
 //pub use builder::FunctionBuilder;
 
+mod builder;
+pub use builder::FunctionBuilder;
+
 //mod validate;
 
-mod graph;
-pub use graph::{ FunctionCfg, CfgNode, CfgEdge };
-pub use petgraph::Direction;
+//mod graph;
+//pub use graph::{ FunctionCfg, CfgNode, CfgEdge };
+//pub use petgraph::Direction;
 
-mod layout;
-pub use layout::Layout;
+//mod layout;
+//pub use layout::Layout;
 
 //pub mod live;
 
@@ -26,11 +31,6 @@ pub use layout::Layout;
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Block(u32);
 entity_impl!(Block, "block");
-
-/// OP in Block
-#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Op(u32);
-entity_impl!(Op, "op");
 
 /// Either a SSA variable, abstraction or a constant
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -42,20 +42,24 @@ entity_impl!(Value, "value");
 pub struct FunRef(u32);
 entity_impl!(FunRef, "fun_ref");
 
-
-#[derive(Debug)]
-pub struct OpData {
-    kind: OpKind,
-    reads: EntityList<Value>,
-    writes: EntityList<Value>,
-}
-
 #[derive(Debug)]
 pub struct BlockData {
     arguments: EntityList<Value>,
-    finished: bool,
-    predecessors: EntityList<Block>,
-    successors: EntityList<Block>,
+
+    op: Option<OpKind>,
+    reads: EntityList<Value>,
+
+    // These will contain all the connected blocks, regardless
+    // of whether they are actually alive or not.
+    predecessors: PooledEntitySet<Block>,
+    successors: PooledEntitySet<Block>,
+}
+
+pub struct ValueData {
+    kind: ValueType,
+
+    definition: Option<Block>,
+    usages: EntityList<Block>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -63,54 +67,7 @@ pub enum ValueType {
     Variable,
     Block(Block),
     Constant(ConstantTerm),
-}
-
-pub struct BlockIter<'a> {
-    fun: &'a Function,
-    next: Option<Block>,
-}
-impl<'a> Iterator for BlockIter<'a> {
-    type Item = Block;
-    fn next(&mut self) -> Option<Self::Item> {
-        let next = self.next;
-        match self.next {
-            Some(n) => self.next = self.fun.layout.blocks[n].next,
-            None => (),
-        }
-        next
-    }
-}
-
-pub struct OpIter<'a> {
-    fun: &'a Function,
-    next: Option<Op>,
-}
-impl<'a> Iterator for OpIter<'a> {
-    type Item = Op;
-    fn next(&mut self) -> Option<Self::Item> {
-        let next = self.next;
-        match self.next {
-            Some(n) => self.next = self.fun.layout.ops[n].next,
-            None => (),
-        }
-        next
-    }
-}
-
-pub struct RevOpIter<'a> {
-    fun: &'a Function,
-    prev: Option<Op>,
-}
-impl<'a> Iterator for RevOpIter<'a> {
-    type Item = Op;
-    fn next(&mut self) -> Option<Self::Item> {
-        let prev = self.prev;
-        match self.prev {
-            Some(n) => self.prev = self.fun.layout.ops[n].prev,
-            None => (),
-        }
-        prev
-    }
+    Alias(Value),
 }
 
 #[derive(Debug)]
@@ -141,152 +98,26 @@ pub struct Function {
 
     // Meta
     ident: FunctionIdent,
-    dialect: Dialect,
-    attributes: HashMap<AttributeKey, AttributeValue>,
 
-    layout: Layout,
-
-    ops: PrimaryMap<Op, OpData>,
     blocks: PrimaryMap<Block, BlockData>,
     values: PrimaryMap<Value, ValueType>,
     fun_refs: PrimaryMap<FunRef, FunctionIdent>,
 
+    entry_block: Option<Block>,
+
     value_pool: ListPool<Value>,
+    block_set_pool: EntitySetPool,
 
     // Auxiliary information
     pub constant_values: HashSet<Value>, // Use EntitySet?
 
 }
 
+/// Values
 impl Function {
-
-    pub fn new(ident: FunctionIdent, dialect: Dialect) -> Self {
-        Function {
-            ident: ident,
-            dialect: dialect,
-            attributes: HashMap::new(),
-
-            layout: Layout::new(),
-
-            ops: PrimaryMap::new(),
-            blocks: PrimaryMap::new(),
-            values: PrimaryMap::new(),
-            fun_refs: PrimaryMap::new(),
-
-            value_pool: ListPool::new(),
-
-            constant_values: HashSet::new(),
-        }
-    }
-
-    pub fn dialect(&self) -> Dialect {
-        self.dialect
-    }
-    pub fn set_dialect(&mut self, dialect: Dialect) {
-        self.dialect = dialect;
-    }
-
-    pub fn new_variable(&mut self) -> Value {
-        self.values.push(ValueType::Variable)
-    }
-    pub fn new_variable_block(&mut self, block: Block) -> Value {
-        self.values.push(ValueType::Block(block))
-    }
-
-    pub fn ident(&self) -> &FunctionIdent {
-        &self.ident
-    }
-
-    pub fn iter_block<'a>(&'a self) -> BlockIter<'a> {
-        BlockIter {
-            fun: self,
-            next: self.layout.first_block,
-        }
-    }
-    pub fn iter_op<'a>(&'a self, block: Block) -> OpIter<'a> {
-        OpIter {
-            fun: self,
-            next: self.layout.blocks[block].first_op,
-        }
-    }
-    pub fn iter_op_rev<'a>(&'a self, block: Block) -> RevOpIter<'a> {
-        RevOpIter {
-            fun: self,
-            prev: self.layout.blocks[block].last_op,
-        }
-    }
-    pub fn iter_op_rev_from<'a>(&'a self, op: Op) -> RevOpIter<'a> {
-        assert!(self.layout.ops[op].block.is_some());
-        RevOpIter {
-            fun: self,
-            prev: Some(op),
-        }
-    }
 
     pub fn iter_constants<'a>(&'a self) -> std::collections::hash_set::Iter<'a, Value> {
         self.constant_values.iter()
-    }
-
-    pub fn entry_arg_num(&self) -> usize {
-        self.block_args(self.block_entry()).len()
-    }
-
-    pub fn block_entry(&self) -> Block {
-        self.layout.first_block.unwrap()
-    }
-    pub fn block_args<'a>(&'a self, block: Block) -> &'a [Value] {
-        self.blocks[block].arguments.as_slice(&self.value_pool)
-    }
-    pub fn block_remove(&mut self, block: Block) {
-        self.layout.remove_block(block)
-    }
-    pub fn block_first_op(&self, block: Block) -> Op {
-        self.layout.blocks[block].first_op.unwrap()
-    }
-
-    //pub fn block_call_source<'a>(&'a self, block: BlockCall) -> Op {
-    //    self.block_calls[block].source.unwrap()
-    //}
-    //pub fn block_call_target<'a>(&'a self, block: BlockCall) -> Block {
-    //    self.block_calls[block].target
-    //}
-    //pub fn block_call_args<'a>(&'a self, block: BlockCall) -> &'a [Value] {
-    //    self.block_calls[block].values.as_slice(&self.value_pool)
-    //}
-    //pub fn block_call_set_target(&mut self, call: BlockCall, block: Block) {
-    //    self.block_calls[call].target = block;
-    //}
-
-    pub fn op_kind<'a>(&'a self, op: Op) -> &'a OpKind {
-        &self.ops[op].kind
-    }
-    pub fn op_writes<'a>(&'a self, op: Op) -> &[Value] {
-        self.ops[op].writes.as_slice(&self.value_pool)
-    }
-    pub fn op_reads<'a>(&'a self, op: Op) -> &[Value] {
-        self.ops[op].reads.as_slice(&self.value_pool)
-    }
-    //pub fn op_branches<'a>(&'a self, op: Op) -> &[BlockCall] {
-    //    self.ops[op].block_calls.as_slice(&self.block_call_pool)
-    //}
-    pub fn op_block(&self, op: Op) -> Block {
-        self.layout.ops[op].block.unwrap()
-    }
-    pub fn op_after(&self, op: Op) -> Option<Op> {
-        self.layout.ops[op].next
-    }
-    pub fn op_before(&self, op: Op) -> Option<Op> {
-        self.layout.ops[op].prev
-    }
-    pub fn op_remove(&mut self, op: Op) {
-        self.layout.remove_op(op);
-    }
-    pub fn op_remove_take_writes(&mut self, op: Op, writes: &mut Vec<WriteToken>) {
-        writes.clear();
-        for write in self.op_writes(op) {
-            writes.push(WriteToken(*write));
-        }
-        self.op_remove(op);
     }
 
     pub fn value<'a>(&'a self, value: Value) -> &'a ValueType {
@@ -303,72 +134,136 @@ impl Function {
         }
     }
 
-    pub fn has_attribute(&self, key: &AttributeKey) -> bool {
-        self.attributes.contains_key(key)
+}
+
+/// Blocks
+impl Function {
+
+    pub fn block_insert(&mut self) -> Block {
+        self.blocks.push(BlockData {
+            arguments: EntityList::new(),
+
+            op: None,
+            reads: EntityList::new(),
+
+            predecessors: PooledEntitySet::new(),
+            successors: PooledEntitySet::new(),
+        })
     }
 
-    pub fn used_values(&self, set: &mut HashSet<Value>) {
-        set.clear();
-        for block in self.iter_block() {
-            for arg in self.block_args(block) {
-                set.insert(*arg);
-            }
-            for op in self.iter_op(block) {
-                for read in self.op_reads(op) {
-                    set.insert(*read);
-                }
-                for write in self.op_writes(op) {
-                    set.insert(*write);
-                }
-                //for branch in self.op_branches(op) {
-                //    for val in self.block_call_args(*branch) {
-                //        set.insert(*val);
-                //    }
-                //}
-            }
+    pub fn block_set_entry(&mut self, block: Block) {
+        self.entry_block = Some(block);
+    }
+
+
+}
+
+/// Graph
+impl Function {
+
+    // fn block_remove_successors(&mut self, block: Block) {
+    //     
+    // }
+
+}
+
+impl Function {
+
+    pub fn new(ident: FunctionIdent) -> Self {
+        Function {
+            ident: ident,
+
+            blocks: PrimaryMap::new(),
+            values: PrimaryMap::new(),
+            fun_refs: PrimaryMap::new(),
+
+            entry_block: None,
+
+            value_pool: ListPool::new(),
+            block_set_pool: EntitySetPool::new(),
+
+            constant_values: HashSet::new(),
         }
     }
 
-    pub fn gen_cfg(&self) -> FunctionCfg {
-        unimplemented!()
-        //let mut graph = Graph::new();
-
-        //let mut blocks = HashMap::new();
-        //let mut ops = HashMap::new();
-
-        //for block in self.iter_block() {
-        //    let idx = graph.add_node(CfgNode::Block(block));
-        //    blocks.insert(block, idx);
-
-        //    let mut prev = idx;
-
-        //    for op in self.iter_op(block) {
-        //        if self.op_branches(op).len() > 0 || self.op_kind(op).is_block_terminator() {
-        //            let op_node = graph.add_node(CfgNode::Op(op));
-        //            ops.insert(op, op_node);
-        //            graph.add_edge(prev, op_node, CfgEdge::Flow);
-        //            prev = op_node;
-        //        }
-        //    }
-        //}
-
-        //for block in self.iter_block() {
-        //    for op in self.iter_op(block) {
-        //        for branch in self.op_branches(op) {
-        //            let target = self.block_call_target(*branch);
-        //            graph.add_edge(
-        //                ops[&op], blocks[&target], CfgEdge::Call(*branch)
-        //            );
-        //        }
-        //    }
-        //}
-
-        //FunctionCfg {
-        //    graph: graph,
-        //    ops: ops,
-        //    blocks: blocks,
-        //}
+    pub fn ident(&self) -> &FunctionIdent {
+        &self.ident
     }
+
+
+    pub fn entry_arg_num(&self) -> usize {
+        self.block_args(self.block_entry()).len()
+    }
+
+    pub fn block_entry(&self) -> Block {
+        self.entry_block.unwrap()
+    }
+    pub fn block_args<'a>(&'a self, block: Block) -> &'a [Value] {
+        self.blocks[block].arguments.as_slice(&self.value_pool)
+    }
+
+
+    //pub fn used_values(&self, set: &mut HashSet<Value>) {
+    //    set.clear();
+    //    for block in self.iter_block() {
+    //        for arg in self.block_args(block) {
+    //            set.insert(*arg);
+    //        }
+    //        for op in self.iter_op(block) {
+    //            for read in self.op_reads(op) {
+    //                set.insert(*read);
+    //            }
+    //            for write in self.op_writes(op) {
+    //                set.insert(*write);
+    //            }
+    //            //for branch in self.op_branches(op) {
+    //            //    for val in self.block_call_args(*branch) {
+    //            //        set.insert(*val);
+    //            //    }
+    //            //}
+    //        }
+    //    }
+    //}
+
+    //pub fn gen_cfg(&self) -> FunctionCfg {
+    //    let mut graph = Graph::new();
+
+    //    let mut blocks = HashMap::new();
+    //    let mut ops = HashMap::new();
+
+    //    for block in self.iter_block() {
+    //        let idx = graph.add_node(CfgNode::Block(block));
+    //        blocks.insert(block, idx);
+
+    //        let mut prev = idx;
+
+    //        for op in self.iter_op(block) {
+    //            if self.op_branches(op).len() > 0 || self.op_kind(op).is_block_terminator() {
+    //                let op_node = graph.add_node(CfgNode::Op(op));
+    //                ops.insert(op, op_node);
+    //                graph.add_edge(prev, op_node, CfgEdge::Flow);
+    //                prev = op_node;
+    //            }
+    //        }
+    //    }
+
+    //    for block in self.iter_block() {
+    //        for op in self.iter_op(block) {
+    //            for branch in self.op_branches(op) {
+    //                let target = self.block_call_target(*branch);
+    //                graph.add_edge(
+    //                    ops[&op], blocks[&target], CfgEdge::Call(*branch)
+    //                );
+    //            }
+    //        }
+    //    }
+
+    //    FunctionCfg {
+    //        graph: graph,
+    //        ops: ops,
+    //        blocks: blocks,
+    //    }
+    //}
 
     //pub fn live_values(&self) -> self::live::LiveValues {
     //    self::live::calculate_live_values(self)
@@ -412,26 +307,26 @@ impl Function {
     //    res
     //}
 
-    pub fn to_text(&self) -> String {
-        use crate::text::{ ToEirText, ToEirTextContext };
+    //pub fn to_text(&self) -> String {
+    //    use crate::text::{ ToEirText, ToEirTextContext };
 
-        let mut ctx = ToEirTextContext::new();
+    //    let mut ctx = ToEirTextContext::new();
 
-        let mut out = Vec::new();
-        self.to_eir_text(&mut ctx, 0, &mut out).unwrap();
-        String::from_utf8(out).unwrap()
-    }
+    //    let mut out = Vec::new();
+    //    self.to_eir_text(&mut ctx, 0, &mut out).unwrap();
+    //    String::from_utf8(out).unwrap()
+    //}
 
-    pub fn to_text_annotated_live_values(&self) -> String {
-        use crate::text::{ ToEirText, ToEirTextContext, EirLiveValuesAnnotator };
+    //pub fn to_text_annotated_live_values(&self) -> String {
+    //    use crate::text::{ ToEirText, ToEirTextContext, EirLiveValuesAnnotator };
 
-        let mut ctx = ToEirTextContext::new();
-        ctx.add_annotator(EirLiveValuesAnnotator::new());
+    //    let mut ctx = ToEirTextContext::new();
+    //    ctx.add_annotator(EirLiveValuesAnnotator::new());
 
-        let mut out = Vec::new();
-        self.to_eir_text(&mut ctx, 0, &mut out).unwrap();
-        String::from_utf8(out).unwrap()
-    }
+    //    let mut out = Vec::new();
+    //    self.to_eir_text(&mut ctx, 0, &mut out).unwrap();
+    //    String::from_utf8(out).unwrap()
+    //}
 
 }
 

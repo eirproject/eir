@@ -2,7 +2,7 @@ use crate::{ FunctionIdent, ClosureEnv, Atom, Clause };
 use crate::{ Value, AtomicTerm };
 use crate::{ Dialect };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TestOperation {
     EqualAtomic(AtomicTerm),
     /// Tests if a value is truthy according to Erlang
@@ -10,7 +10,7 @@ pub enum TestOperation {
     IsTruthy,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ComparisonOperation {
     /// ==
     Equal,
@@ -30,12 +30,20 @@ pub enum ComparisonOperation {
     ExactNotEqual,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum MapPutUpdate {
+    /// Value is put into map, regardless of already existing
+    Put,
+    /// Value is updated, fails if not in map
+    Update,
+}
+
 #[derive(Debug, Clone)]
 pub enum OpKind {
 
     // Control flow/functions
 
-    /// Calls r[0] with args r[1..]
+    /// (call: fn(..), ..)
     /// This is the calling primitive,
     /// doing everything from returns to local calls,
     /// to external calls.
@@ -45,33 +53,30 @@ pub enum OpKind {
     /// Captures r[0]:r[1]/r[2], writing it to w[0]
     CaptureFunction,
 
-    /// Move r[0] into w[0]
-    Move,
-
     // Raw exception handling.
     // This gets the stack trace from a raw trace
-    ExcTrace,
+    // TODO: this needs refinement
+    //ExcTrace,
 
+    /// (cont: fn(tup), terms..)
     MakeTuple,
+    /// (cont: fn(list), tail, heads..)
     MakeList,
-    MakeBinary,
+    // TODO
+    //MakeBinary,
 
     /// (cont: fn())
     /// Creates a new empty map term.
     MapEmpty,
-    /// (cont: fn(), map: map, key, value)
+    /// (ok: fn(new_map), err: fn(), map: map, key1, value1, keyN, valueN)
     /// Puts a new value in the map, replacing the old key
     /// if it exists.
-    /// The map argument is expected to be a map. Codegen
-    /// should not need to do a term tag check on this.
-    MapPut,
-    /// (ok: fn(new_map), err: fn(), map: map, key, value)
-    /// Puts a new value in a map, failing if the key is
-    /// not already set.
-    /// The map argument is expected to be a map. Codegen
-    /// should not need to do a term tag check on this.
-    MapUpdate,
+    MapPut {
+        // TODO: don't do allocation
+        action: Vec<MapPutUpdate>,
+    },
 
+    /// (cont: fn(l: valuelist), terms..)
     /// Value lists are not an actual type in the program.
     /// A value list of length 1 is semantically identical
     /// to the value itself.
@@ -83,12 +88,11 @@ pub enum OpKind {
     /// value. It may not be used in any reads, except a
     /// UnpackValueList with no writes.
     ///
-    /// Only high level Eir may contain value lists. Codegen
+    /// Only high level Eur may contain value lists. Codegen
     /// should not be concerned with these operations.
     PackValueList,
+    /// (cont: fn(terms..), l: valuelist)
     UnpackValueList,
-
-    PrimOp(Atom),
 
     // Tests
     /// (ok: fn(), fail: fn(), lhs, rhs)
@@ -117,6 +121,8 @@ pub enum OpKind {
     /// A guard is strictly required to return through either the ok
     /// or fail continuation.
     Case {
+        // NOTE once changes get propagated down from Hir, this will
+        // not be an allocation.
         clauses: Vec<Clause>,
     },
 
@@ -132,24 +138,4 @@ pub enum OpKind {
     /// Something that should not happen. The VM could be left in an
     /// invalid state, should raise an unrecoverable runtime error.
     Unreachable,
-}
-
-impl OpKind {
-
-    pub fn is_block_terminator(&self) -> bool {
-        match self {
-            OpKind::Call => true,
-            OpKind::MapUpdate => true,
-            OpKind::PrimOp(_) => true,
-            OpKind::Compare(_) => true,
-            OpKind::Test(_) => true,
-            OpKind::Case { .. } => true,
-            OpKind::UnpackTuple(_) => true,
-            OpKind::UnpackListCell => true,
-            OpKind::UnpackMapItem => true,
-            OpKind::Unreachable => true,
-            _ => false,
-        }
-    }
-
 }
