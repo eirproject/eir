@@ -1,9 +1,9 @@
-use super::{ Module, Annotated, FunctionName, Constant,  
+use crate::ast::{ Module, Annotated, FunctionName, Constant,  
 Function, FunctionDefinition, Expression, SingleExpression, Pattern,
-CaseClause, PrimOpCall, MapExactAssoc, AVariable };
-use super::lex::Tok;
-use ::{Atom, Variable};
-use ::eir::AtomicTerm;
+CaseClause, PrimOpCall, MapExactAssoc };
+use crate::lexer::Tok;
+use eir::Atom;
+use eir::AtomicTerm;
 
 use ::num_bigint::BigInt;
 use ::num_traits::ToPrimitive;
@@ -135,7 +135,7 @@ Guard: Expression = {
     "when" <Expression> => <>,
 };
 
-Variables: Vec<Annotated<Variable>> = {
+Variables: Vec<Annotated<Atom>> = {
     <a:Annotated<Variable>> => vec![a],
     "<" <a:Comma<Annotated<Variable>>> ">" => a,
 };
@@ -187,7 +187,7 @@ Pattern: Pattern = {
 
 //ConstantOrVariable: ConstantOrVariable = {
 //    <c:Constant> => ConstantOrVariable::Constant(c),
-//    <v:Variable> => ConstantOrVariable::Variable(AVariable::new(v)),
+//    <v:Variable> => ConstantOrVariable::Variable(v),
 //};
 PatternBinary: Vec<(Annotated<Pattern>, Vec<Annotated<SingleExpression>>)> = {
     "#{" <b:Comma<PatternBinaryElem>> "}#" => b,

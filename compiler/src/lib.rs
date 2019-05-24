@@ -18,15 +18,13 @@ extern crate eir;
 extern crate pattern_compiler;
 extern crate util as util_c;
 
-//pub mod intern;
-//pub use self::intern::{ Atom, Variable };
 pub use ::eir::intern::Atom;
 pub type Variable = Atom;
 
-pub mod parser;
+mod hir;
 pub mod ir;
-pub mod util;
 mod ssa;
+mod lower;
 
 //#[cfg(test)]
 //mod erl_tests;

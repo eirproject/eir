@@ -1,4 +1,4 @@
-use ::matches::assert_matches;
+use ::matches::{ matches, assert_matches };
 
 use std::collections::{ HashSet, HashMap };
 

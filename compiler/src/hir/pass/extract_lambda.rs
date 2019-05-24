@@ -1,6 +1,6 @@
 use ::ir::{ FunctionDefinition, FunctionIdent, FunctionVisibility };
-use ::ir::hir::Function;
-use ::ir::hir::EachSingleExpression;
+use ::hir::Function;
+use ::hir::EachSingleExpression;
 use ::eir::ClosureEnv;
 
 pub struct LambdaCollector {
@@ -36,7 +36,7 @@ impl LambdaCollector {
 
 }
 
-use ::ir::hir::SingleExpressionKind as SEK;
+use ::hir::SingleExpressionKind as SEK;
 pub fn extract_lambdas<T>(func: &mut T,
                           lambdas: &mut LambdaCollector) where T: EachSingleExpression {
 

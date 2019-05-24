@@ -8,10 +8,10 @@
 //! passes. (See pattern match compilation)
 
 use ::std::collections::{ HashMap, HashSet };
-use ::ir::hir::{ Expression, SingleExpression, SingleExpressionKind, PatternNode };
+use ::hir::{ Expression, SingleExpression, SingleExpressionKind, PatternNode };
 
-use ::ir::hir::scope_tracker::VerboseLambdaEnv;
-use ::ir::hir::scope_tracker::{ ScopeTracker, ScopeDefinition };
+use ::hir::scope_tracker::VerboseLambdaEnv;
+use ::hir::scope_tracker::{ ScopeTracker, ScopeDefinition };
 
 pub fn assign_ssa_expression(env: &mut ScopeTracker, expr: &mut Expression) {
     for single in &mut expr.values {

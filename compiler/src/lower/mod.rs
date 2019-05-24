@@ -1,10 +1,7 @@
 use std::collections::{ HashMap, HashSet };
 
 use ::ir::{ Module, FunctionDefinition };
-use ::ir::hir;
-use ::ir::lir;
-//use ::ir::lir::Source;
-use ::ir::hir::scope_tracker::ScopeTracker;
+use ::hir::scope_tracker::ScopeTracker;
 //use ::ir::SSAVariable;
 
 use ::ssa::{ SSAVariable, SSAVariableGenerator };
@@ -140,7 +137,7 @@ struct CaseStructureDef<'a> {
     match_fail: Option<Ebb>,
 }
 struct CaseStructureClauseDef<'a> {
-    patterns: Vec<::ir::hir::Pattern>,
+    patterns: Vec<::hir::Pattern>,
     guard: Box<Fn(&mut FunctionBuilder, &mut LirLowerState, Value, &[SSAVariable])
                   -> SSAVariable + 'a>,
     body: Box<Fn(&mut FunctionBuilder, &mut LirLowerState, Value, &[SSAVariable])
