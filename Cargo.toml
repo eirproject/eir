@@ -2,6 +2,8 @@
 
 members = [
     "hir",
+    "diagnostics",
+    "frontend",
     "pattern-compiler",
     "util",
     "tools",
