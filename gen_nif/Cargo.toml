@@ -13,6 +13,6 @@ print_trace = []
 llvm-sys = "70"
 inkwell = { git = "https://github.com/hansihe/inkwell" }
 eir = { path = "../eir" }
-core_erlang_compiler = { path = "../compiler" }
+hir = { path = "../hir" }
 
 num-traits = "0.2"

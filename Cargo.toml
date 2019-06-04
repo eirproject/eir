@@ -1,10 +1,9 @@
 [workspace]
 
 members = [
-    "compiler",
+    "hir",
     "pattern-compiler",
     "util",
-    "interpreter",
     "tools",
     "gen_nif",
     "cps_transform",

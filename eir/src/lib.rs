@@ -7,11 +7,12 @@ pub mod intern;
 pub use intern::{ Atom, Variable };
 
 pub mod op;
+pub use op::{ TestOperation, ComparisonOperation };
 
 //pub mod text;
 
 pub mod pattern;
-pub use pattern::{ Clause, Pattern };
+pub use pattern::{ PatternNode, PatternValue, PatternContainer };
 
 pub mod fun;
 pub use fun::{ Function, FunctionBuilder, Block, Value };
@@ -37,16 +38,10 @@ pub struct FunctionIdent {
     pub module: Atom,
     pub name: Atom,
     pub arity: usize,
-    pub lambda: Option<(ClosureEnv, usize)>,
 }
 
 impl Display for FunctionIdent {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        if let Some((env, e_idx)) = self.lambda {
-            write!(f, "{}:{}@{}.{}/{}", self.module, self.name,
-                   env.index(), e_idx, self.arity)
-        } else {
-            write!(f, "{}:{}/{}", self.module, self.name, self.arity)
-        }
+        write!(f, "{}:{}/{}", self.module, self.name, self.arity)
     }
 }

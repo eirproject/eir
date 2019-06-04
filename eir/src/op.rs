@@ -1,6 +1,9 @@
-use crate::{ FunctionIdent, ClosureEnv, Atom, Clause };
+use crate::{ FunctionIdent, ClosureEnv, Atom };
+use crate::pattern::{ PatternClause };
 use crate::{ Value, AtomicTerm };
 use crate::{ Dialect };
+
+use cranelift_entity::EntityList;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TestOperation {
@@ -50,8 +53,11 @@ pub enum OpKind {
     /// Always a block terminator.
     Call,
 
-    /// Captures r[0]:r[1]/r[2], writing it to w[0]
+    /// (cont: fn(fun), m, f, a)
     CaptureFunction,
+
+    /// (name: atom, ..)
+    Intrinsic,
 
     // Raw exception handling.
     // This gets the stack trace from a raw trace
@@ -65,7 +71,7 @@ pub enum OpKind {
     // TODO
     //MakeBinary,
 
-    /// (cont: fn())
+    /// (cont: fn(new_map))
     /// Creates a new empty map term.
     MapEmpty,
     /// (ok: fn(new_map), err: fn(), map: map, key1, value1, keyN, valueN)
@@ -121,9 +127,7 @@ pub enum OpKind {
     /// A guard is strictly required to return through either the ok
     /// or fail continuation.
     Case {
-        // NOTE once changes get propagated down from Hir, this will
-        // not be an allocation.
-        clauses: Vec<Clause>,
+        clauses: EntityList<PatternClause>,
     },
 
 

@@ -1,5 +1,4 @@
 use crate::{ FunctionIdent, ConstantTerm, AtomicTerm, ClosureEnv };
-use crate::Clause;
 use crate::op::OpKind;
 use ::cranelift_entity::{ PrimaryMap, SecondaryMap, ListPool, EntityList,
                           EntitySet, entity_impl };
@@ -9,6 +8,8 @@ use std::collections::{ HashMap, HashSet };
 use petgraph::graph::{ Graph, NodeIndex };
 
 use util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
+
+use crate::pattern::{ PatternContainer, PatternClause };
 
 //pub mod builder;
 //pub use builder::FunctionBuilder;
@@ -52,19 +53,17 @@ pub struct BlockData {
     // These will contain all the connected blocks, regardless
     // of whether they are actually alive or not.
     predecessors: PooledEntitySet<Block>,
-    successors: PooledEntitySet<Block>,
 }
 
+#[derive(Debug)]
 pub struct ValueData {
     kind: ValueType,
-
-    definition: Option<Block>,
-    usages: EntityList<Block>,
+    usages: PooledEntitySet<Block>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ValueType {
-    Variable,
+    Arg(Block),
     Block(Block),
     Constant(ConstantTerm),
     Alias(Value),
@@ -100,13 +99,16 @@ pub struct Function {
     ident: FunctionIdent,
 
     blocks: PrimaryMap<Block, BlockData>,
-    values: PrimaryMap<Value, ValueType>,
+    values: PrimaryMap<Value, ValueData>,
     fun_refs: PrimaryMap<FunRef, FunctionIdent>,
 
     entry_block: Option<Block>,
 
     value_pool: ListPool<Value>,
+    clause_pool: ListPool<PatternClause>,
     block_set_pool: EntitySetPool,
+
+    pattern_container: PatternContainer,
 
     // Auxiliary information
     pub constant_values: HashSet<Value>, // Use EntitySet?
@@ -121,13 +123,13 @@ impl Function {
     }
 
     pub fn value<'a>(&'a self, value: Value) -> &'a ValueType {
-        &self.values[value]
+        &self.values[value].kind
     }
     pub fn value_is_constant(&self, value: Value) -> bool {
         self.constant_values.contains(&value)
     }
     pub fn value_constant<'a>(&'a self, value: Value) -> &'a ConstantTerm {
-        if let ValueType::Constant(con) = &self.values[value] {
+        if let ValueType::Constant(con) = &self.values[value].kind {
             con
         } else {
             panic!()
@@ -147,14 +149,29 @@ impl Function {
             reads: EntityList::new(),
 
             predecessors: PooledEntitySet::new(),
-            successors: PooledEntitySet::new(),
         })
+    }
+
+    pub fn block_arg_insert(&mut self, block: Block) -> Value {
+        let val = self.values.push(ValueData {
+            kind: ValueType::Arg(block),
+            usages: PooledEntitySet::new(),
+        });
+        self.blocks[block].arguments.push(val, &mut self.value_pool);
+        val
     }
 
     pub fn block_set_entry(&mut self, block: Block) {
         self.entry_block = Some(block);
     }
 
+    fn block_mut<'a>(&'a mut self, block: Block) -> &'a mut BlockData {
+        self.blocks.get_mut(block).unwrap()
+    }
+
+    pub fn block_arg_n(&self, block: Block, num: usize) -> Option<Value> {
+        self.blocks[block].arguments.get(num, &self.value_pool)
+    }
 
 }
 
@@ -164,6 +181,19 @@ impl Function {
     // fn block_remove_successors(&mut self, block: Block) {
     //     
     // }
+
+}
+
+/// Patterns
+impl Function {
+
+    pub fn pattern_container<'a>(&'a self) -> &'a PatternContainer {
+        &self.pattern_container
+    }
+
+    pub fn pattern_container_mut<'a>(&'a mut self) -> &'a mut PatternContainer {
+        &mut self.pattern_container
+    }
 
 }
 
@@ -180,7 +210,10 @@ impl Function {
             entry_block: None,
 
             value_pool: ListPool::new(),
+            clause_pool: ListPool::new(),
             block_set_pool: EntitySetPool::new(),
+
+            pattern_container: PatternContainer::new(),
 
             constant_values: HashSet::new(),
         }

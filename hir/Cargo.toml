@@ -1,5 +1,5 @@
 [package]
-name = "core_erlang_compiler"
+name = "hir"
 version = "0.1.0"
 authors = ["HansiHE <hansihe@hansihe.com>"]
 autobins = false

@@ -9,7 +9,7 @@ name = "eir_compile"
 path = "src/compile.rs"
 
 [dependencies]
-core_erlang_compiler = { path = "../compiler" }
+hir = { path = "../hir" }
 cps_transform = { path = "../cps_transform" }
 eir = { path = "../eir" }
 #core_erlang_interpreter = { path = "../interpreter" }
