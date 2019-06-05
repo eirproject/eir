@@ -12,7 +12,7 @@ print_trace = []
 [dependencies]
 llvm-sys = "70"
 inkwell = { git = "https://github.com/hansihe/inkwell" }
-eir = { path = "../eir" }
-hir = { path = "../hir" }
+libeir_ir = { path = "../libeir_ir" }
+libeir_hir = { path = "../libeir_hir" }
 
 num-traits = "0.2"

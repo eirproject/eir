@@ -1,0 +1,10 @@
+[package]
+name = "libeir_passes"
+version = "0.1.0"
+authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
+edition = "2018"
+
+[dependencies]
+libeir_ir = { path = "../libeir_ir" }
+pattern-compiler = { path = "../pattern-compiler" }
+matches = "0.1.8"

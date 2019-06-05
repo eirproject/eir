@@ -9,9 +9,9 @@ name = "eir_compile"
 path = "src/compile.rs"
 
 [dependencies]
-hir = { path = "../hir" }
-cps_transform = { path = "../cps_transform" }
-eir = { path = "../eir" }
+libeir_hir = { path = "../libeir_hir" }
+#cps_transform = { path = "../cps_transform" }
+libeir_ir = { path = "../libeir_ir" }
 #core_erlang_interpreter = { path = "../interpreter" }
 
 clap = "2.33.0"
