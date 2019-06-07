@@ -1,21 +1,18 @@
-use crate::{ FunctionIdent, ConstantTerm, AtomicTerm, ClosureEnv };
-use crate::op::OpKind;
-use ::cranelift_entity::{ PrimaryMap, SecondaryMap, ListPool, EntityList,
-                          EntitySet, entity_impl };
-use ::cranelift_entity::packed_option::PackedOption;
-use std::collections::{ HashMap, HashSet };
+use std::collections::{ HashSet };
 
-use petgraph::graph::{ Graph, NodeIndex };
+use ::cranelift_entity::{ PrimaryMap, ListPool, EntityList,
+                          entity_impl };
 
 use libeir_util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
 
+use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
+
+use crate::{ FunctionIdent, ConstantTerm };
+use crate::op::OpKind;
 use crate::pattern::{ PatternContainer, PatternClause };
 
-//pub mod builder;
-//pub use builder::FunctionBuilder;
-
 mod builder;
-pub use builder::FunctionBuilder;
+pub use builder::{ FunctionBuilder, CaseBuilder };
 
 //mod validate;
 
@@ -53,12 +50,16 @@ pub struct BlockData {
     // These will contain all the connected blocks, regardless
     // of whether they are actually alive or not.
     predecessors: PooledEntitySet<Block>,
+
+    span: ByteSpan,
 }
 
 #[derive(Debug)]
 pub struct ValueData {
     kind: ValueType,
     usages: PooledEntitySet<Block>,
+
+    span: ByteSpan,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -97,6 +98,7 @@ pub struct Function {
 
     // Meta
     ident: FunctionIdent,
+    span: ByteSpan,
 
     blocks: PrimaryMap<Block, BlockData>,
     values: PrimaryMap<Value, ValueData>,
@@ -149,6 +151,8 @@ impl Function {
             reads: EntityList::new(),
 
             predecessors: PooledEntitySet::new(),
+
+            span: DUMMY_SPAN,
         })
     }
 
@@ -156,6 +160,8 @@ impl Function {
         let val = self.values.push(ValueData {
             kind: ValueType::Arg(block),
             usages: PooledEntitySet::new(),
+
+            span: DUMMY_SPAN,
         });
         self.blocks[block].arguments.push(val, &mut self.value_pool);
         val
@@ -202,6 +208,7 @@ impl Function {
     pub fn new(ident: FunctionIdent) -> Self {
         Function {
             ident: ident,
+            span: DUMMY_SPAN,
 
             blocks: PrimaryMap::new(),
             values: PrimaryMap::new(),

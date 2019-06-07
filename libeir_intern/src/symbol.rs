@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use lazy_static::lazy_static;
 use rustc_hash::FxHashMap;
 
-use libeir_util::arena::DroplessArena;
+use crate::arena::DroplessArena;
 
 use libeir_diagnostics::{ByteSpan, DUMMY_SPAN};
 
@@ -467,6 +467,8 @@ fn with_read_only_interner<T, F: FnOnce(&Interner) -> T>(f: F) -> T {
 #[derive(Clone, Copy, Hash, PartialOrd, Eq, Ord)]
 pub struct LocalInternedString {
     string: &'static str,
+    /// This type cannot be sent across threads, this emulates the
+    /// behavior of !impl without the unsafe feature flag.
     dummy: PhantomData<*const u8>,
 }
 

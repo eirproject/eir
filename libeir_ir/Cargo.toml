@@ -5,6 +5,8 @@ authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
 edition = "2018"
 
 [dependencies]
+libeir_intern = { path = "../libeir_intern" }
+libeir_diagnostics = { path = "../libeir_diagnostics" }
 libeir_util = { path = "../libeir_util" } 
 
 string-intern = { version = "0.1.7", default-features = false }

@@ -649,4 +649,32 @@ example(File) ->
         let expected = module!(ident!(foo), body);
         assert_eq!(result, expected);
     }
+
+    #[test]
+    fn parse_try2() {
+        let result: Module = parse(
+            "-module(foo).
+
+example(File < 2) ->
+    try read(File) of
+        {ok, Contents} ->
+            {ok, Contents}
+    catch
+        error:{Mod, Code} ->
+            {error, Mod:format_error(Code)};
+        Reason ->
+            {error, Reason}
+    after
+        close(File)
+    end.
+
+exw(File) ->
+    case File of
+        File < 2 ->
+            ok
+    end.
+",
+        );
+    }
+
 }

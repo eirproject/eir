@@ -3,6 +3,7 @@
 members = [
     "libeir_hir",
     "libeir_diagnostics",
+    "libeir_intern",
     "libeir_syntax_erl",
     "libeir_syntax_core",
     "libeir_util",

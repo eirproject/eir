@@ -1,8 +1,7 @@
 use std::fmt::{ Display, Formatter };
 use std::collections::HashMap;
 
-pub mod intern;
-pub use intern::{ Atom, Variable };
+use libeir_intern::Ident;
 
 pub mod op;
 pub use op::{ TestOperation, ComparisonOperation };
@@ -13,7 +12,8 @@ pub mod pattern;
 pub use pattern::{ PatternNode, PatternValue, PatternContainer };
 
 pub mod fun;
-pub use fun::{ Function, FunctionBuilder, Block, Value };
+pub use fun::{ Function, Block, Value };
+pub use fun::{ FunctionBuilder, CaseBuilder };
 pub use fun::{ ValueType };
 pub use fun::{ Dialect };
 pub use fun::{ AttributeKey, AttributeValue };
@@ -23,18 +23,19 @@ pub use env::{ ModuleEnvs, ClosureEnv };
 
 pub mod constant;
 pub use constant::{ AtomicTerm, ConstantTerm };
+pub use constant::{ AtomTerm, IntegerTerm, FloatTerm, BinaryTerm, NilTerm };
 
 #[derive(Debug)]
 pub struct Module {
-    pub name: Atom,
+    pub name: Ident,
     pub envs: ModuleEnvs,
     pub functions: HashMap<FunctionIdent, Function>,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct FunctionIdent {
-    pub module: Atom,
-    pub name: Atom,
+    pub module: Ident,
+    pub name: Ident,
     pub arity: usize,
 }
 

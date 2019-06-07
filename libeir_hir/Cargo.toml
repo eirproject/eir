@@ -29,6 +29,8 @@ cranelift-entity = "0.30.0"
 pattern-compiler = { path = "../pattern-compiler" }
 libeir_util = { path = "../libeir_util" }
 libeir_ir = { path = "../libeir_ir" }
+libeir_intern = { path = "../libeir_intern" }
+libeir_diagnostics = { path = "../libeir_diagnostics" }
 
 [dev-dependencies]
 tempdir = "0.3"

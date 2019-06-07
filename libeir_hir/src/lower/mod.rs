@@ -4,14 +4,18 @@ use self::resolve_scope::{ ResolvedVar, Node as ResNode };
 mod exception_handler_stack;
 use self::exception_handler_stack::ExceptionHandlerStack;
 
-use crate::hir::{ HirModule, Function as HirFun, Clause, Expr, Variable };
+use crate::ir::{ HirModule, Function as HirFun, Clause, Expr, Variable };
 
 use std::collections::HashMap;
 
-use libeir_ir::{ Atom, Function, FunctionBuilder, Block, Value };
-use libeir_ir::{ AtomicTerm };
+use libeir_ir::{ Function, Block, Value };
+use libeir_ir::{ FunctionBuilder, CaseBuilder };
+use libeir_ir::{ AtomTerm, IntegerTerm };
 use libeir_ir::{ TestOperation };
 use libeir_ir::FunctionIdent;
+
+use libeir_intern::{ Symbol };
+use libeir_diagnostics::{ DUMMY_SPAN };
 
 use cranelift_entity::{ EntityList, ListPool };
 
@@ -124,7 +128,7 @@ fn unpack_value_list_variables<'a>(ctx: &mut LowerCtx<'a>, block: Block, value: 
 
 fn lower_match<'a>(ctx: &mut LowerCtx<'a>, block: Block, match_on: Value,
                    clauses: &EntityList<Clause>, no_match: Value,
-                   body_hook: &Fn(&mut LowerCtx<'a>, Block) -> Block) -> (Block, Value)
+                   body_hook: &dyn Fn(&mut LowerCtx<'a>, Block) -> Block) -> (Block, Value)
 {
     let mut block = block;
 
@@ -214,7 +218,10 @@ fn lower_match<'a>(ctx: &mut LowerCtx<'a>, block: Block, match_on: Value,
 
     // Construct match operation
     {
-        ctx.b.op_start_case(block, no_match, match_on);
+        let mut builder = CaseBuilder::new();
+
+        builder.match_on = Some(match_on);
+        builder.no_match = Some(no_match);
 
         for (idx, clause) in clauses.as_slice(&ctx.hir.clause_pool).iter().enumerate() {
             let guard = guards_buf.get(idx, &ctx.block_pool).unwrap();
@@ -225,7 +232,7 @@ fn lower_match<'a>(ctx: &mut LowerCtx<'a>, block: Block, match_on: Value,
             // Values
             for val_expr in ctx.hir.clause_values(*clause) {
                 let val = ctx.get_res(ResNode::Expr(*val_expr));
-                ctx.b.case_value(val);
+                builder.push_value(val, &mut ctx.b);
             }
 
             // Copy clause to the new pattern container
@@ -233,11 +240,10 @@ fn lower_match<'a>(ctx: &mut LowerCtx<'a>, block: Block, match_on: Value,
             let clause_copied = ctx.b.fun_mut().pattern_container_mut()
                 .copy_from(pat_clause, &ctx.hir.pattern_container);
 
-            ctx.b.case_clause(clause_copied, guard_value, body_value);
-
+            builder.push_clause(clause_copied, guard_value, body_value, &mut ctx.b);
         }
 
-        ctx.b.case_finish();
+        builder.finish(block, &mut ctx.b);
     }
 
     guards_buf.clear(&mut ctx.block_pool);
@@ -247,7 +253,7 @@ fn lower_match<'a>(ctx: &mut LowerCtx<'a>, block: Block, match_on: Value,
 }
 
 fn lower_expr<'a>(ctx: &mut LowerCtx<'a>, block: Block, expr: Expr) -> Block {
-    use crate::hir::ExprKind as EK;
+    use crate::ir::ExprKind as EK;
     match ctx.hir.expr_kind(expr) {
         EK::Variable(var) => {
             // This should already be bound, assert that
@@ -261,15 +267,15 @@ fn lower_expr<'a>(ctx: &mut LowerCtx<'a>, block: Block, expr: Expr) -> Block {
             let res = ctx.map.get(ResNode::FunctionRef(*fun)).unwrap();
             if let Some(fun) = ctx.map.is_ext_fun(res) {
 
-                let module_atom = ctx.hir.function_ref_module(fun).cloned()
+                let module_atom = ctx.hir.function_ref_module(fun)
                     .unwrap_or_else(|| ctx.hir.name.clone());
-                let module = ctx.b.value_atomic(AtomicTerm::Atom(module_atom));
+                let module = ctx.b.value_atomic(AtomTerm(module_atom).into());
 
-                let name = ctx.b.value_atomic(AtomicTerm::Atom(
-                    ctx.hir.function_ref_name(fun).clone()));
+                let name = ctx.b.value_atomic(
+                    AtomTerm(ctx.hir.function_ref_name(fun)).into());
 
-                let arity = ctx.b.value_atomic(AtomicTerm::Integer(
-                    ctx.hir.function_ref_arity(fun).into()));
+                let arity = ctx.b.value_atomic(
+                    IntegerTerm(ctx.hir.function_ref_arity(fun).into(), DUMMY_SPAN).into());
 
                 block = ctx.b.op_capture_function(block, module, name, arity);
 
@@ -476,15 +482,16 @@ fn lower_expr<'a>(ctx: &mut LowerCtx<'a>, block: Block, expr: Expr) -> Block {
             block = lower_expr(ctx, block, *timeout_time);
             let timeout_time_val = ctx.get_res(ResNode::Expr(*timeout_time));
 
-            ctx.b.op_intrinsic(block, Atom::from_str("receive_start"), &[wait_block_val, timeout_time_val]);
-            ctx.b.op_intrinsic(wait_block, Atom::from_str("receive_wait"), &[match_entry_block_val, timeout_block_val]);
+            // TODO don't actually intern them here, store in a static or something
+            ctx.b.op_intrinsic(block, Symbol::intern("receive_start"), &[wait_block_val, timeout_time_val]);
+            ctx.b.op_intrinsic(wait_block, Symbol::intern("receive_wait"), &[match_entry_block_val, timeout_block_val]);
 
-            let (mut join_block, join_arg) = lower_match(
+            let (join_block, join_arg) = lower_match(
                 ctx, match_entry_block, match_msg,
                 clauses, wait_block_val, &|ctx, bl| {
                     let fin_block = ctx.b.block_insert();
                     let fin_block_val = ctx.b.block_arg_insert(fin_block);
-                    ctx.b.op_intrinsic(bl, Atom::from_str("receive_finish"), &[fin_block_val]);
+                    ctx.b.op_intrinsic(bl, Symbol::intern("receive_finish"), &[fin_block_val]);
                     fin_block
                 });
             let join_block_val = ctx.b.value_block(timeout_block);

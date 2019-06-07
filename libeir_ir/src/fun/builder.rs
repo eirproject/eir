@@ -1,18 +1,16 @@
 use super::{ Block, Value };
-use super::{ BlockData };
-use super::{ ValueData, ValueType, WriteToken };
+use super::{ ValueData, ValueType };
 use super::{ Function };
-use super::{ AttributeKey, AttributeValue };
 
-use crate::Atom;
-use crate::{ FunctionIdent, ConstantTerm, AtomicTerm, ClosureEnv };
+use crate::{ ConstantTerm, AtomicTerm };
 use crate::op::{ OpKind, ComparisonOperation, TestOperation, MapPutUpdate };
-use crate::pattern::{ PatternNode, PatternClause };
+use crate::pattern::{ PatternClause };
 
-use matches::assert_matches;
 use ::cranelift_entity::{ EntityList };
 
-use libeir_util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
+use libeir_diagnostics::{ DUMMY_SPAN };
+use libeir_intern::{ Symbol, Ident };
+use libeir_util::pooled_entity_set::{ PooledEntitySet };
 
 #[derive(Debug, Clone)]
 enum BuilderState {
@@ -71,6 +69,8 @@ impl<'a> FunctionBuilder<'a> {
             kind: ValueType::Block(block),
             // TODO: Update usages in builder api
             usages: PooledEntitySet::new(),
+
+            span: DUMMY_SPAN,
         })
     }
 
@@ -79,6 +79,8 @@ impl<'a> FunctionBuilder<'a> {
         self.fun.values.push(ValueData {
             kind: ValueType::Constant(constant),
             usages: PooledEntitySet::new(),
+
+            span: DUMMY_SPAN,
         })
     }
 
@@ -161,17 +163,14 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
     }
 
-    pub fn op_intrinsic<'b>(&'b mut self, block: Block, name: Atom, args: &[Value]) {
+    pub fn op_intrinsic<'b>(&'b mut self, block: Block, name: Symbol, args: &[Value]) {
         assert!(self.state.is_none());
-
-        let name_val = self.value_atomic(AtomicTerm::Atom(name));
 
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
-        data.op = Some(OpKind::Intrinsic);
-        data.reads.push(name_val, &mut self.fun.value_pool);
+        data.op = Some(OpKind::Intrinsic(name));
         data.reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
     }
 
@@ -370,72 +369,6 @@ impl<'a> FunctionBuilder<'a> {
         (ok_cont, err_cont)
     }
 
-    pub fn op_start_case(&mut self, block: Block, no_match: Value, val: Value) {
-        assert!(self.state.is_none());
-        self.state = Some(BuilderState::Case {
-            block: block,
-            clauses: EntityList::new(),
-            val: val,
-            clauses_b: EntityList::new(),
-            values: EntityList::new(),
-        });
-
-        let data = self.fun.blocks.get_mut(block).unwrap();
-        assert!(data.op.is_none());
-        assert!(data.reads.is_empty());
-
-        data.reads.push(no_match, &mut self.fun.value_pool);
-    }
-
-    pub fn case_clause(&mut self, clause: PatternClause, guard: Value, body: Value) {
-        if let Some(BuilderState::Case { ref mut clauses, ref mut clauses_b, .. }) = self.state {
-            clauses.push(clause, &mut self.fun.clause_pool);
-            clauses_b.push(guard, &mut self.fun.value_pool);
-            clauses_b.push(body, &mut self.fun.value_pool);
-        } else {
-            panic!()
-        }
-    }
-
-    pub fn case_value(&mut self, value: Value) {
-        if let Some(BuilderState::Case { ref mut values, .. }) = self.state {
-            values.push(value, &mut self.fun.value_pool);
-        } else {
-            panic!()
-        }
-    }
-
-    pub fn case_finish(&mut self) {
-        let state = self.state.take().unwrap();
-        if let BuilderState::Case { block, val, clauses, clauses_b, values } = state {
-            let mut buf = self.value_buf.take().unwrap();
-
-            let data = self.fun.blocks.get_mut(block).unwrap();
-            data.op = Some(OpKind::Case {
-                clauses,
-            });
-
-            buf.clear();
-            for c in clauses_b.as_slice(&self.fun.value_pool) {
-                buf.push(*c);
-            }
-            data.reads.extend(buf.iter().cloned(), &mut self.fun.value_pool);
-
-            data.reads.push(val, &mut self.fun.value_pool);
-
-            buf.clear();
-            for c in values.as_slice(&self.fun.value_pool) {
-                buf.push(*c);
-            }
-            data.reads.extend(buf.iter().cloned(), &mut self.fun.value_pool);
-
-            buf.clear();
-            self.value_buf = Some(buf);
-        } else {
-            panic!()
-        }
-    }
-
     pub fn op_unpack_tuple(&mut self, block: Block, val: Value, num: usize) -> (Block, Block) {
         assert!(self.state.is_none());
 
@@ -511,6 +444,74 @@ impl<'a> FunctionBuilder<'a> {
         assert!(data.reads.is_empty());
 
         data.op = Some(OpKind::Unreachable);
+    }
+
+}
+
+pub struct CaseBuilder {
+    pub match_on: Option<Value>,
+    pub no_match: Option<Value>,
+
+    clauses: EntityList<PatternClause>,
+    clauses_b: EntityList<Value>,
+    values: EntityList<Value>,
+}
+impl CaseBuilder {
+
+    pub fn new() -> Self {
+        CaseBuilder {
+            match_on: None,
+            no_match: None,
+
+            clauses: EntityList::new(),
+            clauses_b: EntityList::new(),
+            values: EntityList::new(),
+        }
+    }
+
+    pub fn push_clause<'a>(&mut self, clause: PatternClause, guard: Value, body: Value, b: &mut FunctionBuilder<'a>) {
+        self.clauses.push(clause, &mut b.fun.clause_pool);
+        self.clauses_b.extend([guard, body].iter().cloned(), &mut b.fun.value_pool);
+    }
+
+    pub fn push_value<'a>(&mut self, value: Value, b: &mut FunctionBuilder<'a>) {
+        self.values.push(value, &mut b.fun.value_pool);
+    }
+
+    pub fn finish<'a>(mut self, block: Block, b: &mut FunctionBuilder<'a>) {
+        assert!(b.state.is_none());
+
+        let data = b.fun.blocks.get_mut(block).unwrap();
+        assert!(data.op.is_none());
+        assert!(data.reads.is_empty());
+
+        data.op = Some(OpKind::Case {
+            clauses: self.clauses,
+        });
+
+        let mut buf = b.value_buf.take().unwrap();
+        buf.clear();
+
+        data.reads.push(self.no_match.unwrap(), &mut b.fun.value_pool);
+
+        for c in self.clauses_b.as_slice(&b.fun.value_pool) {
+            buf.push(*c);
+        }
+        data.reads.extend(buf.iter().cloned(), &mut b.fun.value_pool);
+
+        data.reads.push(self.match_on.unwrap(), &mut b.fun.value_pool);
+
+        buf.clear();
+        for c in self.values.as_slice(&b.fun.value_pool) {
+            buf.push(*c);
+        }
+        data.reads.extend(buf.iter().cloned(), &mut b.fun.value_pool);
+
+        buf.clear();
+        b.value_buf = Some(buf);
+
+        self.clauses_b.clear(&mut b.fun.value_pool);
+        self.values.clear(&mut b.fun.value_pool);
     }
 
 }

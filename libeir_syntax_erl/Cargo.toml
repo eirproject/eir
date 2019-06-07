@@ -12,7 +12,11 @@ build = "build.rs"
 [dependencies]
 libeir_diagnostics = { path = "../libeir_diagnostics" }
 libeir_hir = { path = "../libeir_hir" }
+libeir_intern = { path = "../libeir_intern" }
 libeir_util = { path = "../libeir_util" }
+
+cranelift-entity = "0.30.0"
+
 rustc-hash = "1.0"
 lalrpop-util = "0.16"
 glob = "0.2"

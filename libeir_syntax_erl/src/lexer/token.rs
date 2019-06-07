@@ -77,7 +77,7 @@ impl TryFrom<LexicalToken> for AtomToken {
     type Error = TokenConvertError;
 
     fn try_from(t: LexicalToken) -> TokenConvertResult<AtomToken> {
-        use super::symbol::symbols;
+        use libeir_intern::symbol::symbols;
 
         match t {
             LexicalToken(start, tok @ Token::Atom(_), end) => {

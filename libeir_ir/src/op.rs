@@ -1,7 +1,7 @@
-use crate::{ FunctionIdent, ClosureEnv, Atom };
 use crate::pattern::{ PatternClause };
-use crate::{ Value, AtomicTerm };
-use crate::{ Dialect };
+use crate::{ AtomicTerm };
+
+use libeir_intern::Symbol;
 
 use cranelift_entity::EntityList;
 
@@ -56,8 +56,8 @@ pub enum OpKind {
     /// (cont: fn(fun), m, f, a)
     CaptureFunction,
 
-    /// (name: atom, ..)
-    Intrinsic,
+    /// (..)
+    Intrinsic(Symbol),
 
     // Raw exception handling.
     // This gets the stack trace from a raw trace

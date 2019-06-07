@@ -1,45 +1,9 @@
-//use std::collections::HashSet;
-//use super::{ AtomicTerm };
-//
-//mod fmt;
-//
-//#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-//pub struct ValueAssign(pub usize);
-//
-//#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-//pub struct ValueRef(pub usize);
-//
-//#[derive(Debug, Clone)]
-//pub struct Clause {
-//    pub patterns: Vec<Pattern>,
-//    pub assigns: Vec<ValueAssign>,
-//}
-//
-//#[derive(Debug, Clone)]
-//pub struct Pattern {
-//    pub node: PatternNode,
-//}
-//
-//#[derive(Debug, Clone)]
-//pub struct BinaryPatternElem {
-//    pub node: PatternNode,
-//    pub args: Vec<ValueRef>,
-//}
-//
-//#[derive(Debug, Clone)]
-//pub enum PatternNode {
-//    Wildcard,
-//    Assign(ValueAssign, Box<PatternNode>),
-//    Atomic(AtomicTerm),
-//    Binary(Vec<BinaryPatternElem>),
-//    Tuple(Vec<PatternNode>),
-//    List(Vec<PatternNode>, Box<PatternNode>),
-//    Map(Vec<(ValueRef, Box<PatternNode>)>),
-//}
-
 use std::collections::HashMap;
 
-use cranelift_entity::{ PrimaryMap, SecondaryMap, EntityList, ListPool, entity_impl };
+use cranelift_entity::{ PrimaryMap, EntityList, ListPool, entity_impl };
+
+use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
+
 use super::{ AtomicTerm };
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -76,27 +40,45 @@ struct PatternClauseData {
     root_nodes: EntityList<PatternNode>,
     binds: EntityList<PatternNode>,
     values: EntityList<PatternValue>,
+    finished: bool,
 }
 
 #[derive(Debug, Clone)]
 struct PatternNodeData {
     kind: PatternNodeKind,
     finished: bool,
+    span: ByteSpan,
 }
 
 #[derive(Debug, Clone)]
 enum PatternNodeKind {
     Wildcard,
-    Atomic(AtomicTerm),
+    Atomic(AtomicTerm), // TODO put this in a PrimaryMap
     // TODO: Binary
     Tuple(EntityList<PatternNode>),
     List {
-        head: EntityList<PatternNode>,
+        head: PatternNode,
         tail: PatternNode,
     },
     Map {
         keys: EntityList<PatternValue>,
         values: EntityList<PatternNode>,
+    },
+}
+
+pub enum PatternMergeFail {
+    /// The two patterns are disjoint, they can never match at the
+    /// same time.
+    /// The two nodes are the reason for this.
+    Disjoint {
+        left: PatternNode,
+        right: PatternNode,
+    },
+    /// Merging is not supported. Only happens with binaries
+    /// The two nodes are the reason for this.
+    Failure {
+        left: PatternNode,
+        right: PatternNode,
     },
 }
 
@@ -121,6 +103,7 @@ impl PatternContainer {
         self.nodes.push(PatternNodeData {
             kind: PatternNodeKind::Wildcard,
             finished: true,
+            span: DUMMY_SPAN,
         })
     }
 
@@ -128,6 +111,7 @@ impl PatternContainer {
         self.nodes.push(PatternNodeData {
             kind: PatternNodeKind::Atomic(atomic),
             finished: true,
+            span: DUMMY_SPAN,
         })
     }
 
@@ -135,6 +119,7 @@ impl PatternContainer {
         self.nodes.push(PatternNodeData {
             kind: PatternNodeKind::Tuple(EntityList::new()),
             finished: false,
+            span: DUMMY_SPAN,
         })
     }
 
@@ -148,21 +133,12 @@ impl PatternContainer {
         }
     }
 
-    pub fn list(&mut self, tail: PatternNode) -> PatternNode {
+    pub fn list(&mut self, head: PatternNode, tail: PatternNode) -> PatternNode {
         self.nodes.push(PatternNodeData {
-            kind: PatternNodeKind::List { head: EntityList::new(), tail: tail },
-            finished: false,
+            kind: PatternNodeKind::List { head, tail },
+            finished: true,
+            span: DUMMY_SPAN,
         })
-    }
-
-    pub fn list_head_push(&mut self, list: PatternNode, node: PatternNode) {
-        let data = &mut self.nodes[list];
-        assert!(!data.finished);
-        if let PatternNodeKind::List { ref mut head, .. } = data.kind {
-            head.push(node, &mut self.node_pool);
-        } else {
-            panic!();
-        }
     }
 
     pub fn map(&mut self) -> PatternNode {
@@ -172,6 +148,7 @@ impl PatternContainer {
                 values: EntityList::new(),
             },
             finished: false,
+            span: DUMMY_SPAN,
         })
     }
 
@@ -188,6 +165,132 @@ impl PatternContainer {
 
     pub fn node_finish(&mut self, node: PatternNode) {
         self.nodes[node].finished = true;
+    }
+
+    pub fn node_set_span(&mut self, node: PatternNode, span: ByteSpan) {
+        self.nodes[node].span = span;
+    }
+
+    pub fn clause_start(&mut self) -> PatternClause {
+        self.clauses.push(PatternClauseData {
+            root_nodes: EntityList::new(),
+            binds: EntityList::new(),
+            values: EntityList::new(),
+            finished: false,
+        })
+    }
+    pub fn clause_node_push(&mut self, clause: PatternClause, node: PatternNode) {
+        let data = &mut self.clauses[clause];
+        assert!(!data.finished);
+
+        data.root_nodes.push(node, &mut self.node_pool);
+    }
+    pub fn clause_bind_push(&mut self, clause: PatternClause, node: PatternNode) {
+        let data = &mut self.clauses[clause];
+        assert!(!data.finished);
+
+        data.binds.push(node, &mut self.node_pool);
+    }
+    pub fn clause_value_push(&mut self, clause: PatternClause, val: PatternValue) {
+        let data = &mut self.clauses[clause];
+        assert!(!data.finished);
+
+        data.values.push(val, &mut self.value_pool);
+    }
+    pub fn clause_finish(&mut self, clause: PatternClause) {
+        let data = &mut self.clauses[clause];
+        assert!(!data.finished);
+
+        data.finished = true;
+    }
+
+    pub fn merge(&mut self, map: &mut HashMap<PatternNode, PatternNode>,
+                 lhs: PatternNode, rhs: PatternNode) -> Result<PatternNode, PatternMergeFail>
+    {
+        // This clone is really cheap since entitylists are basically just an usize
+        let lhs_kind = self.nodes[lhs].kind.clone();
+        let rhs_kind = self.nodes[rhs].kind.clone();
+
+        match (lhs_kind, rhs_kind) {
+            (PatternNodeKind::Wildcard, _) => {
+                map.insert(lhs, rhs);
+                Ok(rhs)
+            },
+            (_, PatternNodeKind::Wildcard) => {
+                map.insert(rhs, lhs);
+                Ok(lhs)
+            },
+            (PatternNodeKind::Atomic(a1), PatternNodeKind::Atomic(a2)) => {
+                if a1 == a2 {
+                    map.insert(rhs, lhs);
+                    Ok(lhs)
+                } else {
+                    Err(PatternMergeFail::Disjoint {
+                        left: lhs,
+                        right: rhs,
+                    })
+                }
+            }
+            (PatternNodeKind::Tuple(l1), PatternNodeKind::Tuple(l2)) => {
+                let l1_len = l1.len(&self.node_pool);
+                let l2_len = l2.len(&self.node_pool);
+                if l1_len == l2_len {
+                    let new_tup = self.tuple();
+                    for idx in 0..l1_len {
+                        let ln = l1.get(idx, &self.node_pool).unwrap();
+                        let rn = l2.get(idx, &self.node_pool).unwrap();
+
+                        let merged = self.merge(map, ln, rn)?;
+
+                        self.tuple_elem_push(new_tup, merged);
+                    }
+                    self.node_finish(new_tup);
+
+                    map.insert(lhs, new_tup);
+                    map.insert(rhs, new_tup);
+
+                    Ok(new_tup)
+                } else {
+                    Err(PatternMergeFail::Disjoint {
+                        left: lhs,
+                        right: rhs,
+                    })
+                }
+            }
+            (PatternNodeKind::Map { keys: k1, values: v1 }, PatternNodeKind::Map { keys: k2, values: v2 }) => {
+                let new_map = self.map();
+
+                for idx in 0..(k1.len(&self.value_pool)) {
+                    let k = k1.get(idx, &self.value_pool).unwrap();
+                    let v = v1.get(idx, &self.node_pool).unwrap();
+                    self.map_push(new_map, k, v);
+                }
+                for idx in 0..(k2.len(&self.value_pool)) {
+                    let k = k2.get(idx, &self.value_pool).unwrap();
+                    let v = v2.get(idx, &self.node_pool).unwrap();
+                    self.map_push(new_map, k, v);
+                }
+
+                self.node_finish(new_map);
+
+                map.insert(lhs, new_map);
+                map.insert(rhs, new_map);
+
+                Ok(new_map)
+            }
+            (PatternNodeKind::List { head: h1, tail: t1 }, PatternNodeKind::List { head: h2, tail: t2 }) => {
+                let new_head = self.merge(map, h1, h2)?;
+                let new_tail = self.merge(map, t1, t2)?;
+                Ok(self.list(new_head, new_tail))
+            }
+            // Patterns are incompatible
+            _ => {
+                Err(PatternMergeFail::Disjoint {
+                    left: lhs,
+                    right: rhs,
+                })
+            },
+        }
     }
 
     pub fn copy_from(&mut self, clause: PatternClause, from: &PatternContainer) -> PatternClause {
@@ -223,6 +326,7 @@ impl PatternContainer {
             root_nodes: new_roots,
             binds: new_binds,
             values: new_values,
+            finished: true,
         })
     }
 
@@ -238,6 +342,10 @@ impl PatternContainer {
     pub fn clause_binds(&self, clause: PatternClause) -> &[PatternNode] {
         let data = &self.clauses[clause];
         data.binds.as_slice(&self.node_pool)
+    }
+
+    pub fn node_span(&self, node: PatternNode) -> ByteSpan {
+        self.nodes[node].span
     }
 
 }
@@ -269,15 +377,10 @@ fn copy_pattern_node(
             new
         }
         PatternNodeKind::List { head, tail } => {
+            let head_copied = copy_pattern_node(value_map, node_map, *head, from, to);
             let tail_copied = copy_pattern_node(value_map, node_map, *tail, from, to);
-            let new = to.list(tail_copied);
+            let new = to.list(head_copied, tail_copied);
 
-            for elem in head.as_slice(&from.node_pool) {
-                let copied = copy_pattern_node(value_map, node_map, *elem, from, to);
-                to.list_head_push(new, copied);
-            }
-
-            to.node_finish(new);
             node_map.insert(node, new);
             new
         }

@@ -1,11 +1,9 @@
 use ::std::collections::HashMap;
-use crate::Atom;
 
-use crate::hir::{ HirModule, Function, FunctionRef, Expr, Variable, ExprKind };
+use crate::ir::{ HirModule, Function, FunctionRef, Expr, Variable };
 
 use libeir_ir::pattern::{ PatternValue, PatternNode };
-use libeir_ir::FunctionIdent;
-use libeir_ir::{ ModuleEnvs, ClosureEnv };
+use libeir_intern::Symbol;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ResolvedVar(usize);
@@ -25,8 +23,8 @@ struct Scope {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ScopeDefinition {
-    Variable(Atom),
-    Function(Atom, usize),
+    Variable(Symbol),
+    Function(Symbol, usize),
 }
 
 #[derive(Debug)]
@@ -163,7 +161,7 @@ impl ScopeResolver {
                 let res = self.map.put_assign(Node::Variable(*var));
                 if let Some(name) = hir.variable_name(*var) {
                     scope.insert(
-                        ScopeDefinition::Variable(name.clone()),
+                        ScopeDefinition::Variable(name.name),
                         res
                     );
                 }
@@ -177,7 +175,7 @@ impl ScopeResolver {
     }
 
     fn do_resolve_node(&mut self, hir: &HirModule, expr: Expr) -> ResolvedVar {
-        use crate::hir::ExprKind as EK;
+        use crate::ir::ExprKind as EK;
 
         let kind = hir.expr_kind(expr);
 
@@ -186,7 +184,7 @@ impl ScopeResolver {
                 let node = Node::Variable(*var);
                 if let Some(name) = hir.variable_name(*var) {
                     let resolved = self.tracker
-                        .get(&ScopeDefinition::Variable(name.clone()))
+                        .get(&ScopeDefinition::Variable(name.name))
                         .unwrap();
                     self.map.put_resolve(node, resolved);
                     resolved
@@ -204,7 +202,7 @@ impl ScopeResolver {
                 // a closure
                 if data.module.is_none() {
                     let scope_def = ScopeDefinition::Function(
-                        data.name.clone(), data.arity);
+                        data.name.name, data.arity);
                     if let Some(res) = self.tracker.get(&scope_def) {
                         return res;
                     }
@@ -228,14 +226,14 @@ impl ScopeResolver {
                         // that name binding in the current scope
                         if let Some(name) = &data.name {
                             scope.insert(ScopeDefinition::Function(
-                                name.clone(), data.args.len(&hir.variable_pool)), res);
+                                name.name, data.args.len(&hir.variable_pool)), res);
                         }
 
                         // Variable binding
                         if let Some(var) = data.var_binding {
                             if let Some(name) = hir.variable_name(var) {
                                 scope.insert(
-                                    ScopeDefinition::Variable(name.clone()), res);
+                                    ScopeDefinition::Variable(name.name), res);
                             }
                             self.map.put_resolve(Node::Variable(var), res);
                         }
