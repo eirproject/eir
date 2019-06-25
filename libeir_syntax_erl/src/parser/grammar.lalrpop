@@ -96,7 +96,8 @@ FunctionClause: FunctionClause = {
     }
 };
 
-Guards: Vec<Guard> = "when" <Semi<Guard>>;
+Guards: Vec<Guard> = "when" <BaseGuards>;
+BaseGuards: Vec<Guard> = <Semi<Guard>>;
 
 Guard: Guard = <l:@L> <conditions:Comma<Expr>> <r:@R>
     => Guard { span: span!(l, r), conditions };
@@ -271,9 +272,9 @@ TypeDef100: TypeDef = {
 };
 
 TypeSpec: TypeSpec = {
-    "(" <module:(<Ident> ":")?> <function:Ident> <sigs:Semi<TypeSig>> ")" "."
+    "(" <module:(<atom> ":")?> <function:atom> <sigs:Semi<TypeSig>> ")" "."
         => TypeSpec { span: ByteSpan::default(), module, function, sigs },
-    <module:(<Ident> ":")?> <function:Ident> <sigs:Semi<TypeSig>> "."
+    <module:(<atom> ":")?> <function:atom> <sigs:Semi<TypeSig>> "."
         => TypeSpec { span: ByteSpan::default(), module, function, sigs },
 };
 
@@ -621,7 +622,7 @@ Fun: Expr = {
         => Expr::FunctionName(FunctionName::PartiallyResolved(fun)),
     <l:@L> "fun" <module:atom_or_var> ":" <function:atom_or_var> "/" <arity:arity> <r:@R> =>
         Expr::FunctionName(FunctionName::detect(span!(l, r), Some(module), function, arity)),
-    <l:@L> "fun" <clauses:Semi<FunctionHead>> "end" <r:@R> =>? {
+    <l:@L> "fun" <clauses:Semi<FunctionClause>> "end" <r:@R> =>? {
         match Function::new(errs, span!(l, r), clauses) {
             Ok(fun) => Ok(Expr::Fun(fun)),
             Err(err) => Err(err)
@@ -634,8 +635,8 @@ If: Expr = {
         => Expr::If(If { span: span!(l, r), clauses })
 };
 IfClause: IfClause = {
-    <l:@L> <conditions:Comma<Expr>> "->" <body:Comma<Expr>> <r:@R>
-        => IfClause { span: span!(l, r), conditions, body }
+    <l:@L> <guards:BaseGuards> "->" <body:Comma<Expr>> <r:@R>
+        => IfClause { span: span!(l, r), guards, body }
 };
 
 Case: Expr = {
@@ -657,9 +658,9 @@ After: After = {
 
 Try: Expr = {
     <l:@L> "try" <exprs:Comma<Expr>> "of" <clauses:Semi<Clause>> <catch:TryCatch>
-        => Expr::Try(Try { span: span!(l, catch.2), exprs: Some(exprs), clauses: Some(clauses), catch_clauses: catch.0, after: catch.1 }),
+        => Expr::Try(Try { span: span!(l, catch.2), exprs, clauses: Some(clauses), catch_clauses: catch.0, after: catch.1 }),
     <l:@L> "try" <exprs:Comma<Expr>> <catch:TryCatch>
-        => Expr::Try(Try { span: span!(l, catch.2), exprs: None, clauses: None, catch_clauses: catch.0, after: catch.1 })
+        => Expr::Try(Try { span: span!(l, catch.2), exprs, clauses: None, catch_clauses: catch.0, after: catch.1 })
 };
 
 TryCatch: (Option<Vec<TryClause>>, Option<Vec<Expr>>, ByteIndex) = {
@@ -975,6 +976,19 @@ CompOp: BinaryOp = {
     ">" => BinaryOp::Gt,
     "=:=" => BinaryOp::StrictEqual,
     "=/=" => BinaryOp::StrictNotEqual
+};
+
+BaseInt: i64 = {
+    "-" <i:int> => -i,
+    <i:int> => i,
+};
+BaseBigInt: Integer = {
+    "-" <i:bigint> => -i,
+    <i:bigint> => i,
+};
+Float: f64 = {
+    "-" <i:float> => -i,
+    <i:float> => i,
 };
 
 extern {

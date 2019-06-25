@@ -1,4 +1,5 @@
 use std::fmt;
+use std::collections::HashMap;
 
 use libeir_diagnostics::ByteSpan;
 
@@ -9,6 +10,117 @@ use super::directives::Define;
 use super::token_reader::{ReadFrom, TokenReader};
 use super::types::{MacroArgs, MacroName};
 use super::Result;
+
+pub enum MacroIdent {
+    Const(Symbol),
+    Func(Symbol, usize),
+}
+impl MacroIdent {
+
+    pub fn ident(&self) -> Symbol {
+        match self {
+            MacroIdent::Const(sym) => *sym,
+            MacroIdent::Func(sym, _) => *sym,
+        }
+    }
+
+    pub fn arity(&self) -> Option<usize> {
+        match self {
+            MacroIdent::Const(_) => None,
+            MacroIdent::Func(_, arity) => Some(*arity),
+        }
+    }
+
+}
+
+impl From<&MacroCall> for MacroIdent {
+    fn from(call: &MacroCall) -> MacroIdent {
+        let ident = match &call.name {
+            MacroName::Atom(tok) => tok.symbol(),
+            MacroName::Variable(tok) => tok.symbol(),
+        };
+
+        if let Some(args) = &call.args {
+            MacroIdent::Func(ident, args.len())
+        } else {
+            MacroIdent::Const(ident)
+        }
+    }
+}
+
+impl From<&super::directives::Define> for MacroIdent {
+    fn from(def: &super::directives::Define) -> MacroIdent {
+        let ident = match &def.name {
+            MacroName::Atom(tok) => tok.symbol(),
+            MacroName::Variable(tok) => tok.symbol(),
+        };
+
+        if let Some(args) = &def.variables {
+            MacroIdent::Func(ident, args.len())
+        } else {
+            MacroIdent::Const(ident)
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MacroContainer {
+    func_defines: HashMap<Symbol, HashMap<usize, MacroDef>>,
+    const_defines: HashMap<Symbol, MacroDef>,
+}
+impl MacroContainer {
+
+    pub fn new() -> Self {
+        MacroContainer {
+            func_defines: HashMap::new(),
+            const_defines: HashMap::new(),
+        }
+    }
+
+    pub fn insert<T>(&mut self, key: T, def: MacroDef) -> bool where T: Into<MacroIdent> {
+        let key: MacroIdent = key.into();
+        match key {
+            MacroIdent::Const(name) => {
+                self.const_defines.insert(name, def).is_some()
+            }
+            MacroIdent::Func(name, arity) => {
+                if !self.func_defines.contains_key(&name) {
+                    self.func_defines.insert(name, HashMap::new());
+                }
+                let container = self.func_defines.get_mut(&name).unwrap();
+                container.insert(arity, def).is_some()
+            }
+        }
+    }
+
+    pub fn get<'a, T>(&'a self, key: T) -> Option<&'a MacroDef> where T: Into<MacroIdent> {
+        let key: MacroIdent = key.into();
+        match key {
+            MacroIdent::Const(name) =>
+                self.const_defines.get(&name),
+            MacroIdent::Func(name, arity) =>
+                self.func_defines.get(&name).and_then(|c| c.get(&arity)),
+        }
+    }
+
+    pub fn undef(&mut self, symbol: &Symbol) -> bool {
+        let mut res = false;
+        res |= self.const_defines.remove(symbol).is_some();
+        res |= self.func_defines.remove(symbol).is_some();
+        res
+    }
+
+    pub fn defined(&self, symbol: &Symbol) -> bool {
+        self.defined_const(symbol) || self.defined_func(symbol)
+    }
+    pub fn defined_const(&self, symbol: &Symbol) -> bool {
+        self.const_defines.contains_key(symbol)
+    }
+    pub fn defined_func(&self, symbol: &Symbol) -> bool {
+        self.func_defines.contains_key(symbol)
+    }
+
+}
 
 /// Macro Definition.
 #[derive(Debug, Clone)]

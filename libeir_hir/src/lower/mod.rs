@@ -42,7 +42,6 @@ pub fn lower(hir: &HirModule, fun: HirFun) -> libeir_ir::Function {
             b: FunctionBuilder::new(&mut eir),
 
             val_buf: Vec::new(),
-            block_pool: ListPool::new(),
         };
 
         let block = lower_fun(&mut ctx, fun);
@@ -60,7 +59,6 @@ struct LowerCtx<'a> {
     b: FunctionBuilder<'a>,
 
     val_buf: Vec<Value>,
-    block_pool: ListPool<Block>,
 }
 
 impl<'a> LowerCtx<'a> {
@@ -145,8 +143,10 @@ fn lower_match<'a>(ctx: &mut LowerCtx<'a>, block: Block, match_on: Value,
         }
     }
 
-    let mut guards_buf = EntityList::<Block>::new();
-    let mut bodies_buf = EntityList::<Block>::new();
+    let mut builder = CaseBuilder::new();
+
+    builder.match_on = Some(match_on);
+    builder.no_match = Some(no_match);
 
     // Lower guards and bodies
     for clause in clauses.as_slice(&ctx.hir.clause_pool) {
@@ -158,7 +158,7 @@ fn lower_match<'a>(ctx: &mut LowerCtx<'a>, block: Block, match_on: Value,
         // a guard fail continuation.
         // The rest of the arguments are the pattern binds of the
         // clause.
-        {
+        let guard = {
             let guard_expr = ctx.hir.clause_guard_expr(*clause);
 
             let guard_lambda = ctx.b.block_insert();
@@ -185,11 +185,13 @@ fn lower_match<'a>(ctx: &mut LowerCtx<'a>, block: Block, match_on: Value,
             ctx.b.op_call(ok, guard_ok_cont, &[]);
             ctx.b.op_call(err, guard_fail_cont, &[]);
 
-            guards_buf.push(guard_lambda, &mut ctx.block_pool);
-        }
+            //guards_buf.push(guard_lambda, &mut ctx.block_pool);
+            guard_lambda
+        };
+        let guard_value = ctx.b.value_block(guard);
 
         // Body
-        {
+        let body = {
             let body_expr = ctx.hir.clause_body_expr(*clause);
 
             let body_block = ctx.b.block_insert();
@@ -211,43 +213,25 @@ fn lower_match<'a>(ctx: &mut LowerCtx<'a>, block: Block, match_on: Value,
             let ret_val = ctx.get_res(ResNode::Expr(body_expr));
             ctx.b.op_call(block, join_block_val, &[ret_val]);
 
-            bodies_buf.push(body_block, &mut ctx.block_pool);
+            //bodies_buf.push(body_block, &mut ctx.block_pool);
+            body_block
+        };
+        let body_value = ctx.b.value_block(body);
+
+        // Values
+        for val_expr in ctx.hir.clause_values(*clause) {
+            let val = ctx.get_res(ResNode::Expr(*val_expr));
+            builder.push_value(val, &mut ctx.b);
         }
 
+        // Copy clause to the new pattern container
+        let pat_clause = ctx.hir.clause_pattern_clause(*clause);
+        let clause_copied = ctx.b.fun_mut().pattern_container_mut()
+            .copy_from(pat_clause, &ctx.hir.pattern_container);
+
+        builder.push_clause(clause_copied, guard_value, body_value, &mut ctx.b);
+
     }
-
-    // Construct match operation
-    {
-        let mut builder = CaseBuilder::new();
-
-        builder.match_on = Some(match_on);
-        builder.no_match = Some(no_match);
-
-        for (idx, clause) in clauses.as_slice(&ctx.hir.clause_pool).iter().enumerate() {
-            let guard = guards_buf.get(idx, &ctx.block_pool).unwrap();
-            let guard_value = ctx.b.value_block(guard);
-            let body = bodies_buf.get(idx, &ctx.block_pool).unwrap();
-            let body_value = ctx.b.value_block(body);
-
-            // Values
-            for val_expr in ctx.hir.clause_values(*clause) {
-                let val = ctx.get_res(ResNode::Expr(*val_expr));
-                builder.push_value(val, &mut ctx.b);
-            }
-
-            // Copy clause to the new pattern container
-            let pat_clause = ctx.hir.clause_pattern_clause(*clause);
-            let clause_copied = ctx.b.fun_mut().pattern_container_mut()
-                .copy_from(pat_clause, &ctx.hir.pattern_container);
-
-            builder.push_clause(clause_copied, guard_value, body_value, &mut ctx.b);
-        }
-
-        builder.finish(block, &mut ctx.b);
-    }
-
-    guards_buf.clear(&mut ctx.block_pool);
-    bodies_buf.clear(&mut ctx.block_pool);
 
     (join_block, join_arg)
 }

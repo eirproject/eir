@@ -1,6 +1,6 @@
 mod ir;
 pub use ir::{ HirModule };
-pub use ir::{ Expr, Variable, Function, FunctionRef, Clause };
+pub use ir::{ Expr, Variable, Function, FunctionRef, Clause, LogicOpKind };
 
 mod lower;
 pub use lower::lower;

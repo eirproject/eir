@@ -1,22 +1,24 @@
 use std::collections::{ HashSet };
+use std::hash::Hash;
+use std::cmp::Eq;
 
-use ::cranelift_entity::{ PrimaryMap, ListPool, EntityList,
-                          entity_impl };
-
+use cranelift_entity::{ EntityRef, PrimaryMap, ListPool, EntityList, entity_impl };
 use libeir_util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
 
-use crate::{ FunctionIdent, ConstantTerm };
+use crate::{ FunctionIdent };
+use crate::constant::{ ConstantContainer, Const };
 use crate::op::OpKind;
 use crate::pattern::{ PatternContainer, PatternClause };
 
 mod builder;
-pub use builder::{ FunctionBuilder, CaseBuilder };
+pub use builder::{ FunctionBuilder, PackValueListBuilder, CaseBuilder, IntoValue };
 
 //mod validate;
 
-//mod graph;
+mod graph;
+pub use self::graph::BlockGraph;
 //pub use graph::{ FunctionCfg, CfgNode, CfgEdge };
 //pub use petgraph::Direction;
 
@@ -50,6 +52,7 @@ pub struct BlockData {
     // These will contain all the connected blocks, regardless
     // of whether they are actually alive or not.
     predecessors: PooledEntitySet<Block>,
+    successors: PooledEntitySet<Block>,
 
     span: ByteSpan,
 }
@@ -64,9 +67,14 @@ pub struct ValueData {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ValueType {
+    /// Value is defined as an argument in the following block
     Arg(Block),
+    /// Value references the following block
     Block(Block),
-    Constant(ConstantTerm),
+    /// Constant defined in the ConstantContainer
+    Constant(Const),
+    /// Should never be a part of the active graph.
+    /// Represents a moved value.
     Alias(Value),
 }
 
@@ -111,9 +119,22 @@ pub struct Function {
     block_set_pool: EntitySetPool,
 
     pattern_container: PatternContainer,
+    constant_container: ConstantContainer,
 
     // Auxiliary information
     pub constant_values: HashSet<Value>, // Use EntitySet?
+
+}
+
+impl Function {
+
+    pub fn pat<'b>(&'b self) -> &'b PatternContainer {
+        &self.pattern_container
+    }
+
+    pub fn cons<'b>(&'b self) -> &'b ConstantContainer {
+        &self.constant_container
+    }
 
 }
 
@@ -130,11 +151,18 @@ impl Function {
     pub fn value_is_constant(&self, value: Value) -> bool {
         self.constant_values.contains(&value)
     }
-    pub fn value_constant<'a>(&'a self, value: Value) -> &'a ConstantTerm {
-        if let ValueType::Constant(con) = &self.values[value].kind {
-            con
+    pub fn value_block(&self, value: Value) -> Option<Block> {
+        if let ValueType::Block(block) = self.values[value].kind {
+            Some(block)
         } else {
-            panic!()
+            None
+        }
+    }
+    pub fn value_constant<'a>(&'a self, value: Value) -> Option<Const> {
+        if let ValueType::Constant(con) = &self.values[value].kind {
+            Some(*con)
+        } else {
+            None
         }
     }
 
@@ -143,7 +171,7 @@ impl Function {
 /// Blocks
 impl Function {
 
-    pub fn block_insert(&mut self) -> Block {
+    fn block_insert(&mut self) -> Block {
         self.blocks.push(BlockData {
             arguments: EntityList::new(),
 
@@ -151,12 +179,13 @@ impl Function {
             reads: EntityList::new(),
 
             predecessors: PooledEntitySet::new(),
+            successors: PooledEntitySet::new(),
 
             span: DUMMY_SPAN,
         })
     }
 
-    pub fn block_arg_insert(&mut self, block: Block) -> Value {
+    fn block_arg_insert(&mut self, block: Block) -> Value {
         let val = self.values.push(ValueData {
             kind: ValueType::Arg(block),
             usages: PooledEntitySet::new(),
@@ -167,22 +196,22 @@ impl Function {
         val
     }
 
-    pub fn block_set_entry(&mut self, block: Block) {
-        self.entry_block = Some(block);
-    }
-
-    fn block_mut<'a>(&'a mut self, block: Block) -> &'a mut BlockData {
-        self.blocks.get_mut(block).unwrap()
-    }
-
     pub fn block_arg_n(&self, block: Block, num: usize) -> Option<Value> {
         self.blocks[block].arguments.get(num, &self.value_pool)
+    }
+
+    pub fn block_kind<'a>(&'a self, block: Block) -> Option<&'a OpKind> {
+        self.blocks[block].op.as_ref()
     }
 
 }
 
 /// Graph
 impl Function {
+
+    pub fn block_graph<'a>(&'a self) -> BlockGraph<'a> {
+        BlockGraph::new(self)
+    }
 
     // fn block_remove_successors(&mut self, block: Block) {
     //     
@@ -203,6 +232,40 @@ impl Function {
 
 }
 
+pub trait GeneralSet<V> {
+    fn contains(&self, key: &V, fun: &Function) -> bool;
+    fn insert(&mut self, key: V, fun: &mut Function) -> bool;
+}
+impl<V> GeneralSet<V> for HashSet<V> where V: Hash + Eq {
+    fn contains(&self, key: &V, _fun: &Function) -> bool {
+        HashSet::contains(self, key)
+    }
+    fn insert(&mut self, key: V, _fun: &mut Function) -> bool {
+        HashSet::insert(self, key)
+    }
+}
+impl<V> GeneralSet<V> for PooledEntitySet<V> where V: EntityRef + SetPoolProvider {
+    fn contains(&self, key: &V, fun: &Function) -> bool {
+        PooledEntitySet::contains(self, *key, V::pool(fun))
+    }
+    fn insert(&mut self, key: V, fun: &mut Function) -> bool {
+        PooledEntitySet::insert(self, key, V::pool_mut(fun))
+    }
+}
+
+trait SetPoolProvider {
+    fn pool<'a>(fun: &'a Function) -> &'a EntitySetPool;
+    fn pool_mut<'a>(fun: &'a mut Function) -> &'a mut EntitySetPool;
+}
+impl SetPoolProvider for Block {
+    fn pool<'a>(fun: &'a Function) -> &'a EntitySetPool {
+        &fun.block_set_pool
+    }
+    fn pool_mut<'a>(fun: &'a mut Function) -> &'a mut EntitySetPool {
+        &mut fun.block_set_pool
+    }
+}
+
 impl Function {
 
     pub fn new(ident: FunctionIdent) -> Self {
@@ -221,6 +284,7 @@ impl Function {
             block_set_pool: EntitySetPool::new(),
 
             pattern_container: PatternContainer::new(),
+            constant_container: ConstantContainer::new(),
 
             constant_values: HashSet::new(),
         }
@@ -240,6 +304,10 @@ impl Function {
     }
     pub fn block_args<'a>(&'a self, block: Block) -> &'a [Value] {
         self.blocks[block].arguments.as_slice(&self.value_pool)
+    }
+
+    pub fn block_reads<'a>(&'a self, block: Block) -> &'a [Value] {
+        self.blocks[block].reads.as_slice(&self.value_pool)
     }
 
 
@@ -347,15 +415,15 @@ impl Function {
     //    res
     //}
 
-    //pub fn to_text(&self) -> String {
-    //    use crate::text::{ ToEirText, ToEirTextContext };
+    pub fn to_text(&self) -> String {
+        use crate::text::{ ToEirText, ToEirTextContext };
 
-    //    let mut ctx = ToEirTextContext::new();
+        let mut ctx = ToEirTextContext::new();
 
-    //    let mut out = Vec::new();
-    //    self.to_eir_text(&mut ctx, 0, &mut out).unwrap();
-    //    String::from_utf8(out).unwrap()
-    //}
+        let mut out = Vec::new();
+        self.to_eir_text(&mut ctx, 0, &mut out).unwrap();
+        String::from_utf8(out).unwrap()
+    }
 
     //pub fn to_text_annotated_live_values(&self) -> String {
     //    use crate::text::{ ToEirText, ToEirTextContext, EirLiveValuesAnnotator };

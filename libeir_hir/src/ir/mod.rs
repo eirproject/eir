@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use cranelift_entity::{ PrimaryMap, SecondaryMap, EntityList, ListPool, entity_impl };
 use cranelift_entity::packed_option::ReservedValue;
 
-use libeir_ir::pattern::{ PatternNode, PatternValue, PatternClause, PatternContainer };
 use libeir_ir::FunctionIdent;
+use libeir_ir::pattern::{ PatternNode, PatternValue, PatternClause, PatternContainer };
+use libeir_ir::constant::{ AtomicTerm, AtomTerm };
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
 use libeir_intern::{ Ident, Symbol };
@@ -83,6 +84,7 @@ struct ClauseData {
     nodes: PatternClause,
 
     values: EntityList<Expr>,
+    binds: EntityList<Variable>,
 
     guard: Expr,
     body: Expr,
@@ -148,6 +150,7 @@ impl HirModule {
             nodes: pat_clause,
 
             values: EntityList::new(),
+            binds: EntityList::new(),
 
             guard: Expr::reserved_value(),
             body: Expr::reserved_value(),
@@ -155,6 +158,16 @@ impl HirModule {
             finished: false,
             span: DUMMY_SPAN,
         })
+    }
+    pub fn clause_push_value(&mut self, clause: Clause, expr: Expr) {
+        let data = &mut self.clauses[clause];
+        assert!(!data.finished);
+        data.values.push(expr, &mut self.expr_pool);
+    }
+    pub fn clause_push_bind(&mut self, clause: Clause, var: Variable) {
+        let data = &mut self.clauses[clause];
+        assert!(!data.finished);
+        data.binds.push(var, &mut self.variable_pool);
     }
     pub fn clause_set_body(&mut self, clause: Clause, body: Expr) {
         let data = &mut self.clauses[clause];
@@ -208,6 +221,18 @@ impl HirModule {
         self.exprs.push(ExprData {
             span: DUMMY_SPAN,
             kind: ExprKind::Variable(var),
+            finished: true,
+        })
+    }
+
+    pub fn expr_atom(&mut self, atom: Ident) -> Expr {
+        self.expr_atomic(AtomTerm(atom).into())
+    }
+
+    pub fn expr_atomic(&mut self, atomic: AtomicTerm) -> Expr {
+        self.exprs.push(ExprData {
+            span: DUMMY_SPAN,
+            kind: ExprKind::Atomic(atomic),
             finished: true,
         })
     }
@@ -267,6 +292,27 @@ impl HirModule {
         match data.kind {
             ExprKind::Case { ref mut clauses, .. } => {
                 clauses.push(clause, &mut self.clause_pool);
+            }
+            _ => panic!(),
+        }
+    }
+
+    pub fn expr_logic(&mut self, kind: LogicOpKind) -> Expr {
+        self.exprs.push(ExprData {
+            span: DUMMY_SPAN,
+            kind: ExprKind::Logic {
+                op: kind,
+                exprs: EntityList::new(),
+            },
+            finished: false,
+        })
+    }
+    pub fn expr_logic_push(&mut self, logic: Expr, expr: Expr) {
+        let data = &mut self.exprs[logic];
+        assert!(!data.finished);
+        match data.kind {
+            ExprKind::Logic { ref mut exprs, .. } => {
+                exprs.push(expr, &mut self.expr_pool);
             }
             _ => panic!(),
         }
@@ -337,11 +383,18 @@ impl HirModule {
 
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MapAssoc {
     /// Manditory association
     Exact,
     /// Optional association
     Assoc,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum LogicOpKind {
+    And,
+    Or,
 }
 
 pub enum ExprKind {
@@ -407,6 +460,10 @@ pub enum ExprKind {
 
         catch_vars: EntityList<Variable>,
         catch: Expr,
+    },
+    Logic {
+        op: LogicOpKind,
+        exprs: EntityList<Expr>,
     },
 
     // Matching structures

@@ -11,7 +11,7 @@ pub mod types;
 
 pub use self::directive::Directive;
 pub use self::errors::PreprocessorError;
-pub use self::macros::{MacroCall, MacroDef};
+pub use self::macros::{MacroIdent, MacroContainer, MacroCall, MacroDef};
 pub use self::preprocessor::Preprocessor;
 
 use libeir_diagnostics::ByteIndex;

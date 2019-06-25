@@ -4,7 +4,7 @@ use cranelift_entity::{ PrimaryMap, EntityList, ListPool, entity_impl };
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
 
-use super::{ AtomicTerm };
+use crate::Const;
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PatternNode(u32);
@@ -53,7 +53,7 @@ struct PatternNodeData {
 #[derive(Debug, Clone)]
 enum PatternNodeKind {
     Wildcard,
-    Atomic(AtomicTerm), // TODO put this in a PrimaryMap
+    Atomic(Const),
     // TODO: Binary
     Tuple(EntityList<PatternNode>),
     List {
@@ -107,7 +107,7 @@ impl PatternContainer {
         })
     }
 
-    pub fn atomic(&mut self, atomic: AtomicTerm) -> PatternNode {
+    pub fn atomic(&mut self, atomic: Const) -> PatternNode {
         self.nodes.push(PatternNodeData {
             kind: PatternNodeKind::Atomic(atomic),
             finished: true,
@@ -328,6 +328,23 @@ impl PatternContainer {
             values: new_values,
             finished: true,
         })
+    }
+
+    /// Given a HashMap containing the mapping, this will go through all the
+    /// binds of a clause and update them. Useful when merging nodes while
+    /// constructing patterns.
+    pub fn update_binds(&mut self, clause: PatternClause,
+                        map: &HashMap<PatternNode, PatternNode>)
+    {
+        let clause_d = &mut self.clauses[clause];
+        let len = clause_d.binds.len(&self.node_pool);
+
+        for n in 0..len {
+            let entry = clause_d.binds.get_mut(n, &mut self.node_pool).unwrap();
+            if let Some(new) = map.get(&*entry) {
+                *entry = *new;
+            }
+        }
     }
 
 }

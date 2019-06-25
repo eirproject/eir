@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::path::{Component, Path, PathBuf};
 
-use libeir_diagnostics::ByteSpan;
+use libeir_diagnostics::{ ByteSpan, Diagnostic, Label, DUMMY_SPAN };
 use glob::glob;
 
 use crate::lexer::{symbols, Lexed, LexicalToken, Symbol, Token};
@@ -81,8 +81,48 @@ pub struct Include {
 }
 impl Include {
     /// Executes file inclusion.
-    pub fn include(&self) -> PathBuf {
-        Path::new(&self.path.symbol().as_str().get()).to_path_buf()
+    pub fn include(&self, include_paths: &VecDeque<PathBuf>) -> Result<PathBuf> {
+        let path = match util::substitute_path_variables(self.path.symbol().as_str().get()) {
+            Ok(path) => path,
+            Err(err) => return Err(err.into()),
+        };
+
+        let mut tmp_path;
+        for include_path in include_paths.iter() {
+            tmp_path = PathBuf::new();
+            tmp_path.push(include_path);
+            tmp_path.push(&path);
+            if tmp_path.exists() {
+                return Ok(tmp_path);
+            }
+        }
+
+        fn push_path(buf: &mut String, path: &Path) {
+            if let Some(path_str) = path.to_str() {
+                buf.extend(path_str.chars());
+            } else {
+                let lossy = path.to_string_lossy();
+                buf.extend(lossy.chars());
+            }
+        }
+
+        let mut aux_msg = format!("search paths:\n");
+        for path in include_paths.iter() {
+            push_path(&mut aux_msg, &path);
+            aux_msg.push('\n');
+        }
+
+        let diag = Diagnostic::new_error("could not find include file")
+            .with_label(
+                Label::new_primary(self.span())
+                    .with_message("failed to find include in include search paths")
+            )
+            .with_label(
+                Label::new_secondary(DUMMY_SPAN)
+                    .with_message(aux_msg)
+            );
+
+        Err(diag.into())
     }
 
     pub fn span(&self) -> ByteSpan {

@@ -205,3 +205,8 @@ impl From<glob::PatternError> for PreprocessorError {
         PreprocessorError::Diagnostic(Diagnostic::new_error(err.to_string()))
     }
 }
+impl From<Diagnostic> for PreprocessorError {
+    fn from(err: Diagnostic) -> Self {
+        PreprocessorError::Diagnostic(err)
+    }
+}

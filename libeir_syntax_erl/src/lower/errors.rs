@@ -12,5 +12,16 @@ pub enum LowerError {
     /// but merging these two nodes is not supported.
     /// Happens when trying to merge two binary patterns.
     UnsupportedPatternUnion { left: ByteSpan, right: ByteSpan },
+
+    /// When parsing a string, an invalid character escape
+    /// was encountered.
+    InvalidStringEscape { span: ByteSpan },
+
+    /// Unable to resolve a variable in scope.
+    UnresolvedVariable { span: ByteSpan },
+
+    /// Unable to bind a variable in a scope, it is already bound.
+    AlreadyBound { new: ByteSpan, old: ByteSpan },
+
 }
 

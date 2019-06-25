@@ -330,7 +330,7 @@ macro_rules! declare_atoms {(
         /// Used *only* for testing that the declared atoms have no gaps
         /// NOTE: The length must be static, so it must be changed when new
         /// declared keywords are added to the list
-        pub(super) static DECLARED: [(Symbol, &'static str); 55] = [$(($konst, $string),)*];
+        pub(super) static DECLARED: [(Symbol, &'static str); 56] = [$(($konst, $string),)*];
     }
 
     impl Interner {
@@ -406,6 +406,7 @@ declare_atoms! {
     (52, Attributes,   "attributes")
     (53, Native,       "native")
     (54, Deprecated,   "deprecated")
+    (55, ModuleCapital,"MODULE")
 }
 
 impl Symbol {

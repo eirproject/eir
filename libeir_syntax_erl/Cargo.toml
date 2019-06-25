@@ -11,7 +11,7 @@ build = "build.rs"
 
 [dependencies]
 libeir_diagnostics = { path = "../libeir_diagnostics" }
-libeir_hir = { path = "../libeir_hir" }
+libeir_ir = { path = "../libeir_ir" }
 libeir_intern = { path = "../libeir_intern" }
 libeir_util = { path = "../libeir_util" }
 

@@ -45,7 +45,7 @@ use std::sync::{Arc, Mutex};
 use libeir_diagnostics::{CodeMap, FileName};
 
 use crate::lexer::{FileMapSource, Lexer, Scanner, Source, Symbol};
-use crate::preprocessor::{MacroDef, Preprocessed, Preprocessor};
+use crate::preprocessor::{MacroContainer, MacroDef, Preprocessed, Preprocessor};
 
 pub use self::errors::*;
 
@@ -90,8 +90,9 @@ pub struct ParseConfig {
     pub codemap: Arc<Mutex<CodeMap>>,
     pub warnings_as_errors: bool,
     pub no_warn: bool,
+    pub include_paths: VecDeque<PathBuf>,
     pub code_paths: VecDeque<PathBuf>,
-    pub macros: Option<HashMap<Symbol, MacroDef>>,
+    pub macros: Option<MacroContainer>,
 }
 impl ParseConfig {
     pub fn new(codemap: Arc<Mutex<CodeMap>>) -> Self {
@@ -99,6 +100,7 @@ impl ParseConfig {
             codemap,
             warnings_as_errors: false,
             no_warn: false,
+            include_paths: VecDeque::new(),
             code_paths: VecDeque::new(),
             macros: None,
         }
@@ -110,6 +112,7 @@ impl Default for ParseConfig {
             codemap: Arc::new(Mutex::new(CodeMap::new())),
             warnings_as_errors: false,
             no_warn: false,
+            include_paths: VecDeque::new(),
             code_paths: VecDeque::new(),
             macros: None,
         }
@@ -318,22 +321,37 @@ unless(Value) ->
                 clauses: vec![
                     IfClause {
                         span: ByteSpan::default(),
-                        conditions: vec![Expr::BinaryExpr(BinaryExpr {
-                            span: ByteSpan::default(),
-                            lhs: Box::new(var!(Value)),
-                            op: BinaryOp::Equal,
-                            rhs: Box::new(int!(0)),
-                        })],
+                        guards: vec![
+                            Guard {
+                                span: ByteSpan::default(),
+                                conditions: vec![Expr::BinaryExpr(BinaryExpr {
+                                    span: ByteSpan::default(),
+                                    lhs: Box::new(var!(Value)),
+                                    op: BinaryOp::Equal,
+                                    rhs: Box::new(int!(0)),
+                                })],
+                            },
+                        ],
                         body: vec![atom!(true)],
                     },
                     IfClause {
                         span: ByteSpan::default(),
-                        conditions: vec![var!(Value)],
+                        guards: vec![
+                            Guard {
+                                span: ByteSpan::default(),
+                                conditions: vec![var!(Value)],
+                            },
+                        ],
                         body: vec![atom!(false)],
                     },
                     IfClause {
                         span: ByteSpan::default(),
-                        conditions: vec![atom!(else)],
+                        guards: vec![
+                            Guard {
+                                span: ByteSpan::default(),
+                                conditions: vec![atom!(else)],
+                            },
+                        ],
                         body: vec![atom!(true)],
                     },
                 ],
@@ -607,7 +625,7 @@ example(File) ->
             guard: None,
             body: vec![Expr::Try(Try {
                 span: ByteSpan::default(),
-                exprs: Some(vec![apply!(atom!(read), var!(File))]),
+                exprs: vec![apply!(atom!(read), var!(File))],
                 clauses: Some(vec![Clause {
                     span: ByteSpan::default(),
                     pattern: tuple!(atom!(ok), var!(Contents)),
@@ -673,6 +691,29 @@ exw(File) ->
         File < 2 ->
             ok
     end.
+",
+        );
+    }
+
+    #[test]
+    fn parse_numbers() {
+        let result: Module = parse(
+            "-module(foo).
+
+foo(F) -> F-1+1/1*1.
+
+bar() -> - 2.
+",
+        );
+    }
+
+    #[test]
+    fn parse_spec() {
+        let result: Module = parse(
+            "-module(foo).
+
+-spec bar() -> number.
+bar() -> 2.
 ",
         );
     }

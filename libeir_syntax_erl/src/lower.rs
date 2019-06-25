@@ -1,197 +1,272 @@
 use std::collections::HashMap;
 
-use libeir_hir::HirModule;
-use libeir_hir::{
-    Expr as HirExpr,
-    Variable as HirVariable,
-    Function as HirFunction,
-    Clause as HirClause,
+use libeir_ir::{
+    Module as IrModule,
+    FunctionBuilder,
+    Value as IrValue,
+    Block as IrBlock,
+    IntoValue,
+};
+use libeir_ir::pattern::{
     PatternClause,
     PatternNode,
     PatternMergeFail,
 };
+use libeir_ir::constant::{ ConstantContainer, IntoConst, Const };
 
-use libeir_intern::Symbol;
+use libeir_diagnostics::{ ByteSpan, ByteIndex, DUMMY_SPAN };
+use libeir_intern::{ Symbol, Ident };
 
 use libeir_util::hashmap_stack::HashMapStack;
 
 use cranelift_entity::{ ListPool, EntityList };
 
-use crate::parser::ast::{ Module, ResolvedFunctionName, NamedFunction, Expr, Guard };
-use crate::parser::ast::{ BinaryOp };
+use crate::parser::ast::{ Module, ResolvedFunctionName, NamedFunction, Function, FunctionClause, Expr, Guard };
+use crate::parser::ast::{ Literal, BinaryExpr, BinaryOp, UnaryExpr, UnaryOp };
+
+macro_rules! map_block {
+    ($block:ident, $call:expr) => {
+        {
+            let (block, val) = $call;
+            $block = block;
+            val
+        }
+    }
+}
+
+mod pattern;
+use pattern::lower_clause;
+
+mod expr;
+use expr::lower_block;
 
 mod errors;
 use errors::LowerError;
 
-// Actual error info is located in context, this is only applicable when
-// we encounter something we don't know how to proceed from and need to
-// bail.
+mod exception_handler_stack;
+use exception_handler_stack::ExceptionHandlerStack;
+
+mod scope;
+use scope::ScopeToken;
+
+#[cfg(test)]
+mod tests;
+
+// Actual error info is located in context, this is only applicable when we
+// encounter something we don't know how to proceed from and need to bail.
 type LowerResult<T> = Result<T, ()>;
 
-struct LowerCtx {
-    hir: HirModule,
+struct LowerCtx<'a> {
+    module: &'a Module,
 
-    scope: HashMapStack<Symbol, HirVariable>,
+    scope: scope::ScopeTracker,
+    exc_stack: ExceptionHandlerStack,
+
+    sentinel_value: Option<IrValue>,
 
     errors: Vec<LowerError>,
-
-    expr_pool: ListPool<HirExpr>,
-    variable_pool: ListPool<HirVariable>,
-    clause_pool: ListPool<HirClause>,
+    failed: bool,
 }
 
-pub fn lower_module(module: &Module) -> HirModule {
+impl<'a> LowerCtx<'a> {
+
+    /// Since we want to catch as many errors as possible in a single
+    /// compiler invocation, we frequently purposefully generate invalid
+    /// IR so that the lowering process can continue.
+    /// In a case where, say, we have an unresolved variable, we need
+    /// a dummy value that we can use.
+    /// If this value is used in the resulting IR, it is REQUIRED that
+    /// `failed` be set to true.
+    pub fn sentinel(&self) -> IrValue {
+        assert!(self.failed);
+        self.sentinel_value.unwrap()
+    }
+
+    pub fn error(&mut self, err: LowerError) {
+        self.failed = true;
+        self.errors.push(err);
+    }
+
+    pub fn resolve(&mut self, ident: Ident) -> IrValue {
+        match self.scope.resolve(ident) {
+            Ok(val) => val,
+            Err(err) => {
+                self.error(err);
+                self.sentinel()
+            }
+        }
+    }
+
+    pub fn bind(&mut self, ident: Ident, val: IrValue) {
+        match self.scope.bind(ident, val) {
+            Ok(()) => (),
+            Err(err) => {
+                self.error(err);
+            }
+        }
+    }
+
+    pub fn call_function<M, F>(&mut self, b: &mut FunctionBuilder, mut block: IrBlock,
+                                  m: M, f: F, args: &[IrValue]) -> (IrBlock, IrValue)
+    where
+        M: IntoValue, F: IntoValue
+    {
+        block = b.op_capture_function(block, m, f, args.len());
+        let fun_val = b.block_args(block)[0];
+
+        let (ok_block, ok_block_val) = b.block_insert_get_val();
+        let ok_res = b.block_arg_insert(ok_block);
+
+        let (fail_block, fail_block_val) = b.block_insert_get_val();
+        let fail_type = b.block_arg_insert(fail_block);
+        let fail_error = b.block_arg_insert(fail_block);
+        let fail_trace = b.block_arg_insert(fail_block);
+
+        b.op_call(block, fun_val, args);
+        self.exc_stack.make_error_jump(b, fail_block, fail_type, fail_error, fail_trace);
+
+        (ok_block, ok_res)
+    }
+
+}
+
+pub fn lower_module(module: &Module) -> IrModule {
 
     // TODO sort functions for more deterministic compilation
 
-    let mut ctx = LowerCtx {
-        hir: HirModule::new(module.name),
+    let mut ir_module = IrModule::new(module.name);
 
-        scope: HashMapStack::new(),
+    let mut ctx = LowerCtx {
+        module,
+
+        scope: scope::ScopeTracker::new(),
+        exc_stack: ExceptionHandlerStack::new(),
+
+        sentinel_value: None,
 
         errors: Vec::new(),
-
-        expr_pool: ListPool::new(),
-        variable_pool: ListPool::new(),
-        clause_pool: ListPool::new(),
+        failed: false,
     };
 
     for (ident, function) in module.functions.iter() {
         assert!(ctx.scope.height() == 0);
-        let hir_fun = lower_function(&mut ctx, ident, function);
+        println!("Fun Name: {:?}", ident);
+
+        let mut fun = ir_module.add_function(ident.function, function.arity);
+        let mut builder = FunctionBuilder::new(&mut fun);
+
+        // We do not want the sentinel value to be a constant,
+        // since that would interfere with potential constant
+        // comparisons while lowering. Insert an orphaned block
+        // with an argument that we use.
+        // This has the added benefit of generating actually
+        // invalid IR when used.
+        let sentinel_block = builder.block_insert();
+        let sentinel_value = builder.block_arg_insert(sentinel_block);
+        ctx.sentinel_value = Some(sentinel_value);
+
+        lower_top_function(&mut ctx, &mut builder, function);
     }
 
-    ctx.hir
+    ir_module
 }
 
-fn lower_function(ctx: &mut LowerCtx, ident: &ResolvedFunctionName, function: &NamedFunction) -> HirFunction {
+fn lower_function(
+    ctx: &mut LowerCtx, b: &mut FunctionBuilder,
+    fun: &Function,
+) -> IrBlock {
+    let entry = b.block_insert();
 
-    // Construct function
-    let hir_fun = ctx.hir.function_start();
-    ctx.hir.function_set_name(hir_fun, Some(ident.function));
-
-    // Construct the HIR variables that represent the function
-    // parameters, and construct a value list for pattern matching.
-    let params_val_list = ctx.hir.expr_value_list_start();
-    for _ in 0..function.arity {
-        let param_var = ctx.hir.variable_anon();
-        ctx.hir.function_push_arg(hir_fun, param_var);
-
-        let param_expr = ctx.hir.expr_variable(param_var);
-        ctx.hir.expr_value_list_push(params_val_list, param_expr);
-    }
-    ctx.hir.expr_finish(params_val_list);
-
-    // Top level function case expression
-    let func_case = ctx.hir.expr_case_start(params_val_list);
-    for clause in function.clauses.iter() {
-        let hir_clause = match lower_clause(ctx, &clause.params, &clause.guard, &clause.body) {
-            Some(clause) => clause,
-            None => continue,
-        };
-        ctx.hir.expr_case_push_clause(func_case, hir_clause);
-    }
-    ctx.hir.expr_finish(func_case);
-
-    ctx.hir.function_finish(hir_fun);
-    hir_fun
-}
-
-fn lower_clause(ctx: &mut LowerCtx, patterns: &[Expr],
-                guard: &Option<Vec<Guard>>, body: &[Expr]) -> Option<HirClause>
-{
-
-    let pat_clause = ctx.hir.pattern_container.clause_start();
-    let hir_clause = ctx.hir.clause_start(pat_clause);
-
-    // There can be scope local assignments from a pattern, push a new scope
-    ctx.scope.push();
-
-    let mut fail = false;
-    let mut node_merge_map = HashMap::new();
-
-    for pattern in patterns.iter() {
-        let pat_node = match lower_pattern(ctx, &mut node_merge_map, pat_clause, hir_clause, pattern) {
-            Ok(clause) => clause,
-            Err(PatternMergeFail::Disjoint { left, right }) => {
-                // In this case we only push a warning and fail the lowering of the clause.
-                // This will cause the clause to not be added to the case, and compilation
-                // can still succeed.
-                ctx.errors.push(LowerError::DisjointPatternUnionWarning {
-                    left: ctx.hir.pattern_container.node_span(left),
-                    right: ctx.hir.pattern_container.node_span(right),
-                });
-                fail = true;
-                continue;
-            }
-            Err(PatternMergeFail::Failure { left, right }) => {
-                ctx.errors.push(LowerError::UnsupportedPatternUnion {
-                    left: ctx.hir.pattern_container.node_span(left),
-                    right: ctx.hir.pattern_container.node_span(right),
-                });
-                fail = true;
-                continue;
-            }
-        };
-        ctx.hir.pattern_container.clause_node_push(pat_clause, pat_node);
-    }
-
-    // TODO apply node merge map to pattern binds
-
-    let body_expr = lower_exprs(ctx, body);
-
-    ctx.scope.pop();
-    unimplemented!()
-}
-
-fn lower_exprs(ctx: &mut LowerCtx, exprs: &[Expr]) -> HirExpr {
-}
-
-fn lower_pattern(ctx: &mut LowerCtx, map: &mut HashMap<PatternNode, PatternNode>,
-                 pat_clause: PatternClause, hir_clause: HirClause,
-                 pattern: &Expr) -> Result<PatternNode, PatternMergeFail>
-{
-
-    let node = match pattern {
-        Expr::BinaryExpr(bin_expr) => {
-            // Only assignment/equality is allowed in patterns
-            match bin_expr.op {
-                BinaryOp::Equal => {
-                    let p1 = lower_pattern(ctx, map, pat_clause, hir_clause, &bin_expr.lhs)?;
-                    let p2 = lower_pattern(ctx, map, pat_clause, hir_clause, &bin_expr.rhs)?;
-                    ctx.hir.pattern_container.merge(map, p1, p2)?
-                }
-                _ => {
-                    // Not allowed, push an error.
-                    // Return a dummy pattern so that we can go on and potentially find
-                    // more errors.
-                    ctx.errors.push(LowerError::NotAllowedInPattern { span: bin_expr.span });
-                    ctx.hir.pattern_container.wildcard()
-                }
-            }
-
-        }
-        Expr::Var(var) => {
-
-            if let Some(prev_bound) = ctx.scope.get(&var.name) {
-                // If the variable is already bound in the scope,
-                // we need to insert a new guard for equality.
-            } else {
-                // If it is not already bound, we bind it.
-            }
-
+    match fun {
+        Function::Named(named) => {
             unimplemented!()
         }
-        _ => unimplemented!(),
-    };
+        Function::Unnamed(lambda) => {
+            lower_function_base(ctx, b, entry, lambda.span, lambda.arity, &lambda.clauses);
+        }
+    }
 
-    Ok(node)
+    entry
 }
 
+fn lower_function_base(
+    ctx: &mut LowerCtx, b: &mut FunctionBuilder,
+    // The block the function should be lowered into
+    entry: IrBlock,
+    span: ByteSpan,
+    arity: usize,
+    clauses: &[FunctionClause],
+) {
+    let mut block = entry;
 
+    // Ok and Fail continuations
+    let ok_cont = b.block_arg_insert(entry);
+    let err_cont = b.block_arg_insert(entry);
 
+    ctx.exc_stack.push_handler(err_cont);
 
+    // Add arguments and pack them into a value list
+    let mut args_val_builder = b.op_pack_value_list_build();
+    for _ in 0..arity {
+        let arg = b.block_arg_insert(entry);
+        args_val_builder.push_value(arg, b);
+    }
+    args_val_builder.block = Some(block);
+    block = args_val_builder.finish(b);
+    let args_list = b.block_args(block)[0];
 
+    // Join block after case
+    let join_block = b.block_insert();
+    let join_arg = b.block_arg_insert(join_block);
+    b.op_call(join_block, ok_cont, &[join_arg]);
 
+    // Match fail block
+    let match_fail_block = b.block_insert();
+    b.op_call(match_fail_block, err_cont, &[]); // TODO
 
+    let entry_exc_height = ctx.exc_stack.len();
+
+    // Top level function case expression
+    {
+        let mut func_case = b.op_case_build();
+
+        func_case.match_on = Some(args_list);
+        func_case.no_match = Some(b.value(match_fail_block));
+
+        for clause in clauses.iter() {
+            match lower_clause(ctx, b, &mut block, clause.params.iter(), clause.guard.as_ref()) {
+                Some(lowered) => {
+
+                    // Add to case
+                    let body_val = b.value(lowered.body);
+                    func_case.push_clause(lowered.clause, lowered.guard, body_val, b);
+
+                    let (body_ret_block, body_ret) = lower_block(ctx, b, lowered.body, &clause.body);
+
+                    // Call to join block
+                    b.op_call(body_ret_block, join_block, &[body_ret]);
+
+                    // Pop scope pushed in lower_clause
+                    ctx.scope.pop(lowered.scope_token);
+                },
+                // When the pattern of the clause is unmatchable, we don't add it to
+                // the case.
+                None => continue,
+            }
+            assert!(ctx.exc_stack.len() == entry_exc_height)
+        }
+
+        func_case.finish(block, b);
+    }
+
+    ctx.exc_stack.pop_handler();
+
+}
+
+fn lower_top_function(ctx: &mut LowerCtx, b: &mut FunctionBuilder, function: &NamedFunction) {
+    let entry = b.block_insert();
+    b.block_set_entry(entry);
+
+    lower_function_base(ctx, b, entry, function.span, function.arity, &function.clauses);
+}
 

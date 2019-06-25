@@ -561,8 +561,8 @@ macro_rules! make_visitor {
             }
 
             fn walk_if_clause(&mut self, clause: &'ast $($mutability)* IfClause) {
-                for condition in &$($mutability)* clause.conditions {
-                    self.visit_expression(condition);
+                for guard in &$($mutability)* clause.guards {
+                    self.visit_guard(guard);
                 }
                 for expr in &$($mutability)* clause.body {
                     self.visit_expression(expr);
@@ -600,10 +600,8 @@ macro_rules! make_visitor {
             }
 
             fn walk_try(&mut self, try_expr: &'ast $($mutability)* Try) {
-                if let Some(ref $($mutability)* exprs) = try_expr.exprs {
-                    for ex in exprs {
-                        self.visit_expression(ex);
-                    }
+                for ex in & $($mutability)* try_expr.exprs {
+                    self.visit_expression(ex);
                 }
                 if let Some(ref $($mutability)* clauses) = try_expr.clauses {
                     for clause in clauses {

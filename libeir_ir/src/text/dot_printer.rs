@@ -1,6 +1,8 @@
 use crate::Function;
 use super::printer::{ ToEirTextFun, ToEirTextContext };
 
+use petgraph::visit::{ Dfs, IntoNeighbors };
+
 const DOT_BREAK: &str = "<br align=\"left\" />";
 
 fn format_label(label: &str) -> String {
@@ -26,7 +28,7 @@ pub fn function_to_dot(fun: &Function, w: &mut Write) -> ::std::io::Result<()> {
     let fun_name = format_label(&format!("{}", fun.ident()));
     write!(w, "entry [ label=<entry|fun: {}> ];\n",
            fun_name)?;
-    write!(w, "entry -> blk_{};\n\n", fun.ebb_entry())?;
+    write!(w, "entry -> blk_{};\n\n", fun.block_entry())?;
 
     let mut buf = Vec::new();
 
@@ -37,22 +39,22 @@ pub fn function_to_dot(fun: &Function, w: &mut Write) -> ::std::io::Result<()> {
     write!(w, "{}", text)?;
     write!(w, "> ];\n")?;
 
-    for ebb in fun.iter_ebb() {
-        write!(w, "blk_{} [ label=<", ebb)?;
+    let block_graph = fun.block_graph();
+    let mut block_dfs = Dfs::new(&block_graph, fun.block_entry());
+
+    while let Some(block) = block_dfs.next(&block_graph) {
+        write!(w, "blk_{} [ label=<", block)?;
 
         buf.clear();
-        ebb.to_eir_text_fun(&mut to_eir_ctx, fun, 0, &mut buf).unwrap();
+        block.to_eir_text_fun(&mut to_eir_ctx, fun, 0, &mut buf).unwrap();
         let text = std::str::from_utf8(&buf).unwrap();
         let text = format_label(text);
         write!(w, "{}", text)?;
 
         write!(w, "> ];\n")?;
 
-        for op in fun.iter_op(ebb) {
-            for branch in fun.op_branches(op) {
-                let target = fun.ebb_call_target(*branch);
-                write!(w, "blk_{} -> blk_{};\n", ebb, target)?;
-            }
+        for out in block_graph.neighbors(block) {
+            write!(w, "blk_{} -> blk_{};\n", block, out)?;
         }
 
         write!(w, "\n")?;

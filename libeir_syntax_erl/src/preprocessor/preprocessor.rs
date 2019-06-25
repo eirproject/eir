@@ -15,7 +15,7 @@ use crate::parser::ParseConfig;
 
 use super::macros::Stringify;
 use super::token_reader::{TokenBufferReader, TokenReader, TokenStreamReader};
-use super::{Directive, MacroCall, MacroDef};
+use super::{Directive, MacroContainer, MacroIdent, MacroCall, MacroDef};
 use super::{Preprocessed, PreprocessorError, Result};
 
 pub struct Preprocessor<Reader: TokenReader> {
@@ -24,8 +24,9 @@ pub struct Preprocessor<Reader: TokenReader> {
     can_directive_start: bool,
     directives: BTreeMap<ByteIndex, Directive>,
     code_paths: VecDeque<PathBuf>,
+    include_paths: VecDeque<PathBuf>,
     branches: Vec<Branch>,
-    macros: HashMap<Symbol, MacroDef>,
+    macros: MacroContainer,
     macro_calls: BTreeMap<ByteIndex, MacroCall>,
     expanded_tokens: VecDeque<LexicalToken>,
     warnings_as_errors: bool,
@@ -39,8 +40,9 @@ where
         let codemap = config.codemap.clone();
         let reader = TokenStreamReader::new(codemap.clone(), tokens);
         let code_paths = config.code_paths.clone();
+        let include_paths = config.include_paths.clone();
         let macros = match config.macros {
-            None => HashMap::new(),
+            None => MacroContainer::new(),
             Some(ref macros) => macros.clone(),
         };
         Preprocessor {
@@ -49,6 +51,7 @@ where
             can_directive_start: true,
             directives: BTreeMap::new(),
             code_paths,
+            include_paths,
             branches: Vec::new(),
             macros,
             macro_calls: BTreeMap::new(),
@@ -71,6 +74,7 @@ where
             can_directive_start: false,
             directives: BTreeMap::new(),
             code_paths: self.code_paths.clone(),
+            include_paths: self.include_paths.clone(),
             branches: Vec::new(),
             macros: self.macros.clone(),
             macro_calls: BTreeMap::new(),
@@ -184,7 +188,7 @@ where
     }
 
     fn expand_userdefined_macro(&self, call: MacroCall) -> Result<VecDeque<LexicalToken>> {
-        let definition = match self.macros.get(&call.name()) {
+        let definition = match self.macros.get(&call) {
             None => return Err(PreprocessorError::UndefinedMacro(call)),
             Some(def) => def,
         };
@@ -291,10 +295,10 @@ where
         match directive {
             Directive::Module(ref d) => {
                 self.macros
-                    .insert(symbols::Module, MacroDef::String(d.name.symbol()));
+                    .insert(MacroIdent::Const(symbols::ModuleCapital), MacroDef::String(d.name.symbol()));
             }
             Directive::Include(ref d) if !ignore => {
-                let path = d.include();
+                let path = d.include(&self.include_paths)?;
                 self.reader.inject_include(path)?;
             }
             Directive::IncludeLib(ref d) if !ignore => {
@@ -303,13 +307,13 @@ where
             }
             Directive::Define(ref d) if !ignore => {
                 self.macros
-                    .insert(d.name.symbol(), MacroDef::Static(d.clone()));
+                    .insert(d, MacroDef::Static(d.clone()));
             }
             Directive::Undef(ref d) if !ignore => {
-                self.macros.remove(&d.name());
+                self.macros.undef(&d.name());
             }
             Directive::Ifdef(ref d) => {
-                let entered = self.macros.contains_key(&d.name());
+                let entered = self.macros.defined(&d.name());
                 self.branches.push(Branch::new(entered));
             }
             Directive::If(ref d) => {
@@ -317,7 +321,7 @@ where
                 self.branches.push(Branch::new(entered));
             }
             Directive::Ifndef(ref d) => {
-                let entered = !self.macros.contains_key(&d.name());
+                let entered = !self.macros.defined(&d.name());
                 self.branches.push(Branch::new(entered));
             }
             Directive::Else(_) => match self.branches.last_mut() {

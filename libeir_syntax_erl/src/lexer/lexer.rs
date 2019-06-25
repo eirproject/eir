@@ -233,9 +233,9 @@ where
             ',' => pop!(self, Token::Comma),
             ';' => pop!(self, Token::Semicolon),
             '_' => self.lex_identifier(),
-            '0'...'9' => self.lex_number(),
-            'a'...'z' => self.lex_bare_atom(),
-            'A'...'Z' => self.lex_identifier(),
+            '0'..='9' => self.lex_number(),
+            'a'..='z' => self.lex_bare_atom(),
+            'A'..='Z' => self.lex_identifier(),
             '#' => pop!(self, Token::Pound),
             '*' => pop!(self, Token::Star),
             '!' => pop!(self, Token::Bang),
@@ -252,7 +252,6 @@ where
             '-' => match self.peek() {
                 '-' => pop2!(self, Token::MinusMinus),
                 '>' => pop2!(self, Token::RightStab),
-                n if n.is_digit(10) => self.lex_number(),
                 _ => pop!(self, Token::Minus),
             },
             '$' => {
@@ -305,6 +304,17 @@ where
             '=' => match self.peek() {
                 '=' => pop2!(self, Token::IsEqual),
                 '>' => pop2!(self, Token::RightArrow),
+                '<' => pop2!(self, Token::IsLessThanOrEqual),
+                ':' => {
+                    if self.peek_next() == '=' {
+                        pop3!(self, Token::IsExactlyEqual)
+                    } else {
+                        Token::Error(LexicalError::UnexpectedCharacter {
+                            start: self.span().start(),
+                            found: self.peek_next(),
+                        })
+                    }
+                }
                 '/' => {
                     if self.peek_next() == '=' {
                         pop3!(self, Token::IsExactlyNotEqual)
@@ -564,7 +574,7 @@ where
             match self.read() {
                 '_' => self.skip(),
                 '@' => self.skip(),
-                '0'...'9' => self.skip(),
+                '0'..='9' => self.skip(),
                 c if c.is_alphabetic() => self.skip(),
                 _ => break,
             }
@@ -581,7 +591,7 @@ where
             match self.read() {
                 '_' => self.skip(),
                 '@' => self.skip(),
-                '0'...'9' => self.skip(),
+                '0'..='9' => self.skip(),
                 c if c.is_alphabetic() => self.skip(),
                 _ => break,
             }
@@ -625,7 +635,7 @@ where
         if c == '#' {
             self.skip();
             // Parse in the given radix
-            let radix = match num[1..].parse::<u32>() {
+            let radix = match num[..].parse::<u32>() {
                 Ok(r) => r,
                 Err(e) => {
                     return Token::Error(LexicalError::InvalidRadix {
@@ -723,7 +733,16 @@ where
     type Item = Lexed;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.lex()
+        let mut res = self.lex();
+        loop {
+            match res {
+                Some(Ok(LexicalToken(_, Token::Comment, _))) => {
+                    res = self.lex();
+                }
+                _ => break,
+            }
+        }
+        res
     }
 }
 
@@ -784,7 +803,7 @@ mod test {
 
     #[test]
     fn lex_comment() {
-        assert_lex!("% this is a comment", vec![Ok((1, Token::Comment, 20))]);
+        assert_lex!("% this is a comment", vec![]);
         assert_lex!("% @author Paul", vec![Ok((1, Token::Edoc, 15))]);
     }
 
@@ -810,10 +829,10 @@ mod test {
         assert_lex!("41.0e+9", vec![Ok((1, Token::Float(41e+9), 8))]);
 
         // With leading negative sign
-        assert_lex!("-700.5", vec![Ok((1, Token::Float(-700.5), 7))]);
-        assert_lex!("-9.0e2", vec![Ok((1, Token::Float(-9.0e2), 7))]);
-        assert_lex!("-0.5e1", vec![Ok((1, Token::Float(-0.5e1), 7))]);
-        assert_lex!("-0.0", vec![Ok((1, Token::Float(-0.0), 5))]);
+        assert_lex!("-700.5", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(700.5), 7))]);
+        assert_lex!("-9.0e2", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(9.0e2), 7))]);
+        assert_lex!("-0.5e1", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(0.5e1), 7))]);
+        assert_lex!("-0.0", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(0.0), 5))]);
     }
 
     #[test]
@@ -846,14 +865,14 @@ mod test {
         // Decimal
         assert_lex!("1", vec![Ok((1, Token::Integer(1), 2))]);
         assert_lex!("9624", vec![Ok((1, Token::Integer(9624), 5))]);
-        assert_lex!("-1", vec![Ok((1, Token::Integer(-1), 3))]);
-        assert_lex!("-9624", vec![Ok((1, Token::Integer(-9624), 6))]);
+        assert_lex!("-1", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(1), 3))]);
+        assert_lex!("-9624", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(9624), 6))]);
 
         // Hexadecimal
         assert_lex!(r#"\x00"#, vec![Ok((1, Token::Integer(0x0), 5))]);
         assert_lex!(r#"\x{1234FF}"#, vec![Ok((1, Token::Integer(0x1234FF), 11))]);
-        assert_lex!("-16#0", vec![Ok((1, Token::Integer(0x0), 6))]);
-        assert_lex!("-16#1234FF", vec![Ok((1, Token::Integer(-0x1234FF), 11))]);
+        assert_lex!("-16#0", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(0x0), 6))]);
+        assert_lex!("-16#1234FF", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(0x1234FF), 11))]);
 
         // Octal
         assert_lex!(r#"\00"#, vec![Ok((1, Token::Integer(0), 4))]);

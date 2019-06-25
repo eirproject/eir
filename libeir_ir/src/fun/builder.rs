@@ -2,15 +2,44 @@ use super::{ Block, Value };
 use super::{ ValueData, ValueType };
 use super::{ Function };
 
-use crate::{ ConstantTerm, AtomicTerm };
-use crate::op::{ OpKind, ComparisonOperation, TestOperation, MapPutUpdate };
-use crate::pattern::{ PatternClause };
+use crate::constant::{ ConstantContainer, Const, IntoConst };
+use crate::op::{ OpKind, BinOp, MapPutUpdate };
+use crate::pattern::{ PatternContainer, PatternClause };
 
 use ::cranelift_entity::{ EntityList };
 
 use libeir_diagnostics::{ DUMMY_SPAN };
 use libeir_intern::{ Symbol, Ident };
 use libeir_util::pooled_entity_set::{ PooledEntitySet };
+
+pub trait IntoValue {
+    fn into_value<'a>(self, b: &mut FunctionBuilder<'a>) -> Value;
+}
+impl IntoValue for Value {
+    fn into_value<'a>(self, _b: &mut FunctionBuilder<'a>) -> Value {
+        self
+    }
+}
+impl IntoValue for Block {
+    fn into_value<'a>(self, b: &mut FunctionBuilder<'a>) -> Value {
+        b.fun.values.push(ValueData {
+            kind: ValueType::Block(self),
+            usages: PooledEntitySet::new(),
+
+            span: DUMMY_SPAN,
+        })
+    }
+}
+impl<T> IntoValue for T where T: IntoConst {
+    fn into_value<'a>(self, b: &mut FunctionBuilder<'a>) -> Value {
+        b.fun.values.push(ValueData {
+            kind: ValueType::Constant(b.fun.constant_container.from(self)),
+            usages: PooledEntitySet::new(),
+
+            span: DUMMY_SPAN,
+        })
+    }
+}
 
 #[derive(Debug, Clone)]
 enum BuilderState {
@@ -54,9 +83,22 @@ impl<'a> FunctionBuilder<'a> {
     pub fn fun<'b>(&'b self) -> &'b Function {
         &self.fun
     }
-
     pub fn fun_mut<'b>(&'b mut self) -> &'b mut Function {
         &mut self.fun
+    }
+
+    pub fn pat<'b>(&'b mut self) -> &'b PatternContainer {
+        &self.fun.pattern_container
+    }
+    pub fn pat_mut<'b>(&'b mut self) -> &'b mut PatternContainer {
+        &mut self.fun.pattern_container
+    }
+
+    pub fn cons<'b>(&'b mut self) -> &'b ConstantContainer {
+        &self.fun.constant_container
+    }
+    pub fn cons_mut<'b>(&'b mut self) -> &'b mut ConstantContainer {
+        &mut self.fun.constant_container
     }
 
 }
@@ -64,28 +106,8 @@ impl<'a> FunctionBuilder<'a> {
 /// Values
 impl<'a> FunctionBuilder<'a> {
 
-    pub fn value_block(&mut self, block: Block) -> Value {
-        self.fun.values.push(ValueData {
-            kind: ValueType::Block(block),
-            // TODO: Update usages in builder api
-            usages: PooledEntitySet::new(),
-
-            span: DUMMY_SPAN,
-        })
-    }
-
-    pub fn value_const(&mut self, constant: ConstantTerm) -> Value {
-        // TODO: Dedup atomic at creation time
-        self.fun.values.push(ValueData {
-            kind: ValueType::Constant(constant),
-            usages: PooledEntitySet::new(),
-
-            span: DUMMY_SPAN,
-        })
-    }
-
-    pub fn value_atomic(&mut self, atomic: AtomicTerm) -> Value {
-        self.value_const(ConstantTerm::Atomic(atomic))
+    pub fn value<T>(&mut self, v: T) -> Value where T: IntoValue {
+        v.into_value(self)
     }
 
 }
@@ -97,12 +119,23 @@ impl<'a> FunctionBuilder<'a> {
         self.fun.block_insert()
     }
 
+    /// Inserts a new block and get its value
+    pub fn block_insert_get_val(&mut self) -> (Block, Value) {
+        let block = self.block_insert();
+        let val = self.value(block);
+        (block, val)
+    }
+
     pub fn block_arg_insert(&mut self, block: Block) -> Value {
         self.fun.block_arg_insert(block)
     }
 
     pub fn block_args<'b>(&'b self, block: Block) -> &'b [Value] {
         self.fun.block_args(block)
+    }
+
+    pub fn block_set_entry(&mut self, block: Block) {
+        self.fun.entry_block = Some(block);
     }
 
     /// This will explicitly clear the operation contained in the
@@ -150,16 +183,18 @@ impl<'a> FunctionBuilder<'a> {
 /// Operation constructors
 impl<'a> FunctionBuilder<'a> {
 
-    pub fn op_call<'b>(&'b mut self, block: Block,
-                             target: Value, args: &[Value]) {
+    pub fn op_call<'b, V>(&'b mut self, block: Block,
+                       target: V, args: &[Value]) where V: IntoValue {
         assert!(self.state.is_none());
+
+        let target_val = self.value(target);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
         data.op = Some(OpKind::Call);
-        data.reads.push(target, &mut self.fun.value_pool);
+        data.reads.push(target_val, &mut self.fun.value_pool);
         data.reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
     }
 
@@ -173,14 +208,25 @@ impl<'a> FunctionBuilder<'a> {
         data.op = Some(OpKind::Intrinsic(name));
         data.reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
     }
+    pub fn op_intrinsic_build(&mut self, name: Symbol) -> IntrinsicBuilder {
+        IntrinsicBuilder::new(name, self)
+    }
 
-    pub fn op_capture_function<'b>(&'b mut self, block: Block,
-                                   m: Value, f: Value, a: Value) -> Block {
+    pub fn op_capture_function<'b, M, F, A>(
+        &'b mut self, block: Block,
+        m: M, f: F, a: A) -> Block
+    where
+        M: IntoValue, F: IntoValue, A: IntoValue
+    {
         assert!(self.state.is_none());
 
         let cont = self.fun.block_insert();
-        let cont_val = self.value_block(cont);
+        let cont_val = self.value(cont);
         self.fun.block_arg_insert(cont);
+
+        let m_val = self.value(m);
+        let f_val = self.value(f);
+        let a_val = self.value(a);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
@@ -188,9 +234,9 @@ impl<'a> FunctionBuilder<'a> {
 
         data.op = Some(OpKind::CaptureFunction);
         data.reads.push(cont_val, &mut self.fun.value_pool);
-        data.reads.push(m, &mut self.fun.value_pool);
-        data.reads.push(f, &mut self.fun.value_pool);
-        data.reads.push(a, &mut self.fun.value_pool);
+        data.reads.push(m_val, &mut self.fun.value_pool);
+        data.reads.push(f_val, &mut self.fun.value_pool);
+        data.reads.push(a_val, &mut self.fun.value_pool);
 
         cont
     }
@@ -199,7 +245,7 @@ impl<'a> FunctionBuilder<'a> {
         assert!(self.state.is_none());
 
         let cont = self.fun.block_insert();
-        let cont_val = self.value_block(cont);
+        let cont_val = self.value(cont);
         self.fun.block_arg_insert(cont);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
@@ -212,12 +258,15 @@ impl<'a> FunctionBuilder<'a> {
 
         cont
     }
+    pub fn op_make_tuple_build(&mut self) -> MakeTupleBuilder {
+        MakeTupleBuilder::new(self)
+    }
 
-    pub fn op_make_list(&mut self, block: Block, values: &[Value]) -> Block {
+    pub fn op_make_list(&mut self, block: Block, head: &[Value], tail: Value) -> Block {
         assert!(self.state.is_none());
 
         let cont = self.fun.block_insert();
-        let cont_val = self.value_block(cont);
+        let cont_val = self.value(cont);
         self.fun.block_arg_insert(cont);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
@@ -226,7 +275,8 @@ impl<'a> FunctionBuilder<'a> {
 
         data.op = Some(OpKind::MakeList);
         data.reads.push(cont_val, &mut self.fun.value_pool);
-        data.reads.extend(values.iter().cloned(), &mut self.fun.value_pool);
+        data.reads.push(tail, &mut self.fun.value_pool);
+        data.reads.extend(head.iter().cloned(), &mut self.fun.value_pool);
 
         cont
     }
@@ -235,7 +285,7 @@ impl<'a> FunctionBuilder<'a> {
         assert!(self.state.is_none());
 
         let cont = self.fun.block_insert();
-        let cont_val = self.value_block(cont);
+        let cont_val = self.value(cont);
         self.fun.block_arg_insert(cont);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
@@ -256,7 +306,7 @@ impl<'a> FunctionBuilder<'a> {
         });
 
         let cont = self.fun.block_insert();
-        let cont_val = self.value_block(cont);
+        let cont_val = self.value(cont);
         self.fun.block_arg_insert(cont);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
@@ -294,7 +344,7 @@ impl<'a> FunctionBuilder<'a> {
         assert!(self.state.is_none());
 
         let cont = self.fun.block_insert();
-        let cont_val = self.value_block(cont);
+        let cont_val = self.value(cont);
         self.fun.block_arg_insert(cont);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
@@ -307,12 +357,19 @@ impl<'a> FunctionBuilder<'a> {
 
         cont
     }
+    pub fn op_pack_value_list_build(&mut self) -> PackValueListBuilder {
+        PackValueListBuilder::new(self)
+    }
+
+    pub fn op_case_build(&mut self) -> CaseBuilder {
+        CaseBuilder::new()
+    }
 
     pub fn op_unpack_value_list(&mut self, block: Block, list: Value, num: usize) -> Block {
         assert!(self.state.is_none());
 
         let cont = self.fun.block_insert();
-        let cont_val = self.value_block(cont);
+        let cont_val = self.value(cont);
         for _ in 0..num {
             self.fun.block_arg_insert(cont);
         }
@@ -328,19 +385,19 @@ impl<'a> FunctionBuilder<'a> {
         cont
     }
 
-    pub fn op_compare(&mut self, block: Block, op: ComparisonOperation, lhs: Value, rhs: Value) -> (Block, Block) {
+    pub fn op_binop(&mut self, block: Block, op: BinOp, lhs: Value, rhs: Value) -> (Block, Block) {
         assert!(self.state.is_none());
 
         let ok_cont = self.fun.block_insert();
-        let ok_cont_val = self.value_block(ok_cont);
+        let ok_cont_val = self.value(ok_cont);
         let err_cont = self.fun.block_insert();
-        let err_cont_val = self.value_block(err_cont);
+        let err_cont_val = self.value(err_cont);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
-        data.op = Some(OpKind::Compare(op));
+        data.op = Some(OpKind::BinOp(op));
         data.reads.push(ok_cont_val, &mut self.fun.value_pool);
         data.reads.push(err_cont_val, &mut self.fun.value_pool);
         data.reads.push(lhs, &mut self.fun.value_pool);
@@ -349,24 +406,46 @@ impl<'a> FunctionBuilder<'a> {
         (ok_cont, err_cont)
     }
 
-    pub fn op_test(&mut self, block: Block, op: TestOperation, val: Value) -> (Block, Block) {
+    pub fn op_binop_value(&mut self, block: Block, op: BinOp, lhs: Value, rhs: Value) -> Block {
         assert!(self.state.is_none());
 
-        let ok_cont = self.fun.block_insert();
-        let ok_cont_val = self.value_block(ok_cont);
-        let err_cont = self.fun.block_insert();
-        let err_cont_val = self.value_block(err_cont);
+        let cont = self.fun.block_insert();
+        self.fun.block_arg_insert(cont);
+        let cont_val = self.value(cont);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
-        data.op = Some(OpKind::Test(op));
-        data.reads.push(ok_cont_val, &mut self.fun.value_pool);
-        data.reads.push(err_cont_val, &mut self.fun.value_pool);
-        data.reads.push(val, &mut self.fun.value_pool);
+        data.op = Some(OpKind::BinOpValue(op));
+        data.reads.push(cont_val, &mut self.fun.value_pool);
+        data.reads.push(lhs, &mut self.fun.value_pool);
+        data.reads.push(rhs, &mut self.fun.value_pool);
 
-        (ok_cont, err_cont)
+        cont
+    }
+
+    pub fn op_if_bool(&mut self, block: Block, value: Value) -> (Block, Block, Block) {
+        assert!(self.state.is_none());
+
+        let true_cont = self.fun.block_insert();
+        let true_cont_val = self.value(true_cont);
+        let false_cont = self.fun.block_insert();
+        let false_cont_val = self.value(false_cont);
+        let non_cont = self.fun.block_insert();
+        let non_cont_val = self.value(non_cont);
+
+        let data = self.fun.blocks.get_mut(block).unwrap();
+        assert!(data.op.is_none());
+        assert!(data.reads.is_empty());
+
+        data.op = Some(OpKind::IfBool);
+        data.reads.push(true_cont_val, &mut self.fun.value_pool);
+        data.reads.push(false_cont_val, &mut self.fun.value_pool);
+        data.reads.push(non_cont_val, &mut self.fun.value_pool);
+        data.reads.push(value, &mut self.fun.value_pool);
+
+        (true_cont, false_cont, non_cont)
     }
 
     pub fn op_unpack_tuple(&mut self, block: Block, val: Value, num: usize) -> (Block, Block) {
@@ -376,9 +455,9 @@ impl<'a> FunctionBuilder<'a> {
         for _ in 0..num {
             self.fun.block_arg_insert(ok_cont);
         }
-        let ok_cont_val = self.value_block(ok_cont);
+        let ok_cont_val = self.value(ok_cont);
         let err_cont = self.fun.block_insert();
-        let err_cont_val = self.value_block(err_cont);
+        let err_cont_val = self.value(err_cont);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
@@ -398,9 +477,9 @@ impl<'a> FunctionBuilder<'a> {
         let ok_cont = self.fun.block_insert();
         self.fun.block_arg_insert(ok_cont);
         self.fun.block_arg_insert(ok_cont);
-        let ok_cont_val = self.value_block(ok_cont);
+        let ok_cont_val = self.value(ok_cont);
         let err_cont = self.fun.block_insert();
-        let err_cont_val = self.value_block(err_cont);
+        let err_cont_val = self.value(err_cont);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
@@ -419,9 +498,9 @@ impl<'a> FunctionBuilder<'a> {
 
         let ok_cont = self.fun.block_insert();
         self.fun.block_arg_insert(ok_cont);
-        let ok_cont_val = self.value_block(ok_cont);
+        let ok_cont_val = self.value(ok_cont);
         let err_cont = self.fun.block_insert();
-        let err_cont_val = self.value_block(err_cont);
+        let err_cont_val = self.value(err_cont);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
@@ -444,6 +523,87 @@ impl<'a> FunctionBuilder<'a> {
         assert!(data.reads.is_empty());
 
         data.op = Some(OpKind::Unreachable);
+    }
+
+}
+
+macro_rules! impl_simple_builder {
+    ($name:ident, $op_kind:ident) => {
+        pub struct $name {
+            pub block: Option<Block>,
+            next: Block,
+            values: EntityList<Value>,
+        }
+        impl $name {
+
+            pub fn new<'a>(b: &mut FunctionBuilder<'a>) -> Self {
+                let next = b.block_insert();
+                b.block_arg_insert(next);
+                let next_val = b.value(next);
+
+                let mut values = EntityList::new();
+                values.push(next_val, &mut b.fun.value_pool);
+
+                $name {
+                    block: None,
+                    next,
+                    values,
+                }
+            }
+
+            pub fn push_value<'a>(&mut self, val: Value, b: &mut FunctionBuilder<'a>) {
+                self.values.push(val, &mut b.fun.value_pool);
+            }
+
+            pub fn finish<'a>(self, b: &mut FunctionBuilder<'a>) -> Block {
+                let data = b.fun.blocks.get_mut(self.block.unwrap()).unwrap();
+                assert!(data.op.is_none());
+                assert!(data.reads.is_empty());
+
+                data.op = Some(OpKind::$op_kind);
+                data.reads = self.values;
+
+                self.next
+            }
+
+        }
+    }
+}
+
+impl_simple_builder!(PackValueListBuilder, PackValueList);
+impl_simple_builder!(MakeTupleBuilder, MakeTuple);
+
+pub struct IntrinsicBuilder {
+    name: Symbol,
+    pub block: Option<Block>,
+    values: EntityList<Value>,
+}
+impl IntrinsicBuilder {
+
+    pub fn new<'a>(name: Symbol, b: &mut FunctionBuilder<'a>) -> Self {
+        IntrinsicBuilder {
+            name,
+            block: None,
+            values: EntityList::new(),
+        }
+    }
+
+    pub fn push_value<'a, V>(&mut self, val: V, b: &mut FunctionBuilder<'a>) where V: IntoValue {
+        let val_n = b.value(val);
+        self.values.push(val_n, &mut b.fun.value_pool);
+    }
+
+    pub fn finish<'a>(self, b: &mut FunctionBuilder<'a>) {
+        if self.values.len(&b.fun().value_pool) == 0 {
+            panic!();
+        }
+
+        let data = b.fun.blocks.get_mut(self.block.unwrap()).unwrap();
+        assert!(data.op.is_none());
+        assert!(data.reads.is_empty());
+
+        data.op = Some(OpKind::Intrinsic(self.name));
+        data.reads = self.values;
     }
 
 }

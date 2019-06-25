@@ -1,20 +1,12 @@
+use crate::Const;
 use crate::pattern::{ PatternClause };
-use crate::{ AtomicTerm };
 
 use libeir_intern::Symbol;
 
 use cranelift_entity::EntityList;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TestOperation {
-    EqualAtomic(AtomicTerm),
-    /// Tests if a value is truthy according to Erlang
-    /// truthiness rules
-    IsTruthy,
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ComparisonOperation {
+pub enum BinOp {
     /// ==
     Equal,
     /// /=
@@ -50,11 +42,22 @@ pub enum OpKind {
     /// This is the calling primitive,
     /// doing everything from returns to local calls,
     /// to external calls.
-    /// Always a block terminator.
     Call,
 
     /// (cont: fn(fun), m, f, a)
     CaptureFunction,
+
+    /// (true: fn(), false: fn(), else: fn(), value)
+    /// Strict truth check, only 'true' is true, 'false' is false
+    IfBool,
+
+    // BinOp
+    /// (true: fn(), false: fn(), lhs, rhs)
+    /// Branching variant
+    BinOp(BinOp),
+    /// (cont: fn(bool), lhs, rhs)
+    /// Boolean variant
+    BinOpValue(BinOp),
 
     /// (..)
     Intrinsic(Symbol),
@@ -99,15 +102,6 @@ pub enum OpKind {
     PackValueList,
     /// (cont: fn(terms..), l: valuelist)
     UnpackValueList,
-
-    // Tests
-    /// (ok: fn(), fail: fn(), lhs, rhs)
-    /// Compares two terms according to the given binary
-    /// operator.
-    Compare(ComparisonOperation),
-    /// (ok: fn(), fail: fn(), term)
-    /// Performs a test on the given term.
-    Test(TestOperation),
 
     // Case structure
     /// ```

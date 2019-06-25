@@ -569,12 +569,12 @@ impl PartialEq for If {
 #[derive(Debug, Clone)]
 pub struct IfClause {
     pub span: ByteSpan,
-    pub conditions: Vec<Expr>,
+    pub guards: Vec<Guard>,
     pub body: Vec<Expr>,
 }
 impl PartialEq for IfClause {
     fn eq(&self, other: &Self) -> bool {
-        self.conditions == other.conditions && self.body == other.body
+        self.guards == other.guards && self.body == other.body
     }
 }
 
@@ -616,7 +616,7 @@ impl PartialEq for Receive {
 #[derive(Debug, Clone)]
 pub struct Try {
     pub span: ByteSpan,
-    pub exprs: Option<Vec<Expr>>,
+    pub exprs: Vec<Expr>,
     pub clauses: Option<Vec<Clause>>,
     pub catch_clauses: Option<Vec<TryClause>>,
     pub after: Option<Vec<Expr>>,

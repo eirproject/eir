@@ -12,7 +12,7 @@ use crate::lexer::{Lexed, Lexer, LexicalToken, Symbol, Token};
 
 use super::macros::NoArgsMacroCall;
 use super::token_stream::TokenStream;
-use super::{MacroCall, MacroDef, PreprocessorError, Result};
+use super::{MacroContainer, MacroCall, MacroDef, PreprocessorError, Result};
 
 pub trait TokenReader: Sized {
     type Source;
@@ -33,7 +33,7 @@ pub trait TokenReader: Sized {
 
     fn try_read_macro_call(
         &mut self,
-        macros: &HashMap<Symbol, MacroDef>,
+        macros: &MacroContainer,
     ) -> Result<Option<MacroCall>> {
         if let Some(call) = self.try_read::<NoArgsMacroCall>()? {
             let span = call.span();
@@ -43,12 +43,39 @@ pub trait TokenReader: Sized {
                 name: call.name,
                 args: None,
             };
-            if macros
-                .get(&call.name())
-                .map_or(false, |m| m.has_variables())
-            {
-                call.args = Some(self.read()?);
+
+            // The logic for macro resolve/execution is as follows, in order:
+            // 1. If there is only a constant macro of the given name and not
+            //    a function macro, apply the const without looking ahead.
+            // 2. If there exists a function macro with the given name, and
+            //    there is a paren open following the macro identifier, then
+            //    try to resolve and execute the macro. If there is not a
+            //    function macro of the correct arity defined, error.
+            // 3. If there is a constant macro, apply that.
+            // 4. Error.
+
+            // If there is a function macro defined with the name...
+            if macros.defined_func(&call.name()) {
+
+                let paren_ahead = if let Some(lex_tok) = self.try_read_token()? {
+                    let res = if let LexicalToken(_, Token::LParen, _) = lex_tok {
+                        true
+                    } else {
+                        false
+                    };
+                    self.unread_token(lex_tok);
+                    res
+                } else {
+                    false
+                };
+
+                // If there is a following LParen, read arguments
+                if paren_ahead {
+                    call.args = Some(self.read()?);
+                }
+
             }
+
             Ok(Some(call))
         } else {
             Ok(None)
