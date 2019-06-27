@@ -113,7 +113,8 @@ impl ConstantContainer {
             ConstValueKind::Atomic(atomic) => {
                 write!(out, "{}", atomic).unwrap();
             }
-            _ => unimplemented!()
+            // TODO
+            kind => (), //unimplemented!("{:?}", kind)
         }
     }
 

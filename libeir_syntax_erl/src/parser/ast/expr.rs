@@ -417,6 +417,14 @@ pub enum BitType {
     Name(ByteSpan, Ident),
     Sized(ByteSpan, Ident, i64),
 }
+impl BitType {
+    pub fn span(&self) -> ByteSpan {
+        match self {
+            BitType::Name(span, _) => *span,
+            BitType::Sized(span, _, _) => *span,
+        }
+    }
+}
 impl PartialEq for BitType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {

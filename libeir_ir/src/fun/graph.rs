@@ -26,6 +26,7 @@
 use petgraph::Direction;
 use petgraph::visit::{ GraphBase, IntoNeighbors, IntoNeighborsDirected,
                        Visitable, VisitMap };
+use petgraph::visit::Dfs;
 
 use cranelift_entity::{ EntityRef, EntitySet };
 
@@ -46,6 +47,21 @@ impl<'a> BlockGraph<'a> {
         BlockGraph {
             fun: fun,
         }
+    }
+
+    pub fn dfs(&self) -> Dfs<Block, EntityVisitMap<Block>> {
+        Dfs::new(self, self.fun.block_entry())
+    }
+
+    pub fn dfs_iter(&'a self) -> impl Iterator<Item = Block> + 'a {
+        struct BlocksIterator<'b>(&'b BlockGraph<'b>, Dfs<Block, EntityVisitMap<Block>>);
+        impl<'b> Iterator for BlocksIterator<'b> {
+            type Item = Block;
+            fn next(&mut self) -> Option<Block> {
+                self.1.next(self.0)
+            }
+        }
+        BlocksIterator(self, self.dfs())
     }
 
 }

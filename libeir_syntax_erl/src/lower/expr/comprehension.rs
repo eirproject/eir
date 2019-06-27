@@ -6,8 +6,7 @@ use libeir_ir::{
 use libeir_ir::constant::NilTerm;
 use libeir_ir::op::BinOp;
 
-use libeir_intern::{ Ident };
-use libeir_diagnostics::DUMMY_SPAN;
+use libeir_intern::{ Symbol, Ident };
 
 use crate::parser::ast::{ Expr, ListComprehension };
 
@@ -63,10 +62,17 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
                 let head_val = b.block_args(unpack_ok_block)[0];
                 let tail_val = b.block_args(unpack_ok_block)[1];
 
-                // TODO unpack fail throw
+                {
+                    let typ = b.value(Symbol::intern("error"));
+                    let error = b.value(Symbol::intern("function_clause"));
+                    // TODO trace
+                    let trace = b.value(NilTerm);
+                    ctx.exc_stack.make_error_jump(b, unpack_fail_block, typ, error, trace);
+                }
 
+                // When there is no match, continue iterating
                 let no_match = b.block_insert();
-                // TODO no match throw
+                b.op_call(no_match, loop_block, &[tail_val, acc]);
 
                 match lower_clause(ctx, b, &mut block, [&*gen.pattern].iter().map(|i| *i), None) {
                     Some(lowered) => {
@@ -99,8 +105,6 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
                 let bool_val = map_block!(block, lower_single(ctx, b, block, expr));
                 let (true_block, false_block, else_block) = b.op_if_bool(block, bool_val);
 
-                // TODO raise on else_block
-
                 let join_block = b.block_insert();
                 let join_arg = b.block_arg_insert(join_block);
 
@@ -108,6 +112,7 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
                 b.op_call(cont, join_block, &[cont_val]);
 
                 b.op_call(false_block, join_block, &[acc]);
+                b.op_call(else_block, join_block, &[acc]);
 
                 (join_block, join_arg)
             }
@@ -125,5 +130,5 @@ pub(super) fn lower_list_comprehension_expr(ctx: &mut LowerCtx, b: &mut Function
 
     let nil = b.value(NilTerm);
     let val = map_block!(block, lower_qual(ctx, b, &inner, &compr.qualifiers, block, nil));
-    ctx.call_function(b, block, Ident::from_str("lists"), Ident::from_str("reverse"), &[val])
+    ctx.call_function(b, block, compr.span, Ident::from_str("lists"), Ident::from_str("reverse"), &[val])
 }

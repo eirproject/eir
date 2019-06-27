@@ -4,21 +4,19 @@ use libeir_ir::{
     FunctionBuilder,
     Value as IrValue,
     Block as IrBlock,
-    BinOp as IrBinOp,
 };
 use libeir_ir::pattern::{
     PatternClause,
     PatternNode,
     PatternMergeFail,
 };
+use libeir_ir::constant::NilTerm;
 
-use crate::parser::ast::{ Module, ResolvedFunctionName, NamedFunction, Expr, Guard };
+use crate::parser::ast::{ Expr, Guard };
 use crate::parser::ast::{ Literal, BinaryExpr, BinaryOp, UnaryExpr, UnaryOp };
 
 use super::{ LowerCtx, lower_block, ScopeToken };
 use super::errors::LowerError;
-
-use cranelift_entity::{ ListPool, EntityList };
 
 use libeir_intern::{ Ident, Symbol };
 
@@ -128,6 +126,8 @@ pub(super) fn lower_clause<'a, P>(
         let scope_tok = ctx.scope.push();
         {
             let fail_handler_block = b.block_insert();
+            b.block_arg_insert(fail_handler_block);
+            b.block_arg_insert(fail_handler_block);
             b.block_arg_insert(fail_handler_block);
             let false_val = b.value(false);
             b.op_call(fail_handler_block, ret_cont, &[false_val]);
@@ -250,6 +250,38 @@ pub(super) fn lower_clause<'a, P>(
     }
 }
 
+fn lower_list_head_pattern(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    cl_ctx: &mut ClauseLowerCtx,
+    pattern: &Expr,
+    tail: PatternNode,
+) -> Result<PatternNode, PatternMergeFail>
+{
+    match pattern {
+        Expr::Literal(Literal::String(ident)) => {
+            let tokens = match crate::lower::expr::literal::tokenize_string(*ident) {
+                Ok(tok) => tok,
+                Err(err) => {
+                    ctx.error(err);
+                    let wildcard = b.pat_mut().wildcard();
+                    return Ok(wildcard);
+                },
+            };
+
+            let mut node = tail;
+            for c in tokens.iter().rev() {
+                let char_const = b.cons_mut().from(*c);
+                let char_pat = b.pat_mut().atomic(char_const);
+                node = b.pat_mut().list(char_pat, node);
+            }
+
+            Ok(node)
+        }
+        _ => unimplemented!(),
+    }
+}
+
 fn lower_pattern(
     ctx: &mut LowerCtx,
     b: &mut FunctionBuilder,
@@ -259,6 +291,31 @@ fn lower_pattern(
 {
 
     let node = match pattern {
+        Expr::Literal(lit) => {
+            let constant = match lit {
+                Literal::Atom(ident) => {
+                    b.cons_mut().from(*ident)
+                }
+                Literal::Char(span, c) => {
+                    b.cons_mut().from((*c, *span))
+                }
+                Literal::Integer(span, num) => {
+                    b.cons_mut().from((*num, *span))
+                }
+                Literal::String(ident) => {
+                    match crate::lower::expr::literal::intern_string_const(*ident, b.cons_mut()) {
+                        Ok(cons) => cons,
+                        Err(err) => {
+                            ctx.error(err);
+                            let wildcard = b.pat_mut().wildcard();
+                            return Ok(wildcard);
+                        },
+                    }
+                }
+                _ => unimplemented!("{:?}", lit),
+            };
+            b.pat_mut().atomic(constant)
+        }
         // <pattern> = <expr>
         Expr::Match(match_expr) => {
             // Lower the two sides to patterns and merge them.
@@ -311,6 +368,15 @@ fn lower_pattern(
             b.pat_mut().node_finish(node);
             node
         }
+        Expr::Nil(_nil) => {
+            let nil_const = b.cons_mut().from(NilTerm);
+            b.pat_mut().atomic(nil_const)
+        }
+        Expr::Cons(cons) => {
+            let head = lower_pattern(ctx, b, cl_ctx, &cons.head)?;
+            let tail = lower_pattern(ctx, b, cl_ctx, &cons.tail)?;
+            b.pat_mut().list(head, tail)
+        }
         Expr::Record(rec) => {
             let rec_def = &ctx.module.records[&rec.name.name];
             // TODO: Proper error handling
@@ -347,6 +413,10 @@ fn lower_pattern(
             b.pat_mut().node_finish(node);
 
             node
+        }
+        Expr::BinaryExpr(BinaryExpr { op: BinaryOp::Append, lhs, rhs, .. }) => {
+            let tail = lower_pattern(ctx, b, cl_ctx, rhs)?;
+            lower_list_head_pattern(ctx, b, cl_ctx, lhs, tail)?
         }
         _ => {
             // We don't bother trying to evaluate the expressions here, we
@@ -388,6 +458,7 @@ fn check_valid_pattern_expr(ctx: &mut LowerCtx, expr: &Expr) {
     // > - Its value can be evaluated to a constant when complied.
 
     let valid = match expr {
+        Expr::Literal(Literal::Atom(_)) => true,
         Expr::Literal(Literal::Integer(_, _)) => true,
         Expr::Literal(Literal::BigInteger(_, _)) => true,
         Expr::BinaryExpr(BinaryExpr { op, lhs, rhs, .. }) => {
@@ -406,6 +477,10 @@ fn check_valid_pattern_expr(ctx: &mut LowerCtx, expr: &Expr) {
                 BinaryOp::Bxor => true,
                 BinaryOp::Bsl => true,
                 BinaryOp::Bsr => true,
+
+                // List
+                BinaryOp::Append => true,
+
                 _ => false,
             };
             if valid {
@@ -426,6 +501,14 @@ fn check_valid_pattern_expr(ctx: &mut LowerCtx, expr: &Expr) {
                 check_valid_pattern_expr(ctx, operand);
             }
             valid
+        },
+        Expr::Nil(_nil) => {
+            true
+        }
+        Expr::Cons(cons) => {
+            check_valid_pattern_expr(ctx, &cons.head);
+            check_valid_pattern_expr(ctx, &cons.tail);
+            true
         },
         _ => false,
     };

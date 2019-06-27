@@ -1,5 +1,4 @@
 use libeir_ir::{
-    Module as IrModule,
     FunctionBuilder,
     Value as IrValue,
     Block as IrBlock,
@@ -11,9 +10,7 @@ use libeir_diagnostics::{ ByteSpan, ByteIndex, DUMMY_SPAN };
 
 use super::super::{ LowerCtx, LowerError };
 
-use crate::parser::ast::{ Expr, Literal };
-use crate::parser::ast::{ Apply, Remote, BinaryExpr };
-use crate::parser::ast::{ BinaryOp };
+use crate::parser::ast::Literal;
 
 pub(super) fn lower_literal(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                  literal: &Literal) -> (IrBlock, IrValue)
@@ -37,7 +34,7 @@ pub(super) fn lower_literal(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: 
     (block, value)
 }
 
-fn intern_string_const(ident: Ident, c: &mut ConstantContainer) -> Result<Const, LowerError> {
+pub fn tokenize_string(ident: Ident) -> Result<Vec<u64>, LowerError> {
     let string = ident.name.as_str().get();
 
     // http://erlang.org/doc/reference_manual/data_types.html#escape-sequences
@@ -182,6 +179,12 @@ fn intern_string_const(ident: Ident, c: &mut ConstantContainer) -> Result<Const,
     for (idx, c) in string.char_indices() {
         process(&mut state, &mut chars, ident, string, idx, c)?;
     }
+
+    Ok(chars)
+}
+
+pub fn intern_string_const(ident: Ident, c: &mut ConstantContainer) -> Result<Const, LowerError> {
+    let chars = tokenize_string(ident)?;
 
     let mut cons = c.value_from(NilTerm);
     for elem in chars.iter().rev() {

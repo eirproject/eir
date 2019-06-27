@@ -15,7 +15,7 @@ use crate::pattern::{ PatternContainer, PatternClause };
 mod builder;
 pub use builder::{ FunctionBuilder, PackValueListBuilder, CaseBuilder, IntoValue };
 
-//mod validate;
+mod validate;
 
 mod graph;
 pub use self::graph::BlockGraph;
@@ -49,12 +49,15 @@ pub struct BlockData {
     op: Option<OpKind>,
     reads: EntityList<Value>,
 
+    span: ByteSpan,
+
+    // Auxilary data for graph implementation
+
     // These will contain all the connected blocks, regardless
     // of whether they are actually alive or not.
     predecessors: PooledEntitySet<Block>,
     successors: PooledEntitySet<Block>,
 
-    span: ByteSpan,
 }
 
 #[derive(Debug)]
@@ -151,6 +154,16 @@ impl Function {
     pub fn value_is_constant(&self, value: Value) -> bool {
         self.constant_values.contains(&value)
     }
+
+    /// If the value is a variable, get its definition block
+    pub fn value_arg_definition(&self, value: Value) -> Option<Block> {
+        if let ValueType::Arg(block) = self.values[value].kind {
+            Some(block)
+        } else {
+            None
+        }
+    }
+
     pub fn value_block(&self, value: Value) -> Option<Block> {
         if let ValueType::Block(block) = self.values[value].kind {
             Some(block)

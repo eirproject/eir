@@ -1,9 +1,8 @@
 use crate::op::OpKind;
 use super::Function;
-use super::{ Ebb, EbbCall, Op, Value };
-use super::graph::{ FunctionCfg, CfgNode, CfgEdge };
+use super::{ Block, Value };
 
-use util::pooled_entity_set::{ PooledSetValue, PooledEntitySet };
+use libeir_util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
 use cranelift_entity::ListPool;
 
 use std::collections::{ HashMap, HashSet };
@@ -13,195 +12,198 @@ use petgraph::algo::dominators::Dominators;
 
 use matches::{ matches, assert_matches };
 
-pub enum ValidationEntry {
-    /// The entry EBB has a different arity from the function signature.
-    FunctionEntryArityMismatch {
-        ident_arity: usize,
-        entry_arity: usize,
+//pub enum ValidationEntry {
+//    /// The entry EBB has a different arity from the function signature.
+//    FunctionEntryArityMismatch {
+//        ident_arity: usize,
+//        entry_arity: usize,
+//    },
+//    /// A lambda function must unpack its env as the first OP in
+//    /// its entry basic block.
+//    LambdaNoUnpackEnv,
+//    /// Basic block is empty. Not allowed.
+//    EbbEnpty {
+//        ebb: Ebb,
+//    },
+//    CantBeTerminator,
+//    MustBeTerminator,
+//    InvalidEbbCalls,
+//    OrphanNodeWarning,
+//    /// Tried to read a SSA variable that was not visible.
+//    InvalidRead,
+//}
+
+#[derive(Debug)]
+pub enum ValidationError {
+
+    /// There was an empty block in the function, this is illegal
+    EmptyBlock {
+        block: Block,
     },
-    /// A lambda function must unpack its env as the first OP in
-    /// its entry basic block.
-    LambdaNoUnpackEnv,
-    /// Basic block is empty. Not allowed.
-    EbbEnpty {
-        ebb: Ebb,
+
+    /// Tried to call a block with wrong arity
+    BlockCallArity {
+        caller: Block,
+        callee: Block,
+        attempted: usize,
+        actual: usize,
     },
-    CantBeTerminator,
-    MustBeTerminator,
-    InvalidEbbCalls,
-    OrphanNodeWarning,
+
+    /// The arity of the block marked as entry did not match with the identifier
+    EntryArityMismatch,
+
     /// Tried to read a SSA variable that was not visible.
-    InvalidRead,
+    InvalidRead {
+        value: Value,
+        block: Block,
+    },
+
 }
 
 impl Function {
+
     pub fn validate(&self) {
-        let cfg = self.gen_cfg();
-        let doms = petgraph::algo::dominators::simple_fast(
-            &cfg.graph, cfg.ebbs[&self.ebb_entry()]);
 
-        validate_entry_invariants(self, &cfg);
-        validate_ssa_visibility(self, &cfg, &doms);
-        validate_ebb_calls(self, &cfg);
+        let mut errors = Vec::new();
+
+        let block_graph = self.block_graph();
+        let doms = petgraph::algo::dominators::simple_fast(&block_graph, self.block_entry());
+
+        //validate_entry_invariants(self);
+        //validate_ssa_visibility(self, &doms);
+        self.validate_entry_invariants(&mut errors);
+        self.validate_blocks(&mut errors);
+        self.validate_ssa_visibility(&doms, &mut errors);
+
+        println!("{:#?}", errors);
     }
-}
 
-fn validate_ebb_calls(fun: &Function, cfg: &FunctionCfg) {
-    for ebb in fun.iter_ebb() {
-        for op in fun.iter_op(ebb) {
-            let kind = fun.op_kind(op);
-            if !kind.allowed_in_dialect(fun.dialect) {
-                println!("ERROR: Operation {:?} not allowed in {:?} dialect",
-                         kind, fun.dialect);
+    fn validate_call_to(&self, errors: &mut Vec<ValidationError>, caller: Block, val: Value, arity: usize) {
+        if let Some(block) = self.value_block(val) {
+            let actual = self.block_args(block).len();
+            if actual != arity {
+                errors.push(ValidationError::BlockCallArity {
+                    caller,
+                    callee: block,
+                    attempted: arity,
+                    actual,
+                });
             }
+        }
+    }
 
-            for branch in fun.op_branches(op) {
-                let target = fun.ebb_call_target(*branch);
-                if fun.ebb_call_args(*branch).len() != fun.ebb_args(target).len() {
-                    println!("ERROR: EbbCall arity does not match arity of Ebb {} {}", branch, target);
+    fn validate_blocks(&self, errors: &mut Vec<ValidationError>) {
+        let block_graph = self.block_graph();
+
+        let mut dfs = block_graph.dfs();
+        while let Some(block) = dfs.next(&block_graph) {
+            if let Some(kind) = self.block_kind(block) {
+                match kind {
+                    OpKind::Call => {
+                        let reads = self.block_reads(block);
+                        self.validate_call_to(errors, block, reads[0], reads.len() - 1);
+                    }
+                    _ => (), // TODO validate more types
                 }
-            }
-        }
-    }
-}
-
-fn validate_entry_invariants(fun: &Function, cfg: &FunctionCfg) {
-    let entry_ebb = fun.ebb_entry();
-
-    let arity = fun.ident.arity;
-    let needed_entry_arity = if fun.ident.lambda.is_some() { arity + 1 } else { arity };
-
-    //if fun.ebb_args(entry_ebb).len() != needed_entry_arity {
-    //    println!("ERROR: Entry Ebb and identifier must be of same arity");
-    //}
-
-    if fun.ident.lambda.is_some() {
-        let entry_first_op = fun.iter_op(entry_ebb).next().unwrap();
-        if !matches!(fun.op_kind(entry_first_op), OpKind::UnpackEnv) {
-            println!("ERROR: Lambda must have UnpackEnv as its first argument");
-        }
-    }
-
-}
-
-/// Strictly validate SSA visibility
-///
-/// It operates on the following principle:
-/// * The set of SSA variables visible at the beginning of a block is
-///   (the SSA variables visible at the end of its immediate dominator)
-///   + (the set of SSA variables declared in PHI nodes of the block).
-///
-/// More specifically:
-/// * Seed the live variable map with the entry node.
-/// * While there are basic blocks missing from our live variable map:
-///   * Loop through the set of missing basic blocks:
-///      * Calculate the live variables in the basic block if its
-///        immediate dominator has already been calculated, otherwise
-///        skip.
-/// * Go through each basic block in the cfg and validate that it only
-///   references live variables.
-fn validate_ssa_visibility(fun: &Function, cfg: &FunctionCfg,
-                           doms: &Dominators<NodeIndex>) {
-    let entry_ebb = fun.ebb_entry();
-
-    let mut pool: ListPool<PooledSetValue> = ListPool::new();
-
-    // Live variables on block entry and exit
-    let mut live_variables_ops: HashMap<Op, PooledEntitySet<Value>>
-        = HashMap::new();
-    let mut live_variables_ebbs: HashMap<Ebb, PooledEntitySet<Value>>
-        = HashMap::new();
-
-    // Seed entry node
-    let mut entry_vals = PooledEntitySet::new();
-    for const_val in fun.iter_constants() {
-        entry_vals.insert(*const_val, &mut pool);
-    }
-
-    insert_live_for_node(fun, entry_ebb, entry_vals,
-                         &mut pool,
-                         &mut live_variables_ops,
-                         &mut live_variables_ebbs);
-
-    // Iterate until all calculated
-    let mut missing_nodes: HashSet<_> =
-        cfg.ebbs.keys().cloned().collect();
-    missing_nodes.remove(&entry_ebb);
-    let mut processed = Vec::new();
-
-    while missing_nodes.len() > 0 {
-
-        for node in missing_nodes.iter() {
-
-            // If there are no incoming edges, this Ebb is an orphan.
-            // Remove from set.
-            let idom = doms.immediate_dominator(cfg.ebbs[node]);
-            if idom.is_none() {
-                processed.push(*node);
-                continue;
-            }
-
-            // The immediate dominator of a Ebb will always be an Op.
-            // Get the identifier of the immediate dominator.
-            let node_idom = idom.unwrap();
-            let idom_op = if let CfgNode::Op(op) = cfg.graph[node_idom] {
-                op
             } else {
-                panic!()
-            };
-
-            // If the immediate dominator is already processed, process this Ebb.
-            if live_variables_ops.contains_key(&idom_op) {
-                let live = live_variables_ops[&idom_op].make_copy(&mut pool);
-                insert_live_for_node(fun, *node, live, &mut pool,
-                                     &mut live_variables_ops,
-                                     &mut live_variables_ebbs);
-                processed.push(*node);
+                errors.push(ValidationError::EmptyBlock { block: block });
             }
 
         }
-
-        // Remove processed
-        if missing_nodes.len() > 0 {
-            assert!(processed.len() > 0);
-        }
-        for proc in processed.iter() {
-            missing_nodes.remove(proc);
-        }
-        processed.clear();
-
     }
 
-    let mut aux_values = HashSet::new();
+    fn validate_entry_invariants(&self, errors: &mut Vec<ValidationError>) {
+        let entry = self.block_entry();
+        let arity = self.block_args(entry).len();
 
-    // Go through all blocks and validate visibility
-    for ebb in fun.iter_ebb() {
-        if doms.immediate_dominator(cfg.ebbs[&ebb]).is_none() && ebb != entry_ebb {
-            println!("WARNING: Orphan {}", ebb);
-            continue;
+        // In the calling convention, the first two arguments are (ok_cont, err_cont)
+        if arity != self.ident().arity + 2 {
+            errors.push(ValidationError::EntryArityMismatch);
+        }
+    }
+
+}
+
+impl Function {
+
+    /// Strictly validate SSA visibility
+    ///
+    /// It operates on the following principle:
+    /// * The set of SSA variables visible at the beginning of a block is
+    ///   (the SSA variables visible at its immediate dominator)
+    ///   + (the set of SSA variables declared in the arguments).
+    ///
+    /// More specifically:
+    /// * Seed the live variable map with the entry node.
+    /// * While there are basic blocks missing from our live variable map:
+    ///   * Loop through the set of missing blocks:
+    ///      * Calculate the live variables in the block if its
+    ///        immediate dominator has already been calculated, otherwise
+    ///        skip.
+    /// * Go through each basic block in the cfg and validate that it only
+    ///   references live variables.
+    fn validate_ssa_visibility(&self, doms: &Dominators<Block>, errors: &mut Vec<ValidationError>) {
+        let entry_block = self.block_entry();
+
+        let mut pool: EntitySetPool = ListPool::new();
+
+        // Live variables on block entry and exit
+        let mut live_variables: HashMap<Block, PooledEntitySet<Value>>
+            = HashMap::new();
+
+        // Seed entry node
+        let mut entry_vals = PooledEntitySet::new();
+        self.insert_live_for_node(entry_block, entry_vals,
+                                  &mut pool,
+                                  &mut live_variables);
+
+        // Iterate until all calculated
+        let mut missing_nodes: HashSet<_> = self.block_graph().dfs_iter().collect();
+        missing_nodes.remove(&entry_block);
+        let mut processed = Vec::new();
+
+        while missing_nodes.len() > 0 {
+
+            for node in missing_nodes.iter() {
+
+                if let Some(idom) = doms.immediate_dominator(*node){
+                    // If the immediate dominator is already processed, process this block.
+                    if let Some(idom_live) = live_variables.get(&idom) {
+                        let live = idom_live.make_copy(&mut pool);
+                        self.insert_live_for_node(*node, live, &mut pool,
+                                                  &mut live_variables);
+                        processed.push(*node);
+                    }
+                } else {
+                    // Since we only go through nodes that are alive, that is, reachable
+                    // from the entry point, all nodes (except the entry itself), should
+                    // have an idom
+                    unreachable!()
+                }
+
+            }
+
+            // Remove processed
+            if missing_nodes.len() > 0 {
+                assert!(processed.len() > 0);
+            }
+            for proc in processed.iter() {
+                missing_nodes.remove(proc);
+            }
+            processed.clear();
+
         }
 
-        let mut last_valset = &live_variables_ebbs[&ebb];
-
-        for op in fun.iter_op(ebb) {
-            if live_variables_ops.contains_key(&op) {
-                aux_values.clear();
-                last_valset = &live_variables_ops[&op];
-            }
-            for read in fun.op_reads(op) {
-                if !last_valset.contains(*read, &mut pool)
-                    && !aux_values.contains(read) {
-                    println!("ERROR: Value not visible at location {}", read);
-                }
-            }
-            for write in fun.op_writes(op) {
-                aux_values.insert(*write);
-            }
-            for branch in fun.op_branches(op) {
-                for arg in fun.ebb_call_args(*branch) {
-                    if !last_valset.contains(*arg, &mut pool)
-                        && !aux_values.contains(arg) {
-                        println!("ERROR: Value not visible at location {}", arg);
+        // Go through all blocks and validate visibility
+        for block in self.block_graph().dfs_iter() {
+            let visible = &live_variables[&block];
+            for read in self.block_reads(block) {
+                if let Some(_) = self.value_arg_definition(*read) {
+                    if !visible.contains(*read, &pool) {
+                        errors.push(ValidationError::InvalidRead {
+                            value: *read,
+                            block: block,
+                        });
                     }
                 }
             }
@@ -209,26 +211,14 @@ fn validate_ssa_visibility(fun: &Function, cfg: &FunctionCfg,
 
     }
 
-}
-
-fn insert_live_for_node(fun: &Function, ebb: Ebb, base: PooledEntitySet<Value>,
-                        pool: &mut ListPool<PooledSetValue>,
-                        live_ops: &mut HashMap<Op, PooledEntitySet<Value>>,
-                        live_ebbs: &mut HashMap<Ebb, PooledEntitySet<Value>>) {
-    let mut base = base;
-
-    for arg in fun.ebb_args(ebb) {
-        base.insert(*arg, pool);
+    fn insert_live_for_node(&self, block: Block, base_set: PooledEntitySet<Value>,
+                            pool: &mut EntitySetPool,
+                            live: &mut HashMap<Block, PooledEntitySet<Value>>) {
+        let mut set = base_set.make_copy(pool);
+        for arg in self.block_args(block) {
+            set.insert(*arg, pool);
+        }
+        live.insert(block, set);
     }
 
-    live_ebbs.insert(ebb, base.make_copy(pool));
-
-    for op in fun.iter_op(ebb) {
-        for write in fun.op_writes(op) {
-            base.insert(*write, pool);
-        }
-        if fun.op_branches(op).len() > 0 {
-            live_ops.insert(op, base.make_copy(pool));
-        }
-    }
 }

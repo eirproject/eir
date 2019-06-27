@@ -15,20 +15,21 @@ use super::lower_function;
 use super::LowerCtx;
 use super::pattern::lower_clause;
 
-use crate::parser::ast::{ Name };
-use crate::parser::ast::{ Expr, Literal };
-use crate::parser::ast::{ Apply, Remote, BinaryExpr, UnaryExpr };
-use crate::parser::ast::{ BinaryOp, UnaryOp };
+use crate::parser::ast::Expr;
+use crate::parser::ast::{ Apply, Remote, UnaryExpr };
+use crate::parser::ast::UnaryOp;
 use crate::parser::ast::{ FunctionName };
 
-mod literal;
+pub mod literal;
 use literal::lower_literal;
 
 mod record;
 mod catch;
 mod binary_expr;
-mod list_comprehension;
+mod comprehension;
 mod case;
+mod binary;
+pub use binary::TypeName as BinaryTypeName;
 
 pub(super) fn lower_block<'a, T>(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                                  exprs: T) -> (IrBlock, IrValue) where T: IntoIterator<Item = &'a Expr>
@@ -81,6 +82,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                     // Don't really know if it makes sense to put any span on this
                     let arity_val = b.value(args.len());
 
+                    b.block_set_span(block, *span);
                     block = b.op_capture_function(block, mod_val, fun_val, arity_val);
                     b.block_args(block)[0]
                 }
@@ -96,6 +98,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 arg_vals.push(arg_val);
             }
 
+            b.block_set_span(block, *span);
             b.op_call(block, callee_val, &arg_vals);
             ctx.exc_stack.make_error_jump(b, fail_block, fail_type, fail_error, fail_trace);
 
@@ -107,39 +110,28 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
         Expr::UnaryExpr(UnaryExpr { op, operand, span }) => {
             let operand_val = map_block!(block, lower_single(ctx, b, block, operand));
 
-            let op_fun = match op {
-                UnaryOp::Not => {
-                    block = b.op_capture_function(
-                        block,
-                        Ident::from_str("erlang"),
-                        Ident::from_str("not"),
-                        (1, DUMMY_SPAN)
-                    );
-                    b.block_args(block)[0]
-                }
-                _ => unimplemented!("{:?}", op),
+            let (block, val) = match op {
+                UnaryOp::Not =>
+                    ctx.call_function(b, block, *span, Symbol::intern("erlang"), Symbol::intern("not"), &[operand_val]),
+                _ => unimplemented!(),
             };
 
-            let (ok_block, ok_block_val) = b.block_insert_get_val();
-            let ok_res = b.block_arg_insert(ok_block);
-
-            let (fail_block, fail_block_val) = b.block_insert_get_val();
-            let fail_type = b.block_arg_insert(fail_block);
-            let fail_error = b.block_arg_insert(fail_block);
-            let fail_trace = b.block_arg_insert(fail_block);
-
-            b.op_call(block, op_fun, &[ok_block_val, fail_block_val, operand_val]);
-            ctx.exc_stack.make_error_jump(b, fail_block, fail_type, fail_error, fail_trace);
-
-            (ok_block, ok_res)
+            (block, val)
         }
-        Expr::BinaryExpr(binary_expr) => binary_expr::lower_binary_expr(ctx, b, block, binary_expr),
-        Expr::Literal(lit) => lower_literal(ctx, b, block, lit),
         Expr::Match(mat) => {
             let match_val = map_block!(block, lower_single(ctx, b, block, &mat.expr));
 
-            // TODO throw on no match
             let no_match = b.block_insert();
+            {
+                let mut block = no_match;
+                let typ_val = b.value(Symbol::intern("error"));
+                let badmatch_val = b.value(Symbol::intern("badmatch"));
+                block = b.op_make_tuple(block, &[badmatch_val, match_val]);
+                let err_val = b.block_args(block)[0];
+                // TODO trace
+                let trace_val = b.value(NilTerm);
+                ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
+            }
 
             match lower_clause(ctx, b, &mut block, [&mat.pattern].iter().map(|i| &***i), None) {
                 Some(lowered) => {
@@ -169,11 +161,10 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 }
             }
         }
-        Expr::Case(case) => case::lower_case_expr(ctx, b, block, case),
-        Expr::If(if_expr) => case::lower_if_expr(ctx, b, block, if_expr),
         Expr::Cons(cons) => {
             let head = map_block!(block, lower_single(ctx, b, block, &cons.head));
             let tail = map_block!(block, lower_single(ctx, b, block, &cons.tail));
+            b.block_set_span(block, cons.span);
             block = b.op_make_list(block, &[head], tail);
             (block, b.block_args(block)[0])
         }
@@ -196,8 +187,6 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
             let fun = lower_function(ctx, b, fun);
             (block, b.value(fun))
         }
-        Expr::Try(try_expr) => catch::lower_try_expr(ctx, b, block, try_expr),
-        Expr::Catch(catch_expr) => catch::lower_catch_expr(ctx, b, block, catch_expr),
         Expr::Receive(recv) => {
 
             let join_block = b.block_insert();
@@ -292,10 +281,17 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 _ => unimplemented!(),
             }
         }
+        Expr::Case(case) => case::lower_case_expr(ctx, b, block, case),
+        Expr::If(if_expr) => case::lower_if_expr(ctx, b, block, if_expr),
+        Expr::Try(try_expr) => catch::lower_try_expr(ctx, b, block, try_expr),
+        Expr::Catch(catch_expr) => catch::lower_catch_expr(ctx, b, block, catch_expr),
+        Expr::BinaryExpr(binary_expr) => binary_expr::lower_binary_expr(ctx, b, block, binary_expr),
+        Expr::Literal(lit) => lower_literal(ctx, b, block, lit),
         Expr::Record(rec) => record::lower_record_expr(ctx, b, block, rec),
         Expr::RecordAccess(rec) => record::lower_record_access_expr(ctx, b, block, rec),
         Expr::RecordUpdate(rec) => record::lower_record_update_expr(ctx, b, block, rec),
-        Expr::ListComprehension(compr) => list_comprehension::lower_list_comprehension_expr(ctx, b, block, compr),
+        Expr::ListComprehension(compr) => comprehension::lower_list_comprehension_expr(ctx, b, block, compr),
+        Expr::Binary(bin) => binary::lower_binary_expr(ctx, b, block, bin),
         _ => {
             unimplemented!("{:?}", expr);
         }

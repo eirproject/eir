@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::path::Path;
@@ -12,7 +12,7 @@ use crate::lexer::{Lexed, Lexer, LexicalToken, Symbol, Token};
 
 use super::macros::NoArgsMacroCall;
 use super::token_stream::TokenStream;
-use super::{MacroContainer, MacroCall, MacroDef, PreprocessorError, Result};
+use super::{MacroContainer, MacroCall, PreprocessorError, Result};
 
 pub trait TokenReader: Sized {
     type Source;

@@ -3,9 +3,9 @@ use libeir_ir::{
     Value as IrValue,
     Block as IrBlock,
 };
+use libeir_ir::constant::NilTerm;
 
-use libeir_intern::{ Ident };
-use libeir_diagnostics::DUMMY_SPAN;
+use libeir_intern::{ Symbol, Ident };
 
 use crate::parser::ast::{ BinaryExpr };
 use crate::parser::ast::{ BinaryOp };
@@ -36,7 +36,17 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
             b.op_call(false1_block, ret_block, &[false_val]);
 
             // Nonbool branch
-            // TODO throw
+            {
+                let mut block = non1_block;
+
+                let typ_val = b.value(Symbol::intern("error"));
+                let err_atom = b.value(Symbol::intern("badarg"));
+                block = b.op_make_tuple(block, &[err_atom, lhs_val]);
+                let err_val = b.block_args(block)[0];
+                let trace_val = b.value(NilTerm); // TODO: Trace
+
+                ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
+            }
 
             (ret_block, ret_val)
         }
@@ -57,7 +67,17 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
             b.op_call(l2_block, ret_block, &[rhs_val]);
 
             // Nonbool branch
-            // TODO throw
+            {
+                let mut block = non1_block;
+
+                let typ_val = b.value(Symbol::intern("error"));
+                let err_atom = b.value(Symbol::intern("badarg"));
+                block = b.op_make_tuple(block, &[err_atom, lhs_val]);
+                let err_val = b.block_args(block)[0];
+                let trace_val = b.value(NilTerm); // TODO: Trace
+
+                ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
+            }
 
             (ret_block, ret_val)
         }
@@ -65,36 +85,23 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
             let lhs_val = map_block!(block, lower_single(ctx, b, block, lhs));
             let rhs_val = map_block!(block, lower_single(ctx, b, block, rhs));
 
-            match op {
-                BinaryOp::Lt => {
-                    ctx.call_function(b, block, Ident::from_str("erlang"), Ident::from_str("<"), &[lhs_val, rhs_val])
-                }
-                BinaryOp::Lte => {
-                    ctx.call_function(b, block, Ident::from_str("erlang"), Ident::from_str("=<"), &[lhs_val, rhs_val])
-                }
-                BinaryOp::Sub => {
-                    ctx.call_function(b, block, Ident::from_str("erlang"), Ident::from_str("-"), &[lhs_val, rhs_val])
-                }
-                BinaryOp::Add => {
-                    ctx.call_function(b, block, Ident::from_str("erlang"), Ident::from_str("+"), &[lhs_val, rhs_val])
-                }
-                BinaryOp::Append => {
-                    ctx.call_function(b, block, Ident::from_str("erlang"), Ident::from_str("++"), &[lhs_val, rhs_val])
-                }
-                BinaryOp::Multiply => {
-                    ctx.call_function(b, block, Ident::from_str("erlang"), Ident::from_str("*"), &[lhs_val, rhs_val])
-                }
-                BinaryOp::Divide => {
-                    ctx.call_function(b, block, Ident::from_str("erlang"), Ident::from_str("/"), &[lhs_val, rhs_val])
-                }
-                BinaryOp::StrictNotEqual => {
-                    ctx.call_function(b, block, Ident::from_str("erlang"), Ident::from_str("=/="), &[lhs_val, rhs_val])
-                }
-                BinaryOp::StrictEqual => {
-                    ctx.call_function(b, block, Ident::from_str("erlang"), Ident::from_str("=:="), &[lhs_val, rhs_val])
-                }
+            let (m, f) = match op {
+                BinaryOp::Lt => (Ident::from_str("erlang"), Ident::from_str("<")),
+                BinaryOp::Lte => (Ident::from_str("erlang"), Ident::from_str("=<")),
+                BinaryOp::Gt => (Ident::from_str("erlang"), Ident::from_str(">")),
+                BinaryOp::Gte => (Ident::from_str("erlang"), Ident::from_str(">=")),
+                BinaryOp::Sub => (Ident::from_str("erlang"), Ident::from_str("-")),
+                BinaryOp::Add => (Ident::from_str("erlang"), Ident::from_str("+")),
+                BinaryOp::Append => (Ident::from_str("erlang"), Ident::from_str("++")),
+                BinaryOp::Multiply => (Ident::from_str("erlang"), Ident::from_str("*")),
+                BinaryOp::Divide => (Ident::from_str("erlang"), Ident::from_str("/")),
+                BinaryOp::Rem => (Ident::from_str("erlang"), Ident::from_str("rem")),
+                BinaryOp::StrictNotEqual => (Ident::from_str("erlang"), Ident::from_str("=/=")),
+                BinaryOp::StrictEqual => (Ident::from_str("erlang"), Ident::from_str("=:=")),
                 _ => unimplemented!("{:?}", op),
-            }
+            };
+
+            ctx.call_function(b, block, *span, m, f, &[lhs_val, rhs_val])
         }
     }
 

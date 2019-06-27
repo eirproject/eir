@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use libeir_ir::{
     Module as IrModule,
     FunctionBuilder,
@@ -7,22 +5,12 @@ use libeir_ir::{
     Block as IrBlock,
     IntoValue,
 };
-use libeir_ir::pattern::{
-    PatternClause,
-    PatternNode,
-    PatternMergeFail,
-};
-use libeir_ir::constant::{ ConstantContainer, IntoConst, Const };
+use libeir_ir::constant::NilTerm;
 
-use libeir_diagnostics::{ ByteSpan, ByteIndex, DUMMY_SPAN };
+use libeir_diagnostics::ByteSpan;
 use libeir_intern::{ Symbol, Ident };
 
-use libeir_util::hashmap_stack::HashMapStack;
-
-use cranelift_entity::{ ListPool, EntityList };
-
-use crate::parser::ast::{ Module, ResolvedFunctionName, NamedFunction, Function, FunctionClause, Expr, Guard };
-use crate::parser::ast::{ Literal, BinaryExpr, BinaryOp, UnaryExpr, UnaryOp };
+use crate::parser::ast::{ Module, NamedFunction, Function, FunctionClause };
 
 macro_rules! map_block {
     ($block:ident, $call:expr) => {
@@ -52,10 +40,6 @@ use scope::ScopeToken;
 #[cfg(test)]
 mod tests;
 
-// Actual error info is located in context, this is only applicable when we
-// encounter something we don't know how to proceed from and need to bail.
-type LowerResult<T> = Result<T, ()>;
-
 struct LowerCtx<'a> {
     module: &'a Module,
 
@@ -66,6 +50,8 @@ struct LowerCtx<'a> {
 
     errors: Vec<LowerError>,
     failed: bool,
+
+    val_buf: Vec<IrValue>,
 }
 
 impl<'a> LowerCtx<'a> {
@@ -106,23 +92,32 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
-    pub fn call_function<M, F>(&mut self, b: &mut FunctionBuilder, mut block: IrBlock,
+    pub fn call_function<M, F>(&mut self, b: &mut FunctionBuilder, mut block: IrBlock, span: ByteSpan,
                                   m: M, f: F, args: &[IrValue]) -> (IrBlock, IrValue)
     where
         M: IntoValue, F: IntoValue
     {
+        b.block_set_span(block, span);
         block = b.op_capture_function(block, m, f, args.len());
         let fun_val = b.block_args(block)[0];
 
-        let (ok_block, ok_block_val) = b.block_insert_get_val();
+        let ok_block = b.block_insert();
         let ok_res = b.block_arg_insert(ok_block);
 
-        let (fail_block, fail_block_val) = b.block_insert_get_val();
+        let fail_block = b.block_insert();
         let fail_type = b.block_arg_insert(fail_block);
         let fail_error = b.block_arg_insert(fail_block);
         let fail_trace = b.block_arg_insert(fail_block);
 
-        b.op_call(block, fun_val, args);
+        self.val_buf.clear();
+        self.val_buf.push(b.value(ok_block));
+        self.val_buf.push(b.value(fail_block));
+        for arg in args.iter() {
+            self.val_buf.push(*arg);
+        }
+
+        b.block_set_span(block, span);
+        b.op_call(block, fun_val, &self.val_buf);
         self.exc_stack.make_error_jump(b, fail_block, fail_type, fail_error, fail_trace);
 
         (ok_block, ok_res)
@@ -130,7 +125,7 @@ impl<'a> LowerCtx<'a> {
 
 }
 
-pub fn lower_module(module: &Module) -> IrModule {
+pub fn lower_module(module: &Module) -> (Result<IrModule, ()>, Vec<LowerError>) {
 
     // TODO sort functions for more deterministic compilation
 
@@ -146,6 +141,8 @@ pub fn lower_module(module: &Module) -> IrModule {
 
         errors: Vec::new(),
         failed: false,
+
+        val_buf: Vec::new(),
     };
 
     for (ident, function) in module.functions.iter() {
@@ -168,7 +165,25 @@ pub fn lower_module(module: &Module) -> IrModule {
         lower_top_function(&mut ctx, &mut builder, function);
     }
 
-    ir_module
+    //println!("{} {:#?}", ctx.failed, ctx.errors);
+    //let emitter = libeir_diagnostics::StandardStreamEmitter::new(libeir_diagnostics::ColorChoice::Auto)
+    //    .set_codemap(parser.config.codemap.clone());
+    //for error in ctx.errors {
+    //    use libeir_diagnostics::Emitter;
+    //    emitter.diagnostic(&error.to_diagnostic()).unwrap();
+    //}
+
+    if ctx.failed {
+        (
+            Err(()),
+            ctx.errors,
+        )
+    } else {
+        (
+            Ok(ir_module),
+            ctx.errors,
+        )
+    }
 }
 
 fn lower_function(
@@ -193,7 +208,7 @@ fn lower_function_base(
     ctx: &mut LowerCtx, b: &mut FunctionBuilder,
     // The block the function should be lowered into
     entry: IrBlock,
-    span: ByteSpan,
+    _span: ByteSpan,
     arity: usize,
     clauses: &[FunctionClause],
 ) {
@@ -222,7 +237,13 @@ fn lower_function_base(
 
     // Match fail block
     let match_fail_block = b.block_insert();
-    b.op_call(match_fail_block, err_cont, &[]); // TODO
+    {
+        let typ_val = b.value(Symbol::intern("error"));
+        let err_val = b.value(Symbol::intern("function_clause"));
+        // TODO trace
+        let trace_val = b.value(NilTerm);
+        ctx.exc_stack.make_error_jump(b, match_fail_block, typ_val, err_val, trace_val);
+    }
 
     let entry_exc_height = ctx.exc_stack.len();
 

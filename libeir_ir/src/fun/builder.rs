@@ -8,7 +8,7 @@ use crate::pattern::{ PatternContainer, PatternClause };
 
 use ::cranelift_entity::{ EntityList };
 
-use libeir_diagnostics::{ DUMMY_SPAN };
+use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
 use libeir_intern::{ Symbol, Ident };
 use libeir_util::pooled_entity_set::{ PooledEntitySet };
 
@@ -112,6 +112,57 @@ impl<'a> FunctionBuilder<'a> {
 
 }
 
+/// Graph
+impl<'a> FunctionBuilder<'a> {
+
+    /// Updates the successors in the graph from the reads.
+    /// Mainly used in the builder.
+    fn graph_update_block(&mut self, block: Block) {
+        let mut block_buf = self.block_buf.take().unwrap();
+
+        // 1. Remove the block from all previous successors predecessor sets
+        block_buf.clear();
+        {
+            let block_data = &self.fun.blocks[block];
+            for successor in block_data.successors.iter(&self.fun.block_set_pool) {
+                block_buf.push(successor);
+            }
+        }
+        for successor in block_buf.iter() {
+            let block_data = &mut self.fun.blocks[*successor];
+            block_data.predecessors.remove(*successor, &mut self.fun.block_set_pool);
+        }
+
+        // 2. Add new successors to block
+        block_buf.clear();
+        {
+            let block_data = &mut self.fun.blocks[block];
+            block_data.successors.clear(&mut self.fun.block_set_pool);
+
+            for value in block_data.reads.as_slice(&self.fun.value_pool) {
+                let value_data = &mut self.fun.values[*value];
+                // Insert block as usage of value
+                value_data.usages.insert(block, &mut self.fun.block_set_pool);
+
+                // If the value is a block capture, insert into successors for current block
+                if let ValueType::Block(dest_block) = &value_data.kind {
+                    block_data.successors.insert(*dest_block, &mut self.fun.block_set_pool);
+                    block_buf.push(*dest_block);
+                }
+            }
+        }
+
+        // 3. Add block as predecessor to all successors
+        for dest_block in block_buf.iter() {
+            let block_data = &mut self.fun.blocks[*dest_block];
+            block_data.predecessors.insert(block, &mut self.fun.block_set_pool);
+        }
+
+        self.block_buf = Some(block_buf);
+    }
+
+}
+
 /// Block modifiers
 impl<'a> FunctionBuilder<'a> {
 
@@ -136,6 +187,10 @@ impl<'a> FunctionBuilder<'a> {
 
     pub fn block_set_entry(&mut self, block: Block) {
         self.fun.entry_block = Some(block);
+    }
+
+    pub fn block_set_span(&mut self, block: Block, span: ByteSpan) {
+        self.fun.blocks[block].span = span;
     }
 
     /// This will explicitly clear the operation contained in the
@@ -196,6 +251,8 @@ impl<'a> FunctionBuilder<'a> {
         data.op = Some(OpKind::Call);
         data.reads.push(target_val, &mut self.fun.value_pool);
         data.reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
+
+        self.graph_update_block(block);
     }
 
     pub fn op_intrinsic<'b>(&'b mut self, block: Block, name: Symbol, args: &[Value]) {
@@ -207,6 +264,8 @@ impl<'a> FunctionBuilder<'a> {
 
         data.op = Some(OpKind::Intrinsic(name));
         data.reads.extend(args.iter().cloned(), &mut self.fun.value_pool);
+
+        self.graph_update_block(block);
     }
     pub fn op_intrinsic_build(&mut self, name: Symbol) -> IntrinsicBuilder {
         IntrinsicBuilder::new(name, self)
@@ -238,6 +297,8 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(f_val, &mut self.fun.value_pool);
         data.reads.push(a_val, &mut self.fun.value_pool);
 
+        self.graph_update_block(block);
+
         cont
     }
 
@@ -255,6 +316,8 @@ impl<'a> FunctionBuilder<'a> {
         data.op = Some(OpKind::MakeTuple);
         data.reads.push(cont_val, &mut self.fun.value_pool);
         data.reads.extend(values.iter().cloned(), &mut self.fun.value_pool);
+
+        self.graph_update_block(block);
 
         cont
     }
@@ -278,6 +341,8 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(tail, &mut self.fun.value_pool);
         data.reads.extend(head.iter().cloned(), &mut self.fun.value_pool);
 
+        self.graph_update_block(block);
+
         cont
     }
 
@@ -294,6 +359,8 @@ impl<'a> FunctionBuilder<'a> {
 
         data.op = Some(OpKind::MapEmpty);
         data.reads.push(cont_val, &mut self.fun.value_pool);
+
+        self.graph_update_block(block);
 
         cont
     }
@@ -335,6 +402,7 @@ impl<'a> FunctionBuilder<'a> {
         if let BuilderState::MapPut { block, action } = state {
             let data = self.fun.blocks.get_mut(block).unwrap();
             data.op = Some(OpKind::MapPut { action });
+            self.graph_update_block(block);
         } else {
             panic!()
         }
@@ -354,6 +422,8 @@ impl<'a> FunctionBuilder<'a> {
         data.op = Some(OpKind::PackValueList);
         data.reads.push(cont_val, &mut self.fun.value_pool);
         data.reads.extend(values.iter().cloned(), &mut self.fun.value_pool);
+
+        self.graph_update_block(block);
 
         cont
     }
@@ -382,6 +452,8 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(cont_val, &mut self.fun.value_pool);
         data.reads.push(list, &mut self.fun.value_pool);
 
+        self.graph_update_block(block);
+
         cont
     }
 
@@ -403,6 +475,8 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(lhs, &mut self.fun.value_pool);
         data.reads.push(rhs, &mut self.fun.value_pool);
 
+        self.graph_update_block(block);
+
         (ok_cont, err_cont)
     }
 
@@ -421,6 +495,8 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(cont_val, &mut self.fun.value_pool);
         data.reads.push(lhs, &mut self.fun.value_pool);
         data.reads.push(rhs, &mut self.fun.value_pool);
+
+        self.graph_update_block(block);
 
         cont
     }
@@ -445,6 +521,8 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(non_cont_val, &mut self.fun.value_pool);
         data.reads.push(value, &mut self.fun.value_pool);
 
+        self.graph_update_block(block);
+
         (true_cont, false_cont, non_cont)
     }
 
@@ -468,6 +546,8 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(err_cont_val, &mut self.fun.value_pool);
         data.reads.push(val, &mut self.fun.value_pool);
 
+        self.graph_update_block(block);
+
         (ok_cont, err_cont)
     }
 
@@ -489,6 +569,8 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(ok_cont_val, &mut self.fun.value_pool);
         data.reads.push(err_cont_val, &mut self.fun.value_pool);
         data.reads.push(val, &mut self.fun.value_pool);
+
+        self.graph_update_block(block);
 
         (ok_cont, err_cont)
     }
@@ -512,6 +594,8 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(map, &mut self.fun.value_pool);
         data.reads.push(key, &mut self.fun.value_pool);
 
+        self.graph_update_block(block);
+
         (ok_cont, err_cont)
     }
 
@@ -523,6 +607,8 @@ impl<'a> FunctionBuilder<'a> {
         assert!(data.reads.is_empty());
 
         data.op = Some(OpKind::Unreachable);
+
+        self.graph_update_block(block);
     }
 
 }
@@ -556,12 +642,15 @@ macro_rules! impl_simple_builder {
             }
 
             pub fn finish<'a>(self, b: &mut FunctionBuilder<'a>) -> Block {
-                let data = b.fun.blocks.get_mut(self.block.unwrap()).unwrap();
+                let block = self.block.unwrap();
+                let data = b.fun.blocks.get_mut(block).unwrap();
                 assert!(data.op.is_none());
                 assert!(data.reads.is_empty());
 
                 data.op = Some(OpKind::$op_kind);
                 data.reads = self.values;
+
+                b.graph_update_block(block);
 
                 self.next
             }
@@ -598,12 +687,16 @@ impl IntrinsicBuilder {
             panic!();
         }
 
-        let data = b.fun.blocks.get_mut(self.block.unwrap()).unwrap();
+        let block = self.block.unwrap();
+
+        let data = b.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
         data.op = Some(OpKind::Intrinsic(self.name));
         data.reads = self.values;
+
+        b.graph_update_block(block);
     }
 
 }
@@ -672,6 +765,8 @@ impl CaseBuilder {
 
         self.clauses_b.clear(&mut b.fun.value_pool);
         self.values.clear(&mut b.fun.value_pool);
+
+        b.graph_update_block(block);
     }
 
 }

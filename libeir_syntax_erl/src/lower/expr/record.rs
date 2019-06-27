@@ -17,19 +17,20 @@ use crate::lower::LowerCtx;
 use crate::lower::expr::lower_single;
 
 fn make_rec_fail(ctx: &mut LowerCtx, b: &mut FunctionBuilder, recname_val: IrValue) -> IrBlock {
-    let mut fail_block = b.block_insert();
+    let fail_block = b.block_insert();
+    let mut block = fail_block;
 
     let fail_type = b.value(Symbol::intern("error")); // TODO double check correct type
 
     // TODO: support constant tuples, intern constant directly
     let badrecord_val = b.value(Symbol::intern("badrecord"));
-    fail_block = b.op_make_tuple(fail_block, &[badrecord_val, recname_val]);
-    let fail_error = b.block_args(fail_block)[0];
+    block = b.op_make_tuple(block, &[badrecord_val, recname_val]);
+    let fail_error = b.block_args(block)[0];
 
     // TODO: Trace
     let fail_trace = b.value(NilTerm);
 
-    ctx.exc_stack.make_error_jump(b, fail_block, fail_type, fail_error, fail_trace);
+    ctx.exc_stack.make_error_jump(b, block, fail_type, fail_error, fail_trace);
 
     fail_block
 }
@@ -134,8 +135,12 @@ pub(super) fn lower_record_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
     // Fill with defaults
     for (idx, field) in rec_def.fields.iter().enumerate() {
         if elems[idx].is_none() {
-            // TODO: Allow only constants. This should be a separate lowering method!
-            let new_val = map_block!(block, lower_single(ctx, b, block, field.value.as_ref().unwrap()));
+            let new_val = if let Some(const_expr) = field.value.as_ref() {
+                // TODO: Allow only constants. This should be a separate lowering method!
+                map_block!(block, lower_single(ctx, b, block, const_expr))
+            } else {
+                b.value(Symbol::intern("undefined"))
+            };
             elems[idx] = Some(new_val);
         }
     }

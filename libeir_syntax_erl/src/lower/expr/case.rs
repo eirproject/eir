@@ -6,7 +6,7 @@ use libeir_ir::{
 use libeir_ir::constant::NilTerm;
 use libeir_ir::op::BinOp;
 
-use libeir_intern::{ Ident };
+use libeir_intern::{ Symbol, Ident };
 use libeir_diagnostics::DUMMY_SPAN;
 
 use crate::parser::ast::{ Case, If };
@@ -23,8 +23,17 @@ pub(super) fn lower_case_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut b
     let join_block = b.block_insert();
     let join_arg = b.block_arg_insert(join_block);
 
-    // TODO throw on no match
     let no_match = b.block_insert();
+    {
+        let mut block = no_match;
+        let typ_val = b.value(Symbol::intern("error"));
+        let badmatch_val = b.value(Symbol::intern("badmatch"));
+        block = b.op_make_tuple(block, &[badmatch_val, match_val]);
+        let err_val = b.block_args(block)[0];
+        // TODO trace
+        let trace_val = b.value(NilTerm);
+        ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
+    }
 
     let mut case_b = b.op_case_build();
     case_b.match_on = Some(match_val);
@@ -67,8 +76,17 @@ pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut blo
     let join_block = b.block_insert();
     let join_arg = b.block_arg_insert(join_block);
 
-    // TODO throw on no match
     let no_match = b.block_insert();
+    {
+        let mut block = no_match;
+        let typ_val = b.value(Symbol::intern("error"));
+        let badmatch_val = b.value(Symbol::intern("badmatch"));
+        block = b.op_make_tuple(block, &[badmatch_val, match_val]);
+        let err_val = b.block_args(block)[0];
+        // TODO trace
+        let trace_val = b.value(NilTerm);
+        ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
+    }
 
     let mut case_b = b.op_case_build();
     case_b.match_on = Some(match_val);

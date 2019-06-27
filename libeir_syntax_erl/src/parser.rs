@@ -38,14 +38,14 @@ mod errors;
 pub mod visitor;
 
 use std::borrow::Cow;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use libeir_diagnostics::{CodeMap, FileName};
 
-use crate::lexer::{FileMapSource, Lexer, Scanner, Source, Symbol};
-use crate::preprocessor::{MacroContainer, MacroDef, Preprocessed, Preprocessor};
+use crate::lexer::{FileMapSource, Lexer, Scanner, Source};
+use crate::preprocessor::{MacroContainer, Preprocessed, Preprocessor};
 
 pub use self::errors::*;
 
@@ -670,7 +670,7 @@ example(File) ->
 
     #[test]
     fn parse_try2() {
-        let result: Module = parse(
+        let _result: Module = parse(
             "-module(foo).
 
 example(File < 2) ->
@@ -697,7 +697,7 @@ exw(File) ->
 
     #[test]
     fn parse_numbers() {
-        let result: Module = parse(
+        let _result: Module = parse(
             "-module(foo).
 
 foo(F) -> F-1+1/1*1.
@@ -709,7 +709,7 @@ bar() -> - 2.
 
     #[test]
     fn parse_spec() {
-        let result: Module = parse(
+        let _result: Module = parse(
             "-module(foo).
 
 -spec bar() -> number.
