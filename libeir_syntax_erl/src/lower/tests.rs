@@ -78,10 +78,12 @@ fib(X) -> fib(X - 1) + fib(X-2).
     let (result, messages) = lower_module(&result);
     match result {
         Ok(ir) => {
+            let mut errors = Vec::new();
             for fun in ir.functions.values() {
                 println!("{:?}", fun.ident());
-                fun.validate()
+                fun.validate(&mut errors);
             }
+            println!("{:#?}", errors);
 
             let ident = FunctionIdent {
                 module: Ident::from_str("fib"),
@@ -117,12 +119,14 @@ fn compiler_lower() {
         arity: 1,
     };
 
+    let mut errors = Vec::new();
     for fun in ir.functions.values() {
         //if fun.ident() == &ident {
             println!("{:?}", fun.ident());
-            fun.validate()
+        fun.validate(&mut errors);
         //}
     }
+    println!("{:#?}", errors);
 
     let fun = &ir.functions[&ident];
 

@@ -1,10 +1,9 @@
 use crate::FunctionIdent;
-use crate::ClosureEnv;
-use crate::intern::Atom;
+use libeir_intern::Ident;
 
 impl FunctionIdent {
 
-    pub fn parse_with_module(string: &str, module: Atom) -> Result<Self, ()> {
+    pub fn parse_with_module(string: &str, module: Ident) -> Result<Self, ()> {
         lazy_static::lazy_static! {
             static ref FUNCTION_IDENT_RE: regex::Regex = {
                 regex::Regex::new("^([^:@/]+)(@(\\d+)\\.(\\d+))?/(\\d+)$").unwrap()
@@ -17,14 +16,8 @@ impl FunctionIdent {
 
         let res = FunctionIdent {
             module: module,
-            name: Atom::from_str(&captures[1]),
+            name: Ident::from_str(&captures[1]),
             arity: captures[5].parse().unwrap(),
-            lambda: captures.get(3).map(|v| {
-                (
-                    ClosureEnv::from_num(v.as_str().parse().unwrap()),
-                    captures[4].parse().unwrap(),
-                )
-            }),
         };
         Ok(res)
     }

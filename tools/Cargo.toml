@@ -9,7 +9,8 @@ name = "eir_compile"
 path = "src/compile.rs"
 
 [dependencies]
-libeir_hir = { path = "../libeir_hir" }
+libeir_diagnostics = { path = "../libeir_diagnostics" }
+libeir_syntax_erl = { path = "../libeir_syntax_erl" }
 #cps_transform = { path = "../cps_transform" }
 libeir_ir = { path = "../libeir_ir" }
 #core_erlang_interpreter = { path = "../interpreter" }

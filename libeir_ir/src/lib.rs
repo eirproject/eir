@@ -25,6 +25,8 @@ pub mod constant;
 pub use constant::{ ConstantContainer, Const, ConstValue };
 pub use constant::{ AtomTerm, BigIntTerm, IntTerm, FloatTerm, BinaryTerm, NilTerm };
 
+pub use text::printer::{ ToEirText, ToEirTextContext };
+
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd)]
 pub struct FunctionIdent {
     pub module: Ident,

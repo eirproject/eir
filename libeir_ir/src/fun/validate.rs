@@ -62,20 +62,13 @@ pub enum ValidationError {
 
 impl Function {
 
-    pub fn validate(&self) {
-
-        let mut errors = Vec::new();
-
+    pub fn validate(&self, errors: &mut Vec<ValidationError>) {
         let block_graph = self.block_graph();
         let doms = petgraph::algo::dominators::simple_fast(&block_graph, self.block_entry());
 
-        //validate_entry_invariants(self);
-        //validate_ssa_visibility(self, &doms);
-        self.validate_entry_invariants(&mut errors);
-        self.validate_blocks(&mut errors);
-        self.validate_ssa_visibility(&doms, &mut errors);
-
-        println!("{:#?}", errors);
+        self.validate_entry_invariants(errors);
+        self.validate_blocks(errors);
+        self.validate_ssa_visibility(&doms, errors);
     }
 
     fn validate_call_to(&self, errors: &mut Vec<ValidationError>, caller: Block, val: Value, arity: usize) {
@@ -152,7 +145,7 @@ impl Function {
             = HashMap::new();
 
         // Seed entry node
-        let mut entry_vals = PooledEntitySet::new();
+        let entry_vals = PooledEntitySet::new();
         self.insert_live_for_node(entry_block, entry_vals,
                                   &mut pool,
                                   &mut live_variables);

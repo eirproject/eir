@@ -25,7 +25,7 @@ pub use self::graph::BlockGraph;
 //mod layout;
 //pub use layout::Layout;
 
-//pub mod live;
+pub mod live;
 
 /// Block/continuation
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -386,9 +386,9 @@ impl Function {
     //    }
     //}
 
-    //pub fn live_values(&self) -> self::live::LiveValues {
-    //    self::live::calculate_live_values(self)
-    //}
+    pub fn live_values(&self) -> self::live::LiveValues {
+        self::live::calculate_live_values(self)
+    }
 
     //pub fn get_all_static_calls(&self) -> Vec<FunctionIdent> {
     //    let mut res = Vec::new();

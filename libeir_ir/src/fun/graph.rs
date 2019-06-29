@@ -26,7 +26,7 @@
 use petgraph::Direction;
 use petgraph::visit::{ GraphBase, IntoNeighbors, IntoNeighborsDirected,
                        Visitable, VisitMap };
-use petgraph::visit::Dfs;
+use petgraph::visit::{ Dfs, DfsPostOrder };
 
 use cranelift_entity::{ EntityRef, EntitySet };
 
@@ -62,6 +62,14 @@ impl<'a> BlockGraph<'a> {
             }
         }
         BlocksIterator(self, self.dfs())
+    }
+
+    pub fn dfs_post_order(&self) -> DfsPostOrder<Block, EntityVisitMap<Block>> {
+        DfsPostOrder::new(self, self.fun.block_entry())
+    }
+
+    pub fn outgoing(&'a self, block: Block) -> impl Iterator<Item = Block> + 'a {
+        self.fun.blocks[block].successors.iter(&self.fun.block_set_pool)
     }
 
 }

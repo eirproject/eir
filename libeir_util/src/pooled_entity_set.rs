@@ -69,8 +69,13 @@ where
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.list.is_empty()
+    pub fn size(&self, pool: &EntitySetPool) -> usize {
+        let mut len = 0;
+        for n in self.internal_list().as_slice(pool) {
+            debug_assert!(n.0 != std::u64::MAX);
+            len += n.0.count_ones() as usize;
+        }
+        len
     }
 
     pub fn clear(&mut self, pool: &mut EntitySetPool) {
@@ -166,6 +171,43 @@ where
             current: 0,
             finished: false,
         }
+    }
+
+    pub fn eq(&self, other: &PooledEntitySet<K>, pool: &EntitySetPool) -> bool {
+        let self_list = self.internal_list().as_slice(pool);
+        let other_list = other.internal_list().as_slice(pool);
+
+        // Check common head
+        for (a, b) in self_list.iter().zip(other_list) {
+            debug_assert!(a.0 != std::u64::MAX);
+            debug_assert!(b.0 != std::u64::MAX);
+            if a != b {
+                return false;
+            }
+        }
+
+        // If the length differs, validate that the tail is empty
+        match (self_list.len(), other_list.len()) {
+            (a, b) if a > b => {
+                for n in &self_list[b..] {
+                    debug_assert!(n.0 != std::u64::MAX);
+                    if n.0 != 0 {
+                        return false;
+                    }
+                }
+            }
+            (a, b) if a < b => {
+                for n in &other_list[a..] {
+                    debug_assert!(n.0 != std::u64::MAX);
+                    if n.0 != 0 {
+                        return false;
+                    }
+                }
+            }
+            _ => (),
+        }
+
+        true
     }
 
 }

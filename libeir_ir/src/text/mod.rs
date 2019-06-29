@@ -55,4 +55,4 @@ impl TextFormatter for BufferTextFormatter {
 
 }
 
-//pub mod parser;
+pub mod parser;
