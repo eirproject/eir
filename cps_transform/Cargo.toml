@@ -5,8 +5,8 @@ authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
 edition = "2018"
 
 [dependencies]
-eir = { path = "../eir" }
-util = { path = "../util" }
+#eir = { path = "../eir" }
+libeir_util = { path = "../libeir_util" }
 
 petgraph = "0.4.13"
 cranelift-entity = "0.30.0"
