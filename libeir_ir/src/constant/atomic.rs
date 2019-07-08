@@ -10,6 +10,18 @@ use super::float::raw_double_bits;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BigIntTerm(pub num_bigint::BigInt);
+impl BigIntTerm {
+    #[inline]
+    pub fn value(&self) -> &num_bigint::BigInt {
+        &self.0
+    }
+}
+impl Into<num_bigint::BigInt> for BigIntTerm {
+    #[inline]
+    fn into(self) -> num_bigint::BigInt {
+        self.0
+    }
+}
 impl From<BigIntTerm> for AtomicTerm {
     fn from(data: BigIntTerm) -> Self {
         AtomicTerm::BigInt(data)
@@ -23,6 +35,18 @@ impl Display for BigIntTerm {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IntTerm(pub i64);
+impl IntTerm {
+    #[inline]
+    pub fn value(&self) -> i64 {
+        self.0
+    }
+}
+impl Into<i64> for IntTerm {
+    #[inline]
+    fn into(self) -> i64 {
+        self.0
+    }
+}
 impl From<IntTerm> for AtomicTerm {
     fn from(data: IntTerm) -> Self {
         AtomicTerm::Int(data)
@@ -65,6 +89,12 @@ impl From<char> for AtomicTerm {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FloatTerm(pub f64);
+impl FloatTerm {
+    #[inline]
+    pub fn value(&self) -> f64 {
+        self.0
+    }
+}
 impl Eq for FloatTerm {}
 impl Hash for FloatTerm {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
@@ -79,6 +109,12 @@ impl From<FloatTerm> for AtomicTerm {
 impl From<f64> for AtomicTerm {
     fn from(data: f64) -> Self {
         AtomicTerm::Float(FloatTerm(data))
+    }
+}
+impl Into<f64> for AtomicTerm {
+    #[inline]
+    fn into(self) -> f64 {
+        self.0
     }
 }
 impl Display for FloatTerm {
@@ -118,6 +154,12 @@ impl Display for AtomTerm {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BinaryTerm(pub Symbol);
+impl BinaryTerm {
+    #[inline]
+    pub fn value(&self) -> &'static str {
+        self.0.as_str().get()
+    }
+}
 impl From<BinaryTerm> for AtomicTerm {
     fn from(data: BinaryTerm) -> Self {
         AtomicTerm::Binary(data)
