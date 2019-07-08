@@ -22,7 +22,7 @@ pub struct Const(u32);
 entity_impl!(Const, "const");
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum ConstValueKind {
+pub enum ConstValueKind {
     Atomic(AtomicTerm),
     ListCell {
         head: ConstValue,
@@ -72,6 +72,10 @@ impl ConstantContainer {
 
     pub fn const_value(&self, cons: Const) -> ConstValue {
         self.consts[cons].value
+    }
+
+    pub fn const_value_kind(&self, value: ConstValue) -> Option<ConstValueKind> {
+        self.const_values.get(value)
     }
 
     fn create_value(&mut self, kind: ConstValueKind) -> ConstValue {

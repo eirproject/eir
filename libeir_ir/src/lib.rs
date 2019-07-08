@@ -22,7 +22,7 @@ pub use fun::{ AttributeKey, AttributeValue };
 //pub use env::{ ModuleEnvs, ClosureEnv };
 
 pub mod constant;
-pub use constant::{ ConstantContainer, Const, ConstValue };
+pub use constant::{ ConstantContainer, Const, ConstValue, ConstValueKind };
 pub use constant::{ AtomTerm, BigIntTerm, IntTerm, FloatTerm, BinaryTerm, NilTerm };
 
 pub use text::printer::{ ToEirText, ToEirTextContext };
