@@ -31,16 +31,20 @@ pub struct SimplePatternProvider {
     roots: Vec<NodeIndex>,
     root_var: CfgVar,
     curr_var: CfgVar,
+    wildcard: NodeIndex,
 }
 
 impl SimplePatternProvider {
 
     pub fn new() -> Self {
+        let mut graph = Graph::new();
+        let wildcard = graph.add_node(NodeKind::Wildcard);
         SimplePatternProvider {
-            pattern: Graph::new(),
+            pattern: graph,
             roots: Vec::new(),
             root_var: CfgVar(0),
             curr_var: CfgVar(0),
+            wildcard,
         }
     }
 
@@ -143,7 +147,7 @@ impl PatternProvider for SimplePatternProvider {
     }
 
     fn get_wildcard_node(&self) -> Self::PatternNodeKey {
-        unimplemented!()
+        self.wildcard
     }
 
 }

@@ -30,11 +30,6 @@ where
     T: Parse<T>,
     P: AsRef<Path>,
 {
-    //let mut config = ParseConfig::default();
-
-    //config.include_paths.push_front(PathBuf::from("../otp/lib/compiler/src/"));
-    //config.include_paths.push_front(PathBuf::from("../otp/bootstrap/lib/stdlib/include/"));
-
     let parser = Parser::new(config);
     let errs = match parser.parse_file::<_, T>(path) {
         Ok(ast) => return (ast, parser),
@@ -87,6 +82,8 @@ fib(X) -> fib(X - 1) + fib(X-2).
 ",
         ParseConfig::default()
     ).unwrap();
+
+
 }
 
 #[test]
@@ -101,7 +98,7 @@ pat(A, A) -> 1.
     print!("{}", fun.to_text());
 }
 
-#[test]
+//#[test]
 fn compiler_lower() {
     let mut config = ParseConfig::default();
 

@@ -84,7 +84,7 @@ impl Severity {
 /// # Example
 ///
 /// ```rust
-/// use liblumen_diagnostics::UseColors;
+/// use libeir_diagnostics::UseColors;
 /// use std::str::FromStr;
 ///
 /// fn main() {
