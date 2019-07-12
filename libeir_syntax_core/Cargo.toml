@@ -1,0 +1,19 @@
+[package]
+name = "libeir_syntax_core"
+version = "0.1.0"
+authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
+edition = "2018"
+build = "build.rs"
+
+[build-dependencies]
+lalrpop = "0.16.3"
+
+[dependencies]
+libeir_ir = { path = "../libeir_ir" }
+lalrpop-util = "0.16.3"
+lazy_static = "1.1.0"
+regex = "0.2.0"
+
+num = "0.2"
+num-traits = "0.2"
+num-bigint = "0.2"

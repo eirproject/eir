@@ -1,12 +1,17 @@
 [workspace]
 
 members = [
-    "compiler",
+#    "libeir_hir",
+    "libeir_diagnostics",
+    "libeir_intern",
+    "libeir_syntax_erl",
+#    "libeir_syntax_core",
+    "libeir_util",
+    "libeir_ir",
+    "libeir_passes",
+    "libeir_interpreter",
+    "libeir_tests",
     "pattern-compiler",
-    "util",
-    "interpreter",
     "tools",
-    "eir",
-    "gen_nif",
-    "cps_transform",
+#    "gen_nif",
 ]

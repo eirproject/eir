@@ -1,21 +1,20 @@
-use ::std::collections::HashSet;
+use std::collections::{ HashMap, HashSet };
 
 #[cfg(feature = "debug_table_print")]
-use ::prettytable::Table;
+use prettytable::Table;
 
-use ::petgraph::graph::NodeIndex;
-
-use ::either::Either;
-
+use super::LeafId;
 use super::pattern::PatternProvider;
 
 #[derive(Debug, Derivative)]
 #[derivative(Clone(bound=""))]
-pub struct MatchMatrix<P> where P: PatternProvider {
+pub(crate) struct MatchMatrix<P> where P: PatternProvider {
     pub data: Vec<MatchMatrixElement<P>>,
 
     pub variables: Vec<P::CfgVariable>,
-    pub clause_leaves: Vec<super::cfg::CfgNodeIndex>,
+    pub clause_leaves: Vec<LeafId>,
+
+    pub leaf_bindings: Vec<HashMap<P::PatternNodeKey, P::CfgVariable>>,
 }
 
 #[derive(Debug, Derivative)]
@@ -26,24 +25,41 @@ pub struct MatchMatrixElement<P> where P: PatternProvider {
     pub clause_num: usize,
 }
 
-fn chunks_len<'a, T>(entities: &'a [T], chunk_len: usize, num_chunks: usize)
-                     -> Box<Iterator<Item = &'a [T]> + 'a> {
-
-    assert!(entities.len() == (chunk_len * num_chunks));
-    let ret = if chunk_len == 0 {
-        Either::Left((0..num_chunks).map(|_| [].as_ref()))
-    } else {
-        Either::Right(entities.chunks(chunk_len))
-    };
-    Box::new(ret)
-}
+//fn chunks_len<'a, T>(entities: &'a [T], chunk_len: usize, num_chunks: usize)
+//                     -> impl Iterator<Item = &'a [T]> + 'a {
+//
+//    assert!(entities.len() == (chunk_len * num_chunks));
+//    let ret = if chunk_len == 0 {
+//        Either::Left((0..num_chunks).map(|_| [].as_ref()))
+//    } else {
+//        Either::Right(entities.chunks(chunk_len))
+//    };
+//    ret
+//}
 
 impl<P> MatchMatrix<P> where P: PatternProvider {
 
     pub fn new(nodes: &[P::PatternNodeKey],
-               leaves: Vec<super::cfg::CfgNodeIndex>,
-               vars: Vec<P::CfgVariable>) -> Self {
+               leaves: Vec<LeafId>,
+               vars: Vec<P::CfgVariable>,
+    ) -> Self
+    {
+        let binds = (0..leaves.len())
+            .map(|_| HashMap::new())
+            .collect();
+        MatchMatrix::with_bindings(
+            nodes, leaves, vars, binds,
+        )
+    }
+
+    fn with_bindings(nodes: &[P::PatternNodeKey],
+                     leaves: Vec<LeafId>,
+                     vars: Vec<P::CfgVariable>,
+                     mut leaf_bindings: Vec<HashMap<P::PatternNodeKey, P::CfgVariable>>,
+    ) -> Self
+    {
         assert!(vars.len() * leaves.len() == nodes.len());
+        assert!(leaf_bindings.len() == leaves.len());
 
         let data = if vars.len() == 0 {
             vec![]
@@ -60,10 +76,22 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
                 }).collect()
         };
 
+        // Insert all bindings
+        if nodes.len() > 0 {
+            for (idx, chunk) in data.chunks(vars.len()).enumerate() {
+                for (elem, var) in chunk.iter().zip(vars.iter()) {
+                    leaf_bindings[idx].insert(elem.node, *var);
+                }
+            }
+        }
+
+        println!("NEW binds: {:#?}", leaf_bindings);
+
         MatchMatrix {
             data: data,
             variables: vars,
             clause_leaves: leaves,
+            leaf_bindings: leaf_bindings,
         }
     }
 
@@ -120,55 +148,110 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
                          on: P::PatternNodeKind)
                          -> (Vec<P::CfgVariable>, MatchMatrix<P>)
     {
-        //println!("Specialize variable #{} on {:?}", variable, on);
-        //println!("{}", self.to_table(&ctx.pattern));
+        #[cfg(feature = "debug_table_print")]
+        {
+            println!("Specialize variable #{} on {:?}", variable, on);
+            println!("{}", self.to_table(&ctx.pattern));
+            println!("binds: {:#?}", self.leaf_bindings);
+        }
 
-        // 1: Collect rows that should be included in the specialization
-        let to_specialize_rows: Vec<(usize, &[MatchMatrixElement<_>])> = self.data
+        // 1. Determine how we want to handle the different clauses
+        #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+        enum ClauseMode {
+            /// The clause is included in the kind we specialize on
+            Expand,
+            /// The clause is a wildcard, expand into wildcards
+            Wildcard,
+            /// Clause is not included
+            Skip,
+        }
+        let clause_modes: Vec<ClauseMode> = self.data
             .chunks(self.variables.len())
-            .enumerate()
-            .filter(|&(_, node)| ctx.pattern.kind_includes(on, node[variable].node))
-            .collect();
-
-        // 2: Split rows into list of specialization nodes, and the rest
-        let specialize_nodes: Vec<&MatchMatrixElement<_>> = to_specialize_rows.iter()
-            .map(|&(_, nodes)| &nodes[variable])
-            .collect();
-        let rest_nodes: Vec<Vec<&MatchMatrixElement<_>>> = to_specialize_rows.iter()
-            .map(|&(_, nodes)| {
-                nodes.iter()
-                    .filter(|node| node.variable_num != variable)
-                    .collect::<Vec<_>>()
+            .map(|nodes| {
+                let n = nodes[variable].node;
+                if ctx.pattern.kind_includes(on, n) {
+                    ClauseMode::Expand
+                } else if ctx.pattern.is_wildcard(ctx.pattern.get_kind(n)) {
+                    ClauseMode::Wildcard
+                } else {
+                    ClauseMode::Skip
+                }
             })
             .collect();
 
-        // 3: Generate specialized by PatternProvider::expand_clause_nodes
-        let specialized = {
-            let nodes: Vec<_> = specialize_nodes.iter()
-                .map(|node| node.node)
+        // 2. Expand nodes
+        let expanded = {
+            let nodes: Vec<_> = clause_modes.iter().cloned()
+                .zip(self.data.chunks(self.variables.len()))
+                .filter(|(mode, _)| *mode == ClauseMode::Expand)
+                .map(|(_, nodes)| nodes[variable].node)
                 .collect();
-            ctx.pattern.expand_clause_nodes(nodes)
+            let nodes_len = nodes.len();
+
+            let res = ctx.pattern.expand_clause_nodes(nodes, on);
+
+            assert!(res.clauses == nodes_len);
+            assert!(res.nodes.len() == res.clauses * res.variables.len());
+
+            res
         };
 
-        // 4: Merge specialized with rest from step 2 and return new matrix
-        //let specialized_chunked = specialized.nodes
-        //    .chunks(specialized.variables.len());
-        let specialized_chunked = chunks_len(&specialized.nodes, specialized.variables.len(),
-                                             specialized.clauses);
+        let expanded_var_num = expanded.variables.len();
 
-        let new_nodes: Vec<_> = specialized_chunked
-            .zip(rest_nodes.iter())
-            .flat_map(|(specialized, rest)| {
-                let specialized_m = specialized.iter().map(|node| *node);
-                let rest_m = rest.iter().map(|node| node.node);
+        // 3. Merge expanded with wildcard expansions and residuals
+        let merged = {
+            let mut out = Vec::new();
 
-                specialized_m.chain(rest_m)
-            })
-            .collect();
+            // Because .chunks does not accept 0 as a chunk length,
+            // we do this workaround
+            let mut expanded_iter = if expanded.nodes.len() > 0 {
+                Some(expanded.nodes
+                     .chunks(expanded_var_num))
+            } else {
+                None
+            };
 
-        let new_clause_leaves: Vec<_> = to_specialize_rows.iter()
-            .map(|&(clause_num, _)| self.clause_leaves[clause_num])
-            .collect();
+            let mut residual_iter = clause_modes.iter().cloned()
+                .zip(self.data.chunks(self.variables.len()))
+                .filter(|(mode, _)| *mode != ClauseMode::Skip)
+                .map(|(_, elems)| {
+                    elems.iter()
+                        .filter(|elem| elem.variable_num != variable)
+                        .map(|elem| elem.node)
+                });
+
+            for mode in clause_modes.iter() {
+                // Append expanded
+                match mode {
+                    ClauseMode::Expand => {
+                        if let Some(ref mut inner) = expanded_iter {
+                            let expanded_nodes = inner.next().unwrap();
+                            out.extend(expanded_nodes.iter().cloned());
+                        } else {
+                            assert!(expanded.nodes.len() == 0);
+                        }
+                    }
+                    ClauseMode::Wildcard => {
+                        for _ in 0..expanded_var_num {
+                            out.push(ctx.pattern.get_wildcard_node());
+                        }
+                    }
+                    ClauseMode::Skip => continue,
+                }
+
+                // Append residual
+                let residuals = residual_iter.next().unwrap();
+                out.extend(residuals);
+
+            }
+
+            if let Some(ref mut inner) = expanded_iter {
+                assert!(inner.next().is_none());
+            }
+            assert!(residual_iter.next().is_none());
+
+            out
+        };
 
         let new_variables: Vec<_> = {
             let rest_variables = self.variables.iter()
@@ -176,15 +259,28 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
                 .filter(|&(var_num, _)| var_num != variable)
                 .map(|(_, var)| *var);
 
-            specialized.variables.iter()
+            expanded.variables.iter()
                 .map(|var| *var)
                 .chain(rest_variables)
                 .collect()
         };
 
-        let new_mat = Self::new(new_nodes.as_slice(),
-                                new_clause_leaves, new_variables);
-        (specialized.variables, new_mat)
+        let new_clause_leaves: Vec<_> = clause_modes.iter().cloned()
+            .zip(self.clause_leaves.iter())
+            .filter(|(mode, _)| *mode != ClauseMode::Skip)
+            .map(|(_, clause)| *clause)
+            .collect();
+
+        let new_leaf_bindings: Vec<_> = clause_modes.iter()
+            .zip(self.leaf_bindings.iter())
+            .filter(|(mode, _)| **mode != ClauseMode::Skip)
+            .map(|(_, binds)| binds.clone())
+            .collect();
+
+
+        let matrix = Self::with_bindings(&merged, new_clause_leaves, new_variables, new_leaf_bindings);
+
+        (expanded.variables, matrix)
     }
 
     pub fn without_head<'a>(&'a self) -> MatchMatrix<P> {
@@ -201,15 +297,23 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
         for entry in new.data.iter_mut() {
             entry.clause_num -= 1;
         }
+        new.leaf_bindings.remove(0);
         new
     }
 
-    pub fn iterate_clauses<'a>(&'a self) -> Box<Iterator<Item = (NodeIndex, &'a [MatchMatrixElement<P>])> + 'a> {
-        let iter = self.clause_leaves.iter().map(|l| *l)
-            .zip(chunks_len(&self.data, self.variables.len(), self.clause_leaves.len()));
-
-        Box::new(iter)
+    pub(crate) fn binds_for<'a>(&'a self, leaf: LeafId) -> Option<&'a HashMap<P::PatternNodeKey, P::CfgVariable>> {
+        self.clause_leaves
+            .iter().enumerate()
+            .find(|(_, l)| **l == leaf)
+            .map(|(idx, _)| &self.leaf_bindings[idx])
     }
+
+    //pub(crate) fn iterate_clauses<'a>(&'a self) -> impl Iterator<Item = (LeafId, &'a [MatchMatrixElement<P>])> + 'a {
+    //    let iter = self.clause_leaves.iter().map(|l| *l)
+    //        .zip(chunks_len(&self.data, self.variables.len(), self.clause_leaves.len()));
+
+    //    Box::new(iter)
+    //}
 
     pub fn default(&self, ctx: &mut super::MatchCompileContext<P>,
                    variable: usize)
@@ -223,8 +327,8 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
         self.clause_leaves.len() == 0
     }
 
-    pub fn has_wildcard_head(&self, pattern: &P)
-                             -> Option<super::cfg::CfgNodeIndex>
+    pub(crate) fn has_wildcard_head(&self, pattern: &P)
+                             -> Option<LeafId>
     {
 
         assert!(self.clause_leaves.len() > 0);

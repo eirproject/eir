@@ -1,0 +1,36 @@
+[package]
+name = "libeir_hir"
+version = "0.1.0"
+authors = ["HansiHE <hansihe@hansihe.com>"]
+autobins = false
+edition = "2018"
+
+[build-dependencies]
+lalrpop = "0.16.3"
+
+[dependencies]
+either = "1.1.0"
+petgraph = "0.4.5"
+pretty = "0.3.3"
+itertools = "0.7.8"
+lazy_static = "1.1.0"
+
+lalrpop-util = "0.16.3"
+regex = "0.2.0"
+
+num = "0.2"
+num-traits = "0.2"
+num-bigint = "0.2"
+
+matches = "0.1.8"
+
+cranelift-entity = "0.30.0"
+
+pattern-compiler = { path = "../pattern-compiler" }
+libeir_util = { path = "../libeir_util" }
+libeir_ir = { path = "../libeir_ir" }
+libeir_intern = { path = "../libeir_intern" }
+libeir_diagnostics = { path = "../libeir_diagnostics" }
+
+[dev-dependencies]
+tempdir = "0.3"

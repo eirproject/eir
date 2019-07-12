@@ -1,16 +1,35 @@
-use clap::{ Arg, App, SubCommand, arg_enum, value_t };
+use clap::{ Arg, App, SubCommand, ArgMatches, arg_enum, value_t };
 
 use std::io::Read;
 use std::io::Write;
+use std::path::PathBuf;
 
-use eir::FunctionIdent;
-use eir::text::{ ToEirText, ToEirTextContext, EirLiveValuesAnnotator };
+use libeir_ir::{ Module, FunctionIdent, ToEirTextContext, ToEirText };
+
+use libeir_syntax_erl::{
+    lower_module,
+    ParseConfig,
+    Parser,
+};
+use libeir_diagnostics::{
+    ColorChoice, Emitter, StandardStreamEmitter
+};
+
+//use eir::FunctionIdent;
+//use eir::text::{ ToEirText, ToEirTextContext, EirLiveValuesAnnotator };
 
 arg_enum!{
     #[derive(Debug, PartialEq, Eq)]
     pub enum OutputType {
         Eir,
         Dot,
+    }
+}
+
+arg_enum!{
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum InputType {
+        Erl,
     }
 }
 
@@ -33,6 +52,41 @@ arg_enum!{
     }
 }
 
+fn handle_erl(in_str: &str, matches: &ArgMatches) -> Option<Module> {
+    let mut config = ParseConfig::default();
+
+    if let Some(includes) = matches.values_of("INCLUDE_PATHS") {
+        for include in includes {
+            config.include_paths.push_front(PathBuf::from(include));
+        }
+    }
+
+    let parser = Parser::new(config);
+
+    match parser.parse_string(in_str) {
+        Ok(ast) => {
+            let (res, messages) = lower_module(&ast);
+
+            let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
+                .set_codemap(parser.config.codemap.clone());
+            for msg in messages.iter() {
+                emitter.diagnostic(&msg.to_diagnostic()).unwrap();
+            }
+
+            res.ok()
+        }
+        Err(err) => {
+            let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
+                .set_codemap(parser.config.codemap.clone());
+            for msg in err.iter() {
+                emitter.diagnostic(&msg.to_diagnostic()).unwrap();
+            }
+
+            None
+        }
+    }
+}
+
 fn main() {
 
     let matches = App::new("Eir Compiler CLI")
@@ -42,7 +96,12 @@ fn main() {
         .arg(Arg::with_name("IN_FILE")
              .help("Input file for compiler")
              .required(true))
-        .arg(Arg::from_usage("<FORMAT> -f,--format <FORMAT> 'output format'")
+        .arg(Arg::from_usage("<IN_FORMAT> -f,--in-format <IN_FORMAT> 'input format'")
+             .default_value("erl")
+             .required(true)
+             .case_insensitive(true)
+             .possible_values(&InputType::variants()))
+        .arg(Arg::from_usage("<OUT_FORMAT> -p,--out-format <OUT_FORMAT> 'output format'")
              .default_value("eir")
              .required(true)
              .case_insensitive(true)
@@ -60,6 +119,9 @@ fn main() {
              .case_insensitive(true)
              .possible_values(&CompileLevel::variants()))
         .arg(Arg::from_usage("[ANNOTATE_LIVE] --annotate-live 'annotate calculated live variables in ir"))
+        .arg(Arg::from_usage("<INCLUDE_PATHS> -I <INCLUDE_PATH> 'add include path for the erlang preprocessor'")
+             .required(false)
+             .multiple(true))
         //.arg(Arg::from_usage("-p,--pass <PASS> 'run the given compilation pass'")
         //     .multiple(true)
         //     .possible_values(&CompilePass::variants()))
@@ -71,32 +133,39 @@ fn main() {
     std::fs::File::open(&in_file_name).unwrap()
         .read_to_string(&mut in_str).unwrap();
 
-    let parse_res = core_erlang_compiler::parser::parse(&in_str).unwrap();
-    let mut eir = core_erlang_compiler::ir::parsed_to_eir(&parse_res.0);
+    let eir_ret = match value_t!(matches, "IN_FORMAT", InputType).unwrap() {
+        InputType::Erl => handle_erl(&in_str, &matches),
+    };
 
-    match value_t!(matches, "COMPILE_LEVEL", CompileLevel).unwrap() {
-        CompileLevel::High => {},
-        CompileLevel::Normal => {
-            core_erlang_compiler::ir::eir_normal_passes(&mut eir);
-        },
-        CompileLevel::CPS => {
-            core_erlang_compiler::ir::eir_normal_passes(&mut eir);
-            eir = cps_transform::transform_module(&eir);
-        },
-    }
+    let mut eir = if let Some(eir) = eir_ret {
+        eir
+    } else {
+        return;
+    };
+
+    //match value_t!(matches, "COMPILE_LEVEL", CompileLevel).unwrap() {
+    //    CompileLevel::High => {},
+    //    CompileLevel::Normal => {
+    //        core_erlang_compiler::ir::eir_normal_passes(&mut eir);
+    //    },
+    //    CompileLevel::CPS => {
+    //        core_erlang_compiler::ir::eir_normal_passes(&mut eir);
+    //        eir = cps_transform::transform_module(&eir);
+    //    },
+    //}
 
     let selected_function = matches.value_of("FUN_IDENT")
         .map(|val| FunctionIdent::parse_with_module(
             val, eir.name.clone()).unwrap());
 
     let mut print_ctx = ToEirTextContext::new();
-    if matches.is_present("ANNOTATE_LIVE") {
-        print_ctx.add_annotator(EirLiveValuesAnnotator::new());
-    }
+    //if matches.is_present("ANNOTATE_LIVE") {
+    //    print_ctx.add_annotator(EirLiveValuesAnnotator::new());
+    //}
 
     let mut out_data = Vec::new();
     let out_ext;
-    let out_type = value_t!(matches, "FORMAT", OutputType).unwrap();
+    let out_type = value_t!(matches, "OUT_FORMAT", OutputType).unwrap();
     match out_type {
         OutputType::Eir => {
             if let Some(selected) = selected_function {
@@ -112,7 +181,7 @@ fn main() {
                 "Expected function ident with -i <FUN_IDENT>");
             let fun = &eir.functions[&selected_function];
 
-            ::eir::text::function_to_dot(&fun, &mut out_data).unwrap();
+            ::libeir_ir::text::function_to_dot(&fun, &mut out_data).unwrap();
 
             out_ext = "dot";
         }

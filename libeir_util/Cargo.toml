@@ -1,0 +1,8 @@
+[package]
+name = "libeir_util"
+version = "0.1.0"
+authors = ["HansiHE <hansihe@hansihe.com>"]
+edition = "2018"
+
+[dependencies]
+cranelift-entity = "0.30.0"

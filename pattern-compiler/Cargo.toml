@@ -2,6 +2,7 @@
 authors = ["HansiHE <hansihe@hansihe.com>"]
 name = "pattern-compiler"
 version = "0.1.0"
+edition = "2018"
 
 description = "Utilities for compiling pattern matches into optimal decision trees"
 license = "MIT/Apache-2.0"
@@ -15,3 +16,4 @@ either = "1.5"
 petgraph = "0.4"
 derivative = "1.0"
 prettytable-rs = { version = "0.8", optional = true }
+itertools = "0.8.0"
