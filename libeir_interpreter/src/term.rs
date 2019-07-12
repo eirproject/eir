@@ -2,10 +2,9 @@ use ::std::cell::RefCell;
 use ::std::rc::Rc;
 use std::cmp::Ord;
 
-use eir::Atom;
-use eir::LambdaEnvIdx;
-use ::pattern::CaseContext;
-use ::receive::ReceiveContext;
+use libeir_intern::{ Symbol, LocalInternedString };
+
+use libeir_ir::{ FunctionIdent, Block };
 
 use ::num_bigint::BigInt;
 use ::num_traits::cast::ToPrimitive;
@@ -23,7 +22,7 @@ pub enum TermType {
     Float,
     Atom,
     Tuple,
-    List,
+    ListCell,
     Map,
     Pid,
     Reference,
@@ -33,17 +32,9 @@ pub enum TermType {
     CapturedFunction,
 
     // Internal
-    LambdaEnv,
-    CaseContext,
-    ReceiveContext,
     ValueList,
-}
-
-#[derive(Debug, Clone)]
-pub struct BoundLambdaEnv {
-    /// This field is not runtime information, debug only.
-    pub env: LambdaEnvIdx,
-    pub vars: Vec<Term>,
+    ReturnOk,
+    ReturnThrow,
 }
 
 #[derive(Debug, Clone)]
@@ -51,32 +42,62 @@ pub enum Term {
     Nil,
     Integer(BigInt),
     Float(f64),
-    Atom(Atom),
-    Tuple(Vec<Term>),
-    List(Vec<Term>, Box<Term>),
-    Map(Vec<(Term, Term)>),
+    Atom(Symbol),
+    Tuple(Vec<Rc<Term>>),
+    ListCell(Rc<Term>, Rc<Term>),
+    Map(Vec<(Rc<Term>, Rc<Term>)>),
     Pid(Pid),
     Reference(Reference),
     Binary(Vec<u8>),
     BoundLambda {
-        module: Atom,
-        fun_name: Atom,
-        arity: usize,
-        lambda: (LambdaEnvIdx, usize),
-        bound_env: BoundLambdaEnv,
+        ident: FunctionIdent,
+        block: Block,
+        environment: Vec<Rc<Term>>,
     },
     CapturedFunction {
-        module: Atom,
-        fun_name: Atom,
-        arity: usize,
+        ident: FunctionIdent,
     },
 
     // Internal
-    LambdaEnv(BoundLambdaEnv),
-    CaseContext(Rc<RefCell<CaseContext>>),
-    ReceiveContext(Rc<RefCell<ReceiveContext>>),
-    ValueList(Vec<Term>),
+    ValueList(Vec<Rc<Term>>),
+    ReturnOk,
+    ReturnThrow,
 }
+
+impl From<i64> for Term {
+    fn from(num: i64) -> Self {
+        Term::Integer(num.into())
+    }
+}
+
+pub enum ListIteratorItem {
+    Elem(Rc<Term>),
+    Tail(Rc<Term>),
+}
+
+pub struct ListTermIterator {
+    term: Option<Rc<Term>>,
+}
+impl Iterator for ListTermIterator {
+    type Item = ListIteratorItem;
+    fn next(&mut self) -> Option<ListIteratorItem> {
+        if let Some(term) = self.term.take() {
+            match &*term {
+                Term::ListCell(head, tail) => {
+                    self.term = Some(tail.clone());
+                    Some(ListIteratorItem::Elem(head.clone()))
+                }
+                _ => {
+                    self.term = None;
+                    Some(ListIteratorItem::Tail(term.clone()))
+                }
+            }
+        } else {
+            None
+        }
+    }
+}
+
 impl Term {
 
     pub fn new_i64(num: i64) -> Self {
@@ -84,7 +105,7 @@ impl Term {
     }
 
     pub fn new_atom(string: &str) -> Self {
-        Term::Atom(Atom::from_str(string))
+        Term::Atom(Symbol::intern(string))
     }
 
     pub fn new_bool(val: bool) -> Self {
@@ -95,19 +116,28 @@ impl Term {
         }
     }
 
+    pub fn slice_to_list(head: &[Rc<Term>], tail: Rc<Term>) -> Rc<Term> {
+        let mut acc = tail;
+        for term in head.iter().rev() {
+            acc = Term::ListCell(term.clone(), acc).into();
+        }
+        acc
+    }
+
     fn extend_erl_string(&self, buf: &mut String) -> bool {
         match self {
             Term::Integer(val) => {
                 buf.push(val.to_u8().unwrap() as char);
                 true
             }
-            Term::List(head, tail) => {
-                for item in head {
-                    if !item.extend_erl_string(buf) {
-                        return false;
-                    }
-                }
-                return tail.extend_erl_string(buf);
+            Term::ListCell(head, tail) => {
+                unimplemented!()
+                //for item in head {
+                //    if !item.extend_erl_string(buf) {
+                //        return false;
+                //    }
+                //}
+                //return tail.extend_erl_string(buf);
             }
             Term::Nil => true,
             _ => false,
@@ -123,7 +153,7 @@ impl Term {
         }
     }
 
-    pub fn atom_str<'a>(&'a self) -> &'a str {
+    pub fn atom_str<'a>(&'a self) -> LocalInternedString {
         if let Term::Atom(ref atom) = *self {
             atom.as_str()
         } else {
@@ -141,21 +171,20 @@ impl Term {
             Term::Float(_) => TermType::Float,
             Term::Atom(_) => TermType::Atom,
             Term::Tuple(_) => TermType::Tuple,
-            Term::List(_, _) => TermType::List,
+            Term::ListCell(_, _) => TermType::ListCell,
             Term::Map(_) => TermType::Map,
-            Term::LambdaEnv { .. } => TermType::LambdaEnv,
             Term::BoundLambda { .. } => TermType::BoundLambda,
             Term::CapturedFunction { .. } => TermType::CapturedFunction,
-            Term::CaseContext {.. } => TermType::CaseContext,
-            Term::ReceiveContext(_) => TermType::ReceiveContext,
             Term::ValueList(_) => TermType::ValueList,
+            Term::ReturnOk => TermType::ReturnOk,
+            Term::ReturnThrow => TermType::ReturnThrow,
         }
     }
 
     pub fn as_boolean(&self) -> Option<bool> {
         if let Term::Atom(ref val) = self {
-            let is_truthy = *val == Atom::from("true");
-            let is_falsey = *val == Atom::from("false");
+            let is_truthy = *val == Symbol::intern("true");
+            let is_falsey = *val == Symbol::intern("false");
             if is_truthy ^ is_falsey {
                 Some(is_truthy)
             } else {
@@ -182,7 +211,7 @@ impl Term {
         }
     }
 
-    pub fn as_atom(&self) -> Option<Atom> {
+    pub fn as_atom(&self) -> Option<Symbol> {
         if let Term::Atom(ref atom) = self {
             Some(atom.clone())
         } else {
@@ -190,61 +219,82 @@ impl Term {
         }
     }
 
-    fn join_list(&self, list: &mut Vec<Term>) -> Term {
-        match self {
-            Term::List(head, tail) => {
-                list.extend(head.iter().cloned());
-                tail.join_list(list)
-            }
-            _ => self.clone()
+    pub fn list_iter(term: &Rc<Term>) -> ListTermIterator {
+        ListTermIterator {
+            term: Some(term.clone()),
         }
     }
 
-    pub fn as_inproper_list(&self) -> (Vec<Term>, Term) {
+    //fn join_list(&self, list: &mut Vec<Rc<Term>>) -> Term {
+    //    match self {
+    //        Term::ListCell(head, tail) => {
+    //            list.extend(head.iter().cloned());
+    //            tail.join_list(list)
+    //        }
+    //        _ => self.clone()
+    //    }
+    //}
+
+    pub fn as_inproper_list(term: &Rc<Term>) -> (Vec<Rc<Term>>, Rc<Term>) {
         let mut list = Vec::new();
-        let tail = self.join_list(&mut list);
-        (list, tail)
+        for item in Term::list_iter(term) {
+            match item {
+                ListIteratorItem::Elem(elem) => list.push(elem),
+                ListIteratorItem::Tail(tail) => return (list, tail),
+            }
+        }
+        unreachable!()
     }
 
-    pub fn as_list(&self) -> Option<Vec<Term>> {
-        let (list, tail) = self.as_inproper_list();
-        if let Term::Nil = tail {
+    pub fn as_list(term: &Rc<Term>) -> Option<Vec<Rc<Term>>> {
+        let (list, tail) = Term::as_inproper_list(term);
+        if let Term::Nil = &*tail {
             Some(list)
         } else {
             None
         }
     }
 
-    pub fn to_doc(&self) -> ::pretty::Doc<::pretty::BoxDoc> {
-        use ::pretty::Doc;
-        match self {
+    pub fn to_doc(term: Rc<Term>) -> ::pretty::Doc<'static, ::pretty::BoxDoc<'static>> {
+        use ::pretty::{ Doc };
+        match &*term {
             Term::Nil => Doc::text("[]"),
             Term::Integer(int) => Doc::text(int.to_string()),
             Term::Float(num) => Doc::text(num.to_string()),
             Term::Atom(atom) => Doc::text(atom.to_string()),
             Term::Tuple(items) => {
-                let docs: Vec<_> = items.iter().map(|i| i.to_doc()).collect();
+                let docs: Vec<_> = items.iter().map(|i| Term::to_doc(i.clone())).collect();
                 Doc::text("{")
                     .append(Doc::intersperse(docs, Doc::text(",")))
                     .append(Doc::text("}"))
             },
-            Term::List(head, tail) if head.len() == 0 => tail.to_doc(),
-            Term::List(head, tail) => {
-                let head_docs: Vec<_> = head.iter().map(|i| i.to_doc()).collect();
-                let tail_doc = tail.to_doc();
+            Term::ListCell(_, _) => {
+                let (head, tail) = Term::as_inproper_list(&term);
+                let head_docs: Vec<_> = head.iter().map(|i| Term::to_doc(i.clone())).collect();
+                let tail_doc = Term::to_doc(tail);
                 Doc::text("[")
                     .append(Doc::intersperse(head_docs, Doc::text(",")))
                     .append(Doc::text("|"))
                     .append(tail_doc)
                     .append(Doc::text("]"))
             },
+            //Term::ListCell(head, tail) if head.len() == 0 => tail.to_doc(),
+            //Term::ListCell(head, tail) => {
+            //    let head_docs: Vec<_> = head.iter().map(|i| i.to_doc()).collect();
+            //    let tail_doc = tail.to_doc();
+            //    Doc::text("[")
+            //        .append(Doc::intersperse(head_docs, Doc::text(",")))
+            //        .append(Doc::text("|"))
+            //        .append(tail_doc)
+            //        .append(Doc::text("]"))
+            //},
             Term::Map(entries) => {
                 let entries_doc: Vec<_> = entries.iter()
                     .map(|(k, v)| {
                         Doc::group(
-                            k.to_doc()
+                            Term::to_doc(k.clone())
                                 .append(Doc::text("=>"))
-                                .append(v.to_doc())
+                                .append(Term::to_doc(v.clone()))
                         )
                     }).collect();
                 Doc::text("%{")
@@ -256,7 +306,7 @@ impl Term {
             Term::Binary(bin) => {
                 if let Ok(utf) = std::str::from_utf8(&bin) {
                     Doc::text("\"")
-                        .append(Doc::text(utf))
+                        .append(Doc::text(utf.to_string()))
                         .append(Doc::text("\""))
                 } else {
                     let items: Vec<_> = bin.iter().map(|v| Doc::text(v.to_string()))
@@ -266,24 +316,24 @@ impl Term {
                         .append(Doc::text(">"))
                 }
             },
-            Term::BoundLambda { module, fun_name, arity, lambda, .. } => {
-                Doc::text(format!("Bound<{}:{}@{}.{}/{}>", module, fun_name,
-                                  lambda.0, lambda.1, arity))
+            Term::BoundLambda { ident, block, .. } => {
+                Doc::text(format!("Bound<{}:{}/{}@{}>", ident.module.name, ident.name.name,
+                                  ident.arity, block))
             },
-            Term::CapturedFunction { module, fun_name, arity } => {
-                Doc::text(format!("Captured<{}:{}/{}>", module, fun_name, arity))
+            Term::CapturedFunction { ident } => {
+                Doc::text(format!("Captured<{}:{}/{}>", ident.module.name, ident.name.name, ident.arity))
             },
-            Term::LambdaEnv(_env) =>
-                Doc::text("BoundLambdaEnv"),
-            Term::CaseContext(_case) =>
-                Doc::text("CaseContext"),
-            Term::ReceiveContext(_recv) =>
-                Doc::text("ReceiveContext"),
             Term::ValueList(items) => {
-                let docs: Vec<_> = items.iter().map(|i| i.to_doc()).collect();
+                let docs: Vec<_> = items.iter().map(|i| Term::to_doc(i.clone())).collect();
                 Doc::text("<")
                     .append(Doc::intersperse(docs, Doc::text(",")))
                     .append(Doc::text(">"))
+            }
+            Term::ReturnOk => {
+                Doc::text(format!("ReturnOk"))
+            }
+            Term::ReturnThrow => {
+                Doc::text(format!("ReturnThrow"))
             }
         }
     }
@@ -313,36 +363,37 @@ impl ErlEq for Term {
     fn erl_eq(&self, other: &Term) -> bool {
         match (self, other) {
 
-            (Term::LambdaEnv { .. }, _) => unreachable!(), // These should never happen
-            (_, Term::LambdaEnv { .. }) => unreachable!(),
             (Term::BoundLambda { .. }, _) => unreachable!(),
             (_, Term::BoundLambda { .. }) => unreachable!(),
             (Term::ValueList(_), _) => unimplemented!(),
             (_, Term::ValueList(_)) => unimplemented!(),
 
             (Term::Nil, Term::Nil) => true,
-            (Term::List(h1, t1), Term::Nil) if h1.len() == 0 =>
-                if let Term::Nil = **t1 { true } else { false },
-            (Term::Nil, Term::List(h2, t2)) if h2.len() == 0 =>
-                if let Term::Nil = **t2 { true } else { false },
-            (Term::List(h1, t1), Term::List(h2, t2)) => {
-                let head_ok = h1.iter().zip(h2.iter())
-                    .all(|(v1, v2)| v1.erl_eq(v2));
-                if !head_ok { return false; }
-                if h1.len() == h2.len() {
-                    t1.erl_eq(t2)
-                } else if h1.len() > h2.len() {
-                    let h1_new_head: Vec<_> = h1.iter().skip(h2.len())
-                        .cloned().collect();
-                    let h1_new = Term::List(h1_new_head, t1.clone());
-                    h1_new.erl_eq(t2)
-                } else {
-                    let h2_new_head: Vec<_> = h2.iter().skip(h1.len())
-                        .cloned().collect();
-                    let h2_new = Term::List(h2_new_head, t2.clone());
-                    t1.erl_eq(&h2_new)
-                }
+            (Term::ListCell(h1, t1), Term::ListCell(h2, t2)) => {
+                h1.erl_eq(h2) && t1.erl_eq(t2)
             }
+            //(Term::List(h1, t1), Term::Nil) if h1.len() == 0 =>
+            //    if let Term::Nil = **t1 { true } else { false },
+            //(Term::Nil, Term::List(h2, t2)) if h2.len() == 0 =>
+            //    if let Term::Nil = **t2 { true } else { false },
+            //(Term::List(h1, t1), Term::List(h2, t2)) => {
+            //    let head_ok = h1.iter().zip(h2.iter())
+            //        .all(|(v1, v2)| v1.erl_eq(v2));
+            //    if !head_ok { return false; }
+            //    if h1.len() == h2.len() {
+            //        t1.erl_eq(t2)
+            //    } else if h1.len() > h2.len() {
+            //        let h1_new_head: Vec<_> = h1.iter().skip(h2.len())
+            //            .cloned().collect();
+            //        let h1_new = Term::List(h1_new_head, t1.clone());
+            //        h1_new.erl_eq(t2)
+            //    } else {
+            //        let h2_new_head: Vec<_> = h2.iter().skip(h1.len())
+            //            .cloned().collect();
+            //        let h2_new = Term::List(h2_new_head, t2.clone());
+            //        t1.erl_eq(&h2_new)
+            //    }
+            //}
             (Term::Nil, _) => false,
             (_, Term::Nil) => false,
 
@@ -353,15 +404,11 @@ impl ErlEq for Term {
             (Term::Atom(ref a1), Term::Atom(ref a2)) => a1 == a2,
             (Term::Tuple(ref v1), Term::Tuple(ref v2)) =>
                 v1.iter().zip(v2).all(|(e1, e2)| e1.erl_eq(e2)),
-            (Term::CapturedFunction {
-                module: ref mod1, fun_name: ref fun_name1,
-                arity: ref arity1 },
-             Term::CapturedFunction {
-                 module: ref mod2, fun_name: ref fun_name2,
-                 arity: ref arity2 }) =>
-                mod1 == mod2 && fun_name1 == fun_name2 && arity1 == arity2,
+            (Term::CapturedFunction { ident: ref ident1 },
+             Term::CapturedFunction { ident: ref ident2 }) =>
+                ident1 == ident2,
             _ => {
-                ::trace::warning_args(
+                crate::trace::warning_args(
                     "WARNING: ErlEq might be unimplemented".to_string(),
                     || {
                         let mut event_args = std::collections::HashMap::new();
@@ -387,8 +434,6 @@ impl ErlEq for Term {
 impl ErlExactEq for Term {
     fn erl_exact_eq(&self, other: &Term) -> bool {
         match (self, other) {
-            (Term::LambdaEnv { .. }, _) => unreachable!(), // These should never happen
-            (_, Term::LambdaEnv { .. }) => unreachable!(),
             (Term::BoundLambda { .. }, _) => unreachable!(),
             (_, Term::BoundLambda { .. }) => unreachable!(),
             (Term::ValueList(_), _) => unimplemented!(),
@@ -403,33 +448,36 @@ impl ErlExactEq for Term {
             (_, Term::Integer(_)) => false,
 
             (Term::Nil, Term::Nil) => true,
-            (Term::List(h1, t1), Term::Nil) if h1.len() == 0 =>
-                if let Term::Nil = **t1 { true } else { false },
-            (Term::Nil, Term::List(h2, t2)) if h2.len() == 0 =>
-                if let Term::Nil = **t2 { true } else { false },
-            (Term::List(h1, t1), Term::List(h2, t2)) => {
-                let head_ok = h1.iter().zip(h2.iter())
-                    .all(|(v1, v2)| v1.erl_exact_eq(v2));
-                if !head_ok { return false; }
-                if h1.len() == h2.len() {
-                    t1.erl_exact_eq(t2)
-                } else if h1.len() > h2.len() {
-                    let h1_new_head: Vec<_> = h1.iter().skip(h2.len())
-                        .cloned().collect();
-                    let h1_new = Term::List(h1_new_head, t1.clone());
-                    h1_new.erl_exact_eq(t2)
-                } else {
-                    let h2_new_head: Vec<_> = h2.iter().skip(h1.len())
-                        .cloned().collect();
-                    let h2_new = Term::List(h2_new_head, t2.clone());
-                    t1.erl_exact_eq(&h2_new)
-                }
+            (Term::ListCell(h1, t1), Term::ListCell(h2, t2)) => {
+                h1.erl_exact_eq(h2) && t1.erl_exact_eq(t2)
             }
+            //(Term::List(h1, t1), Term::Nil) if h1.len() == 0 =>
+            //    if let Term::Nil = **t1 { true } else { false },
+            //(Term::Nil, Term::List(h2, t2)) if h2.len() == 0 =>
+            //    if let Term::Nil = **t2 { true } else { false },
+            //(Term::List(h1, t1), Term::List(h2, t2)) => {
+            //    let head_ok = h1.iter().zip(h2.iter())
+            //        .all(|(v1, v2)| v1.erl_exact_eq(v2));
+            //    if !head_ok { return false; }
+            //    if h1.len() == h2.len() {
+            //        t1.erl_exact_eq(t2)
+            //    } else if h1.len() > h2.len() {
+            //        let h1_new_head: Vec<_> = h1.iter().skip(h2.len())
+            //            .cloned().collect();
+            //        let h1_new = Term::List(h1_new_head, t1.clone());
+            //        h1_new.erl_exact_eq(t2)
+            //    } else {
+            //        let h2_new_head: Vec<_> = h2.iter().skip(h1.len())
+            //            .cloned().collect();
+            //        let h2_new = Term::List(h2_new_head, t2.clone());
+            //        t1.erl_exact_eq(&h2_new)
+            //    }
+            //}
             (Term::Nil, _) => false,
             (_, Term::Nil) => false,
 
             _ => {
-                ::trace::warning_args(
+                crate::trace::warning_args(
                     "WARNING: ErlExactEq might be unimplemented".to_string(),
                     || {
                         let mut event_args = std::collections::HashMap::new();

@@ -1,5 +1,9 @@
-use ::{ Atom, FunctionIdent, Term, Pid, LabelN };
-use ::process::CallReturn;
+
+use std::rc::Rc;
+use crate::term::{ Term, Pid };
+
+use libeir_ir::{ FunctionIdent, Block, Value };
+use libeir_intern::Symbol;
 
 use std::sync::{ Mutex, RwLock };
 use std::collections::HashMap;
@@ -68,7 +72,7 @@ fn vm_id() -> usize {
 
 struct StackEntry {
     pid: Pid,
-    module: Atom,
+    module: Symbol,
     ident: FunctionIdent,
     args: Vec<Term>,
 }
@@ -80,19 +84,20 @@ struct TraceEvent {
 
 enum TraceEventType {
     FunctionEnter {
-        module: Atom,
         ident: FunctionIdent,
-        args: Vec<Term>,
+        lambda: Option<Block>,
+        args: Vec<Rc<Term>>,
     },
-    FunctionExit {
-        ret: Option<CallReturn>,
+    FunctionTailCall,
+    FunctionReturn {
+        kind: usize,
+        ret: Rc<Term>,
     },
-    BasicBlockStart {
-        module: Atom,
+    BlockStart {
         ident: FunctionIdent,
-        block: LabelN,
+        block: Block,
     },
-    BasicBlockEnd,
+    BlockEnd,
     Warning {
         text: String,
         args: HashMap<String, ::serde_json::Value>,
@@ -131,7 +136,7 @@ pub fn get_pid() -> Pid {
     })
 }
 
-pub fn enter_function(module: &Atom, ident: &FunctionIdent, args: &[Term]) {
+pub fn enter_function(ident: &FunctionIdent, lambda: Option<Block>, args: &[Rc<Term>]) {
     TRACE_COLLECTOR.with(|c| {
         let mut c = c.lock().unwrap();
         let pid = c.current_pid;
@@ -150,7 +155,6 @@ pub fn enter_function(module: &Atom, ident: &FunctionIdent, args: &[Term]) {
         c.events.push(TraceEvent {
             pid: pid,
             typ: TraceEventType::FunctionEnter {
-                module: module.clone(),
                 ident: ident.clone(),
                 args: args.to_vec(),
             },
@@ -158,7 +162,7 @@ pub fn enter_function(module: &Atom, ident: &FunctionIdent, args: &[Term]) {
     })
 }
 
-pub fn exit_function(module: &Atom, ident: &FunctionIdent, ret: Option<&CallReturn>) {
+pub fn exit_function(ident: &FunctionIdent, ret: Option<&CallReturn>) {
     TRACE_COLLECTOR.with(|c| {
         let mut c = c.lock().unwrap();
         let pid = c.current_pid;

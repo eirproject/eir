@@ -4,8 +4,6 @@ use cranelift_entity::{ PrimaryMap, EntityList, ListPool, entity_impl };
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
 
-use crate::Const;
-
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PatternNode(u32);
 entity_impl!(PatternNode, "pattern_node");
@@ -26,9 +24,8 @@ pub struct PatternContainer {
     values: PrimaryMap<PatternValue, ()>,
     clauses: PrimaryMap<PatternClause, PatternClauseData>,
 
-    node_pool: ListPool<PatternNode>,
-    value_pool: ListPool<PatternValue>,
-    clause_pool: ListPool<PatternClause>,
+    pub node_pool: ListPool<PatternNode>,
+    pub value_pool: ListPool<PatternValue>,
 
     /// Temporary map used for copies
     tmp_val_map: Option<HashMap<PatternValue, PatternValue>>,
@@ -38,8 +35,18 @@ pub struct PatternContainer {
 #[derive(Debug, Clone)]
 struct PatternClauseData {
     root_nodes: EntityList<PatternNode>,
+
+    /// This is the set of nodes that are bound from the pattern.
+    /// This will correspond to another list of the same length stored
+    /// outside of the container, the two will together form a pair.
+    /// This way of doing things enables this single representation
+    /// of patterns to work through several IRs.
     binds: EntityList<PatternNode>,
+
+    /// This is the set of values that are accessible from the pattern.
+    /// Same as `binds`, except for external values used within the clause.
     values: EntityList<PatternValue>,
+
     finished: bool,
 }
 
@@ -51,9 +58,9 @@ struct PatternNodeData {
 }
 
 #[derive(Debug, Clone)]
-enum PatternNodeKind {
+pub enum PatternNodeKind {
     Wildcard,
-    Atomic(Const),
+    Value(PatternValue),
     // TODO: Binary
     Tuple(EntityList<PatternNode>),
     List {
@@ -92,11 +99,16 @@ impl PatternContainer {
 
             node_pool: ListPool::new(),
             value_pool: ListPool::new(),
-            clause_pool: ListPool::new(),
 
             tmp_val_map: Some(HashMap::new()),
             tmp_node_map: Some(HashMap::new()),
         }
+    }
+
+    pub fn clause_value(&mut self, clause: PatternClause) -> PatternValue {
+        let val = self.values.push(());
+        self.clauses[clause].values.push(val, &mut self.value_pool);
+        val
     }
 
     pub fn wildcard(&mut self) -> PatternNode {
@@ -107,9 +119,9 @@ impl PatternContainer {
         })
     }
 
-    pub fn atomic(&mut self, atomic: Const) -> PatternNode {
+    pub fn value(&mut self, val: PatternValue) -> PatternNode {
         self.nodes.push(PatternNodeData {
-            kind: PatternNodeKind::Atomic(atomic),
+            kind: PatternNodeKind::Value(val),
             finished: true,
             span: DUMMY_SPAN,
         })
@@ -176,6 +188,7 @@ impl PatternContainer {
             root_nodes: EntityList::new(),
             binds: EntityList::new(),
             values: EntityList::new(),
+
             finished: false,
         })
     }
@@ -220,17 +233,6 @@ impl PatternContainer {
                 map.insert(rhs, lhs);
                 Ok(lhs)
             },
-            (PatternNodeKind::Atomic(a1), PatternNodeKind::Atomic(a2)) => {
-                if a1 == a2 {
-                    map.insert(rhs, lhs);
-                    Ok(lhs)
-                } else {
-                    Err(PatternMergeFail::Disjoint {
-                        left: lhs,
-                        right: rhs,
-                    })
-                }
-            }
             (PatternNodeKind::Tuple(l1), PatternNodeKind::Tuple(l2)) => {
                 let l1_len = l1.len(&self.node_pool);
                 let l2_len = l2.len(&self.node_pool);
@@ -326,6 +328,7 @@ impl PatternContainer {
             root_nodes: new_roots,
             binds: new_binds,
             values: new_values,
+
             finished: true,
         })
     }
@@ -337,14 +340,15 @@ impl PatternContainer {
                         map: &HashMap<PatternNode, PatternNode>)
     {
         let clause_d = &mut self.clauses[clause];
-        let len = clause_d.binds.len(&self.node_pool);
 
+        let len = clause_d.binds.len(&self.node_pool);
         for n in 0..len {
             let entry = clause_d.binds.get_mut(n, &mut self.node_pool).unwrap();
             if let Some(new) = map.get(&*entry) {
                 *entry = *new;
             }
         }
+
     }
 
 }
@@ -361,8 +365,17 @@ impl PatternContainer {
         data.binds.as_slice(&self.node_pool)
     }
 
+    pub fn clause_values(&self, clause: PatternClause) -> &[PatternValue] {
+        let data = &self.clauses[clause];
+        data.values.as_slice(&self.value_pool)
+    }
+
     pub fn node_span(&self, node: PatternNode) -> ByteSpan {
         self.nodes[node].span
+    }
+
+    pub fn node_kind<'a>(&'a self, node: PatternNode) -> &'a PatternNodeKind {
+        &self.nodes[node].kind
     }
 
 }
@@ -380,7 +393,11 @@ fn copy_pattern_node(
             node_map.insert(node, new);
             new
         },
-        PatternNodeKind::Atomic(atomic) => to.atomic(atomic.clone()),
+        PatternNodeKind::Value(val) => {
+            let new = to.value(*val);
+            node_map.insert(node, new);
+            new
+        }
         PatternNodeKind::Tuple(elems) => {
             let new = to.tuple();
 

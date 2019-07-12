@@ -9,7 +9,9 @@ use crate::{ Function, FunctionIdent };
 use crate::{ Block, Value };
 use crate::op::{ OpKind, BinOp };
 use crate::fun::ValueType;
-use crate::pattern::PatternNode;
+use crate::pattern::{ PatternContainer, PatternNode, PatternNodeKind };
+
+use libeir_util::pooled_entity_set::PooledEntitySet;
 
 use cranelift_entity::EntityRef;
 
@@ -223,6 +225,20 @@ impl ToEirText for Function {
     }
 }
 
+fn format_pattern(ctx: &mut ToEirTextContext, pat: &PatternContainer, indent: usize,
+                  annotated_nodes: &HashSet<PatternNode>,
+                  node: PatternNode, out: &mut dyn Write) -> std::io::Result<()> {
+    if annotated_nodes.contains(&node) {
+        write!(out, "n{} @ ", node.index())?;
+    }
+    match pat.node_kind(node) {
+        PatternNodeKind::Wildcard => write!(out, "_")?,
+        _ => write!(out, "?")?,
+    }
+
+    Ok(())
+}
+
 impl ToEirTextFun for Block {
     fn to_eir_text_fun(&self, ctx: &mut ToEirTextContext, fun: &Function,
                        indent: usize, out: &mut dyn Write)
@@ -240,8 +256,82 @@ impl ToEirTextFun for Block {
             write_indent(out, indent+1)?;
             match kind {
                 OpKind::Case { clauses } => {
-                    //let clauses_num = clauses.len(&fun.clause_pool);
-                    write!(out, "case")?;
+                    let clauses_num = clauses.len(&fun.clause_pool);
+
+                    let values_start = 1 + (clauses_num * 2);
+
+                    write!(out, "case ")?;
+                    format_value(args[values_start], fun, out)?;
+                    write!(out, " {{")?;
+                    write!(out, "\n")?;
+
+                    for clause_num in 0..clauses_num {
+                        let clause = clauses.get(0, &fun.clause_pool).unwrap();
+                        let clause_nodes = fun.pat().clause_root_nodes(clause);
+
+                        let base = 1 + (2 * clause_num);
+                        let guard = args[base + 0];
+                        let body = args[base + 1];
+
+                        let mut annotated_nodes = HashSet::new();
+                        for bind in fun.pat().clause_binds(clause) {
+                            annotated_nodes.insert(*bind);
+                        }
+
+                        // Pattern body
+                        write_indent(out, indent + 2)?;
+                        write!(out, "(")?;
+                        if clause_nodes.len() > 0 {
+                            write!(out, "\n")?;
+                        }
+
+                        for node in clause_nodes {
+                            write_indent(out, indent + 3)?;
+                            format_pattern(ctx, fun.pat(), indent+3, &annotated_nodes, *node, out)?;
+                            write!(out, "\n")?;
+                        }
+
+                        if clause_nodes.len() > 0 {
+                            write_indent(out, indent + 2)?;
+                        }
+                        write!(out, ")")?;
+
+                        // Guard
+                        write!(out, " guard ")?;
+                        format_value(guard, fun, out)?;
+                        write!(out, "(return")?;
+                        for bind in fun.pat().clause_binds(clause) {
+                            write!(out, ", n{}", bind.index())?;
+                        }
+                        write!(out, ")")?;
+
+                        // Body
+                        write!(out, " => ")?;
+                        format_value(body, fun, out)?;
+                        write!(out, "(")?;
+                        let mut first = true;
+                        for bind in fun.pat().clause_binds(clause) {
+                            if !first {
+                                write!(out, ", ")?;
+                            }
+                            first = false;
+
+                            write!(out, "n{}", bind.index())?;
+                        }
+                        write!(out, ")")?;
+
+                        write!(out, "\n")?;
+                    }
+
+                    write_indent(out, indent + 2)?;
+                    write!(out, "_ => ")?;
+                    format_value(args[0], fun, out)?;
+                    write!(out, "()")?;
+                    write!(out, "\n")?;
+
+                    write_indent(out, indent + 1)?;
+                    write!(out, "}}")?;
+
                 }
                 OpKind::Call => {
                     format_value(args[0], fun, out)?;

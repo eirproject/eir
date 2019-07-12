@@ -15,7 +15,7 @@ use crate::lower::expr::{ lower_single };
 use crate::lower::pattern::lower_clause;
 
 fn lower_qual<F>(ctx: &mut LowerCtx, b: &mut FunctionBuilder, inner: &F,
-              quals: &[Expr], mut block: IrBlock, mut acc: IrValue) -> (IrBlock, IrValue)
+                 quals: &[Expr], mut block: IrBlock, mut acc: IrValue) -> (IrBlock, IrValue)
 where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, IrValue)
 {
     if quals.len() == 0 {
@@ -85,7 +85,7 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
                         let body_val = b.value(lowered.body);
                         case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
 
-                        let (cont, cont_val) = lower_qual(ctx, b, inner, &quals[1..], lowered.body, acc);
+                        let (cont, cont_val) = lower_qual(ctx, b, inner, &quals[1..], lowered.body, loop_acc_arg);
                         b.op_call(cont, loop_block, &[tail_val, cont_val]);
 
                         // Pop scope pushed in lower_clause

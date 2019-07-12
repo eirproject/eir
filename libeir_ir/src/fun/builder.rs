@@ -87,14 +87,14 @@ impl<'a> FunctionBuilder<'a> {
         &mut self.fun
     }
 
-    pub fn pat<'b>(&'b mut self) -> &'b PatternContainer {
+    pub fn pat<'b>(&'b self) -> &'b PatternContainer {
         &self.fun.pattern_container
     }
     pub fn pat_mut<'b>(&'b mut self) -> &'b mut PatternContainer {
         &mut self.fun.pattern_container
     }
 
-    pub fn cons<'b>(&'b mut self) -> &'b ConstantContainer {
+    pub fn cons<'b>(&'b self) -> &'b ConstantContainer {
         &self.fun.constant_container
     }
     pub fn cons_mut<'b>(&'b mut self) -> &'b mut ConstantContainer {
@@ -119,9 +119,9 @@ impl<'a> FunctionBuilder<'a> {
     /// Mainly used in the builder.
     fn graph_update_block(&mut self, block: Block) {
         let mut block_buf = self.block_buf.take().unwrap();
+        debug_assert!(block_buf.len() == 0);
 
         // 1. Remove the block from all previous successors predecessor sets
-        block_buf.clear();
         {
             let block_data = &self.fun.blocks[block];
             for successor in block_data.successors.iter(&self.fun.block_set_pool) {
@@ -130,7 +130,7 @@ impl<'a> FunctionBuilder<'a> {
         }
         for successor in block_buf.iter() {
             let block_data = &mut self.fun.blocks[*successor];
-            block_data.predecessors.remove(*successor, &mut self.fun.block_set_pool);
+            assert!(block_data.predecessors.remove(*successor, &mut self.fun.block_set_pool));
         }
 
         // 2. Add new successors to block
@@ -152,12 +152,14 @@ impl<'a> FunctionBuilder<'a> {
             }
         }
 
+
         // 3. Add block as predecessor to all successors
         for dest_block in block_buf.iter() {
             let block_data = &mut self.fun.blocks[*dest_block];
             block_data.predecessors.insert(block, &mut self.fun.block_set_pool);
         }
 
+        block_buf.clear();
         self.block_buf = Some(block_buf);
     }
 
@@ -197,35 +199,41 @@ impl<'a> FunctionBuilder<'a> {
     /// block. This will remove all successors, and will cause
     /// this block to be removed from their predecessors.
     pub fn block_clear(&mut self, block: Block) {
-        let mut buf = self.value_buf.take().unwrap();
-        debug_assert!(buf.len() == 0);
+        #[cfg(debug_assertions)]
+        self.fun().graph_validate_block(block);
+
+        let mut value_buf = self.value_buf.take().unwrap();
+        debug_assert!(value_buf.len() == 0);
 
         {
             let data = self.fun.blocks.get_mut(block).unwrap();
-            data.op = None;
 
+            data.op = None;
             for read in data.reads.as_slice(&self.fun.value_pool) {
-                buf.push(*read);
+                value_buf.push(*read);
             }
-            data.reads = EntityList::new();
+            data.successors.clear(&mut self.fun.block_set_pool);
+            data.reads.clear(&mut self.fun.value_pool);
         }
 
-        for value in buf.iter() {
-            match self.fun.values[*value].kind {
-                ValueType::Block(block) => {
-                    let data = self.fun.blocks.get_mut(block).unwrap();
+
+        for value in value_buf.iter() {
+            let data = &mut self.fun.values[*value];
+            assert!(data.usages.remove(block, &mut self.fun.block_set_pool));
+
+            match data.kind {
+                ValueType::Block(successor_block) => {
+                    let data = self.fun.blocks.get_mut(successor_block).unwrap();
                     assert!(data.predecessors
                             .remove(block, &mut self.fun.block_set_pool));
                 }
                 ValueType::Alias(_) => panic!(),
                 _ => {},
             }
-            assert!(self.fun.values[*value].usages
-                    .remove(block, &mut self.fun.block_set_pool));
         }
 
-        buf.clear();
-        self.value_buf = Some(buf);
+        value_buf.clear();
+        self.value_buf = Some(value_buf);
     }
 
 }
@@ -448,7 +456,7 @@ impl<'a> FunctionBuilder<'a> {
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
-        data.op = Some(OpKind::UnpackValueList);
+        data.op = Some(OpKind::UnpackValueList(num));
         data.reads.push(cont_val, &mut self.fun.value_pool);
         data.reads.push(list, &mut self.fun.value_pool);
 
@@ -734,6 +742,15 @@ impl CaseBuilder {
     pub fn finish<'a>(mut self, block: Block, b: &mut FunctionBuilder<'a>) {
         assert!(b.state.is_none());
 
+        // Validate that the number of values matches between the
+        // clauses and reads
+        let mut num_values = 0;
+        for clause in self.clauses.as_slice(&b.fun().clause_pool) {
+            num_values += b.fun().pat().clause_values(*clause).len();
+        }
+        let num_value_reads = self.values.len(&b.fun().value_pool);
+        assert!(num_values == num_value_reads);
+
         let data = b.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
@@ -747,13 +764,16 @@ impl CaseBuilder {
 
         data.reads.push(self.no_match.unwrap(), &mut b.fun.value_pool);
 
+        // Guard and body blocks for clauses
         for c in self.clauses_b.as_slice(&b.fun.value_pool) {
             buf.push(*c);
         }
         data.reads.extend(buf.iter().cloned(), &mut b.fun.value_pool);
 
+        // Match value
         data.reads.push(self.match_on.unwrap(), &mut b.fun.value_pool);
 
+        // Values
         buf.clear();
         for c in self.values.as_slice(&b.fun.value_pool) {
             buf.push(*c);
@@ -771,6 +791,35 @@ impl CaseBuilder {
 
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::FunctionIdent;
 
+    #[test]
+    fn graph_impl() {
+        let ident = FunctionIdent {
+            module: Ident::from_str("test"),
+            name: Ident::from_str("test"),
+            arity: 1,
+        };
+        let mut fun = Function::new(ident);
+        let mut b = fun.builder();
 
+        {
+            let ba = b.block_insert();
+            let bb = b.block_insert();
+            b.op_call(ba, bb, &[]);
+            b.block_clear(ba);
+
+            b.fun().graph_validate_global();
+
+            let bc = b.block_insert();
+            b.op_call(ba, bc, &[]);
+
+            b.fun().graph_validate_global();
+        }
+    }
+
+}
 

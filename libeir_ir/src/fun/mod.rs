@@ -42,7 +42,7 @@ entity_impl!(Value, "value");
 pub struct FunRef(u32);
 entity_impl!(FunRef, "fun_ref");
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BlockData {
     arguments: EntityList<Value>,
 
@@ -60,7 +60,7 @@ pub struct BlockData {
 
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ValueData {
     kind: ValueType,
     usages: PooledEntitySet<Block>,
@@ -68,7 +68,7 @@ pub struct ValueData {
     span: ByteSpan,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueType {
     /// Value is defined as an argument in the following block
     Arg(Block),
@@ -104,7 +104,7 @@ pub enum AttributeValue {
     None,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
 
     // Meta
@@ -118,7 +118,7 @@ pub struct Function {
     entry_block: Option<Block>,
 
     value_pool: ListPool<Value>,
-    clause_pool: ListPool<PatternClause>,
+    pub clause_pool: ListPool<PatternClause>,
     block_set_pool: EntitySetPool,
 
     pattern_container: PatternContainer,
@@ -179,6 +179,14 @@ impl Function {
         }
     }
 
+    pub fn value_is_arg(&self, value: Value) -> bool {
+        if let ValueType::Arg(_block) = self.values[value].kind {
+            true
+        } else {
+            false
+        }
+    }
+
 }
 
 /// Blocks
@@ -226,9 +234,36 @@ impl Function {
         BlockGraph::new(self)
     }
 
-    // fn block_remove_successors(&mut self, block: Block) {
-    //     
-    // }
+    /// Validates graph invariants for the block.
+    /// Relatively inexpensive, for debug assertions.
+    fn graph_validate_block(&self, block: Block) {
+        let block_data = &self.blocks[block];
+
+        let mut num_successors = 0;
+        for read in block_data.reads.as_slice(&self.value_pool) {
+            let val_data = &self.values[*read];
+
+            match val_data.kind {
+                ValueType::Block(succ_block) => {
+                    assert!(block_data.successors.contains(succ_block, &self.block_set_pool));
+                    assert!(self.blocks[succ_block].predecessors.contains(block, &self.block_set_pool));
+                    num_successors += 1;
+                }
+                _ => (),
+            }
+        }
+
+        assert!(block_data.successors.size(&self.block_set_pool) == num_successors);
+    }
+
+    /// Validates graph invariants globally, for the whole
+    /// function.
+    /// Relatively expensive. Should only be used in tests.
+    fn graph_validate_global(&self) {
+        for block in self.blocks.keys() {
+            self.graph_validate_block(block);
+        }
+    }
 
 }
 
@@ -301,6 +336,10 @@ impl Function {
 
             constant_values: HashSet::new(),
         }
+    }
+
+    pub fn builder<'a>(&'a mut self) -> FunctionBuilder<'a> {
+        FunctionBuilder::new(self)
     }
 
     pub fn ident(&self) -> &FunctionIdent {

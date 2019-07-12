@@ -22,7 +22,7 @@ pub struct Const(u32);
 entity_impl!(Const, "const");
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum ConstValueKind {
+pub enum ConstValueKind {
     Atomic(AtomicTerm),
     ListCell {
         head: ConstValue,
@@ -40,18 +40,18 @@ enum ConstValueKind {
 /// represented by a separate span for each of their atomic values.
 /// In the case that a composite term actually has a single span,
 /// it is fully legal to specify that as an Atomic span.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum SpanKind {
     Atomic(ByteSpan),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ConstData {
     value: ConstValue,
     span: SpanKind,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConstantContainer {
     const_values: PrimaryMap<ConstValue, ConstValueKind>,
     consts: PrimaryMap<Const, ConstData>,
@@ -72,6 +72,10 @@ impl ConstantContainer {
 
     pub fn const_value(&self, cons: Const) -> ConstValue {
         self.consts[cons].value
+    }
+
+    pub fn const_value_kind<'a>(&'a self, value: ConstValue) -> &'a ConstValueKind {
+        &self.const_values[value]
     }
 
     fn create_value(&mut self, kind: ConstValueKind) -> ConstValue {

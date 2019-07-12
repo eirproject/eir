@@ -15,7 +15,7 @@ use super::lower_function;
 use super::LowerCtx;
 use super::pattern::lower_clause;
 
-use crate::parser::ast::Expr;
+use crate::parser::ast::{ Expr, Literal };
 use crate::parser::ast::{ Apply, Remote, UnaryExpr };
 use crate::parser::ast::UnaryOp;
 use crate::parser::ast::{ FunctionName };
@@ -74,13 +74,21 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
 
             let mut arg_vals = vec![ok_block_val, fail_block_val];
 
+            // Don't really know if it makes sense to put any span on this
+            let arity_val = b.value(args.len());
+
             let callee_val = match &**callee {
                 Expr::Remote(Remote { span, module, function }) => {
                     let mod_val = map_block!(block, lower_single(ctx, b, block, module));
                     let fun_val = map_block!(block, lower_single(ctx, b, block, function));
 
-                    // Don't really know if it makes sense to put any span on this
-                    let arity_val = b.value(args.len());
+                    b.block_set_span(block, *span);
+                    block = b.op_capture_function(block, mod_val, fun_val, arity_val);
+                    b.block_args(block)[0]
+                }
+                Expr::Literal(Literal::Atom(name)) => {
+                    let mod_val = b.value(ctx.module.name);
+                    let fun_val = b.value(*name);
 
                     b.block_set_span(block, *span);
                     block = b.op_capture_function(block, mod_val, fun_val, arity_val);

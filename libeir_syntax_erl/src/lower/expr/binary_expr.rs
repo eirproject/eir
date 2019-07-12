@@ -93,6 +93,7 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
                 BinaryOp::Sub => (Ident::from_str("erlang"), Ident::from_str("-")),
                 BinaryOp::Add => (Ident::from_str("erlang"), Ident::from_str("+")),
                 BinaryOp::Append => (Ident::from_str("erlang"), Ident::from_str("++")),
+                BinaryOp::Remove => (Ident::from_str("erlang"), Ident::from_str("--")),
                 BinaryOp::Multiply => (Ident::from_str("erlang"), Ident::from_str("*")),
                 BinaryOp::Divide => (Ident::from_str("erlang"), Ident::from_str("/")),
                 BinaryOp::Rem => (Ident::from_str("erlang"), Ident::from_str("rem")),

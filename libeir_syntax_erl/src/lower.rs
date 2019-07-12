@@ -261,6 +261,10 @@ fn lower_function_base(
                     // Add to case
                     let body_val = b.value(lowered.body);
                     func_case.push_clause(lowered.clause, lowered.guard, body_val, b);
+                    println!("Values: {:?}", lowered.values);
+                    for value in lowered.values.iter() {
+                        func_case.push_value(*value, b);
+                    }
 
                     let (body_ret_block, body_ret) = lower_block(ctx, b, lowered.body, &clause.body);
 

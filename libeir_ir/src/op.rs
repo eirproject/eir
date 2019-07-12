@@ -101,10 +101,10 @@ pub enum OpKind {
     /// should not be concerned with these operations.
     PackValueList,
     /// (cont: fn(terms..), l: valuelist)
-    UnpackValueList,
+    UnpackValueList(usize),
 
     // Case structure
-    /// ```
+    /// ```ignore
     /// (
     ///     no_match: fn(),
     ///     clause1_guard: fn(ok: fn(), fail: fn(), pat_refs..),

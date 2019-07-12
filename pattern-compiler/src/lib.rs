@@ -1,16 +1,9 @@
 // Implements a variant of
 // http://www.cs.tufts.edu/~nr/cs257/archive/luc-maranget/jun08.pdf
 
-extern crate petgraph;
-#[cfg(feature = "debug_table_print")]
-extern crate prettytable;
-extern crate either;
-//extern crate util;
 #[macro_use] extern crate derivative;
 
 pub use petgraph::visit::EdgeRef;
-
-use ::std::collections::HashMap;
 
 mod pattern;
 pub use self::pattern::{ PatternProvider, ExpandedClauseNodes };
@@ -22,14 +15,17 @@ mod matrix;
 
 pub mod simple_pattern;
 
-use ::petgraph::graph::NodeIndex;
+pub use ::petgraph::graph::NodeIndex;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+struct LeafId(usize);
 
 #[derive(Debug)]
 pub struct MatchCompileContext<'a, P> where P: pattern::PatternProvider + 'a {
     pattern: &'a mut P,
 
     cfg: cfg::PatternCfg<P>,
-    leaf_bindings: HashMap<NodeIndex, HashMap<P::CfgVariable, P::PatternNodeKey>>,
+    //leaf_bindings: HashMap<NodeIndex, HashMap<P::PatternNodeKey, P::CfgVariable>>,
 
     root_matrix: matrix::MatchMatrix<P>,
     fail_leaf: NodeIndex,
@@ -41,16 +37,16 @@ impl<'a, P> MatchCompileContext<'a, P> where P: PatternProvider {
 
         let mut cfg = cfg::PatternCfg::new();
         let fail_leaf = cfg.add_fail();
-        let leaves: Vec<NodeIndex> = (0..(root.clauses))
-            .map(|idx| cfg.add_leaf(idx))
+        let leaves: Vec<LeafId> = (0..(root.clauses))
+            .map(|idx| LeafId(idx))
             .collect();
 
-        let leaf_bindings = leaves.iter()
-            .map(|leaf| {
-                let bindings: HashMap<P::CfgVariable, P::PatternNodeKey> = HashMap::new();
-                (*leaf, bindings)
-            })
-            .collect();
+        //let leaf_bindings = leaves.iter()
+        //    .map(|leaf| {
+        //        let bindings: HashMap<P::PatternNodeKey, P::CfgVariable> = HashMap::new();
+        //        (*leaf, bindings)
+        //    })
+        //    .collect();
 
         let root_matrix = matrix::MatchMatrix::new(
             &root.nodes, leaves, root.variables);
@@ -59,14 +55,14 @@ impl<'a, P> MatchCompileContext<'a, P> where P: PatternProvider {
             pattern: pattern,
 
             cfg: cfg,
-            leaf_bindings: leaf_bindings,
+            //leaf_bindings: leaf_bindings,
 
             root_matrix: root_matrix,
             fail_leaf: fail_leaf,
         }
     }
 
-    pub fn root_matrix(&self) -> &matrix::MatchMatrix<P> {
+    fn root_matrix(&self) -> &matrix::MatchMatrix<P> {
         &self.root_matrix
     }
 
@@ -80,10 +76,14 @@ fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
     where P: PatternProvider
 {
 
-    //for _ in 0..level {
-    //    print!(" ==");
-    //}
-    //println!(" MATRIX AT LEVEL {}", level);
+
+    #[cfg(feature = "debug_table_print")]
+    {
+        for _ in 0..level {
+            print!(" ==");
+        }
+        println!(" MATRIX AT LEVEL {}", level);
+    }
 
     let edge = cfg::CfgEdge {
         kind: spec.clone(),
@@ -98,11 +98,13 @@ fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
 
     // If the head of the matrix has only wildcards, none of the other rows
     // can happen.
-    if let Some(node) = matrix.has_wildcard_head(&ctx.pattern) {
-        ctx.cfg.add_edge(parent, node, edge);
-        //let guard_node = ctx.cfg.add_guard(node);
+    if let Some(node_id) = matrix.has_wildcard_head(&ctx.pattern) {
+        let binds = matrix.binds_for(node_id).unwrap();
+        let node = ctx.cfg.add_leaf(parent, node_id.0, edge, binds.clone());
+
         let new_mat = matrix.without_head();
         matrix_to_decision_tree(node, ctx, None, &new_mat, vec![], level+1);
+
         return;
     }
 
@@ -126,15 +128,6 @@ fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
         let (introduced, specialized) = matrix.specialize(ctx, specialize_variable,
                                                           *specialization);
 
-        // TODO: Dedup
-        // Add variable bindings to the current specializations
-        for (leaf, clause) in specialized.iterate_clauses() {
-            let leaf_bindings = ctx.leaf_bindings.get_mut(&leaf).unwrap();
-            for (variable_num, variable_node) in clause.iter().enumerate() {
-                leaf_bindings.insert(specialized.get_var(variable_num), variable_node.node);
-            }
-        }
-
         matrix_to_decision_tree(
             cfg_node, ctx, Some(*specialization),
             &specialized, introduced, level+1);
@@ -142,15 +135,6 @@ fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
 
     // Specialize on default matrix
     let (introduced, default) = matrix.default(ctx, specialize_variable);
-
-    // TODO: Dedup
-    // Add variable bindings to the current specializations
-    for (leaf, clause) in default.iterate_clauses() {
-        let leaf_bindings = ctx.leaf_bindings.get_mut(&leaf).unwrap();
-        for (variable_num, variable_node) in clause.iter().enumerate() {
-            leaf_bindings.insert(default.get_var(variable_num), variable_node.node);
-        }
-    }
 
     let wildcard = ctx.pattern.get_wildcard();
     matrix_to_decision_tree(
@@ -175,9 +159,7 @@ pub fn to_decision_tree<P>(pattern: &mut P) -> cfg::PatternCfg<P>
                             &root,
                             root.variables.clone(), 0);
 
-    let mut cfg = context.cfg;
-    cfg.leaf_bindings = context.leaf_bindings;
-
+    let cfg = context.cfg;
     assert!(!::petgraph::algo::is_cyclic_directed(&cfg.graph));
     cfg
 }

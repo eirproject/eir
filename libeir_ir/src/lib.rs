@@ -17,6 +17,7 @@ pub use fun::{ FunctionBuilder, CaseBuilder, IntoValue };
 pub use fun::{ ValueType };
 pub use fun::{ Dialect };
 pub use fun::{ AttributeKey, AttributeValue };
+pub use fun::live::{ LiveValues };
 
 //pub mod env;
 //pub use env::{ ModuleEnvs, ClosureEnv };
@@ -65,6 +66,14 @@ impl Module {
         self.functions.insert(ident, fun);
 
         self.functions.get_mut(&ident).unwrap()
+    }
+
+    pub fn to_text(&self) -> String {
+        let mut ctx = ToEirTextContext::new();
+
+        let mut out = Vec::new();
+        self.to_eir_text(&mut ctx, 0, &mut out).unwrap();
+        String::from_utf8(out).unwrap()
     }
 
 }

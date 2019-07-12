@@ -1,6 +1,7 @@
 use libeir_ir::{
     Module as IrModule,
     FunctionBuilder,
+    CaseBuilder,
     Value as IrValue,
     Block as IrBlock,
     BinOp as IrBinOp,
@@ -19,8 +20,6 @@ use crate::lower::pattern::lower_clause;
 
 pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
                              try_expr: &Try) -> (IrBlock, IrValue) {
-    // TODO: Decide on exception ABI.
-    // Right now we are doing 3 arguments, type, error and trace.
 
     let exc_block = b.block_insert();
 
@@ -170,26 +169,33 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
     let exc_error = b.block_arg_insert(exc_block);
     let exc_trace = b.block_arg_insert(exc_block);
 
+    let mut case_b = b.op_case_build();
+
     // Atoms
     let big_exit_atom = b.value(Symbol::intern("EXIT"));
 
-    let error_atom = b.cons_mut().from(Symbol::intern("error"));
-    let error_pat = b.pat_mut().atomic(error_atom);
-    let error_clause = b.pat_mut().clause_start();
-    b.pat_mut().clause_node_push(error_clause, error_pat);
-    b.pat_mut().clause_finish(error_clause);
+    let make_value_clause = |b: &mut FunctionBuilder, case_b: &mut CaseBuilder, val: IrValue| {
+        let clause = b.pat_mut().clause_start();
 
-    let exit_atom = b.cons_mut().from(Symbol::intern("exit"));
-    let exit_pat = b.pat_mut().atomic(exit_atom);
-    let exit_clause = b.pat_mut().clause_start();
-    b.pat_mut().clause_node_push(exit_clause, exit_pat);
-    b.pat_mut().clause_finish(exit_clause);
+        // Value
+        case_b.push_value(val, b);
+        let pat_val = b.pat_mut().clause_value(clause);
 
-    let throw_atom = b.cons_mut().from(Symbol::intern("throw"));
-    let throw_pat = b.pat_mut().atomic(throw_atom);
-    let throw_clause = b.pat_mut().clause_start();
-    b.pat_mut().clause_node_push(throw_clause, throw_pat);
-    b.pat_mut().clause_finish(throw_clause);
+        let pat = b.pat_mut().value(pat_val);
+
+        b.pat_mut().clause_node_push(clause, pat);
+        b.pat_mut().clause_finish(clause);
+        clause
+    };
+
+    let error_atom = b.value(Symbol::intern("error"));
+    let error_clause = make_value_clause(b, &mut case_b, error_atom);
+
+    let exit_atom = b.value(Symbol::intern("exit"));
+    let exit_clause = make_value_clause(b, &mut case_b, exit_atom);
+
+    let throw_atom = b.value(Symbol::intern("throw"));
+    let throw_clause = make_value_clause(b, &mut case_b, throw_atom);
 
     // Join block
     let join_block = b.block_insert();
@@ -213,7 +219,6 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
     b.op_call(guard, guard_cont, &[true_val]);
 
     // Actual case
-    let mut case_b = b.op_case_build();
     case_b.match_on = Some(exc_type);
     case_b.no_match = Some(b.value(no_match));
 

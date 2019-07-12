@@ -8,6 +8,10 @@ use libeir_intern::{ Ident };
 
 use super::LowerError;
 
+pub fn is_wildcard(ident: Ident) -> bool {
+    ident.name.as_str().starts_with("_")
+}
+
 pub struct ScopeToken {
     /// The position in the stack of the referenced scope.
     height: usize,
@@ -55,7 +59,7 @@ impl ScopeTracker {
     }
 
     pub fn bind(&mut self, ident: Ident, val: IrValue) -> Result<(), LowerError> {
-        if ident.name.as_str().starts_with("_") {
+        if is_wildcard(ident) {
             Ok(())
         } else {
             if let Some(prev_val) = self.stack.get(&ident) {

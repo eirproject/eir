@@ -1,10 +1,10 @@
 use std::io::Write;
 
-use ::petgraph::Direction;
-use ::petgraph::visit::EdgeRef;
+use petgraph::Direction;
+use petgraph::visit::EdgeRef;
 
-use ::cfg::{ PatternCfg, CfgNodeKind };
-use ::pattern::PatternProvider;
+use crate::cfg::{ PatternCfg, CfgNodeKind };
+use crate::pattern::PatternProvider;
 
 const DOT_BREAK: &str = "<br align=\"left\" />";
 
@@ -27,8 +27,8 @@ impl<P> PatternCfg<P> where P: PatternProvider {
             let label = format_label(&format!("{:?}", node));
             write!(w, "node_{} [ label=<{}: {}", index.index(), index.index(), label)?;
 
-            if let CfgNodeKind::Leaf(leaf_id) = *node {
-                let bindings = &self.leaf_bindings[&self.leaves[&leaf_id]];
+            if let CfgNodeKind::Leaf(_leaf_id) = *node {
+                let bindings = &self.leaf_bindings[&index];
                 write!(w, "{} {}", DOT_BREAK, format_label(&format!("{:#?}", bindings)))?;
             }
 

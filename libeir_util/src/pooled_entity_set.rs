@@ -317,8 +317,53 @@ mod test {
             assert!(!set2.contains(TestEntity(i+1), &mut pool));
         }
 
+    }
+
+    #[test]
+    fn test_pooled_set_remove() {
+        let mut pool: ListPool<PooledSetValue> = ListPool::new();
+
+        let mut set1: PooledEntitySet<TestEntity> = PooledEntitySet::new();
+
+        assert!(!set1.remove(TestEntity(2), &mut pool));
+        assert!(!set1.remove(TestEntity(100), &mut pool));
+        set1.insert(TestEntity(2), &mut pool);
+        assert!(set1.remove(TestEntity(2), &mut pool));
+        assert!(!set1.remove(TestEntity(2), &mut pool));
+        set1.insert(TestEntity(100), &mut pool);
+        assert!(!set1.remove(TestEntity(2), &mut pool));
+        assert!(set1.remove(TestEntity(100), &mut pool));
+        assert!(!set1.remove(TestEntity(99), &mut pool));
+        assert!(!set1.remove(TestEntity(2), &mut pool));
+    }
+
+    #[test]
+    fn test_pooled_set_eq() {
+        let mut pool: ListPool<PooledSetValue> = ListPool::new();
+
+        let mut set1: PooledEntitySet<TestEntity> = PooledEntitySet::new();
+        let mut set2: PooledEntitySet<TestEntity> = PooledEntitySet::new();
+
+        assert!(set1.eq(&set2, &pool));
+
+        set1.insert(TestEntity(2), &mut pool);
+        assert!(!set1.eq(&set2, &pool));
+        assert!(!set2.eq(&set1, &pool));
+
+        set2.insert(TestEntity(2), &mut pool);
+        assert!(set1.eq(&set2, &pool));
+        assert!(set2.eq(&set1, &pool));
+
+        set2.insert(TestEntity(100), &mut pool);
+        assert!(!set1.eq(&set2, &pool));
+        assert!(!set2.eq(&set1, &pool));
+
+        set1.insert(TestEntity(100), &mut pool);
+        assert!(set1.eq(&set2, &pool));
+        assert!(set2.eq(&set1, &pool));
 
     }
+
 
     #[test]
     fn test_iterator() {

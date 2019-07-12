@@ -66,6 +66,9 @@ impl Function {
         let block_graph = self.block_graph();
         let doms = petgraph::algo::dominators::simple_fast(&block_graph, self.block_entry());
 
+        // Validate internal graph invariants
+        self.graph_validate_global();
+
         self.validate_entry_invariants(errors);
         self.validate_blocks(errors);
         self.validate_ssa_visibility(&doms, errors);

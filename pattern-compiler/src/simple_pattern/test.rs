@@ -1,4 +1,4 @@
-use ::{ PatternProvider, ExpandedClauseNodes };
+use crate::{ PatternProvider, ExpandedClauseNodes };
 
 use ::petgraph::{ Graph, Direction };
 use ::petgraph::graph::NodeIndex;
@@ -46,7 +46,7 @@ fn list_merge_pattern() {
         pattern.add_child(list_cell_2, NodeKind::Wildcard);
     }
 
-    let res = ::to_decision_tree(&mut pattern);
+    let res = crate::to_decision_tree(&mut pattern);
 
     let mut file = ::std::fs::File::create("cfg.dot").unwrap();
     res.to_dot(&mut file).unwrap();

@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod test;
 
-use ::{ PatternProvider, ExpandedClauseNodes };
+use crate::{ PatternProvider, ExpandedClauseNodes };
 
-use ::petgraph::{ Graph, Direction };
-use ::petgraph::graph::NodeIndex;
+use petgraph::{ Graph, Direction };
+use petgraph::graph::NodeIndex;
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub struct CfgVar(usize);
@@ -79,7 +79,7 @@ impl PatternProvider for SimplePatternProvider {
         self.pattern[key] == kind
     }
 
-    fn expand_clause_nodes(&mut self, clause_nodes: Vec<Self::PatternNodeKey>)
+    fn expand_clause_nodes(&mut self, clause_nodes: Vec<Self::PatternNodeKey>, kind: Self::PatternNodeKind)
                            -> ExpandedClauseNodes<
             Self::CfgVariable, Self::PatternNodeKey>
     {
@@ -91,12 +91,11 @@ impl PatternProvider for SimplePatternProvider {
             };
         }
 
-        let typ = self.pattern[clause_nodes[0]];
         let base_len = self.pattern.edges_directed(clause_nodes[0], Direction::Outgoing).count();
         for node in &clause_nodes {
             assert!(self.pattern.edges_directed(clause_nodes[0], Direction::Outgoing).count()
                     == base_len);
-            assert!(self.pattern[*node] == typ);
+            assert!(self.pattern[*node] == kind);
         }
 
         let mut curr_var = self.curr_var;
@@ -113,7 +112,7 @@ impl PatternProvider for SimplePatternProvider {
         };
         self.curr_var = curr_var;
 
-        match typ {
+        match kind {
             NodeKind::RootValues => {
                 for node in &clause_nodes {
                     for child in self.pattern.edges_directed(*node, Direction::Outgoing) {
@@ -141,6 +140,10 @@ impl PatternProvider for SimplePatternProvider {
 
     fn get_kind(&self, key: Self::PatternNodeKey) -> Self::PatternNodeKind {
         self.pattern[key]
+    }
+
+    fn get_wildcard_node(&self) -> Self::PatternNodeKey {
+        unimplemented!()
     }
 
 }

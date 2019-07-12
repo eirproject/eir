@@ -110,7 +110,7 @@ pub fn calculate_live_values(fun: &Function) -> LiveValues {
             &mut pool,
             &mut live,
         );
-        if !res { break; }
+        if res { break; }
     }
 
     // Validate that the live set at entry is empty

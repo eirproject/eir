@@ -6,5 +6,9 @@ edition = "2018"
 
 [dependencies]
 libeir_ir = { path = "../libeir_ir" }
-pattern-compiler = { path = "../pattern-compiler" }
+libeir_intern = { path = "../libeir_intern" }
+
+pattern-compiler = { path = "../pattern-compiler", features = ["debug_table_print"] }
 matches = "0.1.8"
+
+cranelift-entity = "0.30.0"

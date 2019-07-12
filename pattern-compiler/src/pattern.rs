@@ -44,9 +44,12 @@ pub trait PatternProvider: Debug {
 
     /// After clauses have been selected for specialization, this will
     /// be called with the set of all nodes that should be specialized on.
-    fn expand_clause_nodes(&mut self, clause_nodes: Vec<Self::PatternNodeKey>)
+    ///
+    fn expand_clause_nodes(&mut self, clause_nodes: Vec<Self::PatternNodeKey>, kind: Self::PatternNodeKind)
                            -> ExpandedClauseNodes<
             Self::CfgVariable, Self::PatternNodeKey>;
+
+    fn get_wildcard_node(&self) -> Self::PatternNodeKey;
 
     /// Every `PatternNodeKey` should belong to one and only one
     /// `PatternNodeKind`.

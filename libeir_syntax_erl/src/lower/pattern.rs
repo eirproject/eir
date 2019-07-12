@@ -8,6 +8,7 @@ use libeir_ir::{
 use libeir_ir::pattern::{
     PatternClause,
     PatternNode,
+    PatternValue,
     PatternMergeFail,
 };
 use libeir_ir::constant::NilTerm;
@@ -53,11 +54,19 @@ struct ClauseLowerCtx {
 
 }
 
+impl ClauseLowerCtx {
+    fn clause_value(&mut self, b: &mut FunctionBuilder, val: IrValue) -> PatternValue {
+        self.values.push(val);
+        b.pat_mut().clause_value(self.pat_clause)
+    }
+}
+
 pub struct LoweredClause {
     pub clause: PatternClause,
     pub body: IrBlock,
     pub guard: IrValue,
     pub scope_token: ScopeToken,
+    pub values: Vec<IrValue>,
 }
 
 /// When this returns Some:
@@ -151,6 +160,10 @@ pub(super) fn lower_clause<'a, P>(
         let mut top_and = b.op_intrinsic_build(Symbol::intern("bool_and"));
         top_and.push_value(cond_block_val, b);
 
+        let erlang_atom = b.value(Ident::from_str("erlang"));
+        let exact_eq_atom = b.value(Ident::from_str("=:="));
+        let two_atom = b.value(2);
+
         // Aux guards
         for eq_guard in clause_ctx.eq_guards.iter() {
             let (next_block, next_block_val) = b.block_insert_get_val();
@@ -168,11 +181,16 @@ pub(super) fn lower_clause<'a, P>(
                 }
             };
 
-            b.op_intrinsic(block, Symbol::intern("eq"), &[
-                next_block_val,
-                lhs,
-                rhs,
-            ]);
+            block = b.op_capture_function(block, erlang_atom, exact_eq_atom, two_atom);
+            let fun_val = b.block_args(block)[0];
+
+            let (unreachable_err, unreachable_err_val) = b.block_insert_get_val();
+            b.block_arg_insert(unreachable_err);
+            b.block_arg_insert(unreachable_err);
+            b.block_arg_insert(unreachable_err);
+            b.op_unreachable(unreachable_err);
+
+            b.op_call(block, fun_val, &[next_block_val, unreachable_err_val, lhs, rhs]);
             block = next_block;
 
             top_and.push_value(res_val, b);
@@ -245,7 +263,8 @@ pub(super) fn lower_clause<'a, P>(
             clause: pat_clause,
             body: body_block,
             guard: b.value(guard_lambda_block),
-            scope_token
+            scope_token,
+            values: clause_ctx.values,
         })
     }
 }
@@ -271,8 +290,10 @@ fn lower_list_head_pattern(
 
             let mut node = tail;
             for c in tokens.iter().rev() {
-                let char_const = b.cons_mut().from(*c);
-                let char_pat = b.pat_mut().atomic(char_const);
+                let char_val = b.value(*c);
+                let char_pat_val = cl_ctx.clause_value(b, char_val);
+                let char_pat = b.pat_mut().value(char_pat_val);
+
                 node = b.pat_mut().list(char_pat, node);
             }
 
@@ -294,17 +315,17 @@ fn lower_pattern(
         Expr::Literal(lit) => {
             let constant = match lit {
                 Literal::Atom(ident) => {
-                    b.cons_mut().from(*ident)
+                    b.value(*ident)
                 }
                 Literal::Char(span, c) => {
-                    b.cons_mut().from((*c, *span))
+                    b.value((*c, *span))
                 }
                 Literal::Integer(span, num) => {
-                    b.cons_mut().from((*num, *span))
+                    b.value((*num, *span))
                 }
                 Literal::String(ident) => {
                     match crate::lower::expr::literal::intern_string_const(*ident, b.cons_mut()) {
-                        Ok(cons) => cons,
+                        Ok(cons) => b.value(cons),
                         Err(err) => {
                             ctx.error(err);
                             let wildcard = b.pat_mut().wildcard();
@@ -314,7 +335,9 @@ fn lower_pattern(
                 }
                 _ => unimplemented!("{:?}", lit),
             };
-            b.pat_mut().atomic(constant)
+
+            let pat_val = cl_ctx.clause_value(b, constant);
+            b.pat_mut().value(pat_val)
         }
         // <pattern> = <expr>
         Expr::Match(match_expr) => {
@@ -336,8 +359,8 @@ fn lower_pattern(
             let node = b.pat_mut().wildcard();
 
             // Bind the node to a new variable
-            b.pat_mut().clause_bind_push(cl_ctx.pat_clause, node);
             let new_bind_idx = cl_ctx.binds.len();
+            let mut do_add = true;
 
             if let Ok(prev_bound) = ctx.scope.resolve(*var) {
                 // If the variable is already bound in the scope,
@@ -351,10 +374,19 @@ fn lower_pattern(
                     cl_ctx.binds.push(None);
                     cl_ctx.eq_guards.push(EqGuard::EqBind(new_bind_idx, *bind_num));
                 } else {
-                    // If it is not already bound, we bind it in the scope.
-                    cl_ctx.binds.push(Some(*var));
-                    cl_ctx.binds_map.insert(*var, new_bind_idx);
+                    // Disregard wildcards
+                    if super::scope::is_wildcard(*var) {
+                        do_add = false;
+                    } else {
+                        // If it is not already bound, we bind it in the scope.
+                        cl_ctx.binds.push(Some(*var));
+                        cl_ctx.binds_map.insert(*var, new_bind_idx);
+                    }
                 }
+            }
+
+            if do_add {
+                b.pat_mut().clause_bind_push(cl_ctx.pat_clause, node);
             }
 
             node
@@ -368,9 +400,10 @@ fn lower_pattern(
             b.pat_mut().node_finish(node);
             node
         }
-        Expr::Nil(_nil) => {
-            let nil_const = b.cons_mut().from(NilTerm);
-            b.pat_mut().atomic(nil_const)
+        Expr::Nil(nil) => {
+            let nil_val = b.value((NilTerm, nil.0));
+            let pat_val = cl_ctx.clause_value(b, nil_val);
+            b.pat_mut().value(pat_val)
         }
         Expr::Cons(cons) => {
             let head = lower_pattern(ctx, b, cl_ctx, &cons.head)?;
@@ -397,8 +430,9 @@ fn lower_pattern(
 
             let node = b.pat_mut().tuple();
 
-            let name_const = b.cons_mut().from(rec.name);
-            let name_node = b.pat_mut().atomic(name_const);
+            let name_val = b.value(rec.name);
+            let name_pat_val = cl_ctx.clause_value(b, name_val);
+            let name_node = b.pat_mut().value(name_pat_val);
             b.pat_mut().tuple_elem_push(node, name_node);
 
             for field in pat_fields.iter() {

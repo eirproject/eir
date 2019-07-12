@@ -5,6 +5,7 @@ use ::petgraph::graph::NodeIndex;
 
 mod generate_dot;
 
+use super::LeafId;
 use super::pattern::PatternProvider;
 
 pub type CfgNodeIndex = NodeIndex;
@@ -18,30 +19,29 @@ pub type CfgNodeIndex = NodeIndex;
 pub struct PatternCfg<P> where P: PatternProvider {
     pub entry: CfgNodeIndex,
     pub graph: Graph<CfgNodeKind<P::CfgVariable>, CfgEdge<P>>,
-    pub leaves: HashMap<usize, NodeIndex>,
-    pub leaf_bindings: HashMap<NodeIndex, HashMap<P::CfgVariable, P::PatternNodeKey>>,
+    pub leaf_bindings: HashMap<NodeIndex, HashMap<P::PatternNodeKey, P::CfgVariable>>,
 }
 
 impl<P> PatternCfg<P> where P: PatternProvider {
 
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let mut graph = Graph::new();
         PatternCfg {
             entry: graph.add_node(CfgNodeKind::Root),
             graph: graph,
-            leaves: HashMap::new(),
             leaf_bindings: HashMap::new(),
         }
     }
 
-    pub fn add_fail(&mut self) -> CfgNodeIndex {
+    pub(crate) fn add_fail(&mut self) -> CfgNodeIndex {
         self.graph.add_node(CfgNodeKind::Fail)
     }
 
-    pub fn add_leaf(&mut self, num: usize) -> CfgNodeIndex {
-        assert!(!self.leaves.contains_key(&num));
-        let index = self.graph.add_node(CfgNodeKind::Leaf(num));
-        self.leaves.insert(num, index);
+    pub(crate) fn add_leaf(&mut self, parent: CfgNodeIndex, leaf_num: usize, edge: CfgEdge<P>,
+                           binds: HashMap<P::PatternNodeKey, P::CfgVariable>) -> CfgNodeIndex {
+        let index = self.graph.add_node(CfgNodeKind::Leaf(leaf_num));
+        self.graph.add_edge(parent, index, edge);
+        self.leaf_bindings.insert(index, binds);
         index
     }
 
@@ -49,17 +49,17 @@ impl<P> PatternCfg<P> where P: PatternProvider {
         self.entry
     }
 
-    pub fn add_node(&mut self, var: P::CfgVariable) -> CfgNodeIndex {
-        self.graph.add_node(CfgNodeKind::Match(var))
-    }
+    //pub fn add_node(&mut self, var: P::CfgVariable) -> CfgNodeIndex {
+    //    self.graph.add_node(CfgNodeKind::Match(var))
+    //}
 
-    pub fn add_edge(&mut self, parent: CfgNodeIndex, child: CfgNodeIndex,
-                    edge: CfgEdge<P>) {
+    pub(crate) fn add_edge(&mut self, parent: CfgNodeIndex, child: CfgNodeIndex,
+                           edge: CfgEdge<P>) {
         self.graph.add_edge(parent, child, edge);
     }
 
-    pub fn add_child(&mut self, parent: CfgNodeIndex, typ: CfgEdge<P>,
-                     var: P::CfgVariable) -> CfgNodeIndex {
+    pub(crate) fn add_child(&mut self, parent: CfgNodeIndex, typ: CfgEdge<P>,
+                            var: P::CfgVariable) -> CfgNodeIndex {
         let child = self.graph.add_node(CfgNodeKind::Match(var));
         self.graph.add_edge(parent, child, typ);
         child
@@ -90,5 +90,4 @@ pub enum CfgNodeKind<CVT> {
     Match(CVT),
     Fail,
     Leaf(usize),
-    Guard,
 }
