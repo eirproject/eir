@@ -18,6 +18,7 @@ pub(super) fn lower_literal(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: 
     let value = match literal {
         Literal::Atom(ident) => b.value((AtomTerm(ident.name), ident.span)),
         Literal::Integer(span, int) => b.value((*int, *span)),
+        Literal::Float(span, flt) => b.value((*flt, *span)),
         Literal::String(ident) => {
             match intern_string_const(*ident, b.cons_mut()) {
                 Ok(cons) => b.value(cons),

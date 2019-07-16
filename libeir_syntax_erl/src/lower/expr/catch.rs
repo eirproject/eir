@@ -61,6 +61,9 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                     // Add to case
                     let body_val = b.value(lowered.body);
                     case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
+                    for value in lowered.values.iter() {
+                        case_b.push_value(*value, b);
+                    }
 
                     let (body_ret_block, body_ret) = lower_block(ctx, b, lowered.body, &clause.body);
 
@@ -107,6 +110,9 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                     // Add to case
                     let body_val = b.value(lowered.body);
                     case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
+                    for value in lowered.values.iter() {
+                        case_b.push_value(*value, b);
+                    }
 
                     // Bind stack trace in scope
                     ctx.bind(clause.trace, exc_trace);

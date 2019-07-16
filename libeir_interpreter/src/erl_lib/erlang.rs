@@ -10,6 +10,7 @@ use crate::term::{ ErlEq, ErlExactEq, ErlOrd };
 use crate::term::{ ListIteratorItem };
 
 use ::num_bigint::{ BigInt, Sign };
+use ::num_traits::{ Signed };
 
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -75,6 +76,21 @@ fn bignum_to_f64(n: &BigInt) -> Option<f64> {
     Some(f64::from_bits(ret))
 }
 
+fn abs(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
+    if args.len() != 1 {
+        return NativeReturn::Throw;
+    }
+    let a1 = &*args[0];
+
+    let ret = match a1 {
+        Term::Integer(ref int) => Term::Integer(int.clone().abs()),
+        Term::Float(flt) => Term::Float(flt.abs()),
+        _ => panic!(),
+    };
+
+    NativeReturn::Return { term: ret.into() }
+}
+
 fn add(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     // TODO: Verify semantics
 
@@ -120,6 +136,16 @@ fn sub(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRe
     match (a1, a2) {
         (Term::Integer(ref i1), Term::Integer(ref i2)) =>
             NativeReturn::Return { term: Term::Integer(i1 - i2).into() },
+        (Term::Integer(ref int), Term::Float(ref flt)) => {
+            let flt_c = bignum_to_f64(int).unwrap();
+            NativeReturn::Return { term: Term::Float(flt_c - *flt).into() }
+        }
+        (Term::Float(ref flt), Term::Integer(ref int)) => {
+            let flt_c = bignum_to_f64(int).unwrap();
+            NativeReturn::Return { term: Term::Float(*flt - flt_c).into() }
+        }
+        (Term::Float(flt1), Term::Float(flt2)) =>
+            NativeReturn::Return { term: Term::Float(flt1 - flt2).into() },
         _ => unimplemented!(),
     }
 }
@@ -136,6 +162,25 @@ fn mul(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRe
             NativeReturn::Return { term: Term::Integer(i1 * i2).into() },
         _ => unimplemented!(),
     }
+}
+
+fn div(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
+    if args.len() != 2 {
+        return NativeReturn::Throw;
+    }
+
+    let a1 = match &*args[0] {
+        Term::Integer(i1) => bignum_to_f64(i1).unwrap(),
+        Term::Float(flt) => *flt,
+        _ => panic!(),
+    };
+    let a2 = match &*args[1] {
+        Term::Integer(i1) => bignum_to_f64(i1).unwrap(),
+        Term::Float(flt) => *flt,
+        _ => panic!(),
+    };
+
+    NativeReturn::Return { term: Term::Float(a1 / a2).into() }
 }
 
 fn is_list(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
@@ -499,6 +544,8 @@ pub fn make_erlang() -> NativeModule {
     module.add_fun(Symbol::intern("+"), 2, Box::new(add));
     module.add_fun(Symbol::intern("-"), 2, Box::new(sub));
     module.add_fun(Symbol::intern("*"), 2, Box::new(mul));
+    module.add_fun(Symbol::intern("/"), 2, Box::new(div));
+    module.add_fun(Symbol::intern("abs"), 1, Box::new(abs));
     //module.add_fun(Symbol::intern("++"), 2, Box::new(list_append));
     module.add_fun(Symbol::intern("--"), 2, Box::new(list_subtract));
     module.add_fun(Symbol::intern("=:="), 2, Box::new(exact_eq));

@@ -58,6 +58,10 @@ pub enum ValidationError {
         block: Block,
     },
 
+    UnfinishedBlock {
+        block: Block,
+    }
+
 }
 
 impl Function {

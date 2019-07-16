@@ -77,6 +77,7 @@ impl VMState {
     pub fn add_builtin_modules(&mut self) {
         self.add_native_module(crate::erl_lib::make_erlang());
         self.add_native_module(crate::erl_lib::make_lists());
+        self.add_native_module(crate::erl_lib::make_math());
     }
 
     pub fn call(&mut self, fun: &FunctionIdent, args: &[Term]) -> Result<Rc<Term>, (Rc<Term>, Rc<Term>, Rc<Term>)> {

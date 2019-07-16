@@ -3,37 +3,19 @@ use std::collections::HashMap;
 use crate::{ Function };
 use crate::{ Block, Value };
 
-use libeir_util::pooled_entity_set::{ EntitySetPool, PooledEntitySet, PooledSetValue };
-
-use petgraph::visit::DfsPostOrder;
-
-use matches::assert_matches;
+use libeir_util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
 
 /// # Value liveness calculation
 /// Utility for calculating live values at every point in a functions
 /// CFG.
-///
-/// This requires that orphan nodes have been removed before it is run.
-///
-/// TODO
-/// If orphan nodes still exist when this is run, this will loop infinitely.
-/// Add a missing counter to detect when we have reached a equilibrium that
-/// is not final.
 ///
 /// TODO
 /// Right now this uses a (probably) bad algorithm I made up on the spot.
 /// I am sure there are better and more efficient ways of doing this,
 /// but this should work for now.
 /// For CFGs that are acyclic, this algorithm will complete in a single
-/// iteration. For cyclic CFGs, this will take more than one iteration,
-/// but with the sort of control flow the compiler produces, it shouldn't
-/// take more than two iterations most of the time.
-///
-/// TODO
-/// Right now a new set is allocated for every node at every pass.
-/// Since we are using arena based allocation, this should not be too bad,
-/// but we probably want to improve this in the future. This will probably
-/// work fine up to reasonably large functions.
+/// iteration. For cyclic CFGs, this should take (around) 1 extra iteration
+/// for every additional nested cycle.
 
 #[derive(Debug)]
 pub struct LiveValues {
@@ -124,3 +106,139 @@ pub fn calculate_live_values(fun: &Function) -> LiveValues {
         live: live,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{ FunctionIdent, Function, FunctionBuilder };
+    use crate::NilTerm;
+    use libeir_intern::Ident;
+
+    #[test]
+    fn test_simple() {
+
+        // b1(ret):
+        //     b2()
+        // b2():
+        //     b3()
+        // b3():
+        //     ret()
+
+        let ident = FunctionIdent {
+            module: Ident::from_str("woo"),
+            name: Ident::from_str("woo"),
+            arity: 1,
+        };
+        let mut fun = Function::new(ident);
+        let mut b = FunctionBuilder::new(&mut fun);
+
+        let b1 = b.block_insert();
+        b.block_set_entry(b1);
+        let b1_ret = b.block_arg_insert(b1);
+        let _b1_nonused = b.block_arg_insert(b1);
+        let b2 = b.block_insert();
+        let b3 = b.block_insert();
+
+        b.op_call(b1, b2, &[]);
+        b.op_call(b2, b3, &[]);
+        b.op_call(b3, b1_ret, &[]);
+
+        let live = b.fun().live_values();
+
+        let b1_live = &live.live[&b1];
+        assert!(b1_live.size(&live.pool) == 0);
+
+        let b2_live = &live.live[&b2];
+        assert!(b2_live.size(&live.pool) == 1);
+        assert!(b2_live.contains(b1_ret, &live.pool));
+
+        let b3_live = &live.live[&b3];
+        assert!(b3_live.size(&live.pool) == 1);
+        assert!(b3_live.contains(b1_ret, &live.pool));
+    }
+
+    #[test]
+    fn test_cycle() {
+
+        // b1(ret, a):
+        //     b2(a, [])
+        // b2(b, c):
+        //     b3()
+        // b3():
+        //     b4()
+        // b4():
+        //     b5(b6, c)
+        // b5(e, f):
+        //     b2(e, f)
+        // b6():
+        //     ret()
+
+        let ident = FunctionIdent {
+            module: Ident::from_str("woo"),
+            name: Ident::from_str("woo"),
+            arity: 1,
+        };
+        let mut fun = Function::new(ident);
+        let mut b = FunctionBuilder::new(&mut fun);
+
+        let b1 = b.block_insert();
+        b.block_set_entry(b1);
+        let b1_ret = b.block_arg_insert(b1);
+        let b1_a = b.block_arg_insert(b1);
+
+        let b2 = b.block_insert();
+        let b2_b = b.block_arg_insert(b2);
+        let b2_c = b.block_arg_insert(b2);
+
+        let b3 = b.block_insert();
+
+        let b4 = b.block_insert();
+
+        let b5 = b.block_insert();
+        let b5_e = b.block_arg_insert(b5);
+        let b5_f = b.block_arg_insert(b5);
+
+        let b6 = b.block_insert();
+        let b6_val = b.value(b6);
+
+        let nil_const = b.value(NilTerm);
+        b.op_call(b1, b2, &[b1_a, nil_const]);
+        b.op_call(b2, b3, &[]);
+        b.op_call(b3, b4, &[]);
+        b.op_call(b4, b5, &[b6_val, b2_c]);
+        b.op_call(b5, b2, &[b5_e, b5_f]);
+        b.op_call(b6, b1_ret, &[]);
+
+        println!("{}", b.fun().to_text());
+
+        let live = b.fun().live_values();
+
+        let b1_live = &live.live[&b1];
+        assert!(b1_live.size(&live.pool) == 0);
+
+        let b3_live = &live.live[&b3];
+        assert!(b3_live.size(&live.pool) == 2);
+        assert!(b3_live.contains(b1_ret, &live.pool));
+        assert!(b3_live.contains(b2_c, &live.pool));
+
+        let b5_live = &live.live[&b5];
+        assert!(b5_live.size(&live.pool) == 1);
+        assert!(b5_live.contains(b1_ret, &live.pool));
+
+        let b6_live = &live.live[&b6];
+        assert!(b6_live.size(&live.pool) == 1);
+        assert!(b6_live.contains(b1_ret, &live.pool));
+
+    }
+
+}
+
+
+
+
+
+
+
+
+
+
+

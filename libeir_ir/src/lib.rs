@@ -3,29 +3,27 @@ use std::collections::HashMap;
 
 use libeir_intern::Ident;
 
-pub mod op;
-pub use op::{ OpKind, BinOp };
-
-pub mod text;
-
-pub mod pattern;
-pub use pattern::{ PatternNode, PatternValue, PatternContainer };
-
 pub mod fun;
 pub use fun::{ Function, Block, Value };
 pub use fun::{ FunctionBuilder, CaseBuilder, IntoValue };
 pub use fun::{ ValueType };
 pub use fun::{ Dialect };
 pub use fun::{ AttributeKey, AttributeValue };
-pub use fun::live::{ LiveValues };
 
-//pub mod env;
-//pub use env::{ ModuleEnvs, ClosureEnv };
+pub use fun::live::LiveValues;
+pub use fun::mangle::Mangler;
+
+pub mod op;
+pub use op::{ OpKind, BinOp };
 
 pub mod constant;
 pub use constant::{ ConstantContainer, Const, ConstValue };
 pub use constant::{ AtomTerm, BigIntTerm, IntTerm, FloatTerm, BinaryTerm, NilTerm };
 
+pub mod pattern;
+pub use pattern::{ PatternNode, PatternValue, PatternContainer };
+
+pub mod text;
 pub use text::printer::{ ToEirText, ToEirTextContext };
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd)]

@@ -27,8 +27,8 @@ pub(super) fn lower_case_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut b
     {
         let mut block = no_match;
         let typ_val = b.value(Symbol::intern("error"));
-        let badmatch_val = b.value(Symbol::intern("badmatch"));
-        block = b.op_make_tuple(block, &[badmatch_val, match_val]);
+        let case_clause_val = b.value(Symbol::intern("case_clause"));
+        block = b.op_make_tuple(block, &[case_clause_val, match_val]);
         let err_val = b.block_args(block)[0];
         // TODO trace
         let trace_val = b.value(NilTerm);
@@ -48,6 +48,9 @@ pub(super) fn lower_case_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut b
                 // Add to case
                 let body_val = b.value(lowered.body);
                 case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
+                for value in lowered.values.iter() {
+                    case_b.push_value(*value, b);
+                }
 
                 let (body_ret_block, body_ret) = lower_block(ctx, b, lowered.body, &clause.body);
 

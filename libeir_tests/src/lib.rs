@@ -14,15 +14,8 @@ use libeir_interpreter::{ VMState, Term, ErlEq };
 mod patterns;
 mod list_comprehensions;
 mod control_flow;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
-
+mod records;
+mod errors;
 
 fn parse<T>(input: &str, config: ParseConfig) -> (T, Parser)
 where

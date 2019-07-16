@@ -149,6 +149,9 @@ impl CallExecutor {
             ConstValueKind::Atomic(AtomicTerm::Int(int)) => {
                 Term::Integer(int.0.into()).into()
             }
+            ConstValueKind::Atomic(AtomicTerm::Float(flt)) => {
+                Term::Float(flt.0).into()
+            }
             ConstValueKind::Atomic(AtomicTerm::Nil) => {
                 Term::Nil.into()
             }
@@ -329,6 +332,13 @@ impl CallExecutor {
                 TermCall {
                     fun: self.make_term(fun, reads[0]),
                     args: vec![term],
+                }
+            }
+            OpKind::MakeTuple => {
+                let items: Vec<_> = reads.iter().skip(1).map(|v| self.make_term(fun, *v)).collect();
+                TermCall {
+                    fun: self.make_term(fun, reads[0]),
+                    args: vec![Term::Tuple(items).into()],
                 }
             }
             kind => unimplemented!("{:?}", kind),

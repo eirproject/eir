@@ -505,6 +505,8 @@ impl ErlOrd for Term {
         match (self, other) {
             (Term::Integer(val1), Term::Integer(val2)) =>
                 val1.cmp(val2),
+            //(Term::Float(val1), Term::Float(val2)) =>
+            //    val1.cmp(val2),
             (_, _) => unimplemented!(),
         }
     }

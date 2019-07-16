@@ -26,8 +26,6 @@ woo(N) -> [1 || erlang:is_integer(N)].
         arity: 1,
     };
 
-    write_dot(&eir_mod, Some(fun.clone()));
-
     let mut vm = VMState::new();
     vm.add_builtin_modules();
     vm.add_erlang_module(eir_mod);
@@ -57,24 +55,6 @@ woo(L) -> [X*2 || X <- L].
         name: Ident::from_str("woo"),
         arity: 1,
     };
-
-    let mut errors = Vec::new();
-    eir_mod.functions[&fun].validate(&mut errors);
-    println!("{:?}", errors);
-
-    {
-        println!("Live:");
-        let live = eir_mod.functions[&fun].live_values();
-        for (block, set) in live.live.iter() {
-            print!("{}: ", block);
-            for var in set.iter(&live.pool) {
-                print!("{}, ", var);
-            }
-            println!("");
-        }
-    }
-
-    write_dot(&eir_mod, Some(fun.clone()));
 
     let mut vm = VMState::new();
     vm.add_builtin_modules();
@@ -122,24 +102,6 @@ comb(L) -> [[A, B] || A <- L, B <- L].
         arity: 1,
     };
 
-    let mut errors = Vec::new();
-    eir_mod.functions[&fun].validate(&mut errors);
-    println!("{:?}", errors);
-
-    {
-        println!("Live:");
-        let live = eir_mod.functions[&fun].live_values();
-        for (block, set) in live.live.iter() {
-            print!("{}: ", block);
-            for var in set.iter(&live.pool) {
-                print!("{}, ", var);
-            }
-            println!("");
-        }
-    }
-
-    write_dot(&eir_mod, Some(fun.clone()));
-
     let mut vm = VMState::new();
     vm.add_builtin_modules();
     vm.add_erlang_module(eir_mod);
@@ -180,24 +142,6 @@ perms(L) -> [[H|T] || H <- L, T <- perms(L--[H])].
         name: Ident::from_str("perms"),
         arity: 1,
     };
-
-    let mut errors = Vec::new();
-    eir_mod.functions[&fun].validate(&mut errors);
-    println!("{:?}", errors);
-
-    {
-        println!("Live:");
-        let live = eir_mod.functions[&fun].live_values();
-        for (block, set) in live.live.iter() {
-            print!("{}: ", block);
-            for var in set.iter(&live.pool) {
-                print!("{}, ", var);
-            }
-            println!("");
-        }
-    }
-
-    write_dot(&eir_mod, Some(fun.clone()));
 
     let mut vm = VMState::new();
     vm.add_builtin_modules();

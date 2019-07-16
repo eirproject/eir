@@ -2,7 +2,7 @@ use super::{ Block, Value };
 use super::{ ValueData, ValueType };
 use super::{ Function };
 
-use crate::constant::{ ConstantContainer, Const, IntoConst };
+use crate::constant::{ ConstantContainer, IntoConst };
 use crate::op::{ OpKind, BinOp, MapPutUpdate };
 use crate::pattern::{ PatternContainer, PatternClause };
 
@@ -22,12 +22,7 @@ impl IntoValue for Value {
 }
 impl IntoValue for Block {
     fn into_value<'a>(self, b: &mut FunctionBuilder<'a>) -> Value {
-        b.fun.values.push(ValueData {
-            kind: ValueType::Block(self),
-            usages: PooledEntitySet::new(),
-
-            span: DUMMY_SPAN,
-        })
+        b.fun.block_values[&self]
     }
 }
 impl<T> IntoValue for T where T: IntoConst {
@@ -46,13 +41,6 @@ enum BuilderState {
     MapPut {
         block: Block,
         action: Vec<MapPutUpdate>,
-    },
-    Case {
-        block: Block,
-        clauses: EntityList<PatternClause>,
-        val: Value,
-        clauses_b: EntityList<Value>,
-        values: EntityList<Value>,
     },
 }
 
@@ -187,6 +175,10 @@ impl<'a> FunctionBuilder<'a> {
         self.fun.block_args(block)
     }
 
+    pub fn block_reads<'b>(&'b self, block: Block) -> &'b [Value] {
+        self.fun.block_reads(block)
+    }
+
     pub fn block_set_entry(&mut self, block: Block) {
         self.fun.entry_block = Some(block);
     }
@@ -237,11 +229,6 @@ impl<'a> FunctionBuilder<'a> {
     }
 
 }
-
-//struct CallBuilder<'a, 'b> {
-//    builder: &'b mut FunctionBuilder<'a>,
-//    block: Block,
-//}
 
 /// Operation constructors
 impl<'a> FunctionBuilder<'a> {
@@ -677,7 +664,7 @@ pub struct IntrinsicBuilder {
 }
 impl IntrinsicBuilder {
 
-    pub fn new<'a>(name: Symbol, b: &mut FunctionBuilder<'a>) -> Self {
+    pub fn new<'a>(name: Symbol, _b: &mut FunctionBuilder<'a>) -> Self {
         IntrinsicBuilder {
             name,
             block: None,
