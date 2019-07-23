@@ -44,6 +44,7 @@ pub enum TokenType {
     Atom,
     Ident,
     String,
+    Integer,
     Symbol,
 }
 impl fmt::Display for TokenType {
@@ -52,6 +53,7 @@ impl fmt::Display for TokenType {
             TokenType::Atom => write!(f, "ATOM"),
             TokenType::Ident => write!(f, "IDENT"),
             TokenType::String => write!(f, "STRING"),
+            TokenType::Integer => write!(f, "INTEGER"),
             TokenType::Symbol => write!(f, "SYMBOL"),
         }
     }
@@ -188,6 +190,51 @@ impl fmt::Display for StringToken {
 }
 
 #[derive(Debug, Clone, PartialEq, Hash)]
+pub struct IntegerToken(pub ByteIndex, pub Token, pub ByteIndex);
+impl IntegerToken {
+    pub fn token(&self) -> Token {
+        self.1.clone()
+    }
+    pub fn span(&self) -> ByteSpan {
+        ByteSpan::new(self.0, self.2)
+    }
+    pub fn small_integer(&self) -> Option<i64> {
+        match self.token() {
+            Token::Integer(a) => Some(a),
+            Token::BigInteger(_) => None,
+            _ => unreachable!(),
+        }
+    }
+}
+impl TryFrom<LexicalToken> for IntegerToken {
+    type Error = TokenConvertError;
+
+    fn try_from(t: LexicalToken) -> TokenConvertResult<Self> {
+        if let LexicalToken(start, tok @ Token::Integer(_), end) = t {
+            return Ok(IntegerToken(start, tok, end));
+        }
+        if let LexicalToken(start, tok @ Token::BigInteger(_), end) = t {
+            return Ok(IntegerToken(start, tok, end));
+        }
+        Err(TokenConvertError {
+            span: t.span(),
+            token: t.token(),
+            expected: TokenType::Integer,
+        })
+    }
+}
+impl Into<LexicalToken> for IntegerToken {
+    fn into(self) -> LexicalToken {
+        LexicalToken(self.0, self.1, self.2)
+    }
+}
+impl fmt::Display for IntegerToken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.1.fmt(f)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct SymbolToken(pub ByteIndex, pub Token, pub ByteIndex);
 impl SymbolToken {
     pub fn token(&self) -> Token {
@@ -282,11 +329,13 @@ pub enum Token {
     Module,
     Compile,
     Vsn,
+    Author,
     OnLoad,
     Behaviour,
     Deprecated,
     Type,
     Opaque,
+    File,
     // Operators
     AndAlso,
     OrElse,
@@ -433,6 +482,18 @@ impl Token {
             _ => Token::Atom(Symbol::intern(atom)),
         }
     }
+
+    /// For opening tokens like `(` and `[`, get the corresponding
+    /// closing token.
+    pub fn get_closing_token(&self) -> Self {
+        match self {
+            Token::LParen => Token::RParen,
+            Token::LBrace => Token::RBrace,
+            Token::LBracket => Token::RBracket,
+            Token::BinaryStart => Token::BinaryEnd,
+            _ => panic!("{} has no closing token", self),
+        }
+    }
 }
 
 impl fmt::Display for Token {
@@ -486,11 +547,13 @@ impl fmt::Display for Token {
             Token::Module => write!(f, "module"),
             Token::Compile => write!(f, "compile"),
             Token::Vsn => write!(f, "vsn"),
+            Token::Author => write!(f, "author"),
             Token::OnLoad => write!(f, "on_load"),
             Token::Behaviour => write!(f, "behaviour"),
             Token::Deprecated => write!(f, "deprecated"),
             Token::Type => write!(f, "type"),
             Token::Opaque => write!(f, "opaque"),
+            Token::File => write!(f, "file"),
             Token::AndAlso => write!(f, "andalso"),
             Token::OrElse => write!(f, "orelse"),
             Token::Bnot => write!(f, "bnot"),

@@ -11,12 +11,12 @@ use libeir_ir::pattern::{
     PatternValue,
     PatternMergeFail,
 };
-use libeir_ir::constant::NilTerm;
+use libeir_ir::constant::{ NilTerm, BinaryTerm };
 
 use crate::parser::ast::{ Expr, Guard };
-use crate::parser::ast::{ Literal, BinaryExpr, BinaryOp, UnaryExpr, UnaryOp };
+use crate::parser::ast::{ Literal, BinaryExpr, BinaryOp, UnaryExpr, UnaryOp, Binary };
 
-use super::{ LowerCtx, lower_block, ScopeToken };
+use super::{ LowerCtx, lower_block, lower_single, ScopeToken };
 use super::errors::LowerError;
 
 use libeir_intern::{ Ident, Symbol };
@@ -43,7 +43,7 @@ struct ClauseLowerCtx {
     /// here in the same order as they are referenced in the pattern.
     binds: Vec<Option<Ident>>,
     /// Used for checking binds in pattern
-    binds_map:HashMap<Ident, usize>,
+    binds_map: HashMap<Ident, usize>,
 
     /// Corresponds to PatternValues in the clause
     values: Vec<IrValue>,
@@ -85,8 +85,10 @@ pub(super) fn lower_clause<'a, P>(
     let mut clause_ctx = ClauseLowerCtx {
         pat_clause,
         pre_case: *pre_case,
+
         binds: Vec::new(),
         binds_map: HashMap::new(),
+
         values: Vec::new(),
         eq_guards: Vec::new(),
         node_renames: HashMap::new(),
@@ -283,7 +285,8 @@ fn lower_list_head_pattern(
                 Ok(tok) => tok,
                 Err(err) => {
                     ctx.error(err);
-                    let wildcard = b.pat_mut().wildcard();
+                    let wildcard = b.pat_mut().node_empty();
+                    b.pat_mut().wildcard(wildcard);
                     return Ok(wildcard);
                 },
             };
@@ -292,9 +295,13 @@ fn lower_list_head_pattern(
             for c in tokens.iter().rev() {
                 let char_val = b.value(*c);
                 let char_pat_val = cl_ctx.clause_value(b, char_val);
-                let char_pat = b.pat_mut().value(char_pat_val);
 
-                node = b.pat_mut().list(char_pat, node);
+                let char_pat = b.pat_mut().node_empty();
+                b.pat_mut().value(char_pat, char_pat_val);
+
+                let new_node = b.pat_mut().node_empty();
+                b.pat_mut().list(new_node, char_pat, node);
+                node = new_node;
             }
 
             Ok(node)
@@ -317,18 +324,19 @@ fn lower_pattern(
                 Literal::Atom(ident) => {
                     b.value(*ident)
                 }
-                Literal::Char(span, c) => {
-                    b.value((*c, *span))
+                Literal::Char(_span, c) => {
+                    b.value(*c)
                 }
-                Literal::Integer(span, num) => {
-                    b.value((*num, *span))
+                Literal::Integer(_span, num) => {
+                    b.value(*num)
                 }
                 Literal::String(ident) => {
                     match crate::lower::expr::literal::intern_string_const(*ident, b.cons_mut()) {
                         Ok(cons) => b.value(cons),
                         Err(err) => {
                             ctx.error(err);
-                            let wildcard = b.pat_mut().wildcard();
+                            let wildcard = b.pat_mut().node_empty();
+                            b.pat_mut().wildcard(wildcard);
                             return Ok(wildcard);
                         },
                     }
@@ -337,7 +345,11 @@ fn lower_pattern(
             };
 
             let pat_val = cl_ctx.clause_value(b, constant);
-            b.pat_mut().value(pat_val)
+
+            let node = b.pat_mut().node_empty();
+            b.pat_mut().value(node, pat_val);
+
+            node
         }
         // <pattern> = <expr>
         Expr::Match(match_expr) => {
@@ -356,7 +368,8 @@ fn lower_pattern(
             b.pat_mut().merge(&mut cl_ctx.node_renames, p1, p2)?
         }
         Expr::Var(var) => {
-            let node = b.pat_mut().wildcard();
+            let node = b.pat_mut().node_empty();
+            b.pat_mut().wildcard(node);
 
             // Bind the node to a new variable
             let new_bind_idx = cl_ctx.binds.len();
@@ -392,23 +405,32 @@ fn lower_pattern(
             node
         }
         Expr::Tuple(tup) => {
-            let node = b.pat_mut().tuple();
+            let node = b.pat_mut().node_empty();
+            b.pat_mut().tuple(node);
+
             for elem in tup.elements.iter() {
                 let elem_node = lower_pattern(ctx, b, cl_ctx, elem)?;
                 b.pat_mut().tuple_elem_push(node, elem_node);
             }
+
             b.pat_mut().node_finish(node);
             node
         }
-        Expr::Nil(nil) => {
-            let nil_val = b.value((NilTerm, nil.0));
+        Expr::Nil(_nil) => {
+            let nil_val = b.value(NilTerm);
             let pat_val = cl_ctx.clause_value(b, nil_val);
-            b.pat_mut().value(pat_val)
+
+            let node = b.pat_mut().node_empty();
+            b.pat_mut().value(node, pat_val);
+            node
         }
         Expr::Cons(cons) => {
             let head = lower_pattern(ctx, b, cl_ctx, &cons.head)?;
             let tail = lower_pattern(ctx, b, cl_ctx, &cons.tail)?;
-            b.pat_mut().list(head, tail)
+
+            let node = b.pat_mut().node_empty();
+            b.pat_mut().list(node, head, tail);
+            node
         }
         Expr::Record(rec) => {
             let rec_def = &ctx.module.records[&rec.name.name];
@@ -428,18 +450,21 @@ fn lower_pattern(
                 pat_fields[idx] = Some(pat);
             }
 
-            let node = b.pat_mut().tuple();
+            let node = b.pat_mut().node_empty();
+            b.pat_mut().tuple(node);
 
             let name_val = b.value(rec.name);
             let name_pat_val = cl_ctx.clause_value(b, name_val);
-            let name_node = b.pat_mut().value(name_pat_val);
+            let name_node = b.pat_mut().node_empty();
+            b.pat_mut().value(name_node, name_pat_val);
             b.pat_mut().tuple_elem_push(node, name_node);
 
             for field in pat_fields.iter() {
                 if let Some(child_node) = field {
                     b.pat_mut().tuple_elem_push(node, *child_node);
                 } else {
-                    let wc = b.pat_mut().wildcard();
+                    let wc = b.pat_mut().node_empty();
+                    b.pat_mut().wildcard(wc);
                     b.pat_mut().tuple_elem_push(node, wc);
                 }
             }
@@ -452,6 +477,98 @@ fn lower_pattern(
             let tail = lower_pattern(ctx, b, cl_ctx, rhs)?;
             lower_list_head_pattern(ctx, b, cl_ctx, lhs, tail)?
         }
+        Expr::Binary(Binary { span, elements }) => {
+            use crate::lower::expr::binary::{ TypeName, specifier_from_parsed, default_specifier,
+                                              specifier_to_typename, specifier_can_have_size };
+
+            let mut map: HashMap<Ident, PatternValue> = HashMap::new();
+
+            let empty_bin_const = b.value(BinaryTerm(Symbol::intern("")));
+            let empty_bin_pat_val = cl_ctx.clause_value(b, empty_bin_const);
+
+            let mut bin_node = b.pat_mut().node_empty();
+            b.pat_mut().value(bin_node, empty_bin_pat_val);
+
+            let mut nodes = Vec::new();
+            for elem in elements.iter() {
+                let node = lower_pattern(ctx, b, cl_ctx, &elem.bit_expr)?;
+                match elem.bit_expr {
+                    Expr::Var(var) => {
+                        let val = b.pat_mut().clause_node_value(cl_ctx.pat_clause, node);
+                        map.insert(var, val);
+                    }
+                    _ => (),
+                }
+                nodes.push(node);
+            }
+
+            for (idx, elem) in elements.iter().enumerate().rev() {
+                let spec = elem.bit_type.as_ref()
+                    .map(|b| specifier_from_parsed(&*b))
+                    .unwrap_or(Ok(default_specifier()));
+
+                let spec = match spec {
+                    Ok(inner) => inner,
+                    Err(err) => {
+                        ctx.error(err);
+                        continue;
+                    },
+                };
+                let spec_typ = specifier_to_typename(&spec);
+
+                let size_val = if let Some(size_expr) = &elem.bit_size {
+                    if !specifier_can_have_size(&spec) {
+                        ctx.error(LowerError::BinaryInvalidSize {
+                            span: size_expr.span(),
+                            typ: spec_typ,
+                        });
+                        None
+                    } else {
+                        let ret = match size_expr {
+                            Expr::Var(var) => {
+                                // If the value is resolved from the outside scope,
+                                // use that
+                                match ctx.try_resolve(*var) {
+                                    Ok(value) => cl_ctx.clause_value(b, value),
+                                    Err(err) => {
+                                        // Also try to resolve from the binary match
+                                        if let Some(r) = map.get(var) {
+                                            *r
+                                        } else {
+                                            // Else, error and return dummy value
+                                            ctx.error(err);
+                                            let nil_val = b.value(NilTerm);
+                                            cl_ctx.clause_value(b, nil_val)
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                let (block, val) = lower_single(ctx, b, cl_ctx.pre_case, size_expr);
+                                cl_ctx.pre_case = block;
+                                cl_ctx.clause_value(b, val)
+                            }
+                        };
+                        Some(ret)
+                    }
+                } else {
+                    match spec_typ {
+                        TypeName::Integer => Some(b.value(8)),
+                        TypeName::Float => Some(b.value(64)),
+                        _ => None,
+                    }.map(|v| cl_ctx.clause_value(b, v))
+                };
+
+                let bit_node = nodes[idx];
+
+                let node = b.pat_mut().node_empty();
+                b.pat_mut().binary(node, spec, bit_node, size_val, bin_node);
+                bin_node = node;
+            }
+
+            b.pat_mut().node_finish(bin_node);
+            bin_node
+        },
         _ => {
             // We don't bother trying to evaluate the expressions here, we
             // instead lower to expressions and rely on later compiler passes to
@@ -459,7 +576,8 @@ fn lower_pattern(
             // constants.
 
             // Create wildcard node and bind to value
-            let node = b.pat_mut().wildcard();
+            let node = b.pat_mut().node_empty();
+            b.pat_mut().wildcard(node);
             b.pat_mut().clause_bind_push(cl_ctx.pat_clause, node);
             let bind_num = cl_ctx.binds.len();
             cl_ctx.binds.push(None);

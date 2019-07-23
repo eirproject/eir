@@ -18,13 +18,19 @@ pub struct BufferTextFormatter {
     buf: String,
 }
 
-impl BufferTextFormatter {
-
-    pub fn new() -> Self {
+impl Default for BufferTextFormatter {
+    fn default() -> Self {
         BufferTextFormatter {
             indent: 0,
             buf: String::new(),
         }
+    }
+}
+
+impl BufferTextFormatter {
+
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn clear(&mut self) {
@@ -37,7 +43,7 @@ impl BufferTextFormatter {
 impl TextFormatter for BufferTextFormatter {
 
     fn write(&mut self, text: &str) {
-        self.buf.extend(text.chars());
+        self.buf.push_str(text);
     }
     fn newline(&mut self) {
         self.buf.push('\n');
@@ -46,10 +52,10 @@ impl TextFormatter for BufferTextFormatter {
         }
     }
 
-    fn enter_indent(&mut self, dist: usize) {
+    fn enter_indent(&mut self, _dist: usize) {
         self.indent += 1;
     }
-    fn exit_indent(&mut self, dist: usize) {
+    fn exit_indent(&mut self, _dist: usize) {
         self.indent -= 1;
     }
 

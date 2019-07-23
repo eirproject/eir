@@ -4,7 +4,7 @@ use libeir_ir::{
     Block as IrBlock,
 };
 use libeir_ir::constant::NilTerm;
-use libeir_ir::op::BinOp;
+use libeir_ir::BinOp;
 
 use libeir_intern::{ Symbol, Ident };
 
@@ -53,7 +53,8 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
 
                 // Check for nil and unpack list
                 let nil = b.value(NilTerm);
-                let (is_nil_block, non_nil_block) = b.op_binop(loop_block, BinOp::Equal, loop_list_arg, nil);
+                let comp_res = b.prim_binop(BinOp::Equal, loop_list_arg, nil);
+                let (is_nil_block, non_nil_block) = b.op_if_bool_strict(loop_block, comp_res);
 
                 ret_block = is_nil_block;
                 ret_val = loop_acc_arg;
@@ -84,6 +85,9 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
                         // Add to case
                         let body_val = b.value(lowered.body);
                         case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
+                        for value in lowered.values.iter() {
+                            case_b.push_value(*value, b);
+                        }
 
                         let (cont, cont_val) = lower_qual(ctx, b, inner, &quals[1..], lowered.body, loop_acc_arg);
                         b.op_call(cont, loop_block, &[tail_val, cont_val]);
@@ -124,8 +128,8 @@ pub(super) fn lower_list_comprehension_expr(ctx: &mut LowerCtx, b: &mut Function
                                             compr: &ListComprehension) -> (IrBlock, IrValue) {
     let inner = |ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock, acc: IrValue| {
         let val = map_block!(block, lower_single(ctx, b, block, &compr.body));
-        block = b.op_make_list(block, &[val], acc);
-        (block, b.block_args(block)[0])
+        let cell = b.prim_list_cell(val, acc);
+        (block, cell)
     };
 
     let nil = b.value(NilTerm);

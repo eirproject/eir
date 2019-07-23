@@ -369,6 +369,10 @@ where
                     StandardStreamEmitter::new(ColorChoice::Auto).set_codemap(self.codemap.clone());
                 emitter.diagnostic(&diag).unwrap();
             }
+            Directive::File(ref f) if !ignore => {
+                // TODO
+                println!("TODO file directive {}", f);
+            }
             _ => {}
         }
         Ok(Some(directive))

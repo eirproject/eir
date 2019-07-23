@@ -4,5 +4,9 @@ version = "0.1.0"
 authors = ["HansiHE <hansihe@hansihe.com>"]
 edition = "2018"
 
+[features]
+default = ["hashbrown/raw-table"]
+
 [dependencies]
 cranelift-entity = "0.30.0"
+hashbrown = { path = "../../hashbrown" }

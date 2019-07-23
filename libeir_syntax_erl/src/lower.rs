@@ -26,7 +26,7 @@ mod pattern;
 use pattern::lower_clause;
 
 mod expr;
-use expr::lower_block;
+use expr::{ lower_block, lower_single };
 
 mod errors;
 use errors::LowerError;
@@ -73,6 +73,9 @@ impl<'a> LowerCtx<'a> {
         self.errors.push(err);
     }
 
+    pub fn try_resolve(&mut self, ident: Ident) -> Result<IrValue, LowerError> {
+        self.scope.resolve(ident)
+    }
     pub fn resolve(&mut self, ident: Ident) -> IrValue {
         match self.scope.resolve(ident) {
             Ok(val) => val,
@@ -221,14 +224,12 @@ fn lower_function_base(
     ctx.exc_stack.push_handler(err_cont);
 
     // Add arguments and pack them into a value list
-    let mut args_val_builder = b.op_pack_value_list_build();
+    let mut args_val = Vec::new();
     for _ in 0..arity {
         let arg = b.block_arg_insert(entry);
-        args_val_builder.push_value(arg, b);
+        args_val.push(arg);
     }
-    args_val_builder.block = Some(block);
-    block = args_val_builder.finish(b);
-    let args_list = b.block_args(block)[0];
+    let args_list = b.prim_value_list(&args_val);
 
     // Join block after case
     let join_block = b.block_insert();

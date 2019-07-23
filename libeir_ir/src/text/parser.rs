@@ -11,11 +11,11 @@ impl FunctionIdent {
         }
 
         let captures = FUNCTION_IDENT_RE.captures(string)
-            .map(|ok| Ok(ok))
+            .map(Ok)
             .unwrap_or(Err(()))?;
 
         let res = FunctionIdent {
-            module: module,
+            module,
             name: Ident::from_str(&captures[1]),
             arity: captures[5].parse().unwrap(),
         };

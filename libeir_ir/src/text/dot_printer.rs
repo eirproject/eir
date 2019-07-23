@@ -18,7 +18,9 @@ fn format_label(label: &str) -> String {
 }
 
 use std::io::Write;
-pub fn function_to_dot(fun: &Function, w: &mut Write) -> ::std::io::Result<()> {
+
+#[allow(clippy::write_with_newline)]
+pub fn function_to_dot(fun: &Function, w: &mut dyn Write) -> ::std::io::Result<()> {
     let mut to_eir_ctx = ToEirTextContext::new();
 
     write!(w, "digraph g {{\n")?;

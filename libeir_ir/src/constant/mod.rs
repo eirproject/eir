@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::hash::{ Hash, Hasher };
 
 use libeir_intern::{ Ident };
-use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
+
+use libeir_util::aux_hash_map::{ AuxHashMap, AuxHash, AuxEq };
 
 use cranelift_entity::{ PrimaryMap, ListPool, EntityList, entity_impl };
 
@@ -9,116 +10,121 @@ mod atomic;
 pub use atomic::*;
 mod float;
 
-/// This is an unspanned constant.
 /// These entities has the property that if they are equal, they
 /// represent the same value.
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ConstValue(u32);
-entity_impl!(ConstValue, "const_value");
-
-/// These contain both a source span and a ConstValue.
-#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Const(u32);
-entity_impl!(Const, "const");
+entity_impl!(Const, "const_value");
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ConstValueKind {
+#[derive(Debug, Clone)]
+pub enum ConstKind {
     Atomic(AtomicTerm),
     ListCell {
-        head: ConstValue,
-        tail: ConstValue,
+        head: Const,
+        tail: Const,
     },
     Tuple {
-        head: ConstValue,
-        /// Required to be of the tuple kind
-        tail: Option<ConstValue>,
+        entries: EntityList<Const>,
+    },
+    Map {
+        /// Key/value pairs are ALWAYS ordered by key constant index
+        keys: EntityList<Const>,
+        values: EntityList<Const>,
     }
 }
-
-/// In the case of constant composite terms, they don't necessarily
-/// have a continuous source span. We want to enable these to be
-/// represented by a separate span for each of their atomic values.
-/// In the case that a composite term actually has a single span,
-/// it is fully legal to specify that as an Atomic span.
-#[derive(Debug, Clone)]
-enum SpanKind {
-    Atomic(ByteSpan),
+impl AuxHash<ListPool<Const>> for ConstKind {
+    fn aux_hash<H: Hasher>(&self, state: &mut H, container: &ListPool<Const>) {
+        match self {
+            ConstKind::Atomic(atomic) => {
+                0.hash(state);
+                atomic.hash(state);
+            }
+            ConstKind::ListCell { head, tail } => {
+                1.hash(state);
+                head.hash(state);
+                tail.hash(state);
+            }
+            ConstKind::Tuple { entries } => {
+                2.hash(state);
+                entries.as_slice(container).hash(state);
+            }
+            ConstKind::Map { keys, values } => {
+                3.hash(state);
+                keys.as_slice(container).hash(state);
+                values.as_slice(container).hash(state);
+            }
+        }
+    }
 }
-
-#[derive(Debug, Clone)]
-struct ConstData {
-    value: ConstValue,
-    span: SpanKind,
+impl AuxEq<ListPool<Const>> for ConstKind {
+    fn aux_eq(&self, rhs: &ConstKind, container: &ListPool<Const>) -> bool {
+        match (self, rhs) {
+            (ConstKind::Atomic(l), ConstKind::Atomic(r)) => l == r,
+            (ConstKind::ListCell { head: lh, tail: lt },
+             ConstKind::ListCell { head: rh, tail: rt }) => lh == rh && lt == rt,
+            (ConstKind::Tuple { entries: l }, ConstKind::Tuple { entries: r }) =>
+                l.as_slice(container) == r.as_slice(container),
+            (ConstKind::Map { keys: lk, values: lv }, ConstKind::Map { keys: rk, values: rv }) =>
+                lk.as_slice(container) == rk.as_slice(container)
+                && lv.as_slice(container) == rv.as_slice(container),
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ConstantContainer {
-    const_values: PrimaryMap<ConstValue, ConstValueKind>,
-    consts: PrimaryMap<Const, ConstData>,
+    const_values: PrimaryMap<Const, ConstKind>,
+    value_map: AuxHashMap<ConstKind, Const, ListPool<Const>>,
+    pub(crate) const_pool: ListPool<Const>,
+}
 
-    value_map: HashMap<ConstValueKind, ConstValue>,
+impl Default for ConstantContainer {
+    fn default() -> Self {
+        ConstantContainer {
+            const_values: PrimaryMap::new(),
+            value_map: AuxHashMap::new(),
+            const_pool: ListPool::new(),
+        }
+    }
 }
 
 impl ConstantContainer {
 
     pub fn new() -> Self {
-        ConstantContainer {
-            const_values: PrimaryMap::new(),
-            consts: PrimaryMap::new(),
-
-            value_map: HashMap::new(),
-        }
+        Self::default()
     }
 
-    pub fn const_value(&self, cons: Const) -> ConstValue {
-        self.consts[cons].value
-    }
-
-    pub fn const_value_kind<'a>(&'a self, value: ConstValue) -> &'a ConstValueKind {
+    pub fn const_kind(&self, value: Const) -> &ConstKind {
         &self.const_values[value]
     }
 
-    fn create_value(&mut self, kind: ConstValueKind) -> ConstValue {
-        if let Some(val) = self.value_map.get(&kind) {
-            *val
-        } else {
-            let val = self.const_values.push(kind.clone());
-            self.value_map.insert(kind, val);
-            val
-        }
-    }
-
-    pub fn value_list_cell(&mut self, head: ConstValue, tail: ConstValue) -> ConstValue {
-        self.create_value(ConstValueKind::ListCell { head, tail })
+    pub fn value_list_cell(&mut self, head: Const, tail: Const) -> Const {
+        self.from(ConstKind::ListCell { head, tail })
     }
 
     pub fn from<T>(&mut self, val: T) -> Const where T: IntoConst {
         val.into_const(self)
     }
-    pub fn value_from<T>(&mut self, val: T) -> ConstValue where T: IntoConst {
-        // TODO: Remove the useless Const creation
-        let v = self.from(val);
-        self.const_value(v)
-    }
 
-    pub fn print<T>(&self, val: ConstValue, fmt: &mut T)
+    pub fn print<T>(&self, val: Const, fmt: &mut T)
     where T: crate::text::TextFormatter
     {
         match &self.const_values[val] {
-            ConstValueKind::Atomic(atomic) => {
+            ConstKind::Atomic(atomic) => {
                 fmt.write(&format!("{}", atomic));
             }
             _ => unimplemented!()
         }
     }
 
-    pub fn write(&self, val: ConstValue, out: &mut dyn std::io::Write) {
+    pub fn write(&self, val: Const, out: &mut dyn std::io::Write) {
         match &self.const_values[val] {
-            ConstValueKind::Atomic(atomic) => {
+            ConstKind::Atomic(atomic) => {
                 write!(out, "{}", atomic).unwrap();
             }
             // TODO
-            kind => (), //unimplemented!("{:?}", kind)
+            _kind => (), //unimplemented!("{:?}", kind)
         }
     }
 
@@ -128,33 +134,21 @@ pub trait IntoConst {
     fn into_const(self, c: &mut ConstantContainer) -> Const;
 }
 
-impl<T> IntoConst for (T, ByteSpan) where T: Into<AtomicTerm> {
-    fn into_const(self, c: &mut ConstantContainer) -> Const {
-        let atomic: AtomicTerm = self.0.into();
-        let value = c.create_value(ConstValueKind::Atomic(atomic));
-        c.consts.push(ConstData {
-            value,
-            span: SpanKind::Atomic(self.1),
-        })
-    }
-}
 impl<T> IntoConst for T where T: Into<AtomicTerm> {
     fn into_const(self, c: &mut ConstantContainer) -> Const {
-        let atomic: AtomicTerm = self.into();
-        let value = c.create_value(ConstValueKind::Atomic(atomic));
-        c.consts.push(ConstData {
-            value,
-            span: SpanKind::Atomic(DUMMY_SPAN),
-        })
+        c.from(ConstKind::Atomic(self.into()))
     }
 }
 
-impl IntoConst for (ConstValue, ByteSpan) {
+impl IntoConst for ConstKind {
     fn into_const(self, c: &mut ConstantContainer) -> Const {
-        c.consts.push(ConstData {
-            value: self.0,
-            span: SpanKind::Atomic(self.1),
-        })
+        if let Some(val) = c.value_map.get(&self, &c.const_pool) {
+            *val
+        } else {
+            let val = c.const_values.push(self.clone());
+            c.value_map.try_insert(self, val, &c.const_pool).unwrap();
+            val
+        }
     }
 }
 
@@ -166,7 +160,7 @@ impl IntoConst for Const {
 
 impl IntoConst for Ident {
     fn into_const(self, c: &mut ConstantContainer) -> Const {
-        (self.name, self.span).into_const(c)
+        self.name.into_const(c)
     }
 }
 

@@ -35,6 +35,7 @@ pub struct Module {
     pub span: ByteSpan,
     pub name: Ident,
     pub vsn: Option<Expr>,
+    pub author: Option<Expr>,
     pub compile: Option<CompileOptions>,
     pub on_load: Option<ResolvedFunctionName>,
     pub imports: HashSet<ResolvedFunctionName>,
@@ -76,6 +77,7 @@ impl Module {
             span,
             name,
             vsn: None,
+            author: None,
             on_load: None,
             compile: None,
             imports: HashSet::new(),
@@ -103,6 +105,22 @@ impl Module {
                 TopLevel::Attribute(Attribute::Vsn(aspan, vsn)) => {
                     if module.vsn.is_none() {
                         module.vsn = Some(vsn);
+                        continue;
+                    }
+                    errs.push(to_lalrpop_err!(ParserError::Diagnostic(
+                        Diagnostic::new_error("attribute is already defined")
+                            .with_label(
+                                Label::new_primary(aspan).with_message("redefinition occurs here")
+                            )
+                            .with_label(
+                                Label::new_secondary(module.vsn.clone().map(|v| v.span()).unwrap())
+                                    .with_message("first defined here")
+                            )
+                    )));
+                }
+                TopLevel::Attribute(Attribute::Author(aspan, author)) => {
+                    if module.author.is_none() {
+                        module.author = Some(author);
                         continue;
                     }
                     errs.push(to_lalrpop_err!(ParserError::Diagnostic(
@@ -765,6 +783,8 @@ pub struct CompileOptions {
     pub warn_unused_record: bool,
     // Warns about missing type specs
     pub warn_missing_spec: bool,
+    // Inlines the given functions
+    pub inline_functions: HashSet<ResolvedFunctionName>,
 }
 impl Default for CompileOptions {
     fn default() -> Self {
@@ -785,6 +805,7 @@ impl Default for CompileOptions {
             warn_unused_var: true,
             warn_unused_record: true,
             warn_missing_spec: false,
+            inline_functions: HashSet::new(),
         }
     }
 }
@@ -835,6 +856,13 @@ impl CompileOptions {
                             }
                             "nowarn_unused_function" => {
                                 self.no_warn_unused_functions(&mut diagnostics, module, tail);
+                            }
+                            "inline" => {
+                                self.inline_functions(&mut diagnostics, module, tail);
+                            }
+                            "hipe" => {
+                                // Should we warn about this? I'm inclined to think
+                                // not, since we want to ignore warning spam.
                             }
                             _name => {
                                 diagnostics.push(
@@ -928,6 +956,32 @@ impl CompileOptions {
             }
         }
     }
+
+    fn inline_functions(
+        &mut self,
+        diagnostics: &mut Vec<Diagnostic>,
+        module: &Ident,
+        funs: &[Expr],
+    ) {
+        for fun in funs {
+            match fun {
+                Expr::FunctionName(FunctionName::PartiallyResolved(name)) => {
+                    self.inline_functions
+                        .insert(name.resolve(module.clone()));
+                }
+                other => {
+                    diagnostics.push(
+                        Diagnostic::new_warning("invalid compile option").with_label(
+                            Label::new_primary(other.span()).with_message(
+                                "expected function name/arity term for inline",
+                            ),
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
 }
 
 fn to_list(head: &Expr, tail: &Expr) -> Vec<Expr> {

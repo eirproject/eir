@@ -16,6 +16,7 @@ mod list_comprehensions;
 mod control_flow;
 mod records;
 mod errors;
+mod otp;
 
 fn parse<T>(input: &str, config: ParseConfig) -> (T, Parser)
 where

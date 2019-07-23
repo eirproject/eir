@@ -2,7 +2,7 @@ use ::matches::{ matches, assert_matches };
 
 use std::collections::{ HashSet, HashMap };
 
-use ::libeir_ir::op::OpKind;
+use ::libeir_ir::OpKind;
 use ::libeir_ir::{ Block, Value };
 use ::libeir_ir::{ Function, FunctionBuilder, Dialect };
 
@@ -64,7 +64,7 @@ impl CompilePatternPass {
             let mut clauses = Vec::new();
 
             if let Some(OpKind::Case { clauses: c }) = b.fun().block_kind(block) {
-                clauses.extend(c.as_slice(&b.fun().clause_pool).iter().cloned());
+                clauses.extend(c.as_slice(&b.fun().pool.clause).iter().cloned());
             } else {
                 unreachable!()
             };

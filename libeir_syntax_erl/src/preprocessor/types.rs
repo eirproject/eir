@@ -198,6 +198,9 @@ impl ReadFrom for MacroArg {
                         Ok(Some(MacroArg { tokens: arg }))
                     };
                 }
+                Token::RBrace | Token::RBracket | Token::BinaryEnd if stack.is_empty() => {
+                    return Err(PreprocessorError::UnexpectedToken(token.clone(), vec![Token::RParen.to_string()]));
+                }
                 Token::Comma if stack.is_empty() => {
                     if arg.len() == 0 {
                         return Err(PreprocessorError::UnexpectedToken(token.clone(), vec![]));
@@ -210,23 +213,15 @@ impl ReadFrom for MacroArg {
                 }
                 Token::RParen | Token::RBrace | Token::RBracket | Token::BinaryEnd => {
                     match stack.pop() {
-                        None => (),
+                        None => unreachable!(),
                         Some(LexicalToken(_, t2, _)) => {
-                            if token.1 == t2 {
-                                continue;
+                            let closing = t2.get_closing_token();
+                            if token.1 != closing {
+                                return Err(PreprocessorError::UnexpectedToken(
+                                    token.clone(), vec![closing.to_string()]));
                             }
                         }
                     }
-                    let expected = vec![
-                        Token::RParen,
-                        Token::RBrace,
-                        Token::RBracket,
-                        Token::BinaryEnd,
-                    ]
-                    .iter()
-                    .map(|t| t.to_string())
-                    .collect();
-                    return Err(PreprocessorError::UnexpectedToken(token.clone(), expected));
                 }
                 _ => (),
             }

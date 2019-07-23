@@ -1,37 +1,11 @@
-use crate::op::OpKind;
-use super::Function;
-use super::{ Block, Value };
+use crate::{ Function, OpKind };
+use crate::{ Block, Value };
 
 use libeir_util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
 use cranelift_entity::ListPool;
 
 use std::collections::{ HashMap, HashSet };
-use petgraph::{ Direction };
-use petgraph::graph::{ Graph, NodeIndex };
 use petgraph::algo::dominators::Dominators;
-
-use matches::{ matches, assert_matches };
-
-//pub enum ValidationEntry {
-//    /// The entry EBB has a different arity from the function signature.
-//    FunctionEntryArityMismatch {
-//        ident_arity: usize,
-//        entry_arity: usize,
-//    },
-//    /// A lambda function must unpack its env as the first OP in
-//    /// its entry basic block.
-//    LambdaNoUnpackEnv,
-//    /// Basic block is empty. Not allowed.
-//    EbbEnpty {
-//        ebb: Ebb,
-//    },
-//    CantBeTerminator,
-//    MustBeTerminator,
-//    InvalidEbbCalls,
-//    OrphanNodeWarning,
-//    /// Tried to read a SSA variable that was not visible.
-//    InvalidRead,
-//}
 
 #[derive(Debug)]
 pub enum ValidationError {
@@ -98,6 +72,7 @@ impl Function {
         let mut dfs = block_graph.dfs();
         while let Some(block) = dfs.next(&block_graph) {
             if let Some(kind) = self.block_kind(block) {
+                #[allow(clippy::single_match)]
                 match kind {
                     OpKind::Call => {
                         let reads = self.block_reads(block);
@@ -106,7 +81,7 @@ impl Function {
                     _ => (), // TODO validate more types
                 }
             } else {
-                errors.push(ValidationError::EmptyBlock { block: block });
+                errors.push(ValidationError::EmptyBlock { block });
             }
 
         }
@@ -162,7 +137,7 @@ impl Function {
         missing_nodes.remove(&entry_block);
         let mut processed = Vec::new();
 
-        while missing_nodes.len() > 0 {
+        while !missing_nodes.is_empty() {
 
             for node in missing_nodes.iter() {
 
@@ -184,8 +159,8 @@ impl Function {
             }
 
             // Remove processed
-            if missing_nodes.len() > 0 {
-                assert!(processed.len() > 0);
+            if !missing_nodes.is_empty() {
+                assert!(!processed.is_empty());
             }
             for proc in processed.iter() {
                 missing_nodes.remove(proc);
@@ -198,14 +173,16 @@ impl Function {
         for block in self.block_graph().dfs_iter() {
             let visible = &live_variables[&block];
             for read in self.block_reads(block) {
-                if let Some(_) = self.value_arg_definition(*read) {
-                    if !visible.contains(*read, &pool) {
+                self.value_walk_nested_values(*read, &mut |val| {
+                    if self.value_argument(val).is_some()
+                        && !visible.contains(val, &pool)
+                    {
                         errors.push(ValidationError::InvalidRead {
-                            value: *read,
-                            block: block,
+                            value: val,
+                            block,
                         });
                     }
-                }
+                });
             }
         }
 

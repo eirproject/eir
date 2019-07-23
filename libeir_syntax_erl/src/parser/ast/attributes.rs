@@ -216,6 +216,7 @@ pub enum Attribute {
     Import(ByteSpan, Ident, Vec<PartiallyResolvedFunctionName>),
     Compile(ByteSpan, Expr),
     Vsn(ByteSpan, Expr),
+    Author(ByteSpan, Expr),
     OnLoad(ByteSpan, PartiallyResolvedFunctionName),
     Behaviour(ByteSpan, Ident),
     Deprecation(Vec<Deprecation>),
@@ -240,6 +241,7 @@ impl PartialEq for Attribute {
             }
             (&Attribute::Compile(_, ref x), &Attribute::Compile(_, ref y)) => x == y,
             (&Attribute::Vsn(_, ref x), &Attribute::Vsn(_, ref y)) => x == y,
+            (&Attribute::Author(_, ref x), &Attribute::Author(_, ref y)) => x == y,
             (&Attribute::OnLoad(_, ref x), &Attribute::OnLoad(_, ref y)) => x == y,
             (&Attribute::Behaviour(_, ref x), &Attribute::Behaviour(_, ref y)) => x == y,
             _ => false,

@@ -1,17 +1,12 @@
-use pretty::{ Doc, DocBuilder, DocAllocator, Arena as DocArena };
+#![allow(clippy::write_with_newline)]
 
 use std::io::Write;
 
-use matches::assert_matches;
-
-use crate::Module;
-use crate::{ Function, FunctionIdent };
+use crate::{ Module, Function, FunctionIdent };
 use crate::{ Block, Value };
-use crate::op::{ OpKind, BinOp };
-use crate::fun::ValueType;
+use crate::OpKind;
+use crate::ValueKind;
 use crate::pattern::{ PatternContainer, PatternNode, PatternNodeKind };
-
-use libeir_util::pooled_entity_set::PooledEntitySet;
 
 use cranelift_entity::EntityRef;
 
@@ -95,16 +90,15 @@ pub trait EirAnnotator {
 //    }
 //}
 
+#[derive(Default)]
 pub struct ToEirTextContext {
     out_buf: String,
-    annotators: Vec<Box<EirAnnotator>>,
+    annotators: Vec<Box<dyn EirAnnotator>>,
 }
+
 impl ToEirTextContext {
     pub fn new() -> Self {
-        ToEirTextContext {
-            out_buf: String::new(),
-            annotators: Vec::new(),
-        }
+        Self::default()
     }
     pub fn add_annotator<T>(&mut self, ann: T) where T: EirAnnotator + 'static {
         self.annotators.push(Box::new(ann));
@@ -119,7 +113,7 @@ impl ToEirTextContext {
         for ann in self.annotators.iter_mut() {
             ann.annotate_block(&mut self.out_buf, fun, block);
         }
-        if self.out_buf.len() > 0 {
+        if !self.out_buf.is_empty() {
             Some(self.out_buf.to_string())
         } else {
             None
@@ -143,7 +137,7 @@ fn write_indent(out: &mut dyn Write, indent: usize) -> std::io::Result<()> {
 }
 
 impl ToEirText for FunctionIdent {
-    fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut dyn Write) -> std::io::Result<()> {
+    fn to_eir_text(&self, _ctx: &mut ToEirTextContext, indent: usize, out: &mut dyn Write) -> std::io::Result<()> {
         write_indent(out, indent)?;
         write!(out, "{}:{}/{}",
                self.module, self.name, self.arity)?;
@@ -151,7 +145,7 @@ impl ToEirText for FunctionIdent {
     }
 }
 
-pub fn print_constants(ctx: &mut ToEirTextContext, fun: &Function, indent: usize, out: &mut dyn Write) -> std::io::Result<()> {
+pub fn print_constants(_ctx: &mut ToEirTextContext, _fun: &Function, _indent: usize, _out: &mut dyn Write) -> std::io::Result<()> {
     // TODO
     //let mut used_values = HashSet::new();
     //fun.used_values(&mut used_values);
@@ -177,7 +171,7 @@ pub fn print_constants(ctx: &mut ToEirTextContext, fun: &Function, indent: usize
 
 impl ToEirText for Module {
     fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut dyn Write) -> std::io::Result<()> {
-        let mut funs: Vec<_> = self.functions.keys().collect();
+        let funs: Vec<_> = self.functions.keys().collect();
         // TODO sort
         //funs.sort();
 
@@ -225,7 +219,7 @@ impl ToEirText for Function {
     }
 }
 
-fn format_pattern(ctx: &mut ToEirTextContext, pat: &PatternContainer, indent: usize,
+fn format_pattern(_ctx: &mut ToEirTextContext, pat: &PatternContainer, _indent: usize,
                   annotated_nodes: &HashSet<PatternNode>,
                   node: PatternNode, out: &mut dyn Write) -> std::io::Result<()> {
     if annotated_nodes.contains(&node) {
@@ -256,7 +250,7 @@ impl ToEirTextFun for Block {
             write_indent(out, indent+1)?;
             match kind {
                 OpKind::Case { clauses } => {
-                    let clauses_num = clauses.len(&fun.clause_pool);
+                    let clauses_num = clauses.len(&fun.pool.clause);
 
                     let values_start = 1 + (clauses_num * 2);
 
@@ -266,11 +260,11 @@ impl ToEirTextFun for Block {
                     write!(out, "\n")?;
 
                     for clause_num in 0..clauses_num {
-                        let clause = clauses.get(0, &fun.clause_pool).unwrap();
+                        let clause = clauses.get(0, &fun.pool.clause).unwrap();
                         let clause_nodes = fun.pat().clause_root_nodes(clause);
 
                         let base = 1 + (2 * clause_num);
-                        let guard = args[base + 0];
+                        let guard = args[base];
                         let body = args[base + 1];
 
                         let mut annotated_nodes = HashSet::new();
@@ -281,7 +275,7 @@ impl ToEirTextFun for Block {
                         // Pattern body
                         write_indent(out, indent + 2)?;
                         write!(out, "(")?;
-                        if clause_nodes.len() > 0 {
+                        if !clause_nodes.is_empty() {
                             write!(out, "\n")?;
                         }
 
@@ -291,7 +285,7 @@ impl ToEirTextFun for Block {
                             write!(out, "\n")?;
                         }
 
-                        if clause_nodes.len() > 0 {
+                        if !clause_nodes.is_empty() {
                             write_indent(out, indent + 2)?;
                         }
                         write!(out, ")")?;
@@ -339,16 +333,6 @@ impl ToEirTextFun for Block {
                     format_value_list(&args[1..], fun, out)?;
                     write!(out, ")")?;
                 }
-                OpKind::CaptureFunction => {
-                    format_value(args[0], fun, out)?;
-                    write!(out, "(")?;
-                    format_value(args[1], fun, out)?;
-                    write!(out, ":")?;
-                    format_value(args[2], fun, out)?;
-                    write!(out, "/")?;
-                    format_value(args[3], fun, out)?;
-                    write!(out, ")")?;
-                }
                 OpKind::Intrinsic(name) => {
                     write!(out, "intrinsic {}(", name)?;
                     format_value_list(args, fun, out)?;
@@ -368,11 +352,10 @@ impl ToEirTextFun for Block {
 }
 
 fn format_value(value: Value, fun: &Function, out: &mut dyn Write) -> std::io::Result<()> {
-    match fun.value(value) {
-        ValueType::Block(block) => write!(out, "{}", block)?,
-        ValueType::Constant(cons) => {
-            let val = fun.cons().const_value(*cons);
-            fun.cons().write(val, out);
+    match fun.value_kind(value) {
+        ValueKind::Block(block) => write!(out, "{}", block)?,
+        ValueKind::Const(cons) => {
+            fun.cons().write(cons, out);
         },
         _ => write!(out, "%{}", value.index())?,
     }
@@ -389,387 +372,3 @@ fn format_value_list(values: &[Value], fun: &Function,
     }
     Ok(())
 }
-
-//impl ToEirTextFun for EbbCall {
-//    fn to_eir_text_fun(&self, ctx: &mut ToEirTextContext, fun: &Function, indent: usize, out: &mut dyn Write) -> std::io::Result<()> {
-//        write!(out, "B{}(", fun.ebb_call_target(*self).index())?;
-//        format_value_list(fun.ebb_call_args(*self), fun, out)?;
-//        write!(out, ")")?;
-//        Ok(())
-//    }
-//}
-//
-//fn format_ebb_label(ebb: Ebb, ctx: &mut ToEirTextContext, fun: &Function, out: &mut dyn Write) -> std::io::Result<()> {
-//    write!(out, "B{}", ebb.index())?;
-//    let args = fun.ebb_args(ebb);
-//    if args.len() > 0 {
-//        write!(out, "(")?;
-//        for (idx, arg) in args.iter().enumerate() {
-//            if idx != 0 {
-//                write!(out, ", ")?;
-//            }
-//            write!(out, "%{}", arg.index())?;
-//        }
-//        write!(out, ")")?;
-//    }
-//    write!(out, ":\n")?;
-//    Ok(())
-//}
-//
-//fn format_branches(ctx: &mut ToEirTextContext, calls: &[EbbCall], fun: &Function, indent: usize,
-//                   out: &mut dyn Write) -> std::io::Result<()> {
-//    for (idx, ebb_call) in calls.iter().enumerate() {
-//        if idx != 0 {
-//            write!(out, ", ")?;
-//        }
-//        ebb_call.to_eir_text_fun(ctx, fun, indent, out)?;
-//    }
-//    Ok(())
-//}
-//
-//impl ToEirText for PatternNode {
-//    fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut dyn Write) -> std::io::Result<()> {
-//        match self {
-//            PatternNode::Atomic(atomic) => {
-//                atomic.to_eir_text(ctx, indent, out)?;
-//            },
-//            PatternNode::Wildcard => {
-//                write!(out, "_")?;
-//            },
-//            PatternNode::Assign(assign, inner) => {
-//                write!(out, "A{} = (", assign.0)?;
-//                inner.to_eir_text(ctx, indent, out)?;
-//                write!(out, ")")?;
-//            },
-//            PatternNode::List(head, tail) => {
-//                write!(out, "[")?;
-//
-//                for (idx, elem) in head.iter().enumerate() {
-//                    if idx != 0 {
-//                        write!(out, ", ")?;
-//                    }
-//                    elem.to_eir_text(ctx, indent, out)?;
-//                }
-//
-//                write!(out, " | ")?;
-//                tail.to_eir_text(ctx, indent, out)?;
-//                write!(out, "]")?;
-//            },
-//            PatternNode::Map(entries) => {
-//                write!(out, "%{{")?;
-//                for (idx, (key, value)) in entries.iter().enumerate() {
-//                    if idx != 0 {
-//                        write!(out, ", ")?;
-//                    }
-//                    write!(out, "V{} => (", key.0)?;
-//                    value.to_eir_text(ctx, indent, out)?;
-//                    write!(out, ")")?;
-//                }
-//                write!(out, "}}")?;
-//            },
-//            PatternNode::Tuple(entries) => {
-//                write!(out, "{{")?;
-//                for (idx, value) in entries.iter().enumerate() {
-//                    if idx != 0 {
-//                        write!(out, ", ")?;
-//                    }
-//                    write!(out, "(")?;
-//                    value.to_eir_text(ctx, indent, out)?;
-//                    write!(out, ")")?;
-//                }
-//                write!(out, "}}")?;
-//            },
-//            _ => unimplemented!("ToEirText unimplemented for pattern: {:?}", self),
-//        }
-//        Ok(())
-//    }
-//}
-//
-//impl ToEirTextFun for Ebb {
-//    fn to_eir_text_fun(&self, ctx: &mut ToEirTextContext, fun: &Function, indent: usize, out: &mut dyn Write) -> std::io::Result<()> {
-//        write_indent(out, indent)?;
-//        format_ebb_label(*self, ctx, fun, out)?;
-//
-//        for op in fun.iter_op(*self) {
-//            write_indent(out, indent+1)?;
-//
-//            let writes = fun.op_writes(op);
-//            format_value_list(writes, fun, out)?;
-//            if writes.len() > 0 { write!(out, " = ")?; }
-//
-//            let reads = fun.op_reads(op);
-//            let branches = fun.op_branches(op);
-//
-//            let sig = (reads.len(), writes.len(), branches.len());
-//
-//            let kind = fun.op_kind(op);
-//            let mut default_reads = true;
-//            let mut default_branch = true;
-//            match kind {
-//                OpKind::Jump => {
-//                    assert!(sig == (0, 0, 1));
-//                    write!(out, "jump ")?;
-//                    branches[0].to_eir_text_fun(ctx, fun, indent, out)?;
-//                    default_branch = false;
-//                },
-//                OpKind::PackValueList => {
-//                    assert_matches!(sig, (_, 1, 0));
-//                    write!(out, "pack_value_list")?;
-//                },
-//                OpKind::UnpackValueList => {
-//                    assert_matches!(sig, (1, _, 0));
-//                    write!(out, "unpack_value_list")?;
-//                },
-//                OpKind::CaseStart { clauses } => {
-//                    assert_matches!(sig, (_, 1, 1));
-//                    write!(out, "case_start on: ")?;
-//                    format_value(reads[0], fun, out)?;
-//                    write!(out, ", values: [")?;
-//                    format_value_list(&reads[1..], fun, out)?;
-//                    write!(out, "] {{\n")?;
-//
-//                    for clause in clauses {
-//                        write_indent(out, indent+2)?;
-//
-//                        write!(out, "clause assigns: [")?;
-//                        for (idx, assign) in clause.assigns.iter().enumerate() {
-//                            if idx != 0 {
-//                                write!(out, ", ")?;
-//                            }
-//                            write!(out, "A{}", assign.0)?;
-//                        }
-//                        write!(out, "] {{\n")?;
-//
-//                        for pattern in clause.patterns.iter() {
-//                            write_indent(out, indent+3)?;
-//                            write!(out, "pattern ")?;
-//                            pattern.node.to_eir_text(ctx, indent, out)?;
-//                            write!(out, ";\n")?;
-//                        }
-//
-//                        write_indent(out, indent+2)?;
-//                        write!(out, "}};\n")?;
-//                    }
-//
-//                    write_indent(out, indent+1)?;
-//                    write!(out, "}}")?;
-//                    default_reads = false;
-//                },
-//                OpKind::Case(num_clauses) => {
-//                    assert_matches!(sig, (1, 0, _));
-//                    assert!(sig.2 == num_clauses + 1);
-//                    write!(out, "case_body")?;
-//                },
-//                OpKind::CaseGuardOk => {
-//                    assert_matches!(sig, (1, 0, 0));
-//                    write!(out, "case_guard_ok")?;
-//                },
-//                OpKind::CaseGuardFail { .. } => {
-//                    assert_matches!(sig, (1, 0, 1));
-//                    write!(out, "case_guard_fail")?;
-//                },
-//                OpKind::IfTruthy => {
-//                    assert_matches!(sig, (1, 0, 1));
-//                    write!(out, "if_truthy ")?;
-//                    format_value(reads[0], fun, out)?;
-//                    write!(out, " else ")?;
-//                    format_branches(ctx, branches, fun, indent, out)?;
-//                    default_reads = false;
-//                    default_branch = false;
-//                },
-//                OpKind::MakeTuple => {
-//                    assert_matches!(sig, (_, 1, 0));
-//                    write!(out, "make_tuple")?;
-//                },
-//                OpKind::UnpackTuple => {
-//                    assert_matches!(sig, (1, _, 1));
-//                    write!(out, "unpack_tuple")?;
-//                },
-//                OpKind::MakeList => {
-//                    assert_matches!(sig, (_, 1, 0));
-//                    write!(out, "make_list ")?;
-//
-//                    write!(out, "[")?;
-//                    format_value_list(&reads[1..], fun, out)?;
-//                    write!(out, " | ")?;
-//                    format_value_list(&[reads[0]], fun, out)?;
-//                    write!(out, "]")?;
-//
-//                    default_reads = false;
-//                },
-//                OpKind::MakeBinary => {
-//                    write!(out, "make_binary")?;
-//                },
-//                OpKind::UnpackListCell => {
-//                    write!(out, "unpack_list_cell")?;
-//                },
-//                OpKind::Call { call_type, arity } => {
-//                    match call_type {
-//                        CallType::Normal => {
-//                            assert_matches!(sig, (_, 2, 1));
-//                            write!(out, "call")?;
-//                        },
-//                        CallType::Tail => {
-//                            assert_matches!(sig, (_, 0, 0));
-//                            write!(out, "call tail")?;
-//                        },
-//                        CallType::Cont => {
-//                            assert_matches!(sig, (_, 0, 0));
-//                            write!(out, "call cont")?;
-//                        },
-//                    }
-//
-//                    write!(out, " ")?;
-//                    format_value(reads[0], fun, out)?;
-//                    write!(out, ":")?;
-//                    format_value(reads[1], fun, out)?;
-//                    write!(out, "/{}", arity)?;
-//
-//                    write!(out, "(")?;
-//                    format_value_list(&reads[2..], fun, out)?;
-//                    write!(out, ")")?;
-//
-//                    if *call_type == CallType::Normal {
-//                        write!(out, " except ")?;
-//                        format_branches(ctx, branches, fun, indent, out)?;
-//                    }
-//
-//                    default_reads = false;
-//                    default_branch = false;
-//                },
-//                OpKind::Apply { call_type } => {
-//                    match call_type {
-//                        CallType::Normal => {
-//                            assert_matches!(sig, (_, 2, 1));
-//                            write!(out, "apply")?;
-//                        },
-//                        CallType::Tail => {
-//                            assert_matches!(sig, (_, 0, 0));
-//                            write!(out, "apply tail")?;
-//                        },
-//                        CallType::Cont => {
-//                            assert_matches!(sig, (_, 0, 0));
-//                            write!(out, "apply cont")?;
-//                        },
-//                    }
-//
-//                    write!(out, " ")?;
-//                    format_value(reads[0], fun, out)?;
-//
-//                    write!(out, "(")?;
-//                    format_value_list(&reads[1..], fun, out)?;
-//                    write!(out, ")")?;
-//
-//                    if *call_type == CallType::Normal {
-//                        write!(out, " except ")?;
-//                        format_branches(ctx, branches, fun, indent, out)?;
-//                    }
-//
-//                    default_reads = false;
-//                    default_branch = false;
-//                },
-//                OpKind::UnpackEnv => {
-//                    assert_matches!(sig, (1, _, 0));
-//                    write!(out, "unpack_env")?;
-//                },
-//                OpKind::MakeClosureEnv { env_idx } => {
-//                    assert_matches!(sig, (_, 1, 0));
-//                    write!(out, "pack_env E{}", env_idx.index())?;
-//                },
-//                OpKind::MapEmpty => {
-//                    write!(out, "map_empty")?;
-//                },
-//                OpKind::MapPut { update } => {
-//                    write!(out, "map_put")?;
-//                    if *update {
-//                        write!(out, " update")?;
-//                    }
-//                },
-//                OpKind::MapGet => {
-//                    write!(out, "map_get")?;
-//                },
-//                OpKind::CaseValues =>
-//                    write!(out, "case_values")?,
-//                OpKind::ReturnThrow => {
-//                    assert_matches!(sig, (1, 0, 0));
-//                    write!(out, "return_throw")?;
-//                },
-//                OpKind::ReturnOk => {
-//                    assert_matches!(sig, (1, 0, 0));
-//                    write!(out, "return_ok")?;
-//                },
-//                OpKind::BindClosure { ident } => {
-//                    assert_matches!(sig, (1, 1, 0));
-//                    write!(out, "bind_closure ")?;
-//                    ident.to_eir_text(ctx, indent, out)?;
-//                    write!(out, " with")?;
-//                },
-//                OpKind::CaptureNamedFunction(ident) => {
-//                    assert_matches!(sig, (0, 1, 0));
-//                    write!(out, "capture_function ")?;
-//                    ident.to_eir_text(ctx, indent, out)?;
-//                },
-//                OpKind::ExcTrace => {
-//                    assert_matches!(sig, (1, 1, 0));
-//                    write!(out, "exc_trace")?;
-//                },
-//                OpKind::Unreachable => {
-//                    assert_matches!(sig, (0, 0, 0));
-//                    write!(out, "unreachable")?;
-//                },
-//                OpKind::ComparisonOperation(oper) => {
-//                    assert_matches!(sig, (2, 0, 1));
-//                    write!(out, "compare ")?;
-//                    match oper {
-//                        ComparisonOperation::Equal => {
-//                            write!(out, "equal")?;
-//                        }
-//                        _ => unimplemented!(),
-//                    }
-//                },
-//                OpKind::Move => {
-//                    assert_matches!(sig, (1, 1, 0));
-//                    write!(out, "move")?;
-//                },
-//                OpKind::PrimOp(atom) => {
-//                    write!(out, "prim_op {}", atom)?;
-//                },
-//                _ => {
-//                    unimplemented!("ToEirText unimplemented for: {:?}", kind);
-//                },
-//            }
-//
-//            if default_reads && reads.len() > 0 {
-//                write!(out, " ")?;
-//                if reads.len() > 1 {
-//                    write!(out, "[")?;
-//                }
-//                format_value_list(reads, fun, out)?;
-//                if reads.len() > 1 {
-//                    write!(out, "]")?;
-//                }
-//            }
-//
-//            if default_branch && branches.len() > 0 {
-//                write!(out, " branch ")?;
-//                format_branches(ctx, branches, fun, indent, out)?;
-//            }
-//
-//            write!(out, ";")?;
-//
-//            if let Some(annotation) = ctx.annotate_op(fun, op) {
-//                write!(out, " //{}", annotation)?;
-//            }
-//            write!(out, "\n")?;
-//
-//        }
-//
-//        Ok(())
-//    }
-//}
-
-//impl ToEirTextFun for Op {
-//    fn to_eir_text_fun(&self, fun: &Function, out: &mut dyn Write) -> std::io::Result<()> {
-//
-//    }
-//}

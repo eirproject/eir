@@ -118,6 +118,8 @@ FunctionName: PartiallyResolvedFunctionName = {
 AttributeDefinition: Attribute = {
     <l:@L> "-" "vsn" "(" <vsn:Atomic> ")" "." <r:@R>
         => Attribute::Vsn(span!(l, r), vsn),
+    <l:@L> "-" "author" "(" <author:Atomic> ")" "." <r:@R>
+        => Attribute::Author(span!(l, r), author),
     <l:@L> "-" "compile" "(" <opts:Constant> ")" "." <r:@R>
         => Attribute::Compile(span!(l, r), opts),
     <l:@L> "-" "import" "(" <module:atom> "," "[" <imports:Comma<FunctionName>> "]" ")" "." <r:@R>
@@ -132,6 +134,7 @@ AttributeDefinition: Attribute = {
     TypeSpecAttribute,
     CallbackAttribute,
     DeprecatedAttribute,
+    UserAttribute,
 };
 
 RecordDeclaration: Record = {
@@ -620,7 +623,7 @@ ExprMax: Expr = {
 Fun: Expr = {
     "fun" <fun:FunctionName>
         => Expr::FunctionName(FunctionName::PartiallyResolved(fun)),
-    <l:@L> "fun" <module:atom_or_var> ":" <function:atom_or_var> "/" <arity:arity> <r:@R> =>
+    <l:@L> "fun" <module:atom_or_var> ":" <function:atom_or_var> "/" <arity:arity_or_var> <r:@R> =>
         Expr::FunctionName(FunctionName::detect(span!(l, r), Some(module), function, arity)),
     <l:@L> "fun" <clauses:Semi<FunctionClause>> "end" <r:@R> =>? {
         match Function::new(errs, span!(l, r), clauses) {
@@ -826,6 +829,8 @@ Constant: Expr = {
     ConstantTuple,
     ConstantList,
     ConstantMapExpr,
+    <FunctionName> =>
+        Expr::FunctionName(FunctionName::PartiallyResolved(<>)),
     Atomic,
 };
 
@@ -902,6 +907,12 @@ Integer: Literal = {
         => Literal::Integer(span!(l, r), i),
     <l:@L> <i:bigint> <r:@R>
         => Literal::BigInteger(span!(l, r), i)
+};
+
+#[inline]
+arity_or_var: Arity = {
+    <i:int> => Arity::Int(i as usize),
+    <i:Ident> => Arity::Var(i),
 };
 
 #[inline]
@@ -1043,11 +1054,13 @@ extern {
         "module" => Token::Module,
         "compile" => Token::Compile,
         "vsn" => Token::Vsn,
+        "author" => Token::Author,
         "on_load" => Token::OnLoad,
         "behaviour" => Token::Behaviour,
         "deprecated" => Token::Deprecated,
         "type" => Token::Type,
         "opaque" => Token::Opaque,
+        "file" => Token::File,
         "andalso" => Token::AndAlso,
         "orelse" => Token::OrElse,
         "bnot" => Token::Bnot,

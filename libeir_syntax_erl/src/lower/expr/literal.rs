@@ -16,9 +16,9 @@ pub(super) fn lower_literal(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: 
                  literal: &Literal) -> (IrBlock, IrValue)
 {
     let value = match literal {
-        Literal::Atom(ident) => b.value((AtomTerm(ident.name), ident.span)),
-        Literal::Integer(span, int) => b.value((*int, *span)),
-        Literal::Float(span, flt) => b.value((*flt, *span)),
+        Literal::Atom(ident) => b.value(AtomTerm(ident.name)),
+        Literal::Integer(span, int) => b.value(*int),
+        Literal::Float(span, flt) => b.value(*flt),
         Literal::String(ident) => {
             match intern_string_const(*ident, b.cons_mut()) {
                 Ok(cons) => b.value(cons),
@@ -29,7 +29,7 @@ pub(super) fn lower_literal(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: 
                 },
             }
         },
-        Literal::Char(span, c) => b.value((*c, *span)),
+        Literal::Char(span, c) => b.value(*c),
         _ => unimplemented!("{:?}", literal),
     };
     (block, value)
@@ -187,11 +187,11 @@ pub fn tokenize_string(ident: Ident) -> Result<Vec<u64>, LowerError> {
 pub fn intern_string_const(ident: Ident, c: &mut ConstantContainer) -> Result<Const, LowerError> {
     let chars = tokenize_string(ident)?;
 
-    let mut cons = c.value_from(NilTerm);
+    let mut cons = c.from(NilTerm);
     for elem in chars.iter().rev() {
-        let val = c.value_from(*elem);
+        let val = c.from(*elem);
         cons = c.value_list_cell(val, cons);
     }
 
-    Ok(c.from((cons, ident.span)))
+    Ok(c.from(cons))
 }

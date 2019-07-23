@@ -5,6 +5,14 @@ use crate::{ Block, Value };
 
 use libeir_util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
 
+impl Function {
+
+    pub fn live_values(&self) -> LiveValues {
+        calculate_live_values(self)
+    }
+
+}
+
 /// # Value liveness calculation
 /// Utility for calculating live values at every point in a functions
 /// CFG.
@@ -16,7 +24,6 @@ use libeir_util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
 /// For CFGs that are acyclic, this algorithm will complete in a single
 /// iteration. For cyclic CFGs, this should take (around) 1 extra iteration
 /// for every additional nested cycle.
-
 #[derive(Debug)]
 pub struct LiveValues {
     /// Values that need to exist at every block
@@ -37,7 +44,7 @@ fn dataflow_pass(
     let mut stable = true;
 
     // For each Op node in the cfg
-    'outer: while let Some(block) = visitor.next(&graph) {
+    while let Some(block) = visitor.next(&graph) {
 
         let mut set: PooledEntitySet<Value> = PooledEntitySet::new();
 
@@ -51,9 +58,11 @@ fn dataflow_pass(
         // Add the reads for the block OP to the current set
         for read in fun.block_reads(block) {
             // Only insert if it actually is a variable, not a block or constant
-            if fun.value_arg_definition(*read).is_some() {
-                set.insert(*read, pool);
-            }
+            fun.value_walk_nested_values(*read, &mut |v| {
+                if fun.value_argument(v).is_some() {
+                    set.insert(v, pool);
+                }
+            });
         }
 
         // Remove the block arguments from the current set
@@ -102,8 +111,8 @@ pub fn calculate_live_values(fun: &Function) -> LiveValues {
     }
 
     LiveValues {
-        pool: pool,
-        live: live,
+        pool,
+        live,
     }
 }
 

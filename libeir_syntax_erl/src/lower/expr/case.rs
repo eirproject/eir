@@ -3,8 +3,8 @@ use libeir_ir::{
     Value as IrValue,
     Block as IrBlock,
 };
+use libeir_ir::BinOp;
 use libeir_ir::constant::NilTerm;
-use libeir_ir::op::BinOp;
 
 use libeir_intern::{ Symbol, Ident };
 use libeir_diagnostics::DUMMY_SPAN;
@@ -28,8 +28,7 @@ pub(super) fn lower_case_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut b
         let mut block = no_match;
         let typ_val = b.value(Symbol::intern("error"));
         let case_clause_val = b.value(Symbol::intern("case_clause"));
-        block = b.op_make_tuple(block, &[case_clause_val, match_val]);
-        let err_val = b.block_args(block)[0];
+        let err_val = b.prim_tuple(&[case_clause_val, match_val]);
         // TODO trace
         let trace_val = b.value(NilTerm);
         ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
@@ -73,8 +72,7 @@ pub(super) fn lower_case_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut b
 pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
                             if_expr: &If) -> (IrBlock, IrValue)
 {
-    block = b.op_pack_value_list(block, &[]);
-    let match_val = b.block_args(block)[0];
+    let match_val = b.prim_value_list(&[]);
 
     let join_block = b.block_insert();
     let join_arg = b.block_arg_insert(join_block);
@@ -84,8 +82,7 @@ pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut blo
         let mut block = no_match;
         let typ_val = b.value(Symbol::intern("error"));
         let badmatch_val = b.value(Symbol::intern("badmatch"));
-        block = b.op_make_tuple(block, &[badmatch_val, match_val]);
-        let err_val = b.block_args(block)[0];
+        let err_val = b.prim_tuple(&[badmatch_val, match_val]);
         // TODO trace
         let trace_val = b.value(NilTerm);
         ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
@@ -104,6 +101,9 @@ pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut blo
                 // Add to case
                 let body_val = b.value(lowered.body);
                 case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
+                for value in lowered.values.iter() {
+                    case_b.push_value(*value, b);
+                }
 
                 let (body_ret_block, body_ret) = lower_block(ctx, b, lowered.body, &clause.body);
 

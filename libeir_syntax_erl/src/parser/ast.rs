@@ -23,7 +23,7 @@ pub type TryParseResult<T> =
 
 /// Represents either a concrete name (an atom) or a variable name (an identifier).
 /// This is used in constructs where either are permitted.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Name {
     Atom(Ident),
     Var(Ident),
@@ -40,6 +40,12 @@ impl PartialOrd for Name {
     fn partial_cmp(&self, other: &Name) -> Option<std::cmp::Ordering> {
         self.symbol().partial_cmp(&other.symbol())
     }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
+pub enum Arity {
+    Int(usize),
+    Var(Ident),
 }
 
 /// The set of all binary operators which may be used in expressions

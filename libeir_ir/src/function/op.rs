@@ -1,29 +1,9 @@
-use crate::Const;
-use crate::pattern::{ PatternClause };
+use crate::pattern::PatternClause;
+use crate::binary::EntrySpecifier as BinaryEntrySpecifier;
 
 use libeir_intern::Symbol;
 
 use cranelift_entity::EntityList;
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum BinOp {
-    /// ==
-    Equal,
-    /// /=
-    NotEqual,
-    /// =<
-    LessEqual,
-    /// <
-    Less,
-    /// >=
-    GreaterEqual,
-    /// >
-    Greater,
-    /// =:=
-    ExactEqual,
-    /// =/=
-    ExactNotEqual,
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MapPutUpdate {
@@ -44,40 +24,27 @@ pub enum OpKind {
     /// to external calls.
     Call,
 
-    /// (cont: fn(fun), m, f, a)
+    // (cont: fn(fun), m, f, a)
     CaptureFunction,
 
     /// (true: fn(), false: fn(), else: fn(), value)
+    /// (true: fn(), false: fn(), value) implies else is unreachable
     /// Strict truth check, only 'true' is true, 'false' is false
     IfBool,
-
-    // BinOp
-    /// (true: fn(), false: fn(), lhs, rhs)
-    /// Branching variant
-    BinOp(BinOp),
-    /// (cont: fn(bool), lhs, rhs)
-    /// Boolean variant
-    BinOpValue(BinOp),
 
     /// (..)
     Intrinsic(Symbol),
 
-    // Raw exception handling.
-    // This gets the stack trace from a raw trace
-    // TODO: this needs refinement
-    //ExcTrace,
+    // Stack traces
+    /// This captures the current stack trace.
+    /// Returns an implementation specific value that can only be
+    /// used with `TraceConstruct`. Can not be exposed to the user
+    /// or used with any other operation.
+    TraceCaptureRaw,
+    /// This gets the stack trace from a raw trace.
+    TraceConstruct,
 
-    /// (cont: fn(tup), terms..)
-    MakeTuple,
-    /// (cont: fn(list), tail, heads..)
-    MakeList,
-    // TODO
-    //MakeBinary,
-
-    /// (cont: fn(new_map))
-    /// Creates a new empty map term.
-    MapEmpty,
-    /// (ok: fn(new_map), err: fn(), map: map, key1, value1, keyN, valueN)
+    /// (ok: fn(new_map), err: fn(), map: map, keys: (keys..), values: (value..))
     /// Puts a new value in the map, replacing the old key
     /// if it exists.
     MapPut {
@@ -85,7 +52,7 @@ pub enum OpKind {
         action: Vec<MapPutUpdate>,
     },
 
-    /// (cont: fn(l: valuelist), terms..)
+    /// (cont: fn(terms..), l: valuelist)
     /// Value lists are not an actual type in the program.
     /// A value list of length 1 is semantically identical
     /// to the value itself.
@@ -99,20 +66,16 @@ pub enum OpKind {
     ///
     /// Only high level Eur may contain value lists. Codegen
     /// should not be concerned with these operations.
-    PackValueList,
-    /// (cont: fn(terms..), l: valuelist)
     UnpackValueList(usize),
 
     // Case structure
     /// ```ignore
     /// (
     ///     no_match: fn(),
-    ///     clause1_guard: fn(ok: fn(), fail: fn(), pat_refs..),
-    ///     clause1_body: fn(pat_refs..),
-    ///     clauseN_guard: fn(ok: fn(), fail: fn(), pat_refs..),
-    ///     clauseN_body: fn(pat_refs..),
-    ///     match_val: valuelist,
-    ///     match_values..
+    ///     clause_guards: (fn(ok: fn(), fail: fn(), pat_refs..)..)
+    ///     clause_bodies: (fn(pat_refs..)..)
+    ///     match_val: (term..),
+    ///     match_values: (term..),
     /// )
     /// ```
     /// High level matching construct, lowered to explicit control flow
@@ -124,6 +87,12 @@ pub enum OpKind {
         clauses: EntityList<PatternClause>,
     },
 
+    // Binary construction
+    /// (ok: fn(bin), fail: fn(), value)
+    /// (ok: fn(bin), fail: fn(), value, size)
+    BinaryPush {
+        specifier: BinaryEntrySpecifier,
+    },
 
     /// (ok: fn(tuple_elem..), fail: fn(), term)
     UnpackTuple(usize),

@@ -141,7 +141,9 @@ impl TokenReader for TokenBufferReader {
         match self.tokens.pop_front() {
             None => Ok(None),
             Some(Err(e)) => Err(e.into()),
-            Some(Ok(t)) => Ok(Some(t)),
+            Some(Ok(t)) => {
+                Ok(Some(t))
+            }
         }
     }
 

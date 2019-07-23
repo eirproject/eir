@@ -1,11 +1,8 @@
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::collections::HashMap;
 
-use num_bigint::BigInt;
-
-use libeir_ir::{ FunctionIdent, Block, Value, OpKind, BinOp, ValueType };
-use libeir_ir::constant::{ ConstValue, ConstValueKind, AtomicTerm };
+use libeir_ir::{ FunctionIdent, Block, Value, OpKind, BinOp, ValueKind, PrimOpKind };
+use libeir_ir::constant::{ Const, ConstKind, AtomicTerm };
 use libeir_intern::{ Symbol, Ident };
 
 use crate::term::{ Term, Pid, ErlEq };
@@ -141,59 +138,82 @@ impl CallExecutor {
         }
     }
 
-    fn make_const_term(&self, fun: &ErlangFunction, const_val: ConstValue) -> Rc<Term> {
-        match fun.fun.cons().const_value_kind(const_val) {
-            ConstValueKind::Atomic(AtomicTerm::Atom(atom)) => {
+    fn make_const_term(&self, fun: &ErlangFunction, const_val: Const) -> Rc<Term> {
+        match fun.fun.cons().const_kind(const_val) {
+            ConstKind::Atomic(AtomicTerm::Atom(atom)) => {
                 Term::Atom(atom.0).into()
             }
-            ConstValueKind::Atomic(AtomicTerm::Int(int)) => {
+            ConstKind::Atomic(AtomicTerm::Int(int)) => {
                 Term::Integer(int.0.into()).into()
             }
-            ConstValueKind::Atomic(AtomicTerm::Float(flt)) => {
+            ConstKind::Atomic(AtomicTerm::Float(flt)) => {
                 Term::Float(flt.0).into()
             }
-            ConstValueKind::Atomic(AtomicTerm::Nil) => {
+            ConstKind::Atomic(AtomicTerm::Nil) => {
                 Term::Nil.into()
+            }
+            ConstKind::ListCell { head, tail } => {
+                Term::ListCell(
+                    self.make_const_term(fun, *head),
+                    self.make_const_term(fun, *tail),
+                ).into()
             }
             kind => unimplemented!("{:?}", kind),
         }
     }
 
     fn make_term(&self, fun: &ErlangFunction, value: Value) -> Rc<Term> {
-        match fun.fun.value(value) {
-            ValueType::Block(block) => {
-                let live = &fun.live.live[block];
+        match fun.fun.value_kind(value) {
+            ValueKind::Block(block) => {
+                let live = &fun.live.live[&block];
                 let mut env = Vec::new();
                 for v in live.iter(&fun.live.pool) {
-                    assert!(fun.fun.value_is_arg(v));
+                    assert!(fun.fun.value_argument(v).is_some());
                     env.push(self.make_term(fun, v));
                 }
-                Term::BoundLambda { ident: fun.fun.ident().clone(), block: *block, environment: env }.into()
+                Term::BoundLambda { ident: fun.fun.ident().clone(), block, environment: env }.into()
             }
-            ValueType::Arg(_) => {
+            ValueKind::Argument(_, _) => {
                 self.binds[&value].clone()
             }
-            ValueType::Constant(cons) => {
-                let const_val = fun.fun.cons().const_value(*cons);
-                self.make_const_term(fun, const_val)
+            ValueKind::Const(cons) => {
+                self.make_const_term(fun, cons)
             }
-            _ => unreachable!()
+            ValueKind::PrimOp(prim) => {
+                let reads = fun.fun.primop_reads(prim);
+                match fun.fun.primop_kind(prim) {
+                    PrimOpKind::ValueList => {
+                        let terms: Vec<_> = reads.iter()
+                            .map(|r| self.make_term(fun, *r)).collect();
+                        Term::ValueList(terms).into()
+                    }
+                    PrimOpKind::Tuple => {
+                        let terms: Vec<_> = reads.iter()
+                            .map(|r| self.make_term(fun, *r)).collect();
+                        Term::Tuple(terms).into()
+                    }
+                    PrimOpKind::ListCell => {
+                        assert!(reads.len() == 2);
+                        let head = self.make_term(fun, reads[0]);
+                        let tail = self.make_term(fun, reads[1]);
+                        Term::ListCell(head, tail).into()
+                    }
+                    PrimOpKind::BinOp(BinOp::Equal) => {
+                        assert!(reads.len() == 2);
+                        let lhs = self.make_term(fun, reads[0]);
+                        let rhs = self.make_term(fun, reads[1]);
+                        Term::new_bool(lhs.erl_eq(&*rhs)).into()
+                    }
+                    kind => unimplemented!("{:?}", kind),
+                }
+            }
         }
     }
 
-    pub fn run_erlang_op(&mut self, vm: &VMState, fun: &ErlangFunction, block: Block) -> TermCall {
+    pub fn run_erlang_op(&mut self, _vm: &VMState, fun: &ErlangFunction, block: Block) -> TermCall {
         let reads = fun.fun.block_reads(block);
         println!("{} {}", fun.fun.ident(), block);
         match fun.fun.block_kind(block).unwrap() {
-            OpKind::PackValueList => {
-                let val_list = Term::ValueList(
-                    reads.iter().skip(1).map(|r| self.make_term(fun, *r)).collect()
-                );
-                TermCall {
-                    fun: self.make_term(fun, reads[0]),
-                    args: vec![val_list.into()],
-                }
-            }
             OpKind::Call => {
                 TermCall {
                     fun: self.make_term(fun, reads[0]),
@@ -281,11 +301,22 @@ impl CallExecutor {
                 }
             }
             OpKind::IfBool => {
-                let bool_term = self.make_term(fun, reads[3]);
-                let call_n = match bool_term.as_boolean() {
-                    Some(true) => 0,
-                    Some(false) => 1,
-                    None => 2,
+                let call_n = if reads.len() == 4 {
+                    let bool_term = self.make_term(fun, reads[3]);
+                    match bool_term.as_boolean() {
+                        Some(true) => 0,
+                        Some(false) => 1,
+                        None => 2,
+                    }
+                } else if reads.len() == 3 {
+                    let bool_term = self.make_term(fun, reads[2]);
+                    match bool_term.as_boolean() {
+                        Some(true) => 0,
+                        Some(false) => 1,
+                        None => unreachable!(),
+                    }
+                } else {
+                    unreachable!()
                 };
 
                 TermCall {
@@ -308,37 +339,6 @@ impl CallExecutor {
                             args: vec![],
                         }
                     }
-                }
-            }
-            OpKind::BinOp(BinOp::Equal) => {
-                assert!(reads.len() == 4);
-                let lhs = self.make_term(fun, reads[2]);
-                let rhs = self.make_term(fun, reads[3]);
-                if lhs.erl_eq(&rhs) {
-                    TermCall {
-                        fun: self.make_term(fun, reads[0]),
-                        args: vec![],
-                    }
-                } else {
-                    TermCall {
-                        fun: self.make_term(fun, reads[1]),
-                        args: vec![],
-                    }
-                }
-            }
-            OpKind::MakeList => {
-                let heads: Vec<_> = reads.iter().skip(2).map(|v| self.make_term(fun, *v)).collect();
-                let term = Term::slice_to_list(&heads, self.make_term(fun, reads[1]));
-                TermCall {
-                    fun: self.make_term(fun, reads[0]),
-                    args: vec![term],
-                }
-            }
-            OpKind::MakeTuple => {
-                let items: Vec<_> = reads.iter().skip(1).map(|v| self.make_term(fun, *v)).collect();
-                TermCall {
-                    fun: self.make_term(fun, reads[0]),
-                    args: vec![Term::Tuple(items).into()],
                 }
             }
             kind => unimplemented!("{:?}", kind),

@@ -44,8 +44,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
             let mut block = no_match;
             let typ_val = b.value(Symbol::intern("error"));
             let try_clause_val = b.value(Symbol::intern("try_clause"));
-            block = b.op_make_tuple(block, &[try_clause_val, body_ret]);
-            let err_val = b.block_args(block)[0];
+            let err_val = b.prim_tuple(&[try_clause_val, body_ret]);
             // TODO trace
             let trace_val = b.value(NilTerm);
             ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
@@ -87,8 +86,9 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
 
     // Catch
     if let Some(catch_clauses) = try_expr.catch_clauses.as_ref() {
-        let mut block = b.op_pack_value_list(exc_block, &[exc_type, exc_error]);
-        let match_val = b.block_args(block)[0];
+        let mut block = exc_block;
+
+        let match_val = b.prim_value_list(&[exc_type, exc_error]);
 
         let mut case_b = b.op_case_build();
         case_b.match_on = Some(match_val);
@@ -187,7 +187,8 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
         case_b.push_value(val, b);
         let pat_val = b.pat_mut().clause_value(clause);
 
-        let pat = b.pat_mut().value(pat_val);
+        let pat = b.pat_mut().node_empty();
+        b.pat_mut().value(pat, pat_val);
 
         b.pat_mut().clause_node_push(clause, pat);
         b.pat_mut().clause_finish(clause);
@@ -234,11 +235,8 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
         let error_block_val = b.value(error_block);
         case_b.push_clause(error_clause, guard_val, error_block_val, b);
 
-        error_block = b.op_make_tuple(error_block, &[exc_error, exc_trace]);
-        let inner_tup = b.block_args(error_block)[0];
-
-        error_block = b.op_make_tuple(error_block, &[big_exit_atom, inner_tup]);
-        let ret_tup = b.block_args(error_block)[0];
+        let inner_tup = b.prim_tuple(&[exc_error, exc_trace]);
+        let ret_tup = b.prim_tuple(&[big_exit_atom, inner_tup]);
 
         b.op_call(error_block, join_block, &[ret_tup]);
     }
@@ -249,8 +247,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
         let exit_block_val = b.value(exit_block);
         case_b.push_clause(exit_clause, guard_val, exit_block_val, b);
 
-        exit_block = b.op_make_tuple(exit_block, &[big_exit_atom, exc_error]);
-        let ret_tup = b.block_args(exit_block)[0];
+        let ret_tup = b.prim_tuple(&[big_exit_atom, exc_error]);
 
         b.op_call(exit_block, join_block, &[ret_tup]);
     }

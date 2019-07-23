@@ -22,10 +22,8 @@ fn make_rec_fail(ctx: &mut LowerCtx, b: &mut FunctionBuilder, recname_val: IrVal
 
     let fail_type = b.value(Symbol::intern("error")); // TODO double check correct type
 
-    // TODO: support constant tuples, intern constant directly
     let badrecord_val = b.value(Symbol::intern("badrecord"));
-    block = b.op_make_tuple(block, &[badrecord_val, recname_val]);
-    let fail_error = b.block_args(block)[0];
+    let fail_error = b.prim_tuple(&[badrecord_val, recname_val]);
 
     // TODO: Trace
     let fail_trace = b.value(NilTerm);
@@ -54,7 +52,8 @@ pub(super) fn lower_record_access_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
     let recname_test_val = b.block_args(block)[0];
     let rec_field_val = b.block_args(block)[idx + 1];
 
-    let eq_fail_block = map_block!(block, b.op_binop(block, IrBinOp::Equal, recname_test_val, recname_val));
+    let eq_cond = b.prim_binop(IrBinOp::Equal, recname_test_val, recname_val);
+    let eq_fail_block = map_block!(block, b.op_if_bool_strict(block, eq_cond));
     b.op_call(eq_fail_block, fail_block, &[]);
 
     (block, rec_field_val)
@@ -87,7 +86,8 @@ pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
 
     // Check first tuple element
     let recname_test_val = b.block_args(block)[0];
-    let eq_fail_block = map_block!(block, b.op_binop(block, IrBinOp::Equal, recname_test_val, recname_val));
+    let eq_cond = b.prim_binop(IrBinOp::Equal, recname_test_val, recname_val);
+    let eq_fail_block = map_block!(block, b.op_if_bool_strict(block, eq_cond));
     b.op_call(eq_fail_block, fail_block, &[]);
 
     // Update fields
@@ -98,17 +98,12 @@ pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
     }
 
     // Create new tuple
-    let mut tup_b = b.op_make_tuple_build();
+    let mut tup_values = Vec::new();
+    tup_values.push(recname_val);
+    tup_values.extend(elems.iter().cloned());
+    let tup = b.prim_tuple(&tup_values);
 
-    tup_b.push_value(recname_val, b);
-    for elem in elems.iter() {
-        tup_b.push_value(*elem, b);
-    }
-
-    tup_b.block = Some(block);
-    block = tup_b.finish(b);
-
-    (block, b.block_args(block)[0])
+    (block, tup)
 }
 
 pub(super) fn lower_record_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
@@ -145,17 +140,12 @@ pub(super) fn lower_record_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
         }
     }
 
-    let mut tup_b = b.op_make_tuple_build();
+    let mut tup_values = Vec::new();
+    tup_values.push(recname_val);
+    tup_values.extend(elems.iter().map(|e| e.unwrap()));
+    let tup = b.prim_tuple(&tup_values);
 
-    tup_b.push_value(recname_val, b);
-    for elem in elems.iter() {
-        tup_b.push_value(elem.unwrap(), b);
-    }
-
-    tup_b.block = Some(block);
-    block = tup_b.finish(b);
-
-    (block, b.block_args(block)[0])
+    (block, tup)
 }
 
 

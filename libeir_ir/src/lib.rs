@@ -3,28 +3,36 @@ use std::collections::HashMap;
 
 use libeir_intern::Ident;
 
-pub mod fun;
-pub use fun::{ Function, Block, Value };
-pub use fun::{ FunctionBuilder, CaseBuilder, IntoValue };
-pub use fun::{ ValueType };
-pub use fun::{ Dialect };
-pub use fun::{ AttributeKey, AttributeValue };
+mod function;
 
-pub use fun::live::LiveValues;
-pub use fun::mangle::Mangler;
+// Auxiliary utilities
+mod algo;
+mod graph;
+pub mod text;
 
-pub mod op;
-pub use op::{ OpKind, BinOp };
-
+// Subcontainers
 pub mod constant;
-pub use constant::{ ConstantContainer, Const, ConstValue };
+pub mod pattern;
+
+pub use function::{ Function, Block, Value, PrimOp };
+pub use function::{ OpKind, MapPutUpdate, PrimOpKind, BinOp };
+pub use function::{ ValueKind };
+pub use function::{ Dialect };
+pub use function::{ AttributeKey, AttributeValue };
+
+pub use function::builder::{ FunctionBuilder, CaseBuilder, IntoValue };
+
+pub use algo::live::LiveValues;
+//pub use algo::mangle::Mangler;
+
+pub use constant::{ ConstantContainer, Const, ConstKind };
 pub use constant::{ AtomTerm, BigIntTerm, IntTerm, FloatTerm, BinaryTerm, NilTerm };
 
-pub mod pattern;
-pub use pattern::{ PatternNode, PatternValue, PatternContainer };
+pub use pattern::{ PatternNode, PatternValue, PatternClause, PatternContainer };
 
-pub mod text;
 pub use text::printer::{ ToEirText, ToEirTextContext };
+
+pub mod binary;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd)]
 pub struct FunctionIdent {
@@ -52,7 +60,7 @@ impl Module {
         }
     }
 
-    pub fn add_function<'a>(&'a mut self, name: Ident, arity: usize) -> &'a mut Function {
+    pub fn add_function(&mut self, name: Ident, arity: usize) -> &mut Function {
         let ident = FunctionIdent {
             module: self.name,
             name,

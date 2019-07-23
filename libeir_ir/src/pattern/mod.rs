@@ -4,6 +4,8 @@ use cranelift_entity::{ PrimaryMap, EntityList, ListPool, entity_impl };
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
 
+use crate::binary::EntrySpecifier;
+
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PatternNode(u32);
 entity_impl!(PatternNode, "pattern_node");
@@ -32,9 +34,28 @@ pub struct PatternContainer {
     tmp_node_map: Option<HashMap<PatternNode, PatternNode>>,
 }
 
+impl Default for PatternContainer {
+    fn default() -> PatternContainer {
+        PatternContainer {
+            nodes: PrimaryMap::new(),
+            values: PrimaryMap::new(),
+            clauses: PrimaryMap::new(),
+
+            node_pool: ListPool::new(),
+            value_pool: ListPool::new(),
+
+            tmp_val_map: Some(HashMap::new()),
+            tmp_node_map: Some(HashMap::new()),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct PatternClauseData {
     root_nodes: EntityList<PatternNode>,
+
+    node_binds_keys: EntityList<PatternNode>,
+    node_binds_vals: EntityList<PatternValue>,
 
     /// This is the set of nodes that are bound from the pattern.
     /// This will correspond to another list of the same length stored
@@ -52,7 +73,7 @@ struct PatternClauseData {
 
 #[derive(Debug, Clone)]
 struct PatternNodeData {
-    kind: PatternNodeKind,
+    kind: Option<PatternNodeKind>,
     finished: bool,
     span: ByteSpan,
 }
@@ -61,7 +82,13 @@ struct PatternNodeData {
 pub enum PatternNodeKind {
     Wildcard,
     Value(PatternValue),
-    // TODO: Binary
+    Binary {
+        specifier: EntrySpecifier,
+        value: PatternNode,
+        size: Option<PatternValue>,
+
+        remaining: PatternNode,
+    },
     Tuple(EntityList<PatternNode>),
     List {
         head: PatternNode,
@@ -71,6 +98,10 @@ pub enum PatternNodeKind {
         keys: EntityList<PatternValue>,
         values: EntityList<PatternNode>,
     },
+}
+
+#[derive(Debug, Clone)]
+pub struct PatternBinaryEntryData {
 }
 
 pub enum PatternMergeFail {
@@ -92,17 +123,7 @@ pub enum PatternMergeFail {
 impl PatternContainer {
 
     pub fn new() -> Self {
-        PatternContainer {
-            nodes: PrimaryMap::new(),
-            values: PrimaryMap::new(),
-            clauses: PrimaryMap::new(),
-
-            node_pool: ListPool::new(),
-            value_pool: ListPool::new(),
-
-            tmp_val_map: Some(HashMap::new()),
-            tmp_node_map: Some(HashMap::new()),
-        }
+        Self::default()
     }
 
     pub fn clause_value(&mut self, clause: PatternClause) -> PatternValue {
@@ -111,63 +132,90 @@ impl PatternContainer {
         val
     }
 
-    pub fn wildcard(&mut self) -> PatternNode {
-        self.nodes.push(PatternNodeData {
-            kind: PatternNodeKind::Wildcard,
-            finished: true,
-            span: DUMMY_SPAN,
-        })
+    pub fn clause_node_value(&mut self, clause: PatternClause, node: PatternNode) -> PatternValue {
+        let val = self.values.push(());
+
+        let data = &mut self.clauses[clause];
+        data.node_binds_keys.push(node, &mut self.node_pool);
+        data.node_binds_vals.push(val, &mut self.value_pool);
+
+        val
     }
 
-    pub fn value(&mut self, val: PatternValue) -> PatternNode {
+    pub fn node_empty(&mut self) -> PatternNode {
         self.nodes.push(PatternNodeData {
-            kind: PatternNodeKind::Value(val),
-            finished: true,
-            span: DUMMY_SPAN,
-        })
-    }
-
-    pub fn tuple(&mut self) -> PatternNode {
-        self.nodes.push(PatternNodeData {
-            kind: PatternNodeKind::Tuple(EntityList::new()),
+            kind: None,
             finished: false,
             span: DUMMY_SPAN,
         })
     }
 
+    pub fn binary(&mut self, node: PatternNode, specifier: EntrySpecifier, value: PatternNode,
+                  size: Option<PatternValue>, remaining: PatternNode) {
+        let mut data = &mut self.nodes[node];
+        assert!(data.kind.is_none());
+        data.kind = Some(PatternNodeKind::Binary {
+            specifier,
+            value,
+            size,
+
+            remaining,
+        });
+        data.finished = true;
+    }
+
+    pub fn wildcard(&mut self, node: PatternNode) {
+        let mut data = &mut self.nodes[node];
+        assert!(data.kind.is_none());
+        data.kind = Some(PatternNodeKind::Wildcard);
+        data.finished = true;
+    }
+
+    pub fn value(&mut self, node: PatternNode, val: PatternValue) {
+        let mut data = &mut self.nodes[node];
+        assert!(data.kind.is_none());
+        data.kind = Some(PatternNodeKind::Value(val));
+        data.finished = true;
+    }
+
+    pub fn tuple(&mut self, node: PatternNode) {
+        let mut data = &mut self.nodes[node];
+        assert!(data.kind.is_none());
+        data.kind = Some(PatternNodeKind::Tuple(EntityList::new()));
+    }
+
     pub fn tuple_elem_push(&mut self, tup: PatternNode, node: PatternNode) {
         let data = &mut self.nodes[tup];
         assert!(!data.finished);
-        if let PatternNodeKind::Tuple(ref mut list) = data.kind {
+        assert!(data.kind.is_some());
+        if let PatternNodeKind::Tuple(ref mut list) = data.kind.as_mut().unwrap() {
             list.push(node, &mut self.node_pool);
         } else {
             panic!();
         }
     }
 
-    pub fn list(&mut self, head: PatternNode, tail: PatternNode) -> PatternNode {
-        self.nodes.push(PatternNodeData {
-            kind: PatternNodeKind::List { head, tail },
-            finished: true,
-            span: DUMMY_SPAN,
-        })
+    pub fn list(&mut self, node: PatternNode, head: PatternNode, tail: PatternNode) {
+        let mut data = &mut self.nodes[node];
+        assert!(data.kind.is_none());
+        data.kind = Some(PatternNodeKind::List { head, tail });
+        data.finished = true;
     }
 
-    pub fn map(&mut self) -> PatternNode {
-        self.nodes.push(PatternNodeData {
-            kind: PatternNodeKind::Map {
-                keys: EntityList::new(),
-                values: EntityList::new(),
-            },
-            finished: false,
-            span: DUMMY_SPAN,
-        })
+    pub fn map(&mut self, node: PatternNode) {
+        let mut data = &mut self.nodes[node];
+        assert!(data.kind.is_none());
+        data.kind = Some(PatternNodeKind::Map {
+            keys: EntityList::new(),
+            values: EntityList::new(),
+        });
     }
 
     pub fn map_push(&mut self, map: PatternNode, key: PatternValue, value: PatternNode) {
         let data = &mut self.nodes[map];
         assert!(!data.finished);
-        if let PatternNodeKind::Map { ref mut keys, ref mut values } = data.kind {
+        assert!(data.kind.is_some());
+        if let PatternNodeKind::Map { ref mut keys, ref mut values } = data.kind.as_mut().unwrap() {
             keys.push(key, &mut self.value_pool);
             values.push(value, &mut self.node_pool);
         } else {
@@ -176,7 +224,9 @@ impl PatternContainer {
     }
 
     pub fn node_finish(&mut self, node: PatternNode) {
-        self.nodes[node].finished = true;
+        let data = &mut self.nodes[node];
+        assert!(data.kind.is_some());
+        data.finished = true;
     }
 
     pub fn node_set_span(&mut self, node: PatternNode, span: ByteSpan) {
@@ -186,6 +236,10 @@ impl PatternContainer {
     pub fn clause_start(&mut self) -> PatternClause {
         self.clauses.push(PatternClauseData {
             root_nodes: EntityList::new(),
+
+            node_binds_keys: EntityList::new(),
+            node_binds_vals: EntityList::new(),
+
             binds: EntityList::new(),
             values: EntityList::new(),
 
@@ -221,8 +275,8 @@ impl PatternContainer {
                  lhs: PatternNode, rhs: PatternNode) -> Result<PatternNode, PatternMergeFail>
     {
         // This clone is really cheap since entitylists are basically just an usize
-        let lhs_kind = self.nodes[lhs].kind.clone();
-        let rhs_kind = self.nodes[rhs].kind.clone();
+        let lhs_kind = self.nodes[lhs].kind.clone().unwrap();
+        let rhs_kind = self.nodes[rhs].kind.clone().unwrap();
 
         match (lhs_kind, rhs_kind) {
             (PatternNodeKind::Wildcard, _) => {
@@ -237,7 +291,8 @@ impl PatternContainer {
                 let l1_len = l1.len(&self.node_pool);
                 let l2_len = l2.len(&self.node_pool);
                 if l1_len == l2_len {
-                    let new_tup = self.tuple();
+                    let new_tup = self.node_empty();
+                    self.tuple(new_tup);
                     for idx in 0..l1_len {
                         let ln = l1.get(idx, &self.node_pool).unwrap();
                         let rn = l2.get(idx, &self.node_pool).unwrap();
@@ -260,7 +315,8 @@ impl PatternContainer {
                 }
             }
             (PatternNodeKind::Map { keys: k1, values: v1 }, PatternNodeKind::Map { keys: k2, values: v2 }) => {
-                let new_map = self.map();
+                let new_map = self.node_empty();
+                self.map(new_map);
 
                 for idx in 0..(k1.len(&self.value_pool)) {
                     let k = k1.get(idx, &self.value_pool).unwrap();
@@ -283,7 +339,11 @@ impl PatternContainer {
             (PatternNodeKind::List { head: h1, tail: t1 }, PatternNodeKind::List { head: h2, tail: t2 }) => {
                 let new_head = self.merge(map, h1, h2)?;
                 let new_tail = self.merge(map, t1, t2)?;
-                Ok(self.list(new_head, new_tail))
+
+                let list = self.node_empty();
+                self.list(list, new_head, new_tail);
+
+                Ok(list)
             }
             // Patterns are incompatible
             _ => {
@@ -326,6 +386,10 @@ impl PatternContainer {
 
         self.clauses.push(PatternClauseData {
             root_nodes: new_roots,
+
+            node_binds_keys: unimplemented!(),
+            node_binds_vals: unimplemented!(),
+
             binds: new_binds,
             values: new_values,
 
@@ -374,8 +438,8 @@ impl PatternContainer {
         self.nodes[node].span
     }
 
-    pub fn node_kind<'a>(&'a self, node: PatternNode) -> &'a PatternNodeKind {
-        &self.nodes[node].kind
+    pub fn node_kind(&self, node: PatternNode) -> &PatternNodeKind {
+        self.nodes[node].kind.as_ref().unwrap()
     }
 
 }
@@ -387,19 +451,22 @@ fn copy_pattern_node(
     from: &PatternContainer, to: &mut PatternContainer) -> PatternNode
 {
     let data = &from.nodes[node];
-    match &data.kind {
+    match data.kind.as_ref().unwrap() {
         PatternNodeKind::Wildcard => {
-            let new = to.wildcard();
+            let new = to.node_empty();
+            to.wildcard(new);
             node_map.insert(node, new);
             new
         },
         PatternNodeKind::Value(val) => {
-            let new = to.value(*val);
+            let new = to.node_empty();
+            to.value(new, *val);
             node_map.insert(node, new);
             new
         }
         PatternNodeKind::Tuple(elems) => {
-            let new = to.tuple();
+            let new = to.node_empty();
+            to.tuple(new);
 
             for elem in elems.as_slice(&from.node_pool) {
                 let copied = copy_pattern_node(value_map, node_map, *elem, from, to);
@@ -413,13 +480,16 @@ fn copy_pattern_node(
         PatternNodeKind::List { head, tail } => {
             let head_copied = copy_pattern_node(value_map, node_map, *head, from, to);
             let tail_copied = copy_pattern_node(value_map, node_map, *tail, from, to);
-            let new = to.list(head_copied, tail_copied);
+
+            let new = to.node_empty();
+            to.list(new, head_copied, tail_copied);
 
             node_map.insert(node, new);
             new
         }
         PatternNodeKind::Map { keys, values } => {
-            let new = to.map();
+            let new = to.node_empty();
+            to.map(new);
 
             for (key, val) in keys.as_slice(&from.value_pool).iter()
                 .zip(values.as_slice(&from.node_pool))
@@ -432,6 +502,7 @@ fn copy_pattern_node(
             node_map.insert(node, new);
             new
         }
+        _ => unimplemented!("{:?}", data.kind),
     }
 }
 

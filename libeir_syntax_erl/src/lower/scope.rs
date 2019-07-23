@@ -9,7 +9,7 @@ use libeir_intern::{ Ident };
 use super::LowerError;
 
 pub fn is_wildcard(ident: Ident) -> bool {
-    ident.name.as_str().starts_with("_")
+    ident.name.as_str() == "_"
 }
 
 pub struct ScopeToken {

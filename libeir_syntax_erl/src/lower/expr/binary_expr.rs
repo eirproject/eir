@@ -41,8 +41,7 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
 
                 let typ_val = b.value(Symbol::intern("error"));
                 let err_atom = b.value(Symbol::intern("badarg"));
-                block = b.op_make_tuple(block, &[err_atom, lhs_val]);
-                let err_val = b.block_args(block)[0];
+                let err_val = b.prim_tuple(&[err_atom, lhs_val]);
                 let trace_val = b.value(NilTerm); // TODO: Trace
 
                 ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
@@ -72,8 +71,7 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
 
                 let typ_val = b.value(Symbol::intern("error"));
                 let err_atom = b.value(Symbol::intern("badarg"));
-                block = b.op_make_tuple(block, &[err_atom, lhs_val]);
-                let err_val = b.block_args(block)[0];
+                let err_val = b.prim_tuple(&[err_atom, lhs_val]);
                 let trace_val = b.value(NilTerm); // TODO: Trace
 
                 ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
@@ -97,8 +95,15 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
                 BinaryOp::Multiply => (Ident::from_str("erlang"), Ident::from_str("*")),
                 BinaryOp::Divide => (Ident::from_str("erlang"), Ident::from_str("/")),
                 BinaryOp::Rem => (Ident::from_str("erlang"), Ident::from_str("rem")),
-                BinaryOp::StrictNotEqual => (Ident::from_str("erlang"), Ident::from_str("=/=")),
+                BinaryOp::Div => (Ident::from_str("erlang"), Ident::from_str("div")),
+                BinaryOp::Equal => (Ident::from_str("erlang"), Ident::from_str("==")),
+                BinaryOp::NotEqual => (Ident::from_str("erlang"), Ident::from_str("/=")),
                 BinaryOp::StrictEqual => (Ident::from_str("erlang"), Ident::from_str("=:=")),
+                BinaryOp::StrictNotEqual => (Ident::from_str("erlang"), Ident::from_str("=/=")),
+                BinaryOp::Band => (Ident::from_str("erlang"), Ident::from_str("band")),
+                BinaryOp::Bor => (Ident::from_str("erlang"), Ident::from_str("bor")),
+                BinaryOp::Bsl => (Ident::from_str("erlang"), Ident::from_str("bsl")),
+                BinaryOp::Bsr => (Ident::from_str("erlang"), Ident::from_str("bsr")),
                 _ => unimplemented!("{:?}", op),
             };
 

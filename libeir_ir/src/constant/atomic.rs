@@ -3,8 +3,7 @@ use std::hash::{ Hash, Hasher };
 
 use num::cast::{ NumCast, cast };
 
-use libeir_intern::{ Symbol, Ident };
-use libeir_diagnostics::ByteSpan;
+use libeir_intern::Symbol;
 
 use super::float::raw_double_bits;
 
@@ -96,6 +95,7 @@ impl FloatTerm {
     }
 }
 impl Eq for FloatTerm {}
+#[allow(clippy::derive_hash_xor_eq)]
 impl Hash for FloatTerm {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
         raw_double_bits(&self.0).hash(state)
@@ -109,12 +109,6 @@ impl From<FloatTerm> for AtomicTerm {
 impl From<f64> for AtomicTerm {
     fn from(data: f64) -> Self {
         AtomicTerm::Float(FloatTerm(data))
-    }
-}
-impl Into<f64> for AtomicTerm {
-    #[inline]
-    fn into(self) -> f64 {
-        self.0
     }
 }
 impl Display for FloatTerm {
@@ -169,7 +163,7 @@ impl From<BinaryTerm> for AtomicTerm {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NilTerm;
 impl From<NilTerm> for AtomicTerm {
-    fn from(data: NilTerm) -> Self {
+    fn from(_data: NilTerm) -> Self {
         AtomicTerm::Nil
     }
 }

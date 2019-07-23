@@ -15,6 +15,7 @@ use super::lower_function;
 use super::LowerCtx;
 use super::pattern::lower_clause;
 
+use crate::parser::ast::{ Name, Arity };
 use crate::parser::ast::{ Expr, Literal };
 use crate::parser::ast::{ Apply, Remote, UnaryExpr };
 use crate::parser::ast::UnaryOp;
@@ -28,7 +29,7 @@ mod catch;
 mod binary_expr;
 mod comprehension;
 mod case;
-mod binary;
+pub mod binary;
 pub use binary::TypeName as BinaryTypeName;
 
 pub(super) fn lower_block<'a, T>(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
@@ -51,7 +52,7 @@ pub(super) fn lower_block<'a, T>(ctx: &mut LowerCtx, b: &mut FunctionBuilder, bl
     (block, value.unwrap())
 }
 
-fn lower_single(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
+pub(super) fn lower_single(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 expr: &Expr) -> (IrBlock, IrValue) {
     lower_block(ctx, b, block, [expr].iter().map(|v| *v))
 }
@@ -134,8 +135,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 let mut block = no_match;
                 let typ_val = b.value(Symbol::intern("error"));
                 let badmatch_val = b.value(Symbol::intern("badmatch"));
-                block = b.op_make_tuple(block, &[badmatch_val, match_val]);
-                let err_val = b.block_args(block)[0];
+                let err_val = b.prim_tuple(&[badmatch_val, match_val]);
                 // TODO trace
                 let trace_val = b.value(NilTerm);
                 ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
@@ -151,6 +151,9 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                     // Add clause to match
                     let body_val = b.value(lowered.body);
                     match_case.push_clause(lowered.clause, lowered.guard, body_val, b);
+                    for value in lowered.values.iter() {
+                        match_case.push_value(*value, b);
+                    }
 
                     match_case.finish(block, b);
 
@@ -172,12 +175,11 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
         Expr::Cons(cons) => {
             let head = map_block!(block, lower_single(ctx, b, block, &cons.head));
             let tail = map_block!(block, lower_single(ctx, b, block, &cons.tail));
-            b.block_set_span(block, cons.span);
-            block = b.op_make_list(block, &[head], tail);
-            (block, b.block_args(block)[0])
+            let list = b.prim_list_cell(head, tail);
+            (block, list)
         }
         Expr::Nil(nil) => {
-            let nil_val = b.value((NilTerm, nil.0));
+            let nil_val = b.value(NilTerm);
             (block, nil_val)
         }
         Expr::Tuple(tup) => {
@@ -188,8 +190,8 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 vals.push(val);
             }
 
-            block = b.op_make_tuple(block, &vals);
-            (block, b.block_args(block)[0])
+            let tuple = b.prim_tuple(&vals);
+            (block, tuple)
         }
         Expr::Fun(fun) => {
             let fun = lower_function(ctx, b, fun);
@@ -252,6 +254,9 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                             // Add to case
                             let body_val = b.value(lowered.body);
                             case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
+                            for value in lowered.values.iter() {
+                                case_b.push_value(*value, b);
+                            }
 
                             let (body_ret_block, body_ret) = lower_block(ctx, b, lowered.body, &clause.body);
 
@@ -286,9 +291,31 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
 
                     (block, fun_val)
                 }
-                _ => unimplemented!(),
+                FunctionName::Unresolved(unresolved) => {
+                    let module = match unresolved.module {
+                        None => b.value(ctx.module.name),
+                        Some(Name::Atom(atom)) => b.value(atom),
+                        Some(Name::Var(var)) => ctx.resolve(var),
+                    };
+                    let function = match unresolved.function {
+                        Name::Atom(atom) => b.value(atom),
+                        Name::Var(var) => ctx.resolve(var),
+                    };
+                    let arity = match unresolved.arity {
+                        Arity::Int(int) => b.value(int),
+                        Arity::Var(var) => b.value(var),
+                    };
+
+                    b.block_set_span(block, unresolved.span);
+                    block = b.op_capture_function(block, module, function, arity);
+                    let fun_val = b.block_args(block)[0];
+
+                    (block, fun_val)
+                }
+                _ => unimplemented!("{:?}", name),
             }
         }
+        Expr::Begin(begin) => lower_block(ctx, b, block, &begin.body),
         Expr::Case(case) => case::lower_case_expr(ctx, b, block, case),
         Expr::If(if_expr) => case::lower_if_expr(ctx, b, block, if_expr),
         Expr::Try(try_expr) => catch::lower_try_expr(ctx, b, block, try_expr),

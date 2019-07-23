@@ -25,6 +25,7 @@ pub enum Directive {
     Endif(directives::Endif),
     Error(directives::Error),
     Warning(directives::Warning),
+    File(directives::File),
 }
 impl Directive {
     pub fn span(&self) -> ByteSpan {
@@ -42,6 +43,7 @@ impl Directive {
             Directive::Endif(ref t) => t.span(),
             Directive::Error(ref t) => t.span(),
             Directive::Warning(ref t) => t.span(),
+            Directive::File(ref t) => t.span(),
         }
     }
 }
@@ -61,6 +63,7 @@ impl fmt::Display for Directive {
             Directive::Endif(ref t) => t.fmt(f),
             Directive::Error(ref t) => t.fmt(f),
             Directive::Warning(ref t) => t.fmt(f),
+            Directive::File(ref t) => t.fmt(f),
         }
     }
 }
@@ -87,7 +90,7 @@ impl ReadFrom for Directive {
         // but otherwise do nothing else with them
         match name_sym {
             "compile" => {
-                reader.unread_token(LexicalToken(name.0, Token::Record, name.2));
+                reader.unread_token(LexicalToken(name.0, Token::Compile, name.2));
                 reader.unread_token(_hyphen.into());
                 return Ok(None);
             }
@@ -131,6 +134,11 @@ impl ReadFrom for Directive {
                 reader.unread_token(_hyphen.into());
                 return Ok(None);
             }
+            "author" => {
+                reader.unread_token(LexicalToken(name.0, Token::Author, name.2));
+                reader.unread_token(_hyphen.into());
+                return Ok(None);
+            }
             "on_load" => {
                 reader.unread_token(LexicalToken(name.0, Token::OnLoad, name.2));
                 reader.unread_token(_hyphen.into());
@@ -148,6 +156,11 @@ impl ReadFrom for Directive {
             }
             "type" => {
                 reader.unread_token(LexicalToken(name.0, Token::Type, name.2));
+                reader.unread_token(_hyphen.into());
+                return Ok(None);
+            }
+            "opaque" => {
+                reader.unread_token(LexicalToken(name.0, Token::Opaque, name.2));
                 reader.unread_token(_hyphen.into());
                 return Ok(None);
             }
@@ -173,6 +186,7 @@ impl ReadFrom for Directive {
             "endif" => reader.read().map(Directive::Endif).map(Some),
             "error" => reader.read().map(Directive::Error).map(Some),
             "warning" => reader.read().map(Directive::Warning).map(Some),
+            "file" => reader.read().map(Directive::File).map(Some),
             _ => Ok(None),
         }
     }

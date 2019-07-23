@@ -6,7 +6,7 @@ use libeir_diagnostics::{ ByteSpan, Diagnostic, Label, DUMMY_SPAN };
 use glob::glob;
 
 use crate::lexer::{symbols, Lexed, LexicalToken, Symbol, Token};
-use crate::lexer::{AtomToken, StringToken, SymbolToken};
+use crate::lexer::{AtomToken, StringToken, SymbolToken, IntegerToken};
 use crate::util;
 
 use super::token_reader::{ReadFrom, TokenReader};
@@ -717,5 +717,51 @@ impl ReadFrom for Define {
                 }
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct File {
+    pub _hyphen: SymbolToken,
+    pub _file: AtomToken,
+    pub _open_paren: SymbolToken,
+    pub path: StringToken,
+    pub _comma: SymbolToken,
+    pub line: IntegerToken,
+    pub _close_paren: SymbolToken,
+    pub _dot: SymbolToken,
+}
+impl File {
+    pub fn span(&self) -> ByteSpan {
+        let start = self._hyphen.0;
+        let end = self._dot.0;
+        ByteSpan::new(start, end)
+    }
+}
+impl fmt::Display for File {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "-file({}, {}).",
+            self.path,
+            self.line,
+        )
+    }
+}
+impl ReadFrom for File {
+    fn read_from<R, S>(reader: &mut R) -> Result<Self>
+    where
+        R: TokenReader<Source = S>,
+    {
+        Ok(File {
+            _hyphen: reader.read_expected(&Token::Minus)?,
+            _file: reader.read_expected(&symbols::File)?,
+            _open_paren: reader.read_expected(&Token::LParen)?,
+            path: reader.read()?,
+            _comma: reader.read_expected(&Token::Comma)?,
+            line: reader.read()?,
+            _close_paren: reader.read_expected(&Token::RParen)?,
+            _dot: reader.read_expected(&Token::Dot)?,
+        })
     }
 }

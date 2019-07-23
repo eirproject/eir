@@ -4,41 +4,23 @@ use ::pattern_compiler::{ PatternProvider, ExpandedClauseNodes };
 use std::collections::{ HashMap, HashSet };
 use std::hash::{ Hash, Hasher };
 
-use libeir_ir::{ Function, FunctionBuilder, Value, ValueType };
+use libeir_ir::{ Function, FunctionBuilder, Value, ValueKind };
 use libeir_ir::pattern::{ PatternContainer, PatternClause, PatternNode, PatternNodeKind, PatternValue };
-use libeir_ir::constant::{ Const, ConstValue };
+use libeir_ir::constant::{ Const };
 
-#[derive(Debug, Copy, Clone, Eq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum ValueOrConst {
     Value(Value),
     /// ConstValue is used for hashing and equality, Const is used for span
-    Const(Const, ConstValue),
-}
-impl Hash for ValueOrConst {
-    fn hash<H>(&self, hasher: &mut H) where H: Hasher {
-        match self {
-            ValueOrConst::Value(val) => val.hash(hasher),
-            ValueOrConst::Const(_, val) => val.hash(hasher),
-        }
-    }
-}
-impl PartialEq for ValueOrConst {
-    fn eq(&self, rhs: &ValueOrConst) -> bool {
-        match (self, rhs) {
-            (ValueOrConst::Value(val1), ValueOrConst::Value(val2)) if val1 == val2 => true,
-            (ValueOrConst::Const(_, val1), ValueOrConst::Const(_, val2)) if val1 == val2 => true,
-            _ => false,
-        }
-    }
+    Const(Const),
 }
 impl ValueOrConst {
     pub fn from_value(val: Value, b: &FunctionBuilder) -> Self {
-        match b.fun().value(val) {
-            ValueType::Constant(cons) => {
-                let const_val = b.cons().const_value(*cons);
-                ValueOrConst::Const(*cons, const_val)
+        match b.fun().value_kind(val) {
+            ValueKind::Const(cons) => {
+                ValueOrConst::Const(cons)
             }
-            ValueType::Arg(_) => {
+            ValueKind::Argument(_, _) => {
                 ValueOrConst::Value(val)
             }
             kind => panic!("{:?}", kind),
@@ -47,7 +29,7 @@ impl ValueOrConst {
     pub fn to_value(self, b: &mut FunctionBuilder) -> Value {
         match self {
             ValueOrConst::Value(val) => val,
-            ValueOrConst::Const(cons, _) => b.value(cons),
+            ValueOrConst::Const(cons) => b.value(cons),
         }
     }
 }

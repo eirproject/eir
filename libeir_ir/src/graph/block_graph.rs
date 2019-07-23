@@ -1,31 +1,6 @@
-//use super::{ Ebb, Op, EbbCall };
-//
-//use std::collections::HashMap;
-//
-//use petgraph::graph::{ Graph, NodeIndex };
-//
-//#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-//pub enum CfgNode {
-//    Ebb(Ebb),
-//    Op(Op),
-//}
-//
-//#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-//pub enum CfgEdge {
-//    Flow,
-//    Call(EbbCall),
-//}
-//
-//#[derive(Debug, Clone)]
-//pub struct FunctionCfg {
-//    pub graph: Graph<CfgNode, CfgEdge>,
-//    pub ops: HashMap<Op, NodeIndex>,
-//    pub ebbs: HashMap<Ebb, NodeIndex>,
-//}
-
 use petgraph::Direction;
 use petgraph::visit::{ GraphBase, IntoNeighbors, IntoNeighborsDirected,
-                       Visitable, VisitMap };
+                       Visitable, VisitMap, Walker };
 use petgraph::visit::{ Dfs, DfsPostOrder };
 
 use cranelift_entity::{ EntityRef, EntitySet };
@@ -34,18 +9,36 @@ use itertools::Either;
 
 use libeir_util::pooled_entity_set::PooledEntitySetIter;
 
-use super::Function;
-use super::{ Block };
+use crate::Function;
+use crate::{ Block };
+
+impl Function {
+
+    pub fn block_graph(&self) -> BlockGraph<'_> {
+        BlockGraph::new(self)
+    }
+
+}
 
 /// This is a newtype that contains implementations of petgraphs graph traits.
+///
+/// The semantics of the below graph is as follows:
+/// - Nodes are blocks
+/// - Block capture values in blocks are edges
+/// - Back edges exist to non-live blocks
+///
+/// The last point may cause some graph algorithms to produce undesirable results.
+/// `LiveBlockGraph` does not have this feature, but is slightly more expensive to
+/// construct.
 pub struct BlockGraph<'a> {
-    fun: &'a Function,
+    pub(crate) fun: &'a Function,
 }
+
 impl<'a> BlockGraph<'a> {
 
     pub fn new(fun: &'a Function) -> Self {
         BlockGraph {
-            fun: fun,
+            fun,
         }
     }
 
@@ -54,14 +47,7 @@ impl<'a> BlockGraph<'a> {
     }
 
     pub fn dfs_iter(&'a self) -> impl Iterator<Item = Block> + 'a {
-        struct BlocksIterator<'b>(&'b BlockGraph<'b>, Dfs<Block, EntityVisitMap<Block>>);
-        impl<'b> Iterator for BlocksIterator<'b> {
-            type Item = Block;
-            fn next(&mut self) -> Option<Block> {
-                self.1.next(self.0)
-            }
-        }
-        BlocksIterator(self, self.dfs())
+        self.dfs().iter(self)
     }
 
     pub fn dfs_post_order(&self) -> DfsPostOrder<Block, EntityVisitMap<Block>> {
@@ -69,7 +55,7 @@ impl<'a> BlockGraph<'a> {
     }
 
     pub fn outgoing(&'a self, block: Block) -> impl Iterator<Item = Block> + 'a {
-        self.fun.blocks[block].successors.iter(&self.fun.block_set_pool)
+        self.fun.blocks[block].successors.iter(&self.fun.pool.block_set)
     }
 
 }
@@ -87,7 +73,7 @@ impl<'a> Iterator for BlockSuccessors<'a> {
     fn next(&mut self) -> Option<Block> {
         loop {
             if let Some(val) = self.fun.blocks[self.block].reads.get(
-                self.pos, &self.fun.value_pool)
+                self.pos, &self.fun.pool.value)
             {
                 self.pos += 1;
                 if let Some(block) = self.fun.value_block(val) {
@@ -103,6 +89,14 @@ impl<'a> Iterator for BlockSuccessors<'a> {
 pub struct BlockPredecessors<'a> {
     iter: PooledEntitySetIter<'a, Block>,
 }
+impl<'a> BlockPredecessors<'a> {
+    fn new(graph: &'a BlockGraph, block: Block) -> Self {
+        BlockPredecessors {
+            iter: graph.fun.blocks[block].predecessors
+                .iter(&graph.fun.pool.block_set),
+        }
+    }
+}
 impl<'a> Iterator for BlockPredecessors<'a> {
     type Item = Block;
     fn next(&mut self) -> Option<Block> {
@@ -114,6 +108,7 @@ impl<'a> GraphBase for BlockGraph<'a> {
     type NodeId = Block;
     type EdgeId = BlockEdge;
 }
+
 impl<'a> IntoNeighbors for &'a BlockGraph<'a> {
     type Neighbors = BlockSuccessors<'a>;
     fn neighbors(self, block: Block) -> Self::Neighbors {
@@ -128,18 +123,8 @@ impl<'a> IntoNeighborsDirected for &'a BlockGraph<'a> {
     type NeighborsDirected = Either<BlockSuccessors<'a>, BlockPredecessors<'a>>;
     fn neighbors_directed(self, block: Block, dir: Direction) -> Self::NeighborsDirected {
         match dir {
-            Direction::Outgoing => {
-                Either::Left(BlockSuccessors {
-                    fun: &self.fun,
-                    block,
-                    pos: 0,
-                })
-            }
-            Direction::Incoming => {
-                Either::Right(BlockPredecessors {
-                    iter: self.fun.blocks[block].predecessors.iter(&self.fun.block_set_pool)
-                })
-            }
+            Direction::Outgoing => Either::Left(self.neighbors(block)),
+            Direction::Incoming => Either::Right(BlockPredecessors::new(self, block)),
         }
     }
 }
@@ -169,4 +154,48 @@ impl<'a> Visitable for &'a BlockGraph<'a> {
         map.set.clear();
         map.set.resize(self.fun.blocks.len());
     }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{ FunctionIdent, Function, FunctionBuilder };
+    use libeir_intern::Ident;
+
+    use petgraph::Direction;
+    use petgraph::visit::IntoNeighborsDirected;
+
+    #[test]
+    fn test_edge() {
+        let ident = FunctionIdent {
+            module: Ident::from_str("woo"),
+            name: Ident::from_str("woo"),
+            arity: 1,
+        };
+        let mut fun = Function::new(ident);
+        let mut b = FunctionBuilder::new(&mut fun);
+
+        let b1 = b.block_insert();
+        b.block_set_entry(b1);
+        let b1_ret = b.block_arg_insert(b1);
+
+        let b2 = b.block_insert();
+
+        let b3 = b.block_insert();
+
+        b.op_call(b1, b2, &[]);
+        b.op_call(b2, b1_ret, &[]);
+        b.op_call(b3, b2, &[]);
+
+        let graph = b.fun().block_graph();
+
+        assert!(&graph.neighbors_directed(b1, Direction::Outgoing).collect::<Vec<_>>() == &[b2]);
+        assert!(&graph.neighbors_directed(b2, Direction::Outgoing).collect::<Vec<_>>() == &[]);
+        assert!(&graph.neighbors_directed(b3, Direction::Outgoing).collect::<Vec<_>>() == &[b2]);
+        assert!(&graph.neighbors_directed(b1, Direction::Incoming).collect::<Vec<_>>() == &[]);
+        assert!(&graph.neighbors_directed(b2, Direction::Incoming).collect::<Vec<_>>() == &[b1, b3]);
+        assert!(&graph.neighbors_directed(b3, Direction::Incoming).collect::<Vec<_>>() == &[]);
+
+    }
+
 }

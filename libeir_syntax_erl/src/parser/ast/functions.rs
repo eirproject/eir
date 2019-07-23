@@ -6,7 +6,7 @@ use libeir_diagnostics::{ByteSpan, Diagnostic, Label};
 
 use crate::preprocessor::PreprocessorError;
 
-use super::{Expr, Ident, Name, TypeSpec};
+use super::{Expr, Ident, Name, Arity, TypeSpec};
 use super::{ParseError, ParserError, TryParseResult};
 
 /// Represents a fully-resolved function name, with module/function/arity explicit
@@ -98,7 +98,7 @@ pub struct UnresolvedFunctionName {
     pub span: ByteSpan,
     pub module: Option<Name>,
     pub function: Name,
-    pub arity: usize,
+    pub arity: Arity,
 }
 impl PartialEq for UnresolvedFunctionName {
     fn eq(&self, other: &Self) -> bool {
@@ -142,32 +142,34 @@ impl FunctionName {
         }
     }
 
-    pub fn detect(span: ByteSpan, module: Option<Name>, function: Name, arity: usize) -> Self {
+    pub fn detect(span: ByteSpan, module: Option<Name>, function: Name, arity: Arity) -> Self {
         if module.is_none() {
-            return match function {
-                Name::Atom(f) => FunctionName::PartiallyResolved(PartiallyResolvedFunctionName {
-                    span,
-                    function: f,
-                    arity,
-                }),
-                Name::Var(_) => FunctionName::Unresolved(UnresolvedFunctionName {
-                    span,
-                    module: None,
-                    function,
-                    arity,
-                }),
+            return match (function, arity) {
+                (Name::Atom(f), Arity::Int(a)) => {
+                    FunctionName::PartiallyResolved(PartiallyResolvedFunctionName {
+                        span,
+                        function: f,
+                        arity: a,
+                    })
+                }
+                _ => {
+                    FunctionName::Unresolved(UnresolvedFunctionName {
+                        span,
+                        module: None,
+                        function,
+                        arity,
+                    })
+                }
             };
         }
 
-        if let Some(Name::Atom(m)) = module {
-            if let Name::Atom(f) = function {
-                return FunctionName::Resolved(ResolvedFunctionName {
-                    span,
-                    module: m,
-                    function: f,
-                    arity,
-                });
-            }
+        if let (Some(Name::Atom(m)), Name::Atom(f), Arity::Int(a)) = (module, function, arity) {
+            return FunctionName::Resolved(ResolvedFunctionName {
+                span,
+                module: m,
+                function: f,
+                arity: a,
+            });
         }
 
         FunctionName::Unresolved(UnresolvedFunctionName {
@@ -213,12 +215,12 @@ impl fmt::Display for FunctionName {
                 ref function,
                 arity,
                 ..
-            }) => write!(f, "{:?}:{:?}/{}", module, function, arity),
+            }) => write!(f, "{:?}:{:?}/{:?}", module, function, arity),
             FunctionName::Unresolved(UnresolvedFunctionName {
                 ref function,
                 arity,
                 ..
-            }) => write!(f, "{:?}/{}", function, arity),
+            }) => write!(f, "{:?}/{:?}", function, arity),
         }
     }
 }
