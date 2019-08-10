@@ -9,9 +9,10 @@ use termcolor::ColorChoice;
 use libeir_diagnostics::{ByteIndex, ByteSpan, CodeMap, Diagnostic, Label};
 use libeir_diagnostics::{Emitter, StandardStreamEmitter};
 
-use crate::lexer::{symbols, IdentToken, Lexed, LexicalToken, Symbol, Token};
+use crate::lexer::{symbols, IdentToken, Lexed, LexicalToken, Symbol, Token,
+                   DelayedSubstitution};
 use crate::lexer::{Lexer, Source};
-use crate::parser::ParseConfig;
+use crate::parser::{ ParseConfig, NodeIdGenerator };
 
 use super::macros::Stringify;
 use super::token_reader::{TokenBufferReader, TokenReader, TokenStreamReader};
@@ -41,10 +42,20 @@ where
         let reader = TokenStreamReader::new(codemap.clone(), tokens);
         let code_paths = config.code_paths.clone();
         let include_paths = config.include_paths.clone();
-        let macros = match config.macros {
+
+        let mut macros = match config.macros {
             None => MacroContainer::new(),
             Some(ref macros) => macros.clone(),
         };
+        macros.insert(
+            MacroIdent::Const(Symbol::intern("FUNCTION_NAME")),
+            MacroDef::DelayedSubstitution(DelayedSubstitution::FunctionName),
+        );
+        macros.insert(
+            MacroIdent::Const(Symbol::intern("FUNCTION_ARITY")),
+            MacroDef::DelayedSubstitution(DelayedSubstitution::FunctionArity),
+        );
+
         Preprocessor {
             codemap,
             reader,
@@ -235,6 +246,13 @@ where
                 let expanded = self.expand_replacement(bindings, &def.replacement)?;
                 Ok(expanded)
             }
+            MacroDef::DelayedSubstitution(subst) => Ok(vec![
+                LexicalToken(
+                    call.span().start(),
+                    Token::DelayedSubstitution(subst),
+                    call.span().end(),
+                ),
+            ].into()),
         }
     }
 
@@ -295,7 +313,11 @@ where
         match directive {
             Directive::Module(ref d) => {
                 self.macros
-                    .insert(MacroIdent::Const(symbols::ModuleCapital), MacroDef::String(d.name.symbol()));
+                    .insert(MacroIdent::Const(symbols::ModuleCapital),
+                            MacroDef::String(d.name.symbol()));
+                self.macros
+                    .insert(MacroIdent::Const(symbols::ModuleStringCapital),
+                            MacroDef::String(d.name.symbol()));
             }
             Directive::Include(ref d) if !ignore => {
                 let path = d.include(&self.include_paths)?;
@@ -303,6 +325,7 @@ where
             }
             Directive::IncludeLib(ref d) if !ignore => {
                 let path = d.include_lib(&self.code_paths)?;
+                println!("{:?}", path);
                 self.reader.inject_include(path)?;
             }
             Directive::Define(ref d) if !ignore => {
@@ -384,14 +407,16 @@ where
         use crate::parser::Parse;
         use crate::preprocessor::evaluator;
 
+        let mut nid = NodeIdGenerator::new();
+
         let pp = self.clone_with(condition);
-        let result = <Expr as Parse<Expr>>::parse_tokens(pp);
+        let result = <Expr as Parse<Expr>>::parse_tokens(&mut nid, pp);
         match result {
             Ok(expr) => match evaluator::eval(expr)? {
-                Expr::Literal(Literal::Atom(Ident { ref name, .. })) if *name == symbols::True => {
+                Expr::Literal(Literal::Atom(_, Ident { ref name, .. })) if *name == symbols::True => {
                     Ok(true)
                 }
-                Expr::Literal(Literal::Atom(Ident { ref name, .. })) if *name == symbols::False => {
+                Expr::Literal(Literal::Atom(_, Ident { ref name, .. })) if *name == symbols::False => {
                     Ok(false)
                 }
                 _other => return Err(PreprocessorError::InvalidConditional(span)),

@@ -11,7 +11,6 @@ trace = []
 [dependencies]
 num = "0.2"
 num-traits = "0.2"
-num-bigint = "0.2"
 tempdir = "0.3"
 lazy_static = "1.2"
 pretty = "0.3.3"
@@ -21,4 +20,9 @@ serde_json = "1.0"
 
 libeir_ir = { path = "../libeir_ir" }
 libeir_intern = { path = "../libeir_intern" }
+libeir_util = { path = "../libeir_util" }
 
+[dependencies.rug]
+version = "1.2"
+default-features = false
+features = ["integer", "float", "rand"]

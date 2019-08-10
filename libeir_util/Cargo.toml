@@ -10,3 +10,9 @@ default = ["hashbrown/raw-table"]
 [dependencies]
 cranelift-entity = "0.30.0"
 hashbrown = { path = "../../hashbrown" }
+num-traits = "0.2.8"
+
+[dependencies.rug]
+version = "1.2"
+default-features = false
+features = ["integer", "float", "rand"]

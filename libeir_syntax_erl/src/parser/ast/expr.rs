@@ -3,16 +3,21 @@ use std::cmp::Ordering;
 use libeir_diagnostics::ByteSpan;
 use rug::Integer;
 
+use super::{NodeId};
 use super::{BinaryOp, Ident, UnaryOp};
 use super::{Function, FunctionName, Guard, Name, Type};
+
+use crate::lexer::DelayedSubstitution;
 
 /// The set of all possible expressions
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     // An identifier/variable/function reference
-    Var(Ident),
+    Var(Var),
     Literal(Literal),
     FunctionName(FunctionName),
+    // Delayed substitution of macro
+    DelayedSubstitution(ByteSpan, NodeId, DelayedSubstitution),
     // The various list forms
     Nil(Nil),
     Cons(Cons),
@@ -48,10 +53,11 @@ pub enum Expr {
 impl Expr {
     pub fn span(&self) -> ByteSpan {
         match self {
-            &Expr::Var(Ident { ref span, .. }) => span.clone(),
+            &Expr::Var(Var(_, Ident { ref span, .. })) => span.clone(),
             &Expr::Literal(ref lit) => lit.span(),
             &Expr::FunctionName(ref name) => name.span(),
-            &Expr::Nil(Nil(ref span)) => span.clone(),
+            &Expr::DelayedSubstitution(ref span, _, _) => *span,
+            &Expr::Nil(Nil(ref span, _)) => span.clone(),
             &Expr::Cons(Cons { ref span, .. }) => span.clone(),
             &Expr::Tuple(Tuple { ref span, .. }) => span.clone(),
             &Expr::Map(Map { ref span, .. }) => span.clone(),
@@ -78,6 +84,41 @@ impl Expr {
             &Expr::Receive(Receive { ref span, .. }) => span.clone(),
             &Expr::Try(Try { ref span, .. }) => span.clone(),
             &Expr::Fun(ref fun) => fun.span(),
+        }
+    }
+    pub fn id(&self) -> NodeId {
+        match self {
+            Expr::Var(Var(id, _)) => *id,
+            Expr::Literal(lit) => lit.id(),
+            Expr::FunctionName(name) => name.id(),
+            Expr::DelayedSubstitution(_, id, _) => *id,
+            Expr::Nil(Nil(_, id)) => *id,
+            Expr::Cons(cons) => cons.id,
+            Expr::Tuple(tuple) => tuple.id,
+            Expr::Map(map) => map.id,
+            Expr::MapUpdate(map) => map.id,
+            Expr::MapProjection(map) => map.id,
+            Expr::Binary(bin) => bin.id,
+            Expr::Record(rec) => rec.id,
+            Expr::RecordAccess(rec) => rec.id,
+            Expr::RecordIndex(rec) => rec.id,
+            Expr::RecordUpdate(rec) => rec.id,
+            Expr::ListComprehension(compr) => compr.id,
+            Expr::BinaryComprehension(compr) => compr.id,
+            Expr::Generator(gen) => gen.id,
+            Expr::BinaryGenerator(gen) => gen.id,
+            Expr::Begin(begin) => begin.id,
+            Expr::Apply(apply) => apply.id,
+            Expr::Remote(rem) => rem.id,
+            Expr::BinaryExpr(bin) => bin.id,
+            Expr::UnaryExpr(un) => un.id,
+            Expr::Match(mat) => mat.id,
+            Expr::If(expr) => expr.id,
+            Expr::Catch(catch) => catch.id,
+            Expr::Case(case) => case.id,
+            Expr::Receive(rec) => rec.id,
+            Expr::Try(tr) => tr.id,
+            Expr::Fun(fun) => fun.id(),
         }
     }
 }
@@ -110,7 +151,16 @@ impl PartialOrd for Expr {
 }
 
 #[derive(Debug, Clone)]
-pub struct Nil(pub ByteSpan);
+pub struct Var(pub NodeId, pub Ident);
+impl PartialEq for Var {
+    fn eq(&self, other: &Self) -> bool {
+        self.1 == other.1
+    }
+}
+impl Eq for Var {}
+
+#[derive(Debug, Clone)]
+pub struct Nil(pub ByteSpan, pub NodeId);
 impl PartialEq for Nil {
     fn eq(&self, _: &Self) -> bool {
         return true;
@@ -121,6 +171,7 @@ impl Eq for Nil {}
 #[derive(Debug, Clone)]
 pub struct Cons {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub head: Box<Expr>,
     pub tail: Box<Expr>,
 }
@@ -141,6 +192,7 @@ impl PartialOrd for Cons {
 #[derive(Debug, Clone)]
 pub struct Tuple {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub elements: Vec<Expr>,
 }
 impl PartialEq for Tuple {
@@ -157,6 +209,7 @@ impl PartialOrd for Tuple {
 #[derive(Debug, Clone)]
 pub struct Map {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub fields: Vec<MapField>,
 }
 impl PartialEq for Map {
@@ -174,6 +227,7 @@ impl PartialOrd for Map {
 #[derive(Debug, Clone)]
 pub struct MapUpdate {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub map: Box<Expr>,
     pub updates: Vec<MapField>,
 }
@@ -187,6 +241,7 @@ impl PartialEq for MapUpdate {
 #[derive(Debug, Clone)]
 pub struct MapProjection {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub map: Box<Expr>,
     pub fields: Vec<MapField>,
 }
@@ -204,34 +259,44 @@ impl PartialEq for MapProjection {
 /// types
 #[derive(Debug, Clone)]
 pub enum Literal {
-    Atom(Ident),
-    String(Ident),
-    Char(ByteSpan, char),
-    Integer(ByteSpan, i64),
-    BigInteger(ByteSpan, Integer),
-    Float(ByteSpan, f64),
+    Atom(NodeId, Ident),
+    String(NodeId, Ident),
+    Char(ByteSpan, NodeId, char),
+    Integer(ByteSpan, NodeId, i64),
+    BigInteger(ByteSpan, NodeId, Integer),
+    Float(ByteSpan, NodeId, f64),
 }
 impl Literal {
     pub fn span(&self) -> ByteSpan {
         match self {
-            &Literal::Atom(Ident { ref span, .. }) => span.clone(),
-            &Literal::String(Ident { ref span, .. }) => span.clone(),
-            &Literal::Char(ref span, _) => span.clone(),
-            &Literal::Integer(ref span, _) => span.clone(),
-            &Literal::BigInteger(ref span, _) => span.clone(),
-            &Literal::Float(ref span, _) => span.clone(),
+            &Literal::Atom(_, Ident { ref span, .. }) => span.clone(),
+            &Literal::String(_, Ident { ref span, .. }) => span.clone(),
+            &Literal::Char(span, _, _) => span.clone(),
+            &Literal::Integer(span, _, _) => span.clone(),
+            &Literal::BigInteger(span, _, _) => span.clone(),
+            &Literal::Float(span, _, _) => span.clone(),
+        }
+    }
+    pub fn id(&self) -> NodeId {
+        match self {
+            Literal::Atom(id, _) => *id,
+            Literal::String(id, _) => *id,
+            Literal::Char(_, id, _) => *id,
+            Literal::Integer(_, id, _) => *id,
+            Literal::BigInteger(_, id, _) => *id,
+            Literal::Float(_, id, _) => *id,
         }
     }
 }
 impl PartialEq for Literal {
     fn eq(&self, other: &Literal) -> bool {
         match (self, other) {
-            (&Literal::Atom(ref lhs), &Literal::Atom(ref rhs)) => lhs == rhs,
-            (&Literal::Atom(_), _) => false,
-            (_, &Literal::Atom(_)) => false,
-            (&Literal::String(ref lhs), &Literal::String(ref rhs)) => lhs == rhs,
-            (&Literal::String(_), _) => false,
-            (_, &Literal::String(_)) => false,
+            (&Literal::Atom(_, ref lhs), &Literal::Atom(_, ref rhs)) => lhs == rhs,
+            (&Literal::Atom(_, _), _) => false,
+            (_, &Literal::Atom(_, _)) => false,
+            (&Literal::String(_, ref lhs), &Literal::String(_, ref rhs)) => lhs == rhs,
+            (&Literal::String(_, _), _) => false,
+            (_, &Literal::String(_, _)) => false,
             (x, y) => x.partial_cmp(y) == Some(Ordering::Equal),
         }
     }
@@ -240,28 +305,28 @@ impl PartialOrd for Literal {
     // number < atom < reference < fun < port < pid < tuple < map < nil < list < bit string
     fn partial_cmp(&self, other: &Literal) -> Option<Ordering> {
         match (self, other) {
-            (&Literal::String(ref lhs), &Literal::String(ref rhs)) => lhs.partial_cmp(rhs),
-            (&Literal::String(_), _) => Some(Ordering::Greater),
-            (_, &Literal::String(_)) => Some(Ordering::Less),
-            (&Literal::Atom(ref lhs), &Literal::Atom(ref rhs)) => lhs.partial_cmp(rhs),
-            (&Literal::Atom(_), _) => Some(Ordering::Greater),
-            (_, &Literal::Atom(_)) => Some(Ordering::Less),
-            (&Literal::Integer(_, x), &Literal::Integer(_, y)) => x.partial_cmp(&y),
-            (&Literal::Integer(_, x), &Literal::BigInteger(_, ref y)) => x.partial_cmp(y),
-            (&Literal::Integer(_, x), &Literal::Float(_, y)) => (x as f64).partial_cmp(&y),
-            (&Literal::Integer(_, x), &Literal::Char(_, y)) => x.partial_cmp(&(y as i64)),
-            (&Literal::BigInteger(_, ref x), &Literal::BigInteger(_, ref y)) => x.partial_cmp(y),
-            (&Literal::BigInteger(_, ref x), &Literal::Integer(_, y)) => x.partial_cmp(&y),
-            (&Literal::BigInteger(_, ref x), &Literal::Float(_, y)) => x.partial_cmp(&y),
-            (&Literal::BigInteger(_, ref x), &Literal::Char(_, y)) => x.partial_cmp(&(y as i64)),
-            (&Literal::Float(_, x), &Literal::Float(_, y)) => x.partial_cmp(&y),
-            (&Literal::Float(_, x), &Literal::Integer(_, y)) => x.partial_cmp(&(y as f64)),
-            (&Literal::Float(_, x), &Literal::BigInteger(_, ref y)) => x.partial_cmp(y),
-            (&Literal::Float(_, x), &Literal::Char(_, y)) => x.partial_cmp(&((y as i64) as f64)),
-            (&Literal::Char(_, x), &Literal::Char(_, y)) => x.partial_cmp(&y),
-            (&Literal::Char(_, x), &Literal::Integer(_, y)) => (x as i64).partial_cmp(&y),
-            (&Literal::Char(_, x), &Literal::BigInteger(_, ref y)) => (x as i64).partial_cmp(y),
-            (&Literal::Char(_, x), &Literal::Float(_, y)) => ((x as i64) as f64).partial_cmp(&y),
+            (&Literal::String(_, ref lhs), &Literal::String(_, ref rhs)) => lhs.partial_cmp(rhs),
+            (&Literal::String(_, _), _) => Some(Ordering::Greater),
+            (_, &Literal::String(_, _)) => Some(Ordering::Less),
+            (&Literal::Atom(_, ref lhs), &Literal::Atom(_, ref rhs)) => lhs.partial_cmp(rhs),
+            (&Literal::Atom(_, _), _) => Some(Ordering::Greater),
+            (_, &Literal::Atom(_, _)) => Some(Ordering::Less),
+            (&Literal::Integer(_, _, x), &Literal::Integer(_, _, y)) => x.partial_cmp(&y),
+            (&Literal::Integer(_, _, x), &Literal::BigInteger(_, _, ref y)) => x.partial_cmp(y),
+            (&Literal::Integer(_, _, x), &Literal::Float(_, _, y)) => (x as f64).partial_cmp(&y),
+            (&Literal::Integer(_, _, x), &Literal::Char(_, _, y)) => x.partial_cmp(&(y as i64)),
+            (&Literal::BigInteger(_, _, ref x), &Literal::BigInteger(_, _, ref y)) => x.partial_cmp(y),
+            (&Literal::BigInteger(_, _, ref x), &Literal::Integer(_, _, y)) => x.partial_cmp(&y),
+            (&Literal::BigInteger(_, _, ref x), &Literal::Float(_, _, y)) => x.partial_cmp(&y),
+            (&Literal::BigInteger(_, _, ref x), &Literal::Char(_, _, y)) => x.partial_cmp(&(y as i64)),
+            (&Literal::Float(_, _, x), &Literal::Float(_, _, y)) => x.partial_cmp(&y),
+            (&Literal::Float(_, _, x), &Literal::Integer(_, _, y)) => x.partial_cmp(&(y as f64)),
+            (&Literal::Float(_, _, x), &Literal::BigInteger(_, _, ref y)) => x.partial_cmp(y),
+            (&Literal::Float(_, _, x), &Literal::Char(_, _, y)) => x.partial_cmp(&((y as i64) as f64)),
+            (&Literal::Char(_, _, x), &Literal::Char(_, _, y)) => x.partial_cmp(&y),
+            (&Literal::Char(_, _, x), &Literal::Integer(_, _, y)) => (x as i64).partial_cmp(&y),
+            (&Literal::Char(_, _, x), &Literal::BigInteger(_, _, ref y)) => (x as i64).partial_cmp(y),
+            (&Literal::Char(_, _, x), &Literal::Float(_, _, y)) => ((x as i64) as f64).partial_cmp(&y),
         }
     }
 }
@@ -274,11 +339,13 @@ impl PartialOrd for Literal {
 pub enum MapField {
     Assoc {
         span: ByteSpan,
+        id: NodeId,
         key: Expr,
         value: Expr,
     },
     Exact {
         span: ByteSpan,
+        id: NodeId,
         key: Expr,
         value: Expr,
     },
@@ -316,6 +383,7 @@ impl PartialOrd for MapField {
 #[derive(Debug, Clone)]
 pub struct Record {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub name: Ident,
     pub fields: Vec<RecordField>,
 }
@@ -329,6 +397,7 @@ impl PartialEq for Record {
 #[derive(Debug, Clone)]
 pub struct RecordAccess {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub record: Box<Expr>,
     pub name: Ident,
     pub field: Ident,
@@ -343,6 +412,7 @@ impl PartialEq for RecordAccess {
 #[derive(Debug, Clone)]
 pub struct RecordIndex {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub name: Ident,
     pub field: Ident,
 }
@@ -356,6 +426,7 @@ impl PartialEq for RecordIndex {
 #[derive(Debug, Clone)]
 pub struct RecordUpdate {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub record: Box<Expr>,
     pub name: Ident,
     pub updates: Vec<RecordField>,
@@ -373,7 +444,8 @@ impl PartialEq for RecordUpdate {
 #[derive(Debug, Clone)]
 pub struct RecordField {
     pub span: ByteSpan,
-    pub name: Name,
+    pub id: NodeId,
+    pub name: Ident,
     pub value: Option<Expr>,
     pub ty: Option<Type>,
 }
@@ -386,6 +458,7 @@ impl PartialEq for RecordField {
 #[derive(Debug, Clone)]
 pub struct Binary {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub elements: Vec<BinaryElement>,
 }
 impl PartialEq for Binary {
@@ -399,6 +472,7 @@ impl PartialEq for Binary {
 #[derive(Debug, Clone)]
 pub struct BinaryElement {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub bit_expr: Expr,
     pub bit_size: Option<Expr>,
     pub bit_type: Option<Vec<BitType>>,
@@ -414,22 +488,22 @@ impl PartialEq for BinaryElement {
 /// A bit type can come in the form `Type` or `Type:Size`
 #[derive(Debug, Clone)]
 pub enum BitType {
-    Name(ByteSpan, Ident),
-    Sized(ByteSpan, Ident, i64),
+    Name(ByteSpan, NodeId, Ident),
+    Sized(ByteSpan, NodeId, Ident, i64),
 }
 impl BitType {
     pub fn span(&self) -> ByteSpan {
         match self {
-            BitType::Name(span, _) => *span,
-            BitType::Sized(span, _, _) => *span,
+            BitType::Name(span, _, _) => *span,
+            BitType::Sized(span, _, _, _) => *span,
         }
     }
 }
 impl PartialEq for BitType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (&BitType::Name(_, ref x1), &BitType::Name(_, ref y1)) => x1 == y1,
-            (&BitType::Sized(_, ref x1, ref x2), &BitType::Sized(_, ref y1, ref y2)) => {
+            (&BitType::Name(_, _, ref x1), &BitType::Name(_, _, ref y1)) => x1 == y1,
+            (&BitType::Sized(_, _, ref x1, ref x2), &BitType::Sized(_, _, ref y1, ref y2)) => {
                 (x1 == y1) && (x2 == y2)
             }
             _ => false,
@@ -440,6 +514,7 @@ impl PartialEq for BitType {
 #[derive(Debug, Clone)]
 pub struct ListComprehension {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub body: Box<Expr>,
     pub qualifiers: Vec<Expr>,
 }
@@ -452,6 +527,7 @@ impl PartialEq for ListComprehension {
 #[derive(Debug, Clone)]
 pub struct BinaryComprehension {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub body: Box<Expr>,
     pub qualifiers: Vec<Expr>,
 }
@@ -465,6 +541,7 @@ impl PartialEq for BinaryComprehension {
 #[derive(Debug, Clone)]
 pub struct Generator {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub pattern: Box<Expr>,
     pub expr: Box<Expr>,
 }
@@ -478,6 +555,7 @@ impl PartialEq for Generator {
 #[derive(Debug, Clone)]
 pub struct BinaryGenerator {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub pattern: Box<Expr>,
     pub expr: Box<Expr>,
 }
@@ -491,6 +569,7 @@ impl PartialEq for BinaryGenerator {
 #[derive(Debug, Clone)]
 pub struct Begin {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub body: Vec<Expr>,
 }
 impl PartialEq for Begin {
@@ -503,6 +582,7 @@ impl PartialEq for Begin {
 #[derive(Debug, Clone)]
 pub struct Apply {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub callee: Box<Expr>,
     pub args: Vec<Expr>,
 }
@@ -516,6 +596,7 @@ impl PartialEq for Apply {
 #[derive(Debug, Clone)]
 pub struct Remote {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub module: Box<Expr>,
     pub function: Box<Expr>,
 }
@@ -528,6 +609,7 @@ impl PartialEq for Remote {
 #[derive(Debug, Clone)]
 pub struct BinaryExpr {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub lhs: Box<Expr>,
     pub op: BinaryOp,
     pub rhs: Box<Expr>,
@@ -541,6 +623,7 @@ impl PartialEq for BinaryExpr {
 #[derive(Debug, Clone)]
 pub struct UnaryExpr {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub op: UnaryOp,
     pub operand: Box<Expr>,
 }
@@ -553,6 +636,7 @@ impl PartialEq for UnaryExpr {
 #[derive(Debug, Clone)]
 pub struct Match {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub pattern: Box<Expr>,
     pub expr: Box<Expr>,
 }
@@ -565,6 +649,7 @@ impl PartialEq for Match {
 #[derive(Debug, Clone)]
 pub struct If {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub clauses: Vec<IfClause>,
 }
 impl PartialEq for If {
@@ -577,6 +662,7 @@ impl PartialEq for If {
 #[derive(Debug, Clone)]
 pub struct IfClause {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub guards: Vec<Guard>,
     pub body: Vec<Expr>,
 }
@@ -589,6 +675,7 @@ impl PartialEq for IfClause {
 #[derive(Debug, Clone)]
 pub struct Catch {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub expr: Box<Expr>,
 }
 impl PartialEq for Catch {
@@ -600,6 +687,7 @@ impl PartialEq for Catch {
 #[derive(Debug, Clone)]
 pub struct Case {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub expr: Box<Expr>,
     pub clauses: Vec<Clause>,
 }
@@ -612,6 +700,7 @@ impl PartialEq for Case {
 #[derive(Debug, Clone)]
 pub struct Receive {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub clauses: Option<Vec<Clause>>,
     pub after: Option<After>,
 }
@@ -624,6 +713,7 @@ impl PartialEq for Receive {
 #[derive(Debug, Clone)]
 pub struct Try {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub exprs: Vec<Expr>,
     pub clauses: Option<Vec<Clause>>,
     pub catch_clauses: Option<Vec<TryClause>>,
@@ -642,6 +732,7 @@ impl PartialEq for Try {
 #[derive(Debug, Clone)]
 pub struct TryClause {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub kind: Name,
     pub error: Expr,
     pub guard: Option<Vec<Guard>>,
@@ -662,6 +753,7 @@ impl PartialEq for TryClause {
 #[derive(Debug, Clone)]
 pub struct After {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub timeout: Box<Expr>,
     pub body: Vec<Expr>,
 }
@@ -675,6 +767,7 @@ impl PartialEq for After {
 #[derive(Debug, Clone)]
 pub struct Clause {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub pattern: Expr,
     pub guard: Option<Vec<Guard>>,
     pub body: Vec<Expr>,

@@ -173,7 +173,7 @@ impl Function {
         for block in self.block_graph().dfs_iter() {
             let visible = &live_variables[&block];
             for read in self.block_reads(block) {
-                self.value_walk_nested_values(*read, &mut |val| {
+                self.value_walk_nested_values::<_, ()>(*read, &mut |val| {
                     if self.value_argument(val).is_some()
                         && !visible.contains(val, &pool)
                     {
@@ -182,6 +182,7 @@ impl Function {
                             block,
                         });
                     }
+                    Ok(())
                 });
             }
         }

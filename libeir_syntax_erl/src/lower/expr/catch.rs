@@ -10,8 +10,9 @@ use libeir_ir::constant::NilTerm;
 
 use libeir_intern::Symbol;
 
+use crate::parser::ast::{ NodeId };
 use crate::parser::ast::{ Try, Catch };
-use crate::parser::ast::{ Expr, Literal };
+use crate::parser::ast::{ Expr, Var, Literal };
 use crate::parser::ast::{ Name };
 
 use crate::lower::LowerCtx;
@@ -45,9 +46,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
             let typ_val = b.value(Symbol::intern("error"));
             let try_clause_val = b.value(Symbol::intern("try_clause"));
             let err_val = b.prim_tuple(&[try_clause_val, body_ret]);
-            // TODO trace
-            let trace_val = b.value(NilTerm);
-            ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
+            ctx.exc_stack.make_error_jump(b, block, typ_val, err_val);
         }
 
         let mut case_b = b.op_case_build();
@@ -56,7 +55,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
 
         for clause in clauses {
             match lower_clause(ctx, b, &mut block, [&clause.pattern].iter().map(|i| *i), clause.guard.as_ref()) {
-                Some(lowered) => {
+                Ok(lowered) => {
                     // Add to case
                     let body_val = b.value(lowered.body);
                     case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
@@ -72,7 +71,9 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                     // Pop scope pushed in lower_clause
                     ctx.scope.pop(lowered.scope_token);
                 }
-                None => continue,
+                Err(lowered) => {
+                    ctx.scope.pop(lowered.scope_token);
+                },
             }
             assert!(ctx.exc_stack.len() == entry_exc_height)
         }
@@ -101,12 +102,12 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
             // Convert the kind expression into a pattern expression so
             // that we can use existing pattern matching infrastructure.
             let kind_expr = match clause.kind {
-                Name::Atom(atom) => Expr::Literal(Literal::Atom(atom)),
-                Name::Var(var) => Expr::Var(var),
+                Name::Atom(atom) => Expr::Literal(Literal::Atom(NodeId(0), atom)),
+                Name::Var(var) => Expr::Var(Var(NodeId(0), var)),
             };
 
             match lower_clause(ctx, b, &mut block, [&kind_expr, &clause.error].iter().map(|i| *i), clause.guard.as_ref()) {
-                Some(lowered) => {
+                Ok(lowered) => {
                     // Add to case
                     let body_val = b.value(lowered.body);
                     case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
@@ -125,7 +126,9 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                     // Pop scope pushed in lower_clause
                     ctx.scope.pop(lowered.scope_token);
                 }
-                None => continue,
+                Err(lowered) => {
+                    ctx.scope.pop(lowered.scope_token);
+                },
             }
 
             assert!(ctx.exc_stack.len() == entry_exc_height)
@@ -152,7 +155,8 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
         let ret_exc_block = b.block_insert();
         let ret_exc_block_val = b.value(ret_exc_block);
         b.op_call(catch_no_match_block, after_lambda, &[ret_exc_block_val]);
-        ctx.exc_stack.make_error_jump(b, ret_exc_block, exc_type, exc_error, exc_trace);
+        ctx.exc_stack.make_error_jump_trace(
+            b, ret_exc_block, exc_type, exc_error, exc_trace);
 
         // Return regular
         let ret_regular_block = b.block_insert();
@@ -162,7 +166,8 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
 
         (ret_block, ret_val)
     } else {
-        ctx.exc_stack.make_error_jump(b, catch_no_match_block, exc_type, exc_error, exc_trace);
+        ctx.exc_stack.make_error_jump_trace(
+            b, catch_no_match_block, exc_type, exc_error, exc_trace);
         (join_block, join_val)
     }
 }

@@ -116,7 +116,8 @@ fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
     let specialize_variable_cfg_var = matrix.get_var(specialize_variable);
 
     // Add new CFG node for current
-    let cfg_node = ctx.cfg.add_child(parent, edge, specialize_variable_cfg_var);
+    let cfg_node = ctx.cfg.add_child(parent, edge, specialize_variable_cfg_var,
+                                     matrix.binds_for_head().clone());
 
     // Find what pattern types we have as children, so that we can
     // specialize and branch to them in the CFG

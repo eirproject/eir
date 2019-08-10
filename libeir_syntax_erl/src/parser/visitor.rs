@@ -3,8 +3,9 @@
 /// Converts AST to a pretty printed source string.
 pub mod pretty_print;
 
-use std::collections::HashSet;
+use std::collections::{ HashMap, HashSet };
 
+use crate::lexer::DelayedSubstitution;
 use super::ast::*;
 
 pub use self::pretty_print::PrettyPrintVisitor;
@@ -21,13 +22,17 @@ macro_rules! make_visitor {
                 self.walk_module(module);
             }
 
-            fn visit_imports(&mut self, _imports: &'ast $($mutability)* HashSet<ResolvedFunctionName>) {}
-            fn visit_exports(&mut self, _exports: &'ast $($mutability)* HashSet<ResolvedFunctionName>) {}
-            fn visit_exported_types(&mut self, _exported_types: &'ast $($mutability)* HashSet<ResolvedFunctionName>) {}
+            fn visit_imports(&mut self, _imports: &'ast $($mutability)* HashMap<LocalFunctionName, ResolvedFunctionName>) {}
+            fn visit_exports(&mut self, _exports: &'ast $($mutability)* HashSet<LocalFunctionName>) {}
+            fn visit_exported_types(&mut self, _exported_types: &'ast $($mutability)* HashSet<LocalFunctionName>) {}
             fn visit_behaviours(&mut self, _behaviours: &'ast $($mutability)* HashSet<Ident>) {}
 
             fn visit_type_def(&mut self, type_def: &'ast $($mutability)* TypeDef) {
                 self.walk_type_def(type_def);
+            }
+
+            fn visit_defined_record(&mut self, record: &'ast $($mutability)* DefinedRecord) {
+                self.walk_record(& $($mutability)* record.record);
             }
 
             fn visit_record(&mut self, record: &'ast $($mutability)* Record) {
@@ -80,9 +85,10 @@ macro_rules! make_visitor {
 
             fn visit_expression(&mut self, expr: &'ast $($mutability)* Expr) {
                 match expr {
-                    &$($mutability)* Expr::Var(ref $($mutability)* expr) => self.visit_identifier(expr),
+                    &$($mutability)* Expr::Var(ref $($mutability)* expr) => self.visit_var(expr),
                     &$($mutability)* Expr::Literal(ref $($mutability)* expr) => self.visit_literal(expr),
                     &$($mutability)* Expr::FunctionName(ref $($mutability)* expr) => self.visit_function_name(expr),
+                    &$($mutability)* Expr::DelayedSubstitution(_, _, ref $($mutability)* subs) => self.visit_delayed_substitution(subs),
                     &$($mutability)* Expr::Nil(ref $($mutability)* expr) => self.visit_nil(expr),
                     &$($mutability)* Expr::Cons(ref $($mutability)* expr) => self.visit_cons(expr),
                     &$($mutability)* Expr::Tuple(ref $($mutability)* expr) => self.visit_tuple(expr),
@@ -120,6 +126,8 @@ macro_rules! make_visitor {
             }
 
             fn visit_identifier(&mut self, _identifier: &'ast $($mutability)* Ident) {}
+
+            fn visit_var(&mut self, _identifier: &'ast $($mutability)* Var) {}
 
             fn visit_symbol(&mut self, _symbol: &'ast $($mutability)* Symbol) {}
 
@@ -271,6 +279,8 @@ macro_rules! make_visitor {
                 self.walk_named_lambda(expr);
             }
 
+            fn visit_delayed_substitution(&mut self, expr: &'ast $($mutability)* DelayedSubstitution) {}
+
             // The `walk` functions are not meant to be overridden.
 
             fn walk_module(&mut self, module: &'ast $($mutability)* Module) {
@@ -291,7 +301,7 @@ macro_rules! make_visitor {
                 }
 
                 for (_, record) in &$($mutability)* module.records {
-                    self.visit_record(record);
+                    self.visit_defined_record(record);
                 }
 
                 for (_, attribute) in &$($mutability)* module.attributes {
@@ -314,7 +324,7 @@ macro_rules! make_visitor {
             }
 
             fn walk_record_field(&mut self, field: &'ast $($mutability)* RecordField) {
-                self.visit_name(&$($mutability)* field.name);
+                self.visit_identifier(&$($mutability)* field.name);
                 if let Some(ref $($mutability)* expr) = field.value {
                     self.visit_expression(expr);
                 }

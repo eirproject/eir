@@ -1,10 +1,10 @@
 #![allow(clippy::write_with_newline)]
 
-use std::io::Write;
+use std::io::{ Write, Error as IoError };
 
 use crate::{ Module, Function, FunctionIdent };
 use crate::{ Block, Value };
-use crate::OpKind;
+use crate::{ OpKind, PrimOpKind };
 use crate::ValueKind;
 use crate::pattern::{ PatternContainer, PatternNode, PatternNodeKind };
 
@@ -193,6 +193,9 @@ impl ToEirText for Module {
 
 impl ToEirText for Function {
     fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut dyn Write) -> std::io::Result<()> {
+
+        use petgraph::visit::IntoNeighbors;
+
         ctx.annotate_function(self);
         let ident = self.ident();
 
@@ -244,8 +247,28 @@ impl ToEirTextFun for Block {
         format_value_list(fun.block_args(*self), fun, out)?;
         write!(out, "):\n")?;
 
-        let args = fun.block_reads(*self);
+        fun.block_walk_nested_values::<_, IoError>(*self, &mut |value| {
+            match fun.value_kind(value) {
+                ValueKind::PrimOp(prim) => {
+                    write_indent(out, indent+1)?;
+                    write!(out, "%{} = ", value.index())?;
 
+                    match fun.primop_kind(prim) {
+                        kind => write!(out, "{:?}", kind)?,
+                    }
+
+                    write!(out, "(")?;
+                    format_value_list(fun.primop_reads(prim), fun, out)?;
+                    write!(out, ")")?;
+
+                    write!(out, "\n")?;
+                }
+                _ => (),
+            }
+            Ok(())
+        })?;
+
+        let args = fun.block_reads(*self);
         if let Some(kind) = fun.block_kind(*self) {
             write_indent(out, indent+1)?;
             match kind {

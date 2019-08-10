@@ -1,0 +1,129 @@
+49c49
+< -include_lib("syntax_tools/include/merl.hrl").
+---
+> %-include_lib("syntax_tools/include/merl.hrl").
+74c74,75
+<        bad_literals,good_literals,constant_propagation,parse_xml,
+---
+> %       bad_literals,good_literals,constant_propagation,parse_xml,
+>        good_literals,constant_propagation,parse_xml,
+1399,1415c1400,1416
+<     Mod = list_to_atom(?MODULE_STRING ++ "_" ++
+< 			   atom_to_list(?FUNCTION_NAME)),
+<     S = [signed_lit_match(V, Sz) || V <- lists:seq(-8, 8),
+< 				    Sz <- [0,1,2,3]] ++
+< 	[unsigned_lit_match(V, Sz) || V <- lists:seq(-2, 8),
+< 				      Sz <- [0,1,2]] ++
+< 	[unicode_match(V) ||
+< 	    V <- [-100,-1,0,1,2|lists:seq(16#10FFFC, 16#110004)]],
+<     Code = ?Q(["-module('@Mod@').\n"
+< 	       "-export([f/0]).\n"
+< 	       "f() ->\n"
+< 	       "_@S,\n"
+< 	       "ok.\n"]),
+<     merl:print(Code),
+<     Opts = test_lib:opt_opts(?MODULE),
+<     {ok,_} = merl:compile_and_load(Code, Opts),
+<     Mod:f(),
+---
+> %    Mod = list_to_atom(?MODULE_STRING ++ "_" ++
+> %			   atom_to_list(?FUNCTION_NAME)),
+> %    S = [signed_lit_match(V, Sz) || V <- lists:seq(-8, 8),
+> %				    Sz <- [0,1,2,3]] ++
+> %	[unsigned_lit_match(V, Sz) || V <- lists:seq(-2, 8),
+> %				      Sz <- [0,1,2]] ++
+> %	[unicode_match(V) ||
+> %	    V <- [-100,-1,0,1,2|lists:seq(16#10FFFC, 16#110004)]],
+> %    Code = ?Q(["-module('@Mod@').\n"
+> %	       "-export([f/0]).\n"
+> %	       "f() ->\n"
+> %	       "_@S,\n"
+> %	       "ok.\n"]),
+> %    merl:print(Code),
+> %    Opts = test_lib:opt_opts(?MODULE),
+> %    {ok,_} = merl:compile_and_load(Code, Opts),
+> %    Mod:f(),
+1433,1473c1434,1474
+< signed_lit_match(V, Sz) ->
+<     case <<V:Sz>> of
+< 	<<V:Sz/signed>> ->
+< 	    ?Q("<<_@V@:_@Sz@/signed>> = <<_@V@:_@Sz@>>");
+< 	_ ->
+< 	    ?Q(["case <<_@V@:_@Sz@>> of\n",
+< 		" <<_@V@:_@Sz@/signed>> ->\n",
+< 		"  ct:fail(should_not_match);\n",
+< 		" _ ->\n",
+< 		"  ok\n",
+< 		"end\n"])
+<     end.
+< 
+< unsigned_lit_match(V, Sz) ->
+<     case <<V:Sz>> of
+< 	<<V:Sz/unsigned>> ->
+< 	    ?Q("<<_@V@:_@Sz@>> = <<_@V@:_@Sz@>>");
+< 	_ ->
+< 	    ?Q(["case <<_@V@:_@Sz@>> of\n",
+< 		" <<_@V@:_@Sz@/unsigned>> ->\n",
+< 		"  ct:fail(should_not_match);\n",
+< 		" _ ->\n",
+< 		"  ok\n",
+< 		"end\n"])
+<     end.
+< 
+< unicode_match(V) ->
+<     try <<V/utf8>> of
+< 	<<V/utf8>> ->
+< 	    ?Q(["<<_@V@/utf8>> = <<_@V@/utf8>>,\n",
+< 		"<<_@V@/utf16>> = <<_@V@/utf16>>,\n",
+< 		"<<_@V@/utf32>> = <<_@V@/utf32>>\n"])
+<     catch
+< 	error:badarg ->
+< 	    ?Q(["case <<_@V@:32>> of\n",
+< 		" <<_@V@/utf32>> ->\n",
+< 		"  ct:fail(should_not_match);\n",
+< 		" _ ->\n",
+< 		"  ok\n",
+< 		"end\n"])
+<     end.
+---
+> %signed_lit_match(V, Sz) ->
+> %    case <<V:Sz>> of
+> %	<<V:Sz/signed>> ->
+> %	    ?Q("<<_@V@:_@Sz@/signed>> = <<_@V@:_@Sz@>>");
+> %	_ ->
+> %	    ?Q(["case <<_@V@:_@Sz@>> of\n",
+> %		" <<_@V@:_@Sz@/signed>> ->\n",
+> %		"  ct:fail(should_not_match);\n",
+> %		" _ ->\n",
+> %		"  ok\n",
+> %		"end\n"])
+> %    end.
+> 
+> %unsigned_lit_match(V, Sz) ->
+> %    case <<V:Sz>> of
+> %	<<V:Sz/unsigned>> ->
+> %	    ?Q("<<_@V@:_@Sz@>> = <<_@V@:_@Sz@>>");
+> %	_ ->
+> %	    ?Q(["case <<_@V@:_@Sz@>> of\n",
+> %		" <<_@V@:_@Sz@/unsigned>> ->\n",
+> %		"  ct:fail(should_not_match);\n",
+> %		" _ ->\n",
+> %		"  ok\n",
+> %		"end\n"])
+> %    end.
+> 
+> %unicode_match(V) ->
+> %    try <<V/utf8>> of
+> %	<<V/utf8>> ->
+> %	    ?Q(["<<_@V@/utf8>> = <<_@V@/utf8>>,\n",
+> %		"<<_@V@/utf16>> = <<_@V@/utf16>>,\n",
+> %		"<<_@V@/utf32>> = <<_@V@/utf32>>\n"])
+> %    catch
+> %	error:badarg ->
+> %	    ?Q(["case <<_@V@:32>> of\n",
+> %		" <<_@V@/utf32>> ->\n",
+> %		"  ct:fail(should_not_match);\n",
+> %		" _ ->\n",
+> %		"  ok\n",
+> %		"end\n"])
+> %    end.

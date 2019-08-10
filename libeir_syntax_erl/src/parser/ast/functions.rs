@@ -6,13 +6,49 @@ use libeir_diagnostics::{ByteSpan, Diagnostic, Label};
 
 use crate::preprocessor::PreprocessorError;
 
-use super::{Expr, Ident, Name, Arity, TypeSpec};
+use super::{Expr, NodeIdGenerator, NodeId, Ident, Name, Arity, TypeSpec};
 use super::{ParseError, ParserError, TryParseResult};
+
+
+#[derive(Debug, Copy, Clone)]
+pub struct LocalFunctionName {
+    pub span: ByteSpan,
+    pub function: Ident,
+    pub arity: usize,
+}
+impl PartialEq for LocalFunctionName {
+    fn eq(&self, other: &Self) -> bool {
+        self.function == other.function && self.arity == other.arity
+    }
+}
+impl Eq for LocalFunctionName {}
+impl Hash for LocalFunctionName {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.function.hash(state);
+        self.arity.hash(state);
+    }
+}
+impl PartialOrd for LocalFunctionName {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let (xf, xa) = (self.function, self.arity);
+        let (yf, ya) = (other.function, other.arity);
+        match xf.partial_cmp(&yf) {
+            None | Some(Ordering::Equal) => xa.partial_cmp(&ya),
+            Some(order) => Some(order),
+        }
+    }
+}
+impl Ord for LocalFunctionName {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
 
 /// Represents a fully-resolved function name, with module/function/arity explicit
 #[derive(Debug, Clone)]
 pub struct ResolvedFunctionName {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub module: Ident,
     pub function: Ident,
     pub arity: usize,
@@ -49,11 +85,22 @@ impl Ord for ResolvedFunctionName {
     }
 }
 
+impl ResolvedFunctionName {
+    pub fn to_local(&self) -> LocalFunctionName {
+        LocalFunctionName {
+            span: self.span,
+            function: self.function,
+            arity: self.arity,
+        }
+    }
+}
+
 /// Represents a partially-resolved function name, not yet associated with a module
 /// This is typically used to express local captures, e.g. `fun do_stuff/0`
 #[derive(Debug, Clone)]
 pub struct PartiallyResolvedFunctionName {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub function: Ident,
     pub arity: usize,
 }
@@ -61,6 +108,7 @@ impl PartiallyResolvedFunctionName {
     pub fn resolve(&self, module: Ident) -> ResolvedFunctionName {
         ResolvedFunctionName {
             span: self.span.clone(),
+            id: self.id,
             module,
             function: self.function.clone(),
             arity: self.arity,
@@ -90,12 +138,23 @@ impl PartialOrd for PartiallyResolvedFunctionName {
     }
 }
 
+impl PartiallyResolvedFunctionName {
+    pub fn to_local(&self) -> LocalFunctionName {
+        LocalFunctionName {
+            span: self.span,
+            function: self.function,
+            arity: self.arity,
+        }
+    }
+}
+
 /// Represents a function name which contains parts which are not yet concrete,
 /// i.e. they are expressions which need to be evaluated to know precisely which
 /// module or function is referenced
 #[derive(Debug, Clone)]
 pub struct UnresolvedFunctionName {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub module: Option<Name>,
     pub function: Name,
     pub arity: Arity,
@@ -141,13 +200,21 @@ impl FunctionName {
             &FunctionName::Unresolved(UnresolvedFunctionName { ref span, .. }) => span.clone(),
         }
     }
+    pub fn id(&self) -> NodeId {
+        match self {
+            FunctionName::Resolved(fun) => fun.id,
+            FunctionName::PartiallyResolved(fun) => fun.id,
+            FunctionName::Unresolved(fun) => fun.id,
+        }
+    }
 
-    pub fn detect(span: ByteSpan, module: Option<Name>, function: Name, arity: Arity) -> Self {
+    pub fn detect(span: ByteSpan, nid: &mut NodeIdGenerator, module: Option<Name>, function: Name, arity: Arity) -> Self {
         if module.is_none() {
             return match (function, arity) {
                 (Name::Atom(f), Arity::Int(a)) => {
                     FunctionName::PartiallyResolved(PartiallyResolvedFunctionName {
                         span,
+                        id: nid.next(),
                         function: f,
                         arity: a,
                     })
@@ -155,6 +222,7 @@ impl FunctionName {
                 _ => {
                     FunctionName::Unresolved(UnresolvedFunctionName {
                         span,
+                        id: nid.next(),
                         module: None,
                         function,
                         arity,
@@ -166,6 +234,7 @@ impl FunctionName {
         if let (Some(Name::Atom(m)), Name::Atom(f), Arity::Int(a)) = (module, function, arity) {
             return FunctionName::Resolved(ResolvedFunctionName {
                 span,
+                id: nid.next(),
                 module: m,
                 function: f,
                 arity: a,
@@ -174,13 +243,14 @@ impl FunctionName {
 
         FunctionName::Unresolved(UnresolvedFunctionName {
             span,
+            id: nid.next(),
             module,
             function,
             arity,
         })
     }
 
-    pub fn from_clause(clause: &FunctionClause) -> FunctionName {
+    pub fn from_clause(nid: &mut NodeIdGenerator, clause: &FunctionClause) -> FunctionName {
         match clause {
             &FunctionClause {
                 name: Some(ref name),
@@ -189,6 +259,7 @@ impl FunctionName {
                 ..
             } => FunctionName::PartiallyResolved(PartiallyResolvedFunctionName {
                 span: span.clone(),
+                id: nid.next(),
                 function: name.clone(),
                 arity: params.len(),
             }),
@@ -228,6 +299,7 @@ impl fmt::Display for FunctionName {
 #[derive(Debug, Clone)]
 pub struct NamedFunction {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub name: Ident,
     pub arity: usize,
     pub clauses: Vec<FunctionClause>,
@@ -245,6 +317,7 @@ impl NamedFunction {
     pub fn new(
         errs: &mut Vec<ParseError>,
         span: ByteSpan,
+        nid: &mut NodeIdGenerator,
         clauses: Vec<FunctionClause>,
     ) -> TryParseResult<Self> {
         debug_assert!(clauses.len() > 0);
@@ -320,6 +393,7 @@ impl NamedFunction {
 
         Ok(NamedFunction {
             span,
+            id: nid.next(),
             name: name.clone(),
             arity,
             clauses,
@@ -331,6 +405,7 @@ impl NamedFunction {
 #[derive(Debug, Clone)]
 pub struct Lambda {
     pub span: ByteSpan,
+    pub id: NodeId,
     pub arity: usize,
     pub clauses: Vec<FunctionClause>,
 }
@@ -343,6 +418,7 @@ impl Lambda {
     pub fn new(
         errs: &mut Vec<ParseError>,
         span: ByteSpan,
+        nid: &mut NodeIdGenerator,
         clauses: Vec<FunctionClause>,
     ) -> TryParseResult<Self> {
         debug_assert!(clauses.len() > 0);
@@ -392,6 +468,7 @@ impl Lambda {
 
         Ok(Lambda {
             span,
+            id: nid.next(),
             arity,
             clauses,
         })
@@ -410,19 +487,26 @@ impl Function {
             &Function::Unnamed(Lambda { ref span, .. }) => span.clone(),
         }
     }
+    pub fn id(&self) -> NodeId {
+        match self {
+            Function::Named(fun) => fun.id,
+            Function::Unnamed(fun) => fun.id,
+        }
+    }
 
     pub fn new(
         errs: &mut Vec<ParseError>,
         span: ByteSpan,
+        nid: &mut NodeIdGenerator,
         clauses: Vec<FunctionClause>,
     ) -> TryParseResult<Self> {
         debug_assert!(clauses.len() > 0);
         let (head, _rest) = clauses.split_first().unwrap();
 
         if head.name.is_some() {
-            Ok(Function::Named(NamedFunction::new(errs, span, clauses)?))
+            Ok(Function::Named(NamedFunction::new(errs, span, nid, clauses)?))
         } else {
-            Ok(Function::Unnamed(Lambda::new(errs, span, clauses)?))
+            Ok(Function::Unnamed(Lambda::new(errs, span, nid, clauses)?))
         }
     }
 }

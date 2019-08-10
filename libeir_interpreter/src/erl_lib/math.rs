@@ -7,6 +7,7 @@ use crate::module::{ NativeModule, NativeReturn };
 
 use libeir_intern::Symbol;
 
+use rug::ops::Pow;
 use num_traits::{ ToPrimitive };
 
 fn pow(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
@@ -17,7 +18,8 @@ fn pow(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRe
 
     let ret = match (a1, a2) {
         (Term::Integer(ref i1), Term::Integer(ref i2)) =>
-            Term::Integer(num::pow::pow(i1.clone(), i2.to_usize().unwrap())),
+            Term::Integer(i1.clone().pow(i2.to_u32().unwrap())),
+            //Term::Integer(num::pow::pow(i1.clone(), i2.to_usize().unwrap())),
         _ => unimplemented!(),
     };
 

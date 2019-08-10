@@ -58,10 +58,11 @@ fn dataflow_pass(
         // Add the reads for the block OP to the current set
         for read in fun.block_reads(block) {
             // Only insert if it actually is a variable, not a block or constant
-            fun.value_walk_nested_values(*read, &mut |v| {
+            fun.value_walk_nested_values::<_, ()>(*read, &mut |v| {
                 if fun.value_argument(v).is_some() {
                     set.insert(v, pool);
                 }
+                Ok(())
             });
         }
 

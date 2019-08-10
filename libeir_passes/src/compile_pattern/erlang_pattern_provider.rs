@@ -1,35 +1,38 @@
 use cranelift_entity::{ PrimaryMap, EntityList, ListPool, entity_impl };
 use ::pattern_compiler::{ PatternProvider, ExpandedClauseNodes };
 
-use std::collections::{ HashMap, HashSet };
-use std::hash::{ Hash, Hasher };
+use std::collections::{ HashMap, BTreeMap };
 
-use libeir_ir::{ Function, FunctionBuilder, Value, ValueKind };
-use libeir_ir::pattern::{ PatternContainer, PatternClause, PatternNode, PatternNodeKind, PatternValue };
+use libeir_ir::{ Function, FunctionBuilder, Value, ValueKind, PrimOp };
+use libeir_ir::BinaryEntrySpecifier;
+use libeir_ir::pattern::{ PatternClause, PatternNode, PatternNodeKind, PatternValue };
 use libeir_ir::constant::{ Const };
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+use super::ValueBind;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum ValueOrConst {
     Value(Value),
-    /// ConstValue is used for hashing and equality, Const is used for span
     Const(Const),
+    PrimOp(PrimOp),
+    Node(PatternNode),
 }
 impl ValueOrConst {
-    pub fn from_value(val: Value, b: &FunctionBuilder) -> Self {
-        match b.fun().value_kind(val) {
-            ValueKind::Const(cons) => {
-                ValueOrConst::Const(cons)
+    fn from_value(val_bind: ValueBind, b: &FunctionBuilder) -> Self {
+        match val_bind {
+            ValueBind::Value(val) => match b.fun().value_kind(val) {
+                ValueKind::Const(cons) => {
+                    ValueOrConst::Const(cons)
+                }
+                ValueKind::Argument(_, _) => {
+                    ValueOrConst::Value(val)
+                }
+                ValueKind::PrimOp(prim) => {
+                    ValueOrConst::PrimOp(prim)
+                }
+                kind => panic!("{:?}", kind),
             }
-            ValueKind::Argument(_, _) => {
-                ValueOrConst::Value(val)
-            }
-            kind => panic!("{:?}", kind),
-        }
-    }
-    pub fn to_value(self, b: &mut FunctionBuilder) -> Value {
-        match self {
-            ValueOrConst::Value(val) => val,
-            ValueOrConst::Const(cons) => b.value(cons),
+            ValueBind::Node(node) => ValueOrConst::Node(node),
         }
     }
 }
@@ -39,9 +42,13 @@ pub enum NodeKind {
     /// Matched on equality to value
     Value(ValueOrConst),
 
-    /// Binary operations are matched by an interned value.
-    /// When expanded, it expands to the next element in the matching operation.
-    Binary(usize, usize),
+    /// Binary operations take an optional size value.
+    /// When expanded, it expands to the value node, and the tail of the
+    /// binary.
+    Binary {
+        specifier: BinaryEntrySpecifier,
+        size: Option<ValueOrConst>,
+    },
     /// Tuple is matched its length
     TupleSize(usize),
     /// A list cell is a singleton
@@ -70,7 +77,7 @@ impl NodeKind {
             NodeKind::MapItem(_) => 1,
             NodeKind::ValueList => panic!(),
             NodeKind::Wildcard => 0,
-            _ => unimplemented!(),
+            NodeKind::Binary { .. } => 2,
         }
     }
 
@@ -97,6 +104,8 @@ pub struct ErlangPatternProvider<'a> {
     wildcard: Node,
 
     node_pool: ListPool<Node>,
+
+    node_map: BTreeMap<PatternNode, Node>,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -131,15 +140,19 @@ impl<'a> ErlangPatternProvider<'a> {
             wildcard,
 
             node_pool: ListPool::new(),
+
+            node_map: BTreeMap::new(),
         }
     }
 
-    pub fn add_child(&mut self, node: Node, kind: NodeKind) -> Node {
+    pub fn add_child(&mut self, node: Node, kind: NodeKind,
+                     pat_node: PatternNode) -> Node {
         let next = self.nodes.push(NodeData {
             kind: kind,
             children: EntityList::new(),
         });
         self.nodes[node].children.push(next, &mut self.node_pool);
+        self.node_map.insert(pat_node, next);
         next
     }
 
@@ -154,6 +167,10 @@ impl<'a> ErlangPatternProvider<'a> {
 
     fn wildcard(&self) -> Node {
         self.wildcard
+    }
+
+    pub fn pattern_node_to_cfg_node(&self, pat: PatternNode) -> Node {
+        *self.node_map.get(&pat).unwrap()
     }
 
 }
@@ -176,7 +193,14 @@ impl<'a> PatternProvider for ErlangPatternProvider<'a> {
 
     fn kind_includes(&self, kind: NodeKind, key: Node) -> bool {
         let node_kind = self.nodes[key].kind;
-        node_kind == kind
+        if node_kind == kind { return true; }
+
+        //match (kind, node_kind) {
+        //    (NodeKind::Value(l), NodeKind::Value(r)) =>
+
+        //    _ => false,
+        //}
+        false
     }
 
     fn get_kind(&self, key: Node) -> NodeKind {
@@ -189,7 +213,6 @@ impl<'a> PatternProvider for ErlangPatternProvider<'a> {
 
     fn expand_clause_nodes(&mut self, clause_nodes: Vec<Node>, kind: NodeKind)
                            -> ExpandedClauseNodes<Var, Node> {
-        //println!("EXPAND: {:?}", clause_nodes);
 
         if clause_nodes.len() == 0 {
             return ExpandedClauseNodes {
@@ -198,8 +221,6 @@ impl<'a> PatternProvider for ErlangPatternProvider<'a> {
                 nodes: vec![],
             };
         }
-
-        //println!("ClauseNodes: {:?}", clause_nodes);
 
         for node in clause_nodes.iter() {
             let node_kind = self.nodes[*node].kind;
@@ -243,38 +264,54 @@ impl<'a> PatternProvider for ErlangPatternProvider<'a> {
                 // Map is a special case in expansion.
                 // We want to expand each value into a separate column.
 
-                panic!();
-
                 let mut values_map = HashMap::new();
                 for node in &clause_nodes {
                     let sub = &self.nodes[*node];
                     for child_id in sub.children.as_slice(&self.node_pool) {
                         let child = &self.nodes[*child_id];
                         if let NodeKind::MapItem(idx) = child.kind {
-                            values_map.insert((*node, idx), *child_id);
+                            let key = (*node, idx);
+                            if !values_map.contains_key(&key) {
+                                values_map.insert(key, Vec::new());
+                            }
+                            values_map.get_mut(&key).unwrap().push(*child_id);
                         } else {
                             unreachable!();
                         }
                     }
                 }
 
-                let mut values: HashSet<_> = values_map.iter()
-                    .map(|v| (v.0).1).collect();
+                let mut values = BTreeMap::new();
+                for ((_node, key_value), val) in values_map.iter() {
+                    if let Some(max) = values.get_mut(key_value) {
+                        let n_max = val.len();
+                        if n_max > *max {
+                            *max = n_max;
+                        }
+                    } else {
+                        values.insert(*key_value, val.len());
+                    }
+                }
 
-                let map_var = self.vars.push(());
-
+                let value_map = self.vars.push(());
                 let mut exp = ExpandedClauseNodes {
                     clauses: clause_nodes.len(),
-                    variables: (0..values.len()).map(|_| map_var).collect(),
+                    variables: values.values()
+                        .flat_map(|num| 0..*num)
+                        .map(|_| value_map)
+                        .collect(),
                     nodes: vec![],
                 };
 
                 for node in clause_nodes.iter() {
-                    for value in values.iter() {
-                        if let Some(child_id) = values_map.get(&(*node, *value)) {
-                            exp.nodes.push(*child_id);
-                        } else {
-                            exp.nodes.push(self.wildcard());
+                    for (value, num) in values.iter() {
+                        let vals = values_map.get(&(*node, *value));
+                        for n in 0..*num {
+                            if let Some(child_id) = vals.and_then(|v| v.get(n)) {
+                                exp.nodes.push(*child_id);
+                            } else {
+                                exp.nodes.push(self.wildcard());
+                            }
                         }
                     }
                 }
@@ -314,93 +351,122 @@ impl<'a> PatternProvider for ErlangPatternProvider<'a> {
 
 fn pattern_node_to_provider(
     b: &mut FunctionBuilder,
-    node_map: &mut HashMap<PatternNode, Node>,
-    value_map: &HashMap<PatternValue, Value>,
+    //node_map: &mut HashMap<PatternNode, Node>,
+    value_map: &HashMap<PatternValue, ValueBind>,
     provider: &mut ErlangPatternProvider,
     node: PatternNode,
     parent: Node,
     n: usize,
 ) -> Node
 {
+
     // Cheap and safe since we don't modify any patterns
     let kind = b.pat().node_kind(node).clone();
 
-    let res_node = match &kind {
+    match &kind {
         PatternNodeKind::Wildcard => {
-            provider.add_child(parent, NodeKind::Wildcard)
+            provider.add_child(parent, NodeKind::Wildcard, node)
         }
-        //PatternNodeKind::Assign(assign, inner) => {
-        //    let child = pattern_node_to_provider(provider, collector, inner, parent);
-        //    if !collector.node_bindings.contains_key(&child) {
-        //        collector.node_bindings.insert(child, vec![]);
-        //    }
-        //    collector.node_bindings.get_mut(&child).unwrap().push(*assign);
-        //    child
-        //}
-        //PatternNodeKind::Value(atomic_term) => {
-        //    let num = collector.atomic_terms.len();
-        //    collector.atomic_terms.push(atomic_term.clone());
-        //    provider.add_child(parent, NodeKind::Atomic(num))
-        //}
         PatternNodeKind::Tuple(entries) => {
-            let tuple = provider.add_child(parent, NodeKind::TupleSize(entries.len(&b.pat().node_pool)));
+            let tuple = provider.add_child(
+                parent,
+                NodeKind::TupleSize(entries.len(&b.pat().node_pool)),
+                node,
+            );
             for entry_num in 0..(entries.len(&b.pat().node_pool)) {
                 let entry = entries.get(entry_num, &b.pat().node_pool).unwrap();
-                pattern_node_to_provider(b, node_map, value_map, provider, entry, tuple, n+1);
+                pattern_node_to_provider(b, value_map,
+                                         provider, entry, tuple, n+1);
             }
             tuple
         }
         PatternNodeKind::List{ head, tail } => {
-            let node = provider.add_child(parent, NodeKind::ListCell);
-            pattern_node_to_provider(b, node_map, value_map, provider, *head, node, n+1);
-            pattern_node_to_provider(b, node_map, value_map, provider, *tail, node, n+1);
+            let node = provider.add_child(parent, NodeKind::ListCell, node);
+            pattern_node_to_provider(b, value_map,
+                                     provider, *head, node, n+1);
+            pattern_node_to_provider(b, value_map,
+                                     provider, *tail, node, n+1);
             node
         }
         PatternNodeKind::Map { keys, values } => {
-            let map_parent = provider.add_child(parent, NodeKind::Map);
+            let map_parent = provider.add_child(parent, NodeKind::Map, node);
 
             let len = keys.len(&b.pat().value_pool);
             assert!(values.len(&b.pat().node_pool) == len);
 
+            let mut dedup = HashMap::new();
             for n in 0..len {
                 let key = keys.get(n, &b.pat().value_pool).unwrap();
                 let key_val_or_const = ValueOrConst::from_value(value_map[&key], b);
 
                 let val = values.get(n, &b.pat().node_pool).unwrap();
 
-                let entry_parent = provider.add_child(
-                    map_parent, NodeKind::MapItem(key_val_or_const));
-                pattern_node_to_provider(b, node_map, value_map, provider, val, entry_parent, n+1);
+                if !dedup.contains_key(&key_val_or_const) {
+                    dedup.insert(key_val_or_const, Vec::new());
+                }
+                dedup.get_mut(&key_val_or_const).unwrap().push(val);
             }
+
+            // TODO: Currently we just give up here and put duplicate
+            // values in separate columns. We most likely want to take
+            // care of merging these in a separate stage within pattern
+            // match compilation.
+            for (key, values) in dedup.iter() {
+                for value in values {
+                    let entry_parent = provider.add_child(
+                        map_parent, NodeKind::MapItem(*key), node);
+                    pattern_node_to_provider(
+                        b, value_map,
+                        provider, *value, entry_parent, n+1);
+                }
+            }
+
             map_parent
+        }
+        PatternNodeKind::Const(cons) => {
+            let val = ValueOrConst::Const(*cons);
+            provider.add_child(parent, NodeKind::Value(val), node)
         }
         PatternNodeKind::Value(pat_val) => {
             let val = value_map[&pat_val];
             let val_or_const = ValueOrConst::from_value(val, b);
-            provider.add_child(parent, NodeKind::Value(val_or_const))
+            provider.add_child(parent, NodeKind::Value(val_or_const), node)
         }
-        k => unimplemented!("{:?}", k),
-    };
+        PatternNodeKind::Binary { specifier, value, size, remaining } => {
+            let size_val = size.map(
+                |v| ValueOrConst::from_value(value_map[&v], b));
 
-    println!("{} {} {:?}", res_node, n, kind);
+            let binary_entry = provider.add_child(parent, NodeKind::Binary {
+                specifier: *specifier,
+                size: size_val,
+            }, node);
 
-    node_map.insert(node, res_node);
-    res_node
+            pattern_node_to_provider(b, value_map,
+                                     provider, *value, binary_entry, n+1);
+            pattern_node_to_provider(b, value_map,
+                                     provider, *remaining, binary_entry, n+1);
+
+            binary_entry
+        }
+    }
 }
 
-pub fn pattern_to_provider<'a>(b: &mut FunctionBuilder, clauses: &[PatternClause],
-                               node_map: &mut HashMap<PatternNode, Node>,
-                               value_map: &HashMap<PatternValue, Value>) -> ErlangPatternProvider<'a> {
+pub(super) fn pattern_to_provider<'a>(
+    b: &mut FunctionBuilder, clauses: &[PatternClause],
+    //node_map: &mut HashMap<PatternNode, Node>,
+    value_map: &HashMap<PatternValue, ValueBind>,
+) -> ErlangPatternProvider<'a>
+{
     let mut provider = ErlangPatternProvider::new();
     let mut roots = Vec::new();
     for clause in clauses {
-        println!("CL: {}", clause);
         let node = provider.add_clause();
         roots.push(node);
 
         for value_num in 0..b.pat().clause_root_nodes(*clause).len() {
             let value = b.pat().clause_root_nodes(*clause)[value_num];
-            pattern_node_to_provider(b, node_map, value_map, &mut provider, value, node, 0);
+            pattern_node_to_provider(b, value_map,
+                                     &mut provider, value, node, 0);
         }
     }
     provider

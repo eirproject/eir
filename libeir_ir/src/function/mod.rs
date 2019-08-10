@@ -20,10 +20,10 @@ mod pool_container;
 use pool_container::PoolContainer;
 
 mod op;
-pub use op::{ OpKind, MapPutUpdate };
+pub use op::{ OpKind, MatchKind, BasicType, MapPutUpdate };
 
 mod primop;
-pub use primop::{ PrimOpKind, BinOp };
+pub use primop::{ PrimOpKind, BinOp, LogicOp };
 
 mod value;
 use value::ValueMap;
@@ -187,23 +187,27 @@ impl Function {
 
     /// Walks all nested values contained within
     /// the tree of potential PrimOps.
-    pub fn value_walk_nested_values<F>(&self, value: Value, visit: &mut F)
+    pub fn value_walk_nested_values<F, R>(&self, value: Value,
+                                          visit: &mut F) -> Result<(), R>
     where
-        F: FnMut(Value),
+        F: FnMut(Value) -> Result<(), R>,
     {
-        visit(value);
+        visit(value)?;
         if let ValueKind::PrimOp(primop) = self.values[value].kind {
-            self.primop_walk_nested_values(primop, visit)
+            self.primop_walk_nested_values(primop, visit)?;
         }
+        Ok(())
     }
-    pub fn value_walk_nested_values_mut<F>(&mut self, value: Value, visit: &mut F)
+    pub fn value_walk_nested_values_mut<F, R>(&mut self, value: Value,
+                                              visit: &mut F) -> Result<(), R>
     where
-        F: FnMut(&mut Function, Value),
+        F: FnMut(&mut Function, Value) -> Result<(), R>,
     {
-        visit(self, value);
+        visit(self, value)?;
         if let ValueKind::PrimOp(primop) = self.values[value].kind {
-            self.primop_walk_nested_values_mut(primop, visit)
+            self.primop_walk_nested_values_mut(primop, visit)?;
         }
+        Ok(())
     }
 
 }
@@ -218,25 +222,29 @@ impl Function {
         &self.primops[primop].reads.as_slice(&self.pool.value)
     }
 
-    pub fn primop_walk_nested_values<F>(&self, primop: PrimOp, visit: &mut F)
+    pub fn primop_walk_nested_values<F, R>(&self, primop: PrimOp,
+                                           visit: &mut F) -> Result<(), R>
     where
-        F: FnMut(Value),
+        F: FnMut(Value) -> Result<(), R>,
     {
         let data = &self.primops[primop];
         for read in data.reads.as_slice(&self.pool.value) {
-            self.value_walk_nested_values(*read, visit);
+            self.value_walk_nested_values(*read, visit)?;
         }
+        Ok(())
     }
 
-    pub fn primop_walk_nested_values_mut<F>(&mut self, primop: PrimOp, visit: &mut F)
+    pub fn primop_walk_nested_values_mut<F, R>(&mut self, primop: PrimOp,
+                                               visit: &mut F) -> Result<(), R>
     where
-        F: FnMut(&mut Function, Value),
+        F: FnMut(&mut Function, Value) -> Result<(), R>,
     {
         let len = self.primops[primop].reads.as_slice(&self.pool.value).len();
         for n in 0..len {
             let read = self.primops[primop].reads.as_slice(&self.pool.value)[n];
-            self.value_walk_nested_values_mut(read, visit);
+            self.value_walk_nested_values_mut(read, visit)?;
         }
+        Ok(())
     }
 
 }
@@ -290,25 +298,29 @@ impl Function {
         self.blocks[block].reads.as_slice(&self.pool.value)
     }
 
-    pub fn block_walk_nested_values<F>(&self, block: Block, visit: &mut F)
+    pub fn block_walk_nested_values<F, R>(&self, block: Block,
+                                          visit: &mut F) -> Result<(), R>
     where
-        F: FnMut(Value),
+        F: FnMut(Value) -> Result<(), R>,
     {
         let reads_len = self.blocks[block].reads.as_slice(&self.pool.value).len();
         for n in 0..reads_len {
             let read = self.blocks[block].reads.get(n, &self.pool.value).unwrap();
-            self.value_walk_nested_values(read, visit);
+            self.value_walk_nested_values(read, visit)?;
         }
+        Ok(())
     }
-    pub fn block_walk_nested_values_mut<F>(&mut self, block: Block, visit: &mut F)
+    pub fn block_walk_nested_values_mut<F, R>(&mut self, block: Block,
+                                              visit: &mut F) -> Result<(), R>
     where
-        F: FnMut(&mut Function, Value),
+        F: FnMut(&mut Function, Value) -> Result<(), R>,
     {
         let reads_len = self.blocks[block].reads.as_slice(&self.pool.value).len();
         for n in 0..reads_len {
             let read = self.blocks[block].reads.get(n, &self.pool.value).unwrap();
-            self.value_walk_nested_values_mut(read, visit);
+            self.value_walk_nested_values_mut(read, visit)?;
         }
+        Ok(())
     }
 
 
@@ -322,24 +334,26 @@ impl Function {
     pub(crate) fn graph_validate_block(&self, block: Block) {
         let block_data = &self.blocks[block];
 
-        let mut num_successors = 0;
-        for read in block_data.reads.as_slice(&self.pool.value) {
-            let val_data = &self.values[*read];
-
-            if let ValueKind::Block(succ_block) = val_data.kind {
-                assert!(block_data.successors.contains(succ_block, &self.pool.block_set));
-                assert!(self.blocks[succ_block].predecessors.contains(block, &self.pool.block_set));
-                num_successors += 1;
+        let mut successors_set = HashSet::new();
+        self.block_walk_nested_values::<_, ()>(block, &mut |val| {
+            if let ValueKind::Block(succ_block) = self.value_kind(val) {
+                assert!(block_data.successors.contains(
+                    succ_block, &self.pool.block_set));
+                assert!(self.blocks[succ_block].predecessors.contains(
+                    block, &self.pool.block_set));
+                successors_set.insert(succ_block);
             }
-        }
+            Ok(())
+        }).unwrap();
 
-        assert!(block_data.successors.size(&self.pool.block_set) == num_successors);
+        assert!(block_data.successors.size(&self.pool.block_set)
+                == successors_set.len());
     }
 
     /// Validates graph invariants globally, for the whole
     /// function.
     /// Relatively expensive. Should only be used in tests.
-    pub(crate) fn graph_validate_global(&self) {
+    pub fn graph_validate_global(&self) {
         for block in self.blocks.keys() {
             self.graph_validate_block(block);
         }

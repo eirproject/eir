@@ -256,8 +256,7 @@ where
             },
             '$' => {
                 self.skip();
-                let c = self.pop();
-                if c == '\\' {
+                if self.read() == '\\' {
                     return match self.lex_escape_sequence() {
                         Ok(Token::Char(c)) => Token::Char(c),
                         Ok(Token::Integer(i)) => match std::char::from_u32(i as u32) {
@@ -275,7 +274,7 @@ where
                         Err(e) => Token::Error(e),
                     };
                 }
-                Token::Char(c)
+                Token::Char(self.pop())
             }
             '"' => self.lex_string(),
             '\'' => match self.lex_string() {
@@ -538,6 +537,7 @@ where
     fn lex_string(&mut self) -> Token {
         let quote = self.pop();
         debug_assert!(quote == '"' || quote == '\'');
+        let mut buf = None;
         loop {
             match self.read() {
                 '\\' => match self.lex_escape_sequence() {
@@ -551,10 +551,25 @@ where
                     return Token::Error(LexicalError::UnclosedAtom { span: self.span() });
                 }
                 c if c == quote => {
-                    let symbol =
-                        Symbol::intern(self.slice_span(self.span().shrink_front(ByteOffset(1))));
-                    let token = Token::String(symbol);
+                    let span = self.span().shrink_front(ByteOffset(1));
+
                     self.skip();
+                    self.advance_start();
+                    if self.read() == quote {
+                        self.skip();
+
+                        buf = Some(self.slice_span(span).to_string());
+                        continue;
+                    }
+
+                    let symbol = if let Some(mut buf) = buf {
+                        buf.push_str(self.slice_span(span));
+                        Symbol::intern(&buf)
+                    } else {
+                        Symbol::intern(self.slice_span(span))
+                    };
+
+                    let token = Token::String(symbol);
                     return token;
                 }
                 _ => {

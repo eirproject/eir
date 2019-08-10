@@ -16,10 +16,11 @@ pub(super) fn lower_literal(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: 
                  literal: &Literal) -> (IrBlock, IrValue)
 {
     let value = match literal {
-        Literal::Atom(ident) => b.value(AtomTerm(ident.name)),
-        Literal::Integer(span, int) => b.value(*int),
-        Literal::Float(span, flt) => b.value(*flt),
-        Literal::String(ident) => {
+        Literal::Atom(_id, ident) => b.value(AtomTerm(ident.name)),
+        Literal::Integer(_id, _span, int) => b.value(*int),
+        Literal::BigInteger(_id, _span, int) => b.value(int.clone()),
+        Literal::Float(_id, _span, flt) => b.value(*flt),
+        Literal::String(_id, ident) => {
             match intern_string_const(*ident, b.cons_mut()) {
                 Ok(cons) => b.value(cons),
                 Err(err) => {
@@ -29,7 +30,7 @@ pub(super) fn lower_literal(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: 
                 },
             }
         },
-        Literal::Char(span, c) => b.value(*c),
+        Literal::Char(_id, _span, c) => b.value(*c),
         _ => unimplemented!("{:?}", literal),
     };
     (block, value)
@@ -190,7 +191,7 @@ pub fn intern_string_const(ident: Ident, c: &mut ConstantContainer) -> Result<Co
     let mut cons = c.from(NilTerm);
     for elem in chars.iter().rev() {
         let val = c.from(*elem);
-        cons = c.value_list_cell(val, cons);
+        cons = c.list_cell(val, cons);
     }
 
     Ok(c.from(cons))

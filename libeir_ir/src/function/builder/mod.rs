@@ -4,6 +4,7 @@ use super::{ PrimOpData, PrimOpKind };
 use super::{ Function };
 
 use crate::{ BinOp, MapPutUpdate };
+//use crate::algo::Mangler;
 use crate::constant::{ ConstantContainer, IntoConst };
 use crate::pattern::{ PatternContainer };
 
@@ -64,6 +65,8 @@ pub struct FunctionBuilder<'a> {
     value_buf: Option<Vec<Value>>,
     const_pair_buf: Option<Vec<[Const; 2]>>,
     value_pair_buf: Option<Vec<[Value; 2]>>,
+
+    //mangler: Mangler,
 }
 
 impl<'a> FunctionBuilder<'a> {
@@ -135,15 +138,17 @@ impl<'a> FunctionBuilder<'a> {
         }
         for successor in block_buf.iter() {
             let block_data = &mut self.fun.blocks[*successor];
-            assert!(block_data.predecessors.remove(*successor, &mut self.fun.pool.block_set));
+            block_data.predecessors.remove(
+                *successor, &mut self.fun.pool.block_set);
         }
 
         // 2. Add new successors to block
         block_buf.clear();
         {
-            self.fun.block_walk_nested_values(block, &mut |val| {
+            self.fun.block_walk_nested_values::<_, ()>(block, &mut |val| {
                 value_buf.push(val);
-            });
+                Ok(())
+            }).unwrap();
 
             let block_data = &mut self.fun.blocks[block];
             block_data.successors.clear(&mut self.fun.pool.block_set);
@@ -153,13 +158,14 @@ impl<'a> FunctionBuilder<'a> {
                 // Insert block as usage of value
                 value_data.usages.insert(block, &mut self.fun.pool.block_set);
 
-                // If the value is a block capture, insert into successors for current block
+                // If the value is a block capture, insert into successors
+                // for current block
                 if let ValueKind::Block(dest_block) = &value_data.kind {
-                    block_data.successors.insert(*dest_block, &mut self.fun.pool.block_set);
+                    block_data.successors.insert(
+                        *dest_block, &mut self.fun.pool.block_set);
                     block_buf.push(*dest_block);
                 }
             }
-
         }
 
 
@@ -235,12 +241,12 @@ impl<'a> FunctionBuilder<'a> {
 
         for value in value_buf.iter() {
             let data = &mut self.fun.values[*value];
-            assert!(data.usages.remove(block, &mut self.fun.pool.block_set));
+            data.usages.remove(block, &mut self.fun.pool.block_set);
 
             if let ValueKind::Block(successor_block) = data.kind {
                 let data = self.fun.blocks.get_mut(successor_block).unwrap();
-                assert!(data.predecessors
-                        .remove(block, &mut self.fun.pool.block_set));
+                data.predecessors
+                    .remove(block, &mut self.fun.pool.block_set);
             }
         }
 

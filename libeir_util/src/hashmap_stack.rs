@@ -27,6 +27,10 @@ impl<K, V> HashMapStack<K, V> where K: Hash + Eq {
         self.stack.pop();
     }
 
+    pub fn layer(&self, n: usize) -> &HashMap<K, V> {
+        &self.stack[n]
+    }
+
     pub fn insert(&mut self, key: K, value: V) {
         self.stack.last_mut()
             .expect("attempt to insert into empty HashMapStack")

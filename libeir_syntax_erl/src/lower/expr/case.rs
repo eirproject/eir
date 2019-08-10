@@ -3,35 +3,32 @@ use libeir_ir::{
     Value as IrValue,
     Block as IrBlock,
 };
-use libeir_ir::BinOp;
 use libeir_ir::constant::NilTerm;
 
-use libeir_intern::{ Symbol, Ident };
-use libeir_diagnostics::DUMMY_SPAN;
+use libeir_intern::{ Symbol };
 
 use crate::parser::ast::{ Case, If };
 
 use crate::lower::LowerCtx;
-use crate::lower::expr::{ lower_single, lower_block };
+use crate::lower::expr::{ lower_single, lower_block, lower_block_same_scope };
 use crate::lower::pattern::lower_clause;
+use crate::lower::scope::ScopeMerge;
 
-pub(super) fn lower_case_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
-                              case: &Case) -> (IrBlock, IrValue)
+pub(super) fn lower_case_expr(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    mut block: IrBlock,
+    case: &Case,
+) -> (IrBlock, IrValue)
 {
     let match_val = map_block!(block, lower_single(ctx, b, block, &case.expr));
 
-    let join_block = b.block_insert();
-    let join_arg = b.block_arg_insert(join_block);
-
     let no_match = b.block_insert();
     {
-        let mut block = no_match;
         let typ_val = b.value(Symbol::intern("error"));
         let case_clause_val = b.value(Symbol::intern("case_clause"));
         let err_val = b.prim_tuple(&[case_clause_val, match_val]);
-        // TODO trace
-        let trace_val = b.value(NilTerm);
-        ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
+        ctx.exc_stack.make_error_jump(b, no_match, typ_val, err_val);
     }
 
     let mut case_b = b.op_case_build();
@@ -40,9 +37,13 @@ pub(super) fn lower_case_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut b
 
     let entry_exc_height = ctx.exc_stack.len();
 
+    let mut scope_merge = ScopeMerge::new();
+
     for clause in case.clauses.iter() {
-        match lower_clause(ctx, b, &mut block, [&clause.pattern].iter().map(|i| *i), clause.guard.as_ref()) {
-            Some(lowered) => {
+        match lower_clause(ctx, b, &mut block, [&clause.pattern].iter()
+                           .map(|i| *i), clause.guard.as_ref())
+        {
+            Ok(lowered) => {
 
                 // Add to case
                 let body_val = b.value(lowered.body);
@@ -51,22 +52,27 @@ pub(super) fn lower_case_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut b
                     case_b.push_value(*value, b);
                 }
 
-                let (body_ret_block, body_ret) = lower_block(ctx, b, lowered.body, &clause.body);
+                let (body_ret_block, body_ret) = lower_block_same_scope(
+                    ctx, b, lowered.body, &clause.body);
 
-                // Call to join block
-                b.op_call(body_ret_block, join_block, &[body_ret]);
-
-                // Pop scope pushed in lower_clause
-                ctx.scope.pop(lowered.scope_token);
+                let binds = ctx.scope.pop_take(lowered.scope_token);
+                scope_merge.branch(body_ret_block, body_ret, binds);
             }
-            None => continue,
+            Err(lowered) => {
+                let dummy_body = b.block_insert();
+
+                let (body_ret_block, body_ret) = lower_block_same_scope(
+                    ctx, b, dummy_body, &clause.body);
+
+                let binds = ctx.scope.pop_take(lowered.scope_token);
+                scope_merge.branch(body_ret_block, body_ret, binds);
+            },
         }
         assert!(ctx.exc_stack.len() == entry_exc_height)
     }
-
     case_b.finish(block, b);
 
-    (join_block, join_arg)
+    scope_merge.finish(ctx, b)
 }
 
 pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
@@ -83,9 +89,7 @@ pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut blo
         let typ_val = b.value(Symbol::intern("error"));
         let badmatch_val = b.value(Symbol::intern("badmatch"));
         let err_val = b.prim_tuple(&[badmatch_val, match_val]);
-        // TODO trace
-        let trace_val = b.value(NilTerm);
-        ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
+        ctx.exc_stack.make_error_jump(b, block, typ_val, err_val);
     }
 
     let mut case_b = b.op_case_build();
@@ -96,7 +100,7 @@ pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut blo
 
     for clause in if_expr.clauses.iter() {
         match lower_clause(ctx, b, &mut block, [].iter(), Some(&clause.guards)) {
-            Some(lowered) => {
+            Ok(lowered) => {
 
                 // Add to case
                 let body_val = b.value(lowered.body);
@@ -113,7 +117,9 @@ pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut blo
                 // Pop scope pushed in lower_clause
                 ctx.scope.pop(lowered.scope_token);
             }
-            None => continue,
+            Err(lowered) => {
+                ctx.scope.pop(lowered.scope_token);
+            },
         }
         assert!(ctx.exc_stack.len() == entry_exc_height)
     }

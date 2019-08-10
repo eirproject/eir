@@ -5,15 +5,15 @@ use libeir_ir::{
 };
 use libeir_ir::BinOp;
 use libeir_ir::constant::{ NilTerm, BinaryTerm };
-pub use libeir_ir::binary::{ Endianness, EntrySpecifier };
+pub use libeir_ir::binary::{ Endianness, BinaryEntrySpecifier };
 
 use libeir_intern::{ Ident, Symbol };
 use libeir_diagnostics::DUMMY_SPAN;
 
-use crate::parser::ast::{ Binary, BitType };
+use crate::parser::ast::{ Expr, Literal, Binary, BitType, BinaryElement };
 
 use crate::lower::{ LowerCtx, LowerError };
-use crate::lower::expr::{ lower_single, lower_block };
+use crate::lower::expr::{ lower_single, lower_single_same_scope, lower_block };
 use crate::lower::pattern::lower_clause;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -27,32 +27,32 @@ pub enum TypeName {
     Utf32,
 }
 
-pub fn default_specifier() -> EntrySpecifier {
-    EntrySpecifier::Integer {
+pub fn default_specifier() -> BinaryEntrySpecifier {
+    BinaryEntrySpecifier::Integer {
         signed: false,
         endianness: Endianness::Big,
         unit: 1,
     }
 }
 
-pub fn specifier_can_have_size(specifier: &EntrySpecifier) -> bool {
+pub fn specifier_can_have_size(specifier: &BinaryEntrySpecifier) -> bool {
     match specifier {
-        EntrySpecifier::Utf8 => false,
-        EntrySpecifier::Utf16 { .. } => false,
-        EntrySpecifier::Utf32 { .. } => false,
+        BinaryEntrySpecifier::Utf8 => false,
+        BinaryEntrySpecifier::Utf16 { .. } => false,
+        BinaryEntrySpecifier::Utf32 { .. } => false,
         _ => true,
     }
 }
 
-pub fn specifier_to_typename(specifier: &EntrySpecifier) -> TypeName {
+pub fn specifier_to_typename(specifier: &BinaryEntrySpecifier) -> TypeName {
     match specifier {
-        EntrySpecifier::Integer { .. } => TypeName::Integer,
-        EntrySpecifier::Float { .. } => TypeName::Float,
-        EntrySpecifier::Bytes { .. } => TypeName::Bytes,
-        EntrySpecifier::Bits { .. } => TypeName::Bits,
-        EntrySpecifier::Utf8 => TypeName::Utf8,
-        EntrySpecifier::Utf16 { .. } => TypeName::Utf16,
-        EntrySpecifier::Utf32 { .. } => TypeName::Utf32,
+        BinaryEntrySpecifier::Integer { .. } => TypeName::Integer,
+        BinaryEntrySpecifier::Float { .. } => TypeName::Float,
+        BinaryEntrySpecifier::Bytes { .. } => TypeName::Bytes,
+        BinaryEntrySpecifier::Bits { .. } => TypeName::Bits,
+        BinaryEntrySpecifier::Utf8 => TypeName::Utf8,
+        BinaryEntrySpecifier::Utf16 { .. } => TypeName::Utf16,
+        BinaryEntrySpecifier::Utf32 { .. } => TypeName::Utf32,
     }
 }
 
@@ -87,7 +87,7 @@ macro_rules! test_none {
     }
 }
 
-pub fn specifier_from_parsed(parsed: &[BitType]) -> Result<EntrySpecifier, LowerError> {
+pub fn specifier_from_parsed(parsed: &[BitType]) -> Result<BinaryEntrySpecifier, LowerError> {
     let mut typ = None;
     let mut signed = None;
     let mut endianness = None;
@@ -96,41 +96,41 @@ pub fn specifier_from_parsed(parsed: &[BitType]) -> Result<EntrySpecifier, Lower
     for entry in parsed {
         match entry {
             // Types
-            BitType::Name(_span, ident) if ident.as_str() == "integer" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "integer" =>
                 try_specifier!(typ, entry, TypeName::Integer),
-            BitType::Name(_span, ident) if ident.as_str() == "float" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "float" =>
                 try_specifier!(typ, entry, TypeName::Float),
-            BitType::Name(_span, ident) if ident.as_str() == "binary" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "binary" =>
                 try_specifier!(typ, entry, TypeName::Bytes),
-            BitType::Name(_span, ident) if ident.as_str() == "bytes" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "bytes" =>
                 try_specifier!(typ, entry, TypeName::Bytes),
-            BitType::Name(_span, ident) if ident.as_str() == "bitstring" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "bitstring" =>
                 try_specifier!(typ, entry, TypeName::Bits),
-            BitType::Name(_span, ident) if ident.as_str() == "bits" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "bits" =>
                 try_specifier!(typ, entry, TypeName::Bits),
-            BitType::Name(_span, ident) if ident.as_str() == "utf8" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "utf8" =>
                 try_specifier!(typ, entry, TypeName::Utf8),
-            BitType::Name(_span, ident) if ident.as_str() == "utf16" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "utf16" =>
                 try_specifier!(typ, entry, TypeName::Utf16),
-            BitType::Name(_span, ident) if ident.as_str() == "utf32" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "utf32" =>
                 try_specifier!(typ, entry, TypeName::Utf32),
 
             // Signed
-            BitType::Name(_span, ident) if ident.as_str() == "signed" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "signed" =>
                 try_specifier!(signed, entry, true),
-            BitType::Name(_span, ident) if ident.as_str() == "unsigned" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "unsigned" =>
                 try_specifier!(signed, entry, false),
 
             // Endianness
-            BitType::Name(_span, ident) if ident.as_str() == "big" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "big" =>
                 try_specifier!(endianness, entry, Endianness::Big),
-            BitType::Name(_span, ident) if ident.as_str() == "little" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "little" =>
                 try_specifier!(endianness, entry, Endianness::Little),
-            BitType::Name(_span, ident) if ident.as_str() == "native" =>
+            BitType::Name(_id, _span, ident) if ident.as_str() == "native" =>
                 try_specifier!(endianness, entry, Endianness::Native),
 
             // Unit
-            BitType::Sized(_span, ident, num) if ident.as_str() == "unit" =>
+            BitType::Sized(_id, _span, ident, num) if ident.as_str() == "unit" =>
                 try_specifier!(unit, entry, *num),
 
             entry => {
@@ -149,7 +149,7 @@ pub fn specifier_from_parsed(parsed: &[BitType]) -> Result<EntrySpecifier, Lower
             let endianness = endianness.map(|(t, _)| t).unwrap_or(Endianness::Big);
             let unit = unit.map(|(t, _)| t).unwrap_or(1);
 
-            EntrySpecifier::Integer {
+            BinaryEntrySpecifier::Integer {
                 signed,
                 endianness,
                 unit,
@@ -161,7 +161,7 @@ pub fn specifier_from_parsed(parsed: &[BitType]) -> Result<EntrySpecifier, Lower
             let endianness = endianness.map(|(t, _)| t).unwrap_or(Endianness::Big);
             let unit = unit.map(|(t, _)| t).unwrap_or(1);
 
-            EntrySpecifier::Float {
+            BinaryEntrySpecifier::Float {
                 endianness,
                 unit,
             }
@@ -172,7 +172,7 @@ pub fn specifier_from_parsed(parsed: &[BitType]) -> Result<EntrySpecifier, Lower
             test_none!(endianness, typ);
             let unit = unit.map(|(t, _)| t).unwrap_or(8);
 
-            EntrySpecifier::Bytes {
+            BinaryEntrySpecifier::Bytes {
                 unit,
             }
         }
@@ -182,7 +182,7 @@ pub fn specifier_from_parsed(parsed: &[BitType]) -> Result<EntrySpecifier, Lower
             test_none!(endianness, typ);
             let unit = unit.map(|(t, _)| t).unwrap_or(1);
 
-            EntrySpecifier::Bits {
+            BinaryEntrySpecifier::Bits {
                 unit,
             }
         }
@@ -191,14 +191,14 @@ pub fn specifier_from_parsed(parsed: &[BitType]) -> Result<EntrySpecifier, Lower
             test_none!(endianness, typ);
             test_none!(unit, typ);
 
-            EntrySpecifier::Utf8
+            BinaryEntrySpecifier::Utf8
         }
         TypeName::Utf16 => {
             test_none!(signed, typ);
             let endianness = endianness.map(|(t, _)| t).unwrap_or(Endianness::Big);
             test_none!(unit, typ);
 
-            EntrySpecifier::Utf16 {
+            BinaryEntrySpecifier::Utf16 {
                 endianness,
             }
         }
@@ -207,7 +207,7 @@ pub fn specifier_from_parsed(parsed: &[BitType]) -> Result<EntrySpecifier, Lower
             let endianness = endianness.map(|(t, _)| t).unwrap_or(Endianness::Big);
             test_none!(unit, typ);
 
-            EntrySpecifier::Utf32 {
+            BinaryEntrySpecifier::Utf32 {
                 endianness,
             }
         }
@@ -216,54 +216,278 @@ pub fn specifier_from_parsed(parsed: &[BitType]) -> Result<EntrySpecifier, Lower
     Ok(spec)
 }
 
-pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
-                                binary: &Binary) -> (IrBlock, IrValue)
+pub(crate) fn lower_binary_elem(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    mut block: IrBlock,
+    bin: IrValue,
+    elem: &BinaryElement,
+) -> (IrBlock, IrValue)
+{
+    let spec = elem.bit_type.as_ref()
+        .map(|b| specifier_from_parsed(&*b));
+
+    let (spec, bit_val, size_val) = match &elem.bit_expr {
+        Expr::Literal(Literal::String(_id, string)) => {
+            let spec = match spec {
+                None => BinaryEntrySpecifier::Bytes {
+                    unit: 1,
+                },
+                Some(Ok(inner)) => inner,
+                Some(Err(err)) => {
+                    ctx.error(err);
+                    return (block, ctx.sentinel());
+                },
+            };
+            let spec_typ = specifier_to_typename(&spec);
+
+            let tokenized = crate::lower::expr::literal::tokenize_string(*string);
+            let bit_val = match tokenized {
+                Ok(chars) => {
+                    let bin = chars.iter()
+                        .map(|ch| (ch & 0xff) as u8)
+                        .collect::<Vec<_>>();
+                    let cons = b.cons_mut().from(bin);
+                    b.value(cons)
+                }
+                Err(err) => {
+                    ctx.error(err);
+                    let cons = b.cons_mut().from(vec![]);
+                    b.value(cons)
+                }
+            };
+
+            let size_val = if let Some(size_expr) = &elem.bit_size {
+                if !specifier_can_have_size(&spec) {
+                    ctx.error(LowerError::BinaryInvalidSize {
+                        span: size_expr.span(),
+                        typ: spec_typ,
+                    });
+                    None
+                } else {
+                    Some(map_block!(block, lower_single_same_scope(
+                        ctx, b, block, size_expr)))
+                }
+            } else {
+                match spec_typ {
+                    TypeName::Integer => Some(b.value(8)),
+                    TypeName::Float => Some(b.value(64)),
+                    _ => None,
+                }
+            };
+
+            (spec, bit_val, size_val)
+        }
+        _ => {
+            let spec = match spec {
+                None => default_specifier(),
+                Some(Ok(inner)) => inner,
+                Some(Err(err)) => {
+                    ctx.error(err);
+                    return (block, ctx.sentinel());
+                },
+            };
+            let spec_typ = specifier_to_typename(&spec);
+
+            let bit_val = map_block!(block, lower_single_same_scope(
+                ctx, b, block, &elem.bit_expr));
+
+            let size_val = if let Some(size_expr) = &elem.bit_size {
+                if !specifier_can_have_size(&spec) {
+                    ctx.error(LowerError::BinaryInvalidSize {
+                        span: size_expr.span(),
+                        typ: spec_typ,
+                    });
+                    None
+                } else {
+                    Some(map_block!(block, lower_single_same_scope(
+                        ctx, b, block, size_expr)))
+                }
+            } else {
+                match spec_typ {
+                    TypeName::Integer => Some(b.value(8)),
+                    TypeName::Float => Some(b.value(64)),
+                    _ => None,
+                }
+            };
+
+            (spec, bit_val, size_val)
+        }
+    };
+
+    let err_cont = map_block!(block, b.op_binary_push(
+        block, spec, bin, bit_val, size_val));
+    let res_arg = b.block_args(block)[0];
+
+    // TODO: Proper error
+    b.op_unreachable(err_cont);
+
+    (block, res_arg)
+}
+
+pub(super) fn lower_binary_expr(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    mut block: IrBlock,
+    bin: Option<IrValue>,
+    binary: &Binary
+) -> (IrBlock, IrValue)
 {
     // TODO: Revisit what we do here.
     // We should probably lower all values first, then construct
     // the binary in an atomic sequence of operations.
 
-    let mut res_arg = b.value(BinaryTerm(Symbol::intern("")));
+    // Desugar <<"binary string">>
+    //if binary.elements.len() == 1 {
+    //    let elem = &binary.elements[0];
+    //    if elem.bit_size.is_none()
+    //        && elem.bit_type.as_ref().map(|v| v.len() == 0).unwrap_or(true)
+    //    {
+    //        if let Expr::Literal(Literal::String(_id, string)) = &elem.bit_expr {
+    //            let tokenized = crate::lower::expr::literal::tokenize_string(*string);
+    //            return match tokenized {
+    //                Ok(chars) => {
+    //                    let bin = chars.iter()
+    //                        .map(|ch| (ch & 0xff) as u8)
+    //                        .collect::<Vec<_>>();
+    //                    let cons = b.cons_mut().from(bin);
+    //                    (block, b.value(cons))
+    //                }
+    //                Err(err) => {
+    //                    ctx.error(err);
+    //                    let cons = b.cons_mut().from(vec![]);
+    //                    (block, b.value(cons))
+    //                }
+    //            };
+    //        }
+    //    }
+    //}
 
+    let mut res_arg = bin.unwrap_or_else(|| b.value(Vec::<u8>::new()));
     for elem in binary.elements.iter() {
-        let spec = elem.bit_type.as_ref()
-            .map(|b| specifier_from_parsed(&*b))
-            .unwrap_or(Ok(default_specifier()));
 
-        let spec = match spec {
-            Ok(inner) => inner,
-            Err(err) => {
-                ctx.error(err);
-                continue;
-            },
-        };
-        let spec_typ = specifier_to_typename(&spec);
+        let (bl, val) = lower_binary_elem(ctx, b, block, res_arg, elem);
+        res_arg = val;
+        block = bl;
 
-        let bit_val = map_block!(block, lower_single(ctx, b, block, &elem.bit_expr));
+        //if elem.bit_size.is_none()
+        //    && elem.bit_type.as_ref().map(|v| v.len() == 0).unwrap_or(true)
+        //{
+        //    if let Expr::Literal(Literal::String(_id, string)) = &elem.bit_expr {
+        //        let tokenized = crate::lower::expr::literal::tokenize_string(*string);
+        //        return match tokenized {
+        //            Ok(chars) => {
+        //                let bin = chars.iter()
+        //                    .map(|ch| (ch & 0xff) as u8)
+        //                    .collect::<Vec<_>>();
+        //                let cons = b.cons_mut().from(bin);
 
-        let size_val = if let Some(size_expr) = &elem.bit_size {
-            if !specifier_can_have_size(&spec) {
-                ctx.error(LowerError::BinaryInvalidSize {
-                    span: size_expr.span(),
-                    typ: spec_typ,
-                });
-                None
-            } else {
-                Some(map_block!(block, lower_single(ctx, b, block, size_expr)))
-            }
-        } else {
-            match spec_typ {
-                TypeName::Integer => Some(b.value(8)),
-                TypeName::Float => Some(b.value(64)),
-                _ => None,
-            }
-        };
+        //                (block, b.value(cons))
+        //            }
+        //            Err(err) => {
+        //                ctx.error(err);
+        //                let cons = b.cons_mut().from(vec![]);
+        //                (block, b.value(cons))
+        //            }
+        //        };
+        //    }
+        //}
 
-        let err_cont = map_block!(block, b.op_binary_push(block, spec, bit_val, size_val));
-        res_arg = b.block_args(block)[0];
+        //let spec = elem.bit_type.as_ref()
+        //    .map(|b| specifier_from_parsed(&*b));
 
-        // TODO: Proper error
-        b.op_unreachable(err_cont);
+        //let (spec, bit_val, size_val) = match &elem.bit_expr {
+        //    Expr::Literal(Literal::String(_id, string)) => {
+        //        let spec = match spec {
+        //            None => BinaryEntrySpecifier::Bytes {
+        //                unit: 1,
+        //            },
+        //            Some(Ok(inner)) => inner,
+        //            Some(Err(err)) => {
+        //                ctx.error(err);
+        //                continue;
+        //            },
+        //        };
+        //        let spec_typ = specifier_to_typename(&spec);
+
+        //        let tokenized = crate::lower::expr::literal::tokenize_string(*string);
+        //        let bit_val = match tokenized {
+        //            Ok(chars) => {
+        //                let bin = chars.iter()
+        //                    .map(|ch| (ch & 0xff) as u8)
+        //                    .collect::<Vec<_>>();
+        //                let cons = b.cons_mut().from(bin);
+        //                b.value(cons)
+        //            }
+        //            Err(err) => {
+        //                ctx.error(err);
+        //                let cons = b.cons_mut().from(vec![]);
+        //                b.value(cons)
+        //            }
+        //        };
+
+        //        let size_val = if let Some(size_expr) = &elem.bit_size {
+        //            if !specifier_can_have_size(&spec) {
+        //                ctx.error(LowerError::BinaryInvalidSize {
+        //                    span: size_expr.span(),
+        //                    typ: spec_typ,
+        //                });
+        //                None
+        //            } else {
+        //                Some(map_block!(block, lower_single(ctx, b, block, size_expr)))
+        //            }
+        //        } else {
+        //            match spec_typ {
+        //                TypeName::Integer => Some(b.value(8)),
+        //                TypeName::Float => Some(b.value(64)),
+        //                _ => None,
+        //            }
+        //        };
+
+        //        (spec, bit_val, size_val)
+        //    }
+        //    _ => {
+        //        let spec = match spec {
+        //            None => default_specifier(),
+        //            Some(Ok(inner)) => inner,
+        //            Some(Err(err)) => {
+        //                ctx.error(err);
+        //                continue;
+        //            },
+        //        };
+        //        let spec_typ = specifier_to_typename(&spec);
+
+        //        let bit_val = map_block!(block, lower_single(
+        //            ctx, b, block, &elem.bit_expr));
+
+        //        let size_val = if let Some(size_expr) = &elem.bit_size {
+        //            if !specifier_can_have_size(&spec) {
+        //                ctx.error(LowerError::BinaryInvalidSize {
+        //                    span: size_expr.span(),
+        //                    typ: spec_typ,
+        //                });
+        //                None
+        //            } else {
+        //                Some(map_block!(block, lower_single(ctx, b, block, size_expr)))
+        //            }
+        //        } else {
+        //            match spec_typ {
+        //                TypeName::Integer => Some(b.value(8)),
+        //                TypeName::Float => Some(b.value(64)),
+        //                _ => None,
+        //            }
+        //        };
+
+        //        (spec, bit_val, size_val)
+        //    }
+        //};
+
+        //let err_cont = map_block!(block, b.op_binary_push(
+        //    block, spec, res_arg, bit_val, size_val));
+        //res_arg = b.block_args(block)[0];
+
+        //// TODO: Proper error
+        //b.op_unreachable(err_cont);
 
     }
 

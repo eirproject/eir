@@ -1,10 +1,11 @@
 use ::matches::{ matches, assert_matches };
 
-use std::collections::{ HashSet, HashMap };
+use std::collections::HashMap;
 
 use ::libeir_ir::OpKind;
 use ::libeir_ir::{ Block, Value };
 use ::libeir_ir::{ Function, FunctionBuilder, Dialect };
+use ::libeir_ir::{ PatternNode, PatternValue };
 
 use ::pattern_compiler::{ to_decision_tree, PatternCfg, CfgNodeIndex };
 
@@ -13,6 +14,7 @@ use self::erlang_pattern_provider::pattern_to_provider;
 
 mod lower_cfg;
 use self::lower_cfg::lower_cfg;
+use self::lower_cfg::DecisionTreeDestinations;
 
 use super::FunctionPass;
 
@@ -93,6 +95,12 @@ impl CompilePatternPass {
                 }
             }
 
+            let destinations = DecisionTreeDestinations {
+                fail: no_match,
+                guards,
+                bodies,
+            };
+
             // Get/validate number of roots
             let mut roots_num = None;
             for clause in clauses.iter() {
@@ -104,119 +112,57 @@ impl CompilePatternPass {
                 }
             }
 
-            // Create map of PatternValue => Value
             let mut value_map = HashMap::new();
-            let mut value_idx = 0;
-            for clause in clauses.iter() {
-                for value in b.pat().clause_values(*clause) {
-                    value_map.insert(*value, values[value_idx]);
-                    value_idx += 1;
+            {
+                // Create map of PatternValue => Value
+                let mut value_idx = 0;
+                for clause in clauses.iter() {
+                    for value in b.pat().clause_values(*clause) {
+                        value_map.insert(*value, ValueBind::Value(values[value_idx]));
+                        value_idx += 1;
+                    }
                 }
-            }
-            assert!(values.len() == value_idx);
+                assert!(values.len() == value_idx);
 
-            let mut pat_node_to_node_map = HashMap::new();
-            let mut provider = pattern_to_provider(b, &clauses, &mut pat_node_to_node_map, &value_map);
+                // Create map of PatternValue => PatternNode
+                value_map.extend(
+                    clauses.iter()
+                        .flat_map(|clause| b.pat().clause_node_binds_iter(*clause))
+                        .map(|(k, v)| (k, ValueBind::Node(v)))
+                );
+            }
+
+            let mut provider = pattern_to_provider(
+                b, &clauses,
+                &value_map);
             let decision_tree = to_decision_tree(&mut provider);
 
             let mut out = Vec::new();
             decision_tree.to_dot(&mut out).unwrap();
-            println!("{}", std::str::from_utf8(&out).unwrap());
 
-            let cfg_entry = lower_cfg(b, &decision_tree, &pat_node_to_node_map, &clauses, no_match, &guards, &bodies);
+            let cfg_entry = lower_cfg(
+                b, &provider, &decision_tree, &clauses,
+                &destinations);
 
             b.block_clear(block);
             b.op_call(block, cfg_entry, &[match_val]);
 
         }
 
-        //for start_op in case_starts.iter() {
-
-        //    let (case_map, collector, provider, decision_tree) = {
-        //        let fun = b.function();
-        //        let case_map = map_case_structure(fun, *start_op);
-
-        //        let start_kind = fun.op_kind(case_map.start_op);
-        //        let clauses = if let OpKind::CaseStart { clauses } = start_kind { clauses }
-        //        else { panic!() };
-
-        //        let (collector, mut provider) =
-        //            erlang_pattern_provider::pattern_to_provider(clauses);
-        //        let decision_tree = ::pattern_compiler::to_decision_tree(&mut provider);
-
-        //        (case_map, collector, provider, decision_tree)
-        //    };
-
-        //    b.position_at_end(case_map.body_ebb);
-
-        //    let mut value_bindings = HashMap::new();
-
-        //    let match_start = b.insert_ebb();
-        //    b.position_at_end(match_start);
-        //    let destinations = decision_tree_to_cfg(
-        //        &decision_tree, &collector, b, &case_map, &mut value_bindings);
-
-        //    // Graft new CFG into matching construct
-
-        //    // Fail jump
-        //    b.position_at_end(destinations.fail);
-        //    let fail_node = b.function().ebb_call_target(case_map.fail_branch);
-        //    let fail_call = b.create_ebb_call(fail_node, &[]);
-        //    b.op_jump(fail_call);
-
-        //    // Remove case_start op
-        //    let start_block = b.function().op_ebb(case_map.start_op);
-        //    b.function_mut().op_remove(case_map.start_op);
-        //    // Insert jump to new control flow instead
-        //    b.position_at_end(start_block);
-        //    let start_call = b.create_ebb_call(match_start, &[]);
-        //    b.op_jump(start_call);
-
-        //    let mut write_tokens = Vec::new();
-
-        //    // Change guard entry points
-        //    for (idx, guard_branch) in case_map.guard_branches.iter().enumerate() {
-        //        let leaf_ebb = destinations.leaves[idx];
-        //        let guard_entry = b.function().ebb_call_target(*guard_branch);
-
-        //        b.position_at_end(leaf_ebb);
-        //        let call = b.create_ebb_call(guard_entry, &[]);
-        //        b.op_jump(call);
-
-        //        let case_values_op = b.function().iter_op(guard_entry).next().unwrap();
-        //        assert_matches!(b.function().op_kind(case_values_op), OpKind::CaseValues);
-
-        //        b.function_mut().op_remove_take_writes(case_values_op, &mut write_tokens);
-        //        b.position_at_start(guard_entry);
-        //        assert!(write_tokens.len() == collector.clause_assigns[idx].len());
-        //        for (tok, assign) in write_tokens.drain(..).zip(collector.clause_assigns[idx].iter()) {
-        //            b.op_move_write_token(value_bindings[assign], tok);
-        //        }
-        //    }
-
-        //    // Change guard fails
-        //    for (clause_num, fail_op) in case_map.fail_ops.iter() {
-        //        let source_ebb = b.function().op_ebb(*fail_op);
-        //        let target_ebb = destinations.guard_fails[*clause_num];
-        //        b.function_mut().op_remove(*fail_op);
-        //        b.position_at_end(source_ebb);
-        //        let call = b.create_ebb_call(target_ebb, &[]);
-        //        b.op_jump(call);
-        //    }
-
-        //    // Remove case body Ebb
-        //    b.function_mut().ebb_remove(case_map.body_ebb);
-
-        //    // Remove CaseGuardOk
-        //    for op in case_map.ok_ops {
-        //        b.function_mut().op_remove(op);
-        //    }
-
-        //}
-
-        //b.function_mut().set_dialect(Dialect::Normal);
-
     }
 
 }
+
+#[derive(Debug, Copy, Clone)]
+pub(super) enum ValueBind {
+    Value(Value),
+    Node(PatternNode),
+}
+
+struct PatternContext {
+    value_map: HashMap<PatternValue, ValueBind>,
+}
+
+
+
 

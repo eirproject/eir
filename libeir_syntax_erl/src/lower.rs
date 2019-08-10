@@ -40,7 +40,7 @@ use scope::ScopeToken;
 #[cfg(test)]
 mod tests;
 
-struct LowerCtx<'a> {
+pub(crate) struct LowerCtx<'a> {
     module: &'a Module,
 
     scope: scope::ScopeTracker,
@@ -64,7 +64,6 @@ impl<'a> LowerCtx<'a> {
     /// If this value is used in the resulting IR, it is REQUIRED that
     /// `failed` be set to true.
     pub fn sentinel(&self) -> IrValue {
-        assert!(self.failed);
         self.sentinel_value.unwrap()
     }
 
@@ -73,7 +72,11 @@ impl<'a> LowerCtx<'a> {
         self.errors.push(err);
     }
 
-    pub fn try_resolve(&mut self, ident: Ident) -> Result<IrValue, LowerError> {
+    pub fn warn(&mut self, err: LowerError) {
+        self.errors.push(err);
+    }
+
+    pub fn try_resolve(&self, ident: Ident) -> Result<IrValue, LowerError> {
         self.scope.resolve(ident)
     }
     pub fn resolve(&mut self, ident: Ident) -> IrValue {
@@ -121,7 +124,8 @@ impl<'a> LowerCtx<'a> {
 
         b.block_set_span(block, span);
         b.op_call(block, fun_val, &self.val_buf);
-        self.exc_stack.make_error_jump(b, fail_block, fail_type, fail_error, fail_trace);
+        self.exc_stack.make_error_jump_trace(
+            b, fail_block, fail_type, fail_error, fail_trace);
 
         (ok_block, ok_res)
     }
@@ -166,6 +170,7 @@ pub fn lower_module(module: &Module) -> (Result<IrModule, ()>, Vec<LowerError>) 
         ctx.sentinel_value = Some(sentinel_value);
 
         lower_top_function(&mut ctx, &mut builder, function);
+        println!("FAIL: {:?}", ctx.failed);
     }
 
     //println!("{} {:#?}", ctx.failed, ctx.errors);
@@ -241,9 +246,7 @@ fn lower_function_base(
     {
         let typ_val = b.value(Symbol::intern("error"));
         let err_val = b.value(Symbol::intern("function_clause"));
-        // TODO trace
-        let trace_val = b.value(NilTerm);
-        ctx.exc_stack.make_error_jump(b, match_fail_block, typ_val, err_val, trace_val);
+        ctx.exc_stack.make_error_jump(b, match_fail_block, typ_val, err_val);
     }
 
     let entry_exc_height = ctx.exc_stack.len();
@@ -256,8 +259,11 @@ fn lower_function_base(
         func_case.no_match = Some(b.value(match_fail_block));
 
         for clause in clauses.iter() {
-            match lower_clause(ctx, b, &mut block, clause.params.iter(), clause.guard.as_ref()) {
-                Some(lowered) => {
+
+            match lower_clause(ctx, b, &mut block, clause.params.iter(),
+                               clause.guard.as_ref())
+            {
+                Ok(lowered) => {
 
                     // Add to case
                     let body_val = b.value(lowered.body);
@@ -266,7 +272,8 @@ fn lower_function_base(
                         func_case.push_value(*value, b);
                     }
 
-                    let (body_ret_block, body_ret) = lower_block(ctx, b, lowered.body, &clause.body);
+                    let (body_ret_block, body_ret) = lower_block(
+                        ctx, b, lowered.body, &clause.body);
 
                     // Call to join block
                     b.op_call(body_ret_block, join_block, &[body_ret]);
@@ -276,7 +283,9 @@ fn lower_function_base(
                 },
                 // When the pattern of the clause is unmatchable, we don't add it to
                 // the case.
-                None => continue,
+                Err(lowered) => {
+                    ctx.scope.pop(lowered.scope_token);
+                },
             }
             assert!(ctx.exc_stack.len() == entry_exc_height)
         }

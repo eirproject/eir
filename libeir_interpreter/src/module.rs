@@ -11,7 +11,10 @@ pub enum NativeReturn {
     Return {
         term: Rc<Term>,
     },
-    Throw,
+    Throw {
+        typ: Rc<Term>,
+        reason: Rc<Term>,
+    },
 }
 
 pub struct NativeModule {

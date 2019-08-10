@@ -11,12 +11,12 @@ use crate::parser::ast::{ BinaryExpr };
 use crate::parser::ast::{ BinaryOp };
 
 use crate::lower::LowerCtx;
-use crate::lower::expr::{ lower_single };
+use crate::lower::expr::{ lower_single, lower_single_same_scope };
 
 pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
                                 expr: &BinaryExpr) -> (IrBlock, IrValue)
 {
-    let BinaryExpr { lhs, rhs, op, span } = expr;
+    let BinaryExpr { lhs, rhs, op, id, span } = expr;
 
     match op {
         BinaryOp::AndAlso => {
@@ -36,16 +36,10 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
             b.op_call(false1_block, ret_block, &[false_val]);
 
             // Nonbool branch
-            {
-                let mut block = non1_block;
-
-                let typ_val = b.value(Symbol::intern("error"));
-                let err_atom = b.value(Symbol::intern("badarg"));
-                let err_val = b.prim_tuple(&[err_atom, lhs_val]);
-                let trace_val = b.value(NilTerm); // TODO: Trace
-
-                ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
-            }
+            let typ_val = b.value(Symbol::intern("error"));
+            let err_atom = b.value(Symbol::intern("badarg"));
+            let err_val = b.prim_tuple(&[err_atom, lhs_val]);
+            ctx.exc_stack.make_error_jump(b, non1_block, typ_val, err_val);
 
             (ret_block, ret_val)
         }
@@ -72,16 +66,17 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
                 let typ_val = b.value(Symbol::intern("error"));
                 let err_atom = b.value(Symbol::intern("badarg"));
                 let err_val = b.prim_tuple(&[err_atom, lhs_val]);
-                let trace_val = b.value(NilTerm); // TODO: Trace
 
-                ctx.exc_stack.make_error_jump(b, block, typ_val, err_val, trace_val);
+                ctx.exc_stack.make_error_jump(b, block, typ_val, err_val);
             }
 
             (ret_block, ret_val)
         }
         _ => {
-            let lhs_val = map_block!(block, lower_single(ctx, b, block, lhs));
-            let rhs_val = map_block!(block, lower_single(ctx, b, block, rhs));
+            let lhs_val = map_block!(block, lower_single_same_scope(
+                ctx, b, block, lhs));
+            let rhs_val = map_block!(block, lower_single_same_scope(
+                ctx, b, block, rhs));
 
             let (m, f) = match op {
                 BinaryOp::Lt => (Ident::from_str("erlang"), Ident::from_str("<")),
@@ -104,6 +99,9 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
                 BinaryOp::Bor => (Ident::from_str("erlang"), Ident::from_str("bor")),
                 BinaryOp::Bsl => (Ident::from_str("erlang"), Ident::from_str("bsl")),
                 BinaryOp::Bsr => (Ident::from_str("erlang"), Ident::from_str("bsr")),
+                BinaryOp::Or => (Ident::from_str("erlang"), Ident::from_str("|")),
+                BinaryOp::And => (Ident::from_str("erlang"), Ident::from_str("&")),
+                BinaryOp::Send => (Ident::from_str("erlang"), Ident::from_str("!")),
                 _ => unimplemented!("{:?}", op),
             };
 

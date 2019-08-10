@@ -180,7 +180,7 @@ impl IncludeLib {
             let app_name = app_name
                 .to_str()
                 .expect("internal error: expected app name here");
-            let pattern = format!("{}-*", app_name);
+            let pattern = format!("{}", app_name);
             'root: for root in code_paths.iter() {
                 let pattern = root.join(&pattern);
                 let pattern = pattern.to_str().unwrap();
@@ -709,12 +709,14 @@ impl ReadFrom for Define {
                 }
                 replacement.push(_close_paren.into());
             } else {
-                match reader.read_token()? {
-                    token @ LexicalToken(_, Token::Dot, _) => {
-                        return Err(PreprocessorError::UnexpectedToken(token, Vec::new()));
-                    }
-                    token => replacement.push(token),
-                }
+                replacement.push(reader.read_token()?);
+                //match reader.read_token()? {
+                //    token @ LexicalToken(_, Token::Dot, _) => {
+                //        println!("yay {:?}", token);
+                //        return Err(PreprocessorError::UnexpectedToken(token, Vec::new()));
+                //    }
+                //    token => replacement.push(token),
+                //}
             }
         }
     }

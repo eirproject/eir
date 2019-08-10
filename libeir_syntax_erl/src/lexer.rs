@@ -14,7 +14,7 @@ pub use self::lexer::Lexer;
 pub use self::scanner::Scanner;
 pub use self::source::{FileMapSource, Source, SourceError};
 pub use self::token::{AtomToken, IdentToken, StringToken, SymbolToken, IntegerToken, TokenType};
-pub use self::token::{LexicalToken, Token};
+pub use self::token::{LexicalToken, Token, DelayedSubstitution};
 
 /// The type that serves as an `Item` for the lexer iterator.
 pub type Lexed = Result<LexicalToken, LexicalError>;

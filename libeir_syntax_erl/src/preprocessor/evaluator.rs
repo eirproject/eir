@@ -38,66 +38,80 @@ pub fn eval(expr: Expr) -> Result<Expr, PreprocessorError> {
         // Recursively evaluate subexpressions
         Expr::Cons(Cons {
             span,
+            id,
             head,
             tail,
         }) => Expr::Cons(Cons {
             span,
+            id,
             head: Box::new(eval(*head)?),
             tail: Box::new(eval(*tail)?),
         }),
-        Expr::Tuple(Tuple { span, elements }) => Expr::Tuple(Tuple {
+        Expr::Tuple(Tuple { span, id, elements }) => Expr::Tuple(Tuple {
             span,
+            id,
             elements: eval_list(elements)?,
         }),
-        Expr::Map(Map { span, fields }) => Expr::Map(Map {
+        Expr::Map(Map { span, id, fields }) => Expr::Map(Map {
             span,
+            id,
             fields: eval_map(fields)?,
         }),
         Expr::MapUpdate(MapUpdate {
             span,
+            id,
             map,
             updates,
         }) => Expr::MapUpdate(MapUpdate {
             span,
+            id,
             map: Box::new(eval(*map)?),
             updates: eval_map(updates)?,
         }),
         Expr::MapProjection(MapProjection {
             span,
+            id,
             map,
             fields,
         }) => Expr::MapProjection(MapProjection {
             span,
+            id,
             map: Box::new(eval(*map)?),
             fields: eval_map(fields)?,
         }),
-        Expr::Binary(Binary { span, elements }) => Expr::Binary(Binary {
+        Expr::Binary(Binary { span, id, elements }) => Expr::Binary(Binary {
             span,
+            id,
             elements: eval_bin_elements(elements)?,
         }),
-        Expr::Record(Record { span, name, fields }) => Expr::Record(Record {
+        Expr::Record(Record { span, id, name, fields }) => Expr::Record(Record {
             span,
+            id,
             name,
             fields: eval_record(fields)?,
         }),
         Expr::RecordAccess(RecordAccess {
             span,
+            id,
             record,
             name,
             field,
         }) => Expr::RecordAccess(RecordAccess {
             span,
+            id,
             record: Box::new(eval(*record)?),
             name,
             field,
         }),
         Expr::RecordUpdate(RecordUpdate {
             span,
+            id,
             record,
             name,
             updates,
         }) => Expr::RecordUpdate(RecordUpdate {
             span,
+            id,
             record: Box::new(eval(*record)?),
             name,
             updates: eval_record(updates)?,
@@ -109,10 +123,11 @@ pub fn eval(expr: Expr) -> Result<Expr, PreprocessorError> {
             span,
             callee,
             args,
+            ..
         }) => {
             let args = eval_list(args)?;
             match eval(*callee)? {
-                Expr::Literal(Literal::Atom(Ident { ref name, .. })) => match builtin(*name) {
+                Expr::Literal(Literal::Atom(_, Ident { ref name, .. })) => match builtin(*name) {
                     None => {
                         return Err(PreprocessorError::InvalidConstExpression(span));
                     }
@@ -126,16 +141,18 @@ pub fn eval(expr: Expr) -> Result<Expr, PreprocessorError> {
         }
         Expr::BinaryExpr(BinaryExpr {
             span,
+            id,
             lhs,
             op,
             rhs,
         }) => {
             let lhs = eval(*lhs)?;
             let rhs = eval(*rhs)?;
-            return eval_binary_op(span, lhs, op, rhs);
+            return eval_binary_op(span, id, lhs, op, rhs);
         }
         Expr::UnaryExpr(UnaryExpr {
             span,
+            id,
             op,
             operand,
         }) => {
@@ -165,13 +182,15 @@ fn eval_map(mut fields: Vec<MapField>) -> Result<Vec<MapField>, PreprocessorErro
 
     for field in fields.drain(..) {
         match field {
-            MapField::Assoc { span, key, value } => result.push(MapField::Assoc {
+            MapField::Assoc { span, id, key, value } => result.push(MapField::Assoc {
                 span,
+                id,
                 key: eval(key)?,
                 value: eval(value)?,
             }),
-            MapField::Exact { span, key, value } => result.push(MapField::Exact {
+            MapField::Exact { span, id, key, value } => result.push(MapField::Exact {
                 span,
+                id,
                 key: eval(key)?,
                 value: eval(value)?,
             }),
@@ -188,22 +207,26 @@ fn eval_record(mut fields: Vec<RecordField>) -> Result<Vec<RecordField>, Preproc
         let new_field = match field {
             RecordField {
                 span,
+                id,
                 name,
                 value: Some(value),
                 ty,
             } => RecordField {
                 span,
+                id,
                 name,
                 value: Some(eval(value)?),
                 ty,
             },
             RecordField {
                 span,
+                id,
                 name,
                 value: None,
                 ty,
             } => RecordField {
                 span,
+                id,
                 name,
                 value: None,
                 ty,
@@ -224,11 +247,13 @@ fn eval_bin_elements(
         let new_element = match element {
             BinaryElement {
                 span,
+                id,
                 bit_expr,
                 bit_size: Some(bit_size),
                 bit_type,
             } => BinaryElement {
                 span,
+                id,
                 bit_expr: eval(bit_expr)?,
                 bit_size: Some(eval(bit_size)?),
                 bit_type,
@@ -236,11 +261,13 @@ fn eval_bin_elements(
 
             BinaryElement {
                 span,
+                id,
                 bit_expr,
                 bit_size: None,
                 bit_type,
             } => BinaryElement {
                 span,
+                id,
                 bit_expr: eval(bit_expr)?,
                 bit_size: None,
                 bit_type,
@@ -255,33 +282,34 @@ fn eval_bin_elements(
 
 fn eval_binary_op(
     span: ByteSpan,
+    id: NodeId,
     lhs: Expr,
     op: BinaryOp,
     rhs: Expr,
 ) -> Result<Expr, PreprocessorError> {
     match op {
         BinaryOp::OrElse | BinaryOp::AndAlso | BinaryOp::Or | BinaryOp::And => {
-            eval_boolean(span, lhs, op, rhs)
+            eval_boolean(span, id, lhs, op, rhs)
         }
-        BinaryOp::Equal | BinaryOp::NotEqual => eval_equality(span, lhs, op, rhs),
+        BinaryOp::Equal | BinaryOp::NotEqual => eval_equality(span, id, lhs, op, rhs),
         BinaryOp::StrictEqual | BinaryOp::StrictNotEqual => {
-            eval_strict_equality(span, lhs, op, rhs)
+            eval_strict_equality(span, id, lhs, op, rhs)
         }
         BinaryOp::Lte | BinaryOp::Lt | BinaryOp::Gte | BinaryOp::Gt => {
-            eval_comparison(span, lhs, op, rhs)
+            eval_comparison(span, id, lhs, op, rhs)
         }
         BinaryOp::Add
         | BinaryOp::Sub
         | BinaryOp::Multiply
         | BinaryOp::Divide
         | BinaryOp::Div
-        | BinaryOp::Rem => eval_arith(span, lhs, op, rhs),
+        | BinaryOp::Rem => eval_arith(span, id, lhs, op, rhs),
         BinaryOp::Bor
         | BinaryOp::Bxor
         | BinaryOp::Xor
         | BinaryOp::Band
         | BinaryOp::Bsl
-        | BinaryOp::Bsr => eval_shift(span, lhs, op, rhs),
+        | BinaryOp::Bsr => eval_shift(span, id, lhs, op, rhs),
         _ => return Err(PreprocessorError::InvalidConstExpression(span)),
     }
 }
@@ -289,57 +317,57 @@ fn eval_binary_op(
 fn eval_unary_op(span: ByteSpan, op: UnaryOp, rhs: Expr) -> Result<Expr, PreprocessorError> {
     let expr = match op {
         UnaryOp::Plus => match rhs {
-            Expr::Literal(Literal::Integer(span, i)) if i < 0 => {
-                Expr::Literal(Literal::Integer(span, i * -1))
+            Expr::Literal(Literal::Integer(id, span, i)) if i < 0 => {
+                Expr::Literal(Literal::Integer(id, span, i * -1))
             }
-            Expr::Literal(Literal::Integer(_, _)) => rhs,
-            Expr::Literal(Literal::BigInteger(span, i)) => {
+            Expr::Literal(Literal::Integer(_, _, _)) => rhs,
+            Expr::Literal(Literal::BigInteger(id, span, i)) => {
                 if i < 0 {
-                    Expr::Literal(Literal::BigInteger(span, i * -1))
+                    Expr::Literal(Literal::BigInteger(id, span, i * -1))
                 } else {
-                    Expr::Literal(Literal::BigInteger(span, i))
+                    Expr::Literal(Literal::BigInteger(id, span, i))
                 }
             }
-            Expr::Literal(Literal::Float(span, i)) if i < 0.0 => {
-                Expr::Literal(Literal::Float(span, i * -1.0))
+            Expr::Literal(Literal::Float(id, span, i)) if i < 0.0 => {
+                Expr::Literal(Literal::Float(id, span, i * -1.0))
             }
-            Expr::Literal(Literal::Float(_, _)) => rhs,
+            Expr::Literal(Literal::Float(_, _, _)) => rhs,
             _ => return Err(PreprocessorError::InvalidConstExpression(span)),
         },
         UnaryOp::Minus => match rhs {
-            Expr::Literal(Literal::Integer(span, i)) if i > 0 => {
-                Expr::Literal(Literal::Integer(span, i * -1))
+            Expr::Literal(Literal::Integer(id, span, i)) if i > 0 => {
+                Expr::Literal(Literal::Integer(id, span, i * -1))
             }
-            Expr::Literal(Literal::Integer(_, _)) => rhs,
-            Expr::Literal(Literal::BigInteger(span, i)) => {
+            Expr::Literal(Literal::Integer(_, _, _)) => rhs,
+            Expr::Literal(Literal::BigInteger(id, span, i)) => {
                 if i > 0 {
-                    Expr::Literal(Literal::BigInteger(span, i * -1))
+                    Expr::Literal(Literal::BigInteger(id, span, i * -1))
                 } else {
-                    Expr::Literal(Literal::BigInteger(span, i))
+                    Expr::Literal(Literal::BigInteger(id, span, i))
                 }
             }
-            Expr::Literal(Literal::Float(span, i)) if i > 0.0 => {
-                Expr::Literal(Literal::Float(span, i * -1.0))
+            Expr::Literal(Literal::Float(id, span, i)) if i > 0.0 => {
+                Expr::Literal(Literal::Float(id, span, i * -1.0))
             }
-            Expr::Literal(Literal::Float(_, _)) => rhs,
+            Expr::Literal(Literal::Float(_, _, _)) => rhs,
             _ => return Err(PreprocessorError::InvalidConstExpression(span)),
         },
         UnaryOp::Bnot => match rhs {
-            Expr::Literal(Literal::Integer(span, i)) => Expr::Literal(Literal::Integer(span, !i)),
-            Expr::Literal(Literal::BigInteger(span, i)) => {
-                Expr::Literal(Literal::BigInteger(span, !i))
+            Expr::Literal(Literal::Integer(id, span, i)) => Expr::Literal(Literal::Integer(id, span, !i)),
+            Expr::Literal(Literal::BigInteger(id, span, i)) => {
+                Expr::Literal(Literal::BigInteger(id, span, !i))
             }
             _ => return Err(PreprocessorError::InvalidConstExpression(span)),
         },
         UnaryOp::Not => match rhs {
-            Expr::Literal(Literal::Atom(Ident { name, span })) if name == symbols::True => {
-                Expr::Literal(Literal::Atom(Ident {
+            Expr::Literal(Literal::Atom(id, Ident { name, span })) if name == symbols::True => {
+                Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::False,
                     span,
                 }))
             }
-            Expr::Literal(Literal::Atom(Ident { name, span })) if name == symbols::False => {
-                Expr::Literal(Literal::Atom(Ident {
+            Expr::Literal(Literal::Atom(id, Ident { name, span })) if name == symbols::False => {
+                Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::True,
                     span,
                 }))
@@ -352,6 +380,7 @@ fn eval_unary_op(span: ByteSpan, op: UnaryOp, rhs: Expr) -> Result<Expr, Preproc
 
 fn eval_boolean(
     span: ByteSpan,
+    id: NodeId,
     lhs: Expr,
     op: BinaryOp,
     rhs: Expr,
@@ -365,24 +394,24 @@ fn eval_boolean(
     match op {
         BinaryOp::Xor => {
             if (left != right) && (left || right) {
-                return Ok(Expr::Literal(Literal::Atom(Ident {
+                return Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::True,
                     span,
                 })));
             }
-            return Ok(Expr::Literal(Literal::Atom(Ident {
+            return Ok(Expr::Literal(Literal::Atom(id, Ident {
                 name: symbols::False,
                 span,
             })));
         }
         BinaryOp::OrElse | BinaryOp::Or => {
             if left || right {
-                return Ok(Expr::Literal(Literal::Atom(Ident {
+                return Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::True,
                     span,
                 })));
             } else {
-                return Ok(Expr::Literal(Literal::Atom(Ident {
+                return Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::False,
                     span,
                 })));
@@ -390,12 +419,12 @@ fn eval_boolean(
         }
         BinaryOp::AndAlso | BinaryOp::And => {
             if left && right {
-                return Ok(Expr::Literal(Literal::Atom(Ident {
+                return Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::True,
                     span,
                 })));
             } else {
-                return Ok(Expr::Literal(Literal::Atom(Ident {
+                return Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::False,
                     span,
                 })));
@@ -407,22 +436,23 @@ fn eval_boolean(
 
 fn eval_equality(
     span: ByteSpan,
+    id: NodeId,
     lhs: Expr,
     op: BinaryOp,
     rhs: Expr,
 ) -> Result<Expr, PreprocessorError> {
     if is_number(&lhs) && is_number(&rhs) {
-        eval_numeric_equality(span, lhs, op, rhs)
+        eval_numeric_equality(span, id, lhs, op, rhs)
     } else {
         match op {
             BinaryOp::Equal => {
                 if lhs == rhs {
-                    Ok(Expr::Literal(Literal::Atom(Ident {
+                    Ok(Expr::Literal(Literal::Atom(id, Ident {
                         name: symbols::True,
                         span,
                     })))
                 } else {
-                    Ok(Expr::Literal(Literal::Atom(Ident {
+                    Ok(Expr::Literal(Literal::Atom(id, Ident {
                         name: symbols::False,
                         span,
                     })))
@@ -430,12 +460,12 @@ fn eval_equality(
             }
             BinaryOp::NotEqual => {
                 if lhs != rhs {
-                    Ok(Expr::Literal(Literal::Atom(Ident {
+                    Ok(Expr::Literal(Literal::Atom(id, Ident {
                         name: symbols::True,
                         span,
                     })))
                 } else {
-                    Ok(Expr::Literal(Literal::Atom(Ident {
+                    Ok(Expr::Literal(Literal::Atom(id, Ident {
                         name: symbols::False,
                         span,
                     })))
@@ -448,6 +478,7 @@ fn eval_equality(
 
 fn eval_strict_equality(
     span: ByteSpan,
+    id: NodeId,
     lhs: Expr,
     op: BinaryOp,
     rhs: Expr,
@@ -455,12 +486,12 @@ fn eval_strict_equality(
     match op {
         BinaryOp::StrictEqual => {
             if lhs == rhs {
-                Ok(Expr::Literal(Literal::Atom(Ident {
+                Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::True,
                     span,
                 })))
             } else {
-                Ok(Expr::Literal(Literal::Atom(Ident {
+                Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::False,
                     span,
                 })))
@@ -468,12 +499,12 @@ fn eval_strict_equality(
         }
         BinaryOp::StrictNotEqual => {
             if lhs != rhs {
-                Ok(Expr::Literal(Literal::Atom(Ident {
+                Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::True,
                     span,
                 })))
             } else {
-                Ok(Expr::Literal(Literal::Atom(Ident {
+                Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::False,
                     span,
                 })))
@@ -485,111 +516,122 @@ fn eval_strict_equality(
 
 fn eval_numeric_equality(
     span: ByteSpan,
+    id: NodeId,
     lhs: Expr,
     op: BinaryOp,
     rhs: Expr,
 ) -> Result<Expr, PreprocessorError> {
     let result = match (lhs, rhs) {
-        (Expr::Literal(Literal::Integer(_, x)), Expr::Literal(Literal::Integer(_, y))) => {
+        (Expr::Literal(Literal::Integer(_, _, x)), Expr::Literal(Literal::Integer(_, _, y))) => {
             match op {
-                BinaryOp::Equal if x == y => Expr::Literal(Literal::Atom(Ident {
+                BinaryOp::Equal if x == y => Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::True,
                     span,
                 })),
-                BinaryOp::NotEqual if x != y => Expr::Literal(Literal::Atom(Ident {
+                BinaryOp::NotEqual if x != y => Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::True,
                     span,
                 })),
-                BinaryOp::Equal => Expr::Literal(Literal::Atom(Ident {
+                BinaryOp::Equal => Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::False,
                     span,
                 })),
-                BinaryOp::NotEqual => Expr::Literal(Literal::Atom(Ident {
+                BinaryOp::NotEqual => Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::False,
                     span,
                 })),
                 _ => unreachable!(),
             }
         }
-        (Expr::Literal(Literal::BigInteger(_, x)), Expr::Literal(Literal::BigInteger(_, y))) => {
+        (Expr::Literal(Literal::BigInteger(_, _, x)), Expr::Literal(Literal::BigInteger(_, _, y))) => {
             match op {
-                BinaryOp::Equal if x == y => Expr::Literal(Literal::Atom(Ident {
+                BinaryOp::Equal if x == y => Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::True,
                     span,
                 })),
-                BinaryOp::NotEqual if x != y => Expr::Literal(Literal::Atom(Ident {
+                BinaryOp::NotEqual if x != y => Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::True,
                     span,
                 })),
-                BinaryOp::Equal => Expr::Literal(Literal::Atom(Ident {
+                BinaryOp::Equal => Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::False,
                     span,
                 })),
-                BinaryOp::NotEqual => Expr::Literal(Literal::Atom(Ident {
+                BinaryOp::NotEqual => Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::False,
                     span,
                 })),
                 _ => unreachable!(),
             }
         }
-        (Expr::Literal(Literal::Float(_, x)), Expr::Literal(Literal::Float(_, y))) => match op {
-            BinaryOp::Equal if x == y => Expr::Literal(Literal::Atom(Ident {
+        (Expr::Literal(Literal::Float(_, _, x)), Expr::Literal(Literal::Float(_, _, y))) => match op {
+            BinaryOp::Equal if x == y => Expr::Literal(Literal::Atom(id, Ident {
                 name: symbols::True,
                 span,
             })),
-            BinaryOp::NotEqual if x != y => Expr::Literal(Literal::Atom(Ident {
+            BinaryOp::NotEqual if x != y => Expr::Literal(Literal::Atom(id, Ident {
                 name: symbols::True,
                 span,
             })),
-            BinaryOp::Equal => Expr::Literal(Literal::Atom(Ident {
+            BinaryOp::Equal => Expr::Literal(Literal::Atom(id, Ident {
                 name: symbols::False,
                 span,
             })),
-            BinaryOp::NotEqual => Expr::Literal(Literal::Atom(Ident {
+            BinaryOp::NotEqual => Expr::Literal(Literal::Atom(id, Ident {
                 name: symbols::False,
                 span,
             })),
             _ => unreachable!(),
         },
         (
-            Expr::Literal(Literal::Integer(xspan, x)),
-            rhs @ Expr::Literal(Literal::BigInteger(_, _)),
+            Expr::Literal(Literal::Integer(xspan, xid, x)),
+            rhs @ Expr::Literal(Literal::BigInteger(_, _, _)),
         ) => {
             return eval_numeric_equality(
                 span,
-                Expr::Literal(Literal::BigInteger(xspan, Integer::from(x))),
-                op,
-                rhs,
-            );
-        }
-
-        (Expr::Literal(Literal::Integer(xspan, x)), rhs @ Expr::Literal(Literal::Float(_, _))) => {
-            return eval_numeric_equality(
-                span,
-                Expr::Literal(Literal::Float(xspan, x as f64)),
+                id,
+                Expr::Literal(Literal::BigInteger(xspan, xid, Integer::from(x))),
                 op,
                 rhs,
             );
         }
 
         (
-            lhs @ Expr::Literal(Literal::BigInteger(_, _)),
-            Expr::Literal(Literal::Integer(yspan, y)),
+            Expr::Literal(Literal::Integer(xspan, xid, x)),
+            rhs @ Expr::Literal(Literal::Float(_, _, _)),
         ) => {
             return eval_numeric_equality(
                 span,
-                lhs,
+                id,
+                Expr::Literal(Literal::Float(xspan, xid, x as f64)),
                 op,
-                Expr::Literal(Literal::BigInteger(yspan, Integer::from(y))),
+                rhs,
             );
         }
 
-        (lhs @ Expr::Literal(Literal::Float(_, _)), Expr::Literal(Literal::Integer(yspan, y))) => {
+        (
+            lhs @ Expr::Literal(Literal::BigInteger(_, _, _)),
+            Expr::Literal(Literal::Integer(yspan, yid, y)),
+        ) => {
             return eval_numeric_equality(
                 span,
+                id,
                 lhs,
                 op,
-                Expr::Literal(Literal::Float(yspan, y as f64)),
+                Expr::Literal(Literal::BigInteger(yspan, yid, Integer::from(y))),
+            );
+        }
+
+        (
+            lhs @ Expr::Literal(Literal::Float(_, _, _)),
+            Expr::Literal(Literal::Integer(yspan, yid, y)),
+        ) => {
+            return eval_numeric_equality(
+                span,
+                id,
+                lhs,
+                op,
+                Expr::Literal(Literal::Float(yspan, yid, y as f64)),
             );
         }
 
@@ -601,6 +643,7 @@ fn eval_numeric_equality(
 
 fn eval_comparison(
     span: ByteSpan,
+    id: NodeId,
     lhs: Expr,
     op: BinaryOp,
     rhs: Expr,
@@ -608,14 +651,14 @@ fn eval_comparison(
     match op {
         BinaryOp::Lt | BinaryOp::Lte => {
             if lhs < rhs {
-                Ok(Expr::Literal(Literal::Atom(Ident {
+                Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::True,
                     span,
                 })))
             } else if op == BinaryOp::Lte {
-                eval_equality(span, lhs, BinaryOp::Equal, rhs)
+                eval_equality(span, id, lhs, BinaryOp::Equal, rhs)
             } else {
-                Ok(Expr::Literal(Literal::Atom(Ident {
+                Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::False,
                     span,
                 })))
@@ -623,14 +666,14 @@ fn eval_comparison(
         }
         BinaryOp::Gt | BinaryOp::Gte => {
             if lhs > rhs {
-                Ok(Expr::Literal(Literal::Atom(Ident {
+                Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::True,
                     span,
                 })))
             } else if op == BinaryOp::Gte {
-                eval_equality(span, lhs, BinaryOp::Equal, rhs)
+                eval_equality(span, id, lhs, BinaryOp::Equal, rhs)
             } else {
-                Ok(Expr::Literal(Literal::Atom(Ident {
+                Ok(Expr::Literal(Literal::Atom(id, Ident {
                     name: symbols::False,
                     span,
                 })))
@@ -642,6 +685,7 @@ fn eval_comparison(
 
 fn eval_arith(
     span: ByteSpan,
+    id: NodeId,
     lhs: Expr,
     op: BinaryOp,
     rhs: Expr,
@@ -649,31 +693,31 @@ fn eval_arith(
     if is_number(&lhs) && is_number(&rhs) {
         let result = match (lhs, rhs) {
             // Types match
-            (Expr::Literal(Literal::Integer(_, x)), Expr::Literal(Literal::Integer(_, y))) => {
-                eval_op_int(span, x, op, y)?
+            (Expr::Literal(Literal::Integer(_, _, x)), Expr::Literal(Literal::Integer(_, _, y))) => {
+                eval_op_int(span, id, x, op, y)?
             }
             (
-                Expr::Literal(Literal::BigInteger(_, x)),
-                Expr::Literal(Literal::BigInteger(_, y)),
-            ) => eval_op_bigint(span, x, op, y)?,
-            (Expr::Literal(Literal::Float(_, x)), Expr::Literal(Literal::Float(_, y))) => {
-                eval_op_float(span, x, op, y)?
+                Expr::Literal(Literal::BigInteger(_, _, x)),
+                Expr::Literal(Literal::BigInteger(_, _, y)),
+            ) => eval_op_bigint(span, id, x, op, y)?,
+            (Expr::Literal(Literal::Float(_, _, x)), Expr::Literal(Literal::Float(_, _, y))) => {
+                eval_op_float(span, id, x, op, y)?
             }
 
             // Coerce to BigInt
-            (Expr::Literal(Literal::Integer(_, x)), Expr::Literal(Literal::BigInteger(_, y))) => {
-                eval_op_bigint(span, Integer::from(x), op, y)?
+            (Expr::Literal(Literal::Integer(_, _, x)), Expr::Literal(Literal::BigInteger(_, _, y))) => {
+                eval_op_bigint(span, id, Integer::from(x), op, y)?
             }
-            (Expr::Literal(Literal::BigInteger(_, x)), Expr::Literal(Literal::Integer(_, y))) => {
-                eval_op_bigint(span, x, op, Integer::from(y))?
+            (Expr::Literal(Literal::BigInteger(_, _, x)), Expr::Literal(Literal::Integer(_, _, y))) => {
+                eval_op_bigint(span, id, x, op, Integer::from(y))?
             }
 
             // Coerce to float
-            (Expr::Literal(Literal::Integer(_, x)), Expr::Literal(Literal::Float(_, y))) => {
-                eval_op_float(span, x as f64, op, y)?
+            (Expr::Literal(Literal::Integer(_, _, x)), Expr::Literal(Literal::Float(_, _, y))) => {
+                eval_op_float(span, id, x as f64, op, y)?
             }
-            (Expr::Literal(Literal::Float(_, x)), Expr::Literal(Literal::Integer(_, y))) => {
-                eval_op_float(span, x, op, y as f64)?
+            (Expr::Literal(Literal::Float(_, _, x)), Expr::Literal(Literal::Integer(_, _, y))) => {
+                eval_op_float(span, id, x, op, y as f64)?
             }
 
             _ => return Err(PreprocessorError::InvalidConstExpression(span)),
@@ -684,16 +728,22 @@ fn eval_arith(
     }
 }
 
-fn eval_op_int(span: ByteSpan, x: i64, op: BinaryOp, y: i64) -> Result<Expr, PreprocessorError> {
+fn eval_op_int(
+    span: ByteSpan,
+    id: NodeId,
+    x: i64,
+    op: BinaryOp,
+    y: i64
+) -> Result<Expr, PreprocessorError> {
     let result = match op {
-        BinaryOp::Add => Expr::Literal(Literal::Integer(span, x + y)),
-        BinaryOp::Sub => Expr::Literal(Literal::Integer(span, x - y)),
-        BinaryOp::Multiply => Expr::Literal(Literal::Integer(span, x * y)),
+        BinaryOp::Add => Expr::Literal(Literal::Integer(span, id, x + y)),
+        BinaryOp::Sub => Expr::Literal(Literal::Integer(span, id, x - y)),
+        BinaryOp::Multiply => Expr::Literal(Literal::Integer(span, id, x * y)),
         BinaryOp::Divide if y == 0 => return Err(PreprocessorError::InvalidConstExpression(span)),
-        BinaryOp::Divide => Expr::Literal(Literal::Float(span, (x as f64) / (y as f64))),
+        BinaryOp::Divide => Expr::Literal(Literal::Float(span, id, (x as f64) / (y as f64))),
         BinaryOp::Div if y == 0 => return Err(PreprocessorError::InvalidConstExpression(span)),
-        BinaryOp::Div => Expr::Literal(Literal::Integer(span, x / y)),
-        BinaryOp::Rem => Expr::Literal(Literal::Integer(span, x % y)),
+        BinaryOp::Div => Expr::Literal(Literal::Integer(span, id, x / y)),
+        BinaryOp::Rem => Expr::Literal(Literal::Integer(span, id, x % y)),
         _ => unreachable!(),
     };
     Ok(result)
@@ -701,33 +751,40 @@ fn eval_op_int(span: ByteSpan, x: i64, op: BinaryOp, y: i64) -> Result<Expr, Pre
 
 fn eval_op_bigint(
     span: ByteSpan,
+    id: NodeId,
     x: Integer,
     op: BinaryOp,
     y: Integer,
 ) -> Result<Expr, PreprocessorError> {
     let zero = Integer::new();
     let result = match op {
-        BinaryOp::Add => Expr::Literal(Literal::BigInteger(span, x + y)),
-        BinaryOp::Sub => Expr::Literal(Literal::BigInteger(span, x - y)),
-        BinaryOp::Multiply => Expr::Literal(Literal::BigInteger(span, x * y)),
+        BinaryOp::Add => Expr::Literal(Literal::BigInteger(span, id, x + y)),
+        BinaryOp::Sub => Expr::Literal(Literal::BigInteger(span, id, x - y)),
+        BinaryOp::Multiply => Expr::Literal(Literal::BigInteger(span, id, x * y)),
         BinaryOp::Divide => return Err(PreprocessorError::InvalidConstExpression(span)),
         BinaryOp::Div if y == zero => return Err(PreprocessorError::InvalidConstExpression(span)),
-        BinaryOp::Div => Expr::Literal(Literal::BigInteger(span, x / y)),
-        BinaryOp::Rem => Expr::Literal(Literal::BigInteger(span, x % y)),
+        BinaryOp::Div => Expr::Literal(Literal::BigInteger(span, id, x / y)),
+        BinaryOp::Rem => Expr::Literal(Literal::BigInteger(span, id, x % y)),
         _ => unreachable!(),
     };
     Ok(result)
 }
 
-fn eval_op_float(span: ByteSpan, x: f64, op: BinaryOp, y: f64) -> Result<Expr, PreprocessorError> {
+fn eval_op_float(
+    span: ByteSpan,
+    id: NodeId,
+    x: f64,
+    op: BinaryOp,
+    y: f64
+) -> Result<Expr, PreprocessorError> {
     match op {
-        BinaryOp::Add => Ok(Expr::Literal(Literal::Float(span, x + y))),
-        BinaryOp::Sub => Ok(Expr::Literal(Literal::Float(span, x - y))),
-        BinaryOp::Multiply => Ok(Expr::Literal(Literal::Float(span, x * y))),
+        BinaryOp::Add => Ok(Expr::Literal(Literal::Float(span, id, x + y))),
+        BinaryOp::Sub => Ok(Expr::Literal(Literal::Float(span, id, x - y))),
+        BinaryOp::Multiply => Ok(Expr::Literal(Literal::Float(span, id, x * y))),
         BinaryOp::Divide if y == 0.0 => {
             return Err(PreprocessorError::InvalidConstExpression(span))
         }
-        BinaryOp::Divide => Ok(Expr::Literal(Literal::Float(span, x / y))),
+        BinaryOp::Divide => Ok(Expr::Literal(Literal::Float(span, id, x / y))),
         BinaryOp::Div => return Err(PreprocessorError::InvalidConstExpression(span)),
         BinaryOp::Rem => return Err(PreprocessorError::InvalidConstExpression(span)),
         _ => unreachable!(),
@@ -736,18 +793,19 @@ fn eval_op_float(span: ByteSpan, x: f64, op: BinaryOp, y: f64) -> Result<Expr, P
 
 fn eval_shift(
     span: ByteSpan,
+    id: NodeId,
     lhs: Expr,
     op: BinaryOp,
     rhs: Expr,
 ) -> Result<Expr, PreprocessorError> {
     match (lhs, rhs) {
-        (Expr::Literal(Literal::Integer(_, x)), Expr::Literal(Literal::Integer(_, y))) => {
+        (Expr::Literal(Literal::Integer(_, _, x)), Expr::Literal(Literal::Integer(_, _, y))) => {
             let result = match op {
-                BinaryOp::Bor => Expr::Literal(Literal::Integer(span, x | y)),
-                BinaryOp::Bxor => Expr::Literal(Literal::Integer(span, x ^ y)),
-                BinaryOp::Band => Expr::Literal(Literal::Integer(span, x & y)),
-                BinaryOp::Bsl => Expr::Literal(Literal::Integer(span, x << y)),
-                BinaryOp::Bsr => Expr::Literal(Literal::Integer(span, x >> y)),
+                BinaryOp::Bor => Expr::Literal(Literal::Integer(span, id, x | y)),
+                BinaryOp::Bxor => Expr::Literal(Literal::Integer(span, id, x ^ y)),
+                BinaryOp::Band => Expr::Literal(Literal::Integer(span, id, x & y)),
+                BinaryOp::Bsl => Expr::Literal(Literal::Integer(span, id, x << y)),
+                BinaryOp::Bsr => Expr::Literal(Literal::Integer(span, id, x >> y)),
                 _ => unreachable!(),
             };
             Ok(result)
@@ -758,16 +816,16 @@ fn eval_shift(
 
 fn is_number(e: &Expr) -> bool {
     match *e {
-        Expr::Literal(Literal::Integer(_, _)) => true,
-        Expr::Literal(Literal::BigInteger(_, _)) => true,
-        Expr::Literal(Literal::Float(_, _)) => true,
+        Expr::Literal(Literal::Integer(_, _, _)) => true,
+        Expr::Literal(Literal::BigInteger(_, _, _)) => true,
+        Expr::Literal(Literal::Float(_, _, _)) => true,
         _ => false,
     }
 }
 
 fn is_boolean(e: &Expr) -> bool {
     match *e {
-        Expr::Literal(Literal::Atom(Ident { ref name, .. })) => {
+        Expr::Literal(Literal::Atom(_, Ident { ref name, .. })) => {
             if *name == symbols::True || *name == symbols::False {
                 return true;
             }
@@ -779,7 +837,7 @@ fn is_boolean(e: &Expr) -> bool {
 
 fn is_true(e: &Expr) -> bool {
     match *e {
-        Expr::Literal(Literal::Atom(Ident { ref name, .. })) if *name == symbols::True => true,
+        Expr::Literal(Literal::Atom(_, Ident { ref name, .. })) if *name == symbols::True => true,
         _ => false,
     }
 }

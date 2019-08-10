@@ -76,7 +76,7 @@ impl AuxEq<ListPool<Const>> for ConstKind {
 pub struct ConstantContainer {
     const_values: PrimaryMap<Const, ConstKind>,
     value_map: AuxHashMap<ConstKind, Const, ListPool<Const>>,
-    pub(crate) const_pool: ListPool<Const>,
+    pub const_pool: ListPool<Const>,
 }
 
 impl Default for ConstantContainer {
@@ -99,8 +99,12 @@ impl ConstantContainer {
         &self.const_values[value]
     }
 
-    pub fn value_list_cell(&mut self, head: Const, tail: Const) -> Const {
+    pub fn list_cell(&mut self, head: Const, tail: Const) -> Const {
         self.from(ConstKind::ListCell { head, tail })
+    }
+
+    pub fn nil(&mut self) -> Const {
+        self.from(NilTerm)
     }
 
     pub fn from<T>(&mut self, val: T) -> Const where T: IntoConst {
@@ -128,6 +132,20 @@ impl ConstantContainer {
         }
     }
 
+    pub fn tuple_builder(&self) -> TupleBuilder {
+        TupleBuilder::new()
+    }
+
+}
+
+pub struct EmptyMap;
+impl IntoConst for EmptyMap {
+    fn into_const(self, c: &mut ConstantContainer) -> Const {
+        c.from(ConstKind::Map {
+            keys: EntityList::new(),
+            values: EntityList::new(),
+        })
+    }
 }
 
 pub trait IntoConst {
@@ -162,6 +180,33 @@ impl IntoConst for Ident {
     fn into_const(self, c: &mut ConstantContainer) -> Const {
         self.name.into_const(c)
     }
+}
+
+pub struct TupleBuilder {
+    elements: EntityList<Const>,
+}
+impl TupleBuilder {
+
+    pub fn new() -> Self {
+        TupleBuilder {
+            elements: EntityList::new(),
+        }
+    }
+
+    pub fn push(&mut self, elem: Const, c: &mut ConstantContainer) {
+        self.elements.push(elem, &mut c.const_pool);
+    }
+
+    pub fn clear(mut self, c: &mut ConstantContainer) {
+        self.elements.clear(&mut c.const_pool);
+    }
+
+    pub fn finish(self, c: &mut ConstantContainer) -> Const {
+        c.from(ConstKind::Tuple {
+            entries: self.elements,
+        })
+    }
+
 }
 
 //struct TupleTerm<T: IntoConst, I: IntoIterator<Item = T>>(I);

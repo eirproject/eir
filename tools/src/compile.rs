@@ -14,6 +14,7 @@ use libeir_syntax_erl::{
 use libeir_diagnostics::{
     ColorChoice, Emitter, StandardStreamEmitter
 };
+use libeir_passes::PassManager;
 
 //use eir::FunctionIdent;
 //use eir::text::{ ToEirText, ToEirTextContext, EirLiveValuesAnnotator };
@@ -38,7 +39,6 @@ arg_enum!{
     pub enum CompileLevel {
         High,
         Normal,
-        CPS,
     }
 }
 
@@ -58,6 +58,11 @@ fn handle_erl(in_str: &str, matches: &ArgMatches) -> Option<Module> {
     if let Some(includes) = matches.values_of("INCLUDE_PATHS") {
         for include in includes {
             config.include_paths.push_front(PathBuf::from(include));
+        }
+    }
+    if let Some(includes) = matches.values_of("CODE_PATHS") {
+        for include in includes {
+            config.code_paths.push_front(PathBuf::from(include));
         }
     }
 
@@ -122,6 +127,9 @@ fn main() {
         .arg(Arg::from_usage("<INCLUDE_PATHS> -I <INCLUDE_PATH> 'add include path for the erlang preprocessor'")
              .required(false)
              .multiple(true))
+        .arg(Arg::from_usage("<CODE_PATHS> -C <CODE_PATH> 'add code path for the erlang preprocessor'")
+             .required(false)
+             .multiple(true))
         //.arg(Arg::from_usage("-p,--pass <PASS> 'run the given compilation pass'")
         //     .multiple(true)
         //     .possible_values(&CompilePass::variants()))
@@ -143,16 +151,13 @@ fn main() {
         return;
     };
 
-    //match value_t!(matches, "COMPILE_LEVEL", CompileLevel).unwrap() {
-    //    CompileLevel::High => {},
-    //    CompileLevel::Normal => {
-    //        core_erlang_compiler::ir::eir_normal_passes(&mut eir);
-    //    },
-    //    CompileLevel::CPS => {
-    //        core_erlang_compiler::ir::eir_normal_passes(&mut eir);
-    //        eir = cps_transform::transform_module(&eir);
-    //    },
-    //}
+    match value_t!(matches, "COMPILE_LEVEL", CompileLevel).unwrap() {
+        CompileLevel::High => {},
+        CompileLevel::Normal => {
+            let mut pass_manager = PassManager::default();
+            pass_manager.run(&mut eir);
+        },
+    }
 
     let selected_function = matches.value_of("FUN_IDENT")
         .map(|val| FunctionIdent::parse_with_module(

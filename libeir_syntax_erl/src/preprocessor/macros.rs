@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use libeir_diagnostics::ByteSpan;
 
 use crate::lexer::{IdentToken, SymbolToken};
-use crate::lexer::{LexicalToken, Symbol, Token};
+use crate::lexer::{LexicalToken, Symbol, Token, DelayedSubstitution};
 
 use super::directives::Define;
 use super::token_reader::{ReadFrom, TokenReader};
@@ -129,6 +129,7 @@ pub enum MacroDef {
     String(Symbol),
     Static(Define),
     Dynamic(Vec<LexicalToken>),
+    DelayedSubstitution(DelayedSubstitution),
 }
 impl MacroDef {
     /// Returns `true` if this macro has variables, otherwise `false`.
@@ -138,6 +139,7 @@ impl MacroDef {
             MacroDef::Dynamic(_) => false,
             MacroDef::String(_) => false,
             MacroDef::Boolean(_) => false,
+            MacroDef::DelayedSubstitution(_) => false,
         }
     }
 }

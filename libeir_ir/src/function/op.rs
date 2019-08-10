@@ -1,9 +1,39 @@
 use crate::pattern::PatternClause;
-use crate::binary::EntrySpecifier as BinaryEntrySpecifier;
+use crate::binary::BinaryEntrySpecifier;
 
 use libeir_intern::Symbol;
 
 use cranelift_entity::EntityList;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum BasicType {
+    Map,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum MatchKind {
+    /// One read, the value to test it against
+    /// No arguments.
+    Value,
+    /// No reads.
+    /// No writes.
+    Type(BasicType),
+    /// One optional read, the size.
+    /// Two arguments, the decoded value, and the tail.
+    Binary(BinaryEntrySpecifier),
+    /// No reads.
+    /// N arguments, the unpacked values.
+    Tuple(usize),
+    /// No reads.
+    /// Two arguments, the head and the tail.
+    ListCell,
+    /// One read, the key.
+    /// One argument, the value.
+    MapItem,
+    /// No reads.
+    /// No arguments.
+    Wildcard,
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MapPutUpdate {
@@ -94,12 +124,19 @@ pub enum OpKind {
         specifier: BinaryEntrySpecifier,
     },
 
-    /// (ok: fn(tuple_elem..), fail: fn(), term)
-    UnpackTuple(usize),
-    /// (ok: fn(head, tail), fail: fn(), term)
-    UnpackListCell,
-    /// (ok: fn(value), fail: fn(), map: map, key)
-    UnpackMapItem,
+    /// Match on a single value.
+    /// Branches are tested in order, first matched is branched to.
+    /// ```ignore
+    /// (
+    ///     branches: (fn(..), ..),
+    ///     value: term,
+    ///     branch1_args: (..),
+    ///     ..
+    /// )
+    /// ```
+    Match {
+        branches: Vec<MatchKind>,
+    },
 
     /// ()
     /// Something that should not happen. The VM could be left in an

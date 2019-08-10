@@ -23,13 +23,25 @@ impl ExceptionHandlerStack {
         self.stack.pop();
     }
 
-    pub fn make_error_jump(&self, b: &mut FunctionBuilder, block: Block, typ: Value, error: Value, trace: Value) {
+    pub fn make_error_jump_trace(
+        &self, b: &mut FunctionBuilder, block: Block,
+        typ: Value, error: Value, trace: Value)
+    {
         let (handler, has_arg) = self.stack.last().unwrap();
         if *has_arg {
             b.op_call(block, *handler, &[typ, error, trace])
         } else {
             b.op_call(block, *handler, &[])
         }
+    }
+
+    pub fn make_error_jump(
+        &self, b: &mut FunctionBuilder, block: Block,
+        typ: Value, error: Value)
+    {
+        let cont = b.op_trace_capture_raw(block);
+        let trace = b.block_args(cont)[0];
+        self.make_error_jump_trace(b, cont, typ, error, trace);
     }
 
     pub fn finish(&self) {

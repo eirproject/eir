@@ -2,13 +2,15 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 
-use libeir_diagnostics::{ByteSpan, Diagnostic, Label};
+use libeir_diagnostics::{ByteSpan, DUMMY_SPAN, Diagnostic, Label};
 
-use super::{Apply, Cons, Nil, Remote, Tuple};
+use super::NodeIdGenerator;
+use super::{Apply, Cons, Var, Nil, Remote, Tuple};
 use super::{Attribute, Deprecation, UserAttribute};
 use super::{Callback, Record, TypeDef, TypeSig, TypeSpec};
 use super::{Expr, Ident, Literal, Symbol};
-use super::{FunctionClause, FunctionName, NamedFunction, ResolvedFunctionName};
+use super::{FunctionClause, FunctionName, NamedFunction, ResolvedFunctionName,
+            LocalFunctionName};
 use super::{ParseError, ParserError};
 
 /// Represents expressions valid at the top level of a module body
@@ -17,6 +19,17 @@ pub enum TopLevel {
     Attribute(Attribute),
     Record(Record),
     Function(NamedFunction),
+}
+
+#[derive(Debug, Clone)]
+pub struct DefinedRecord {
+    pub record: Record,
+    pub field_idx_map: HashMap<Ident, usize>,
+}
+impl PartialEq for DefinedRecord {
+    fn eq(&self, other: &Self) -> bool {
+        self.record == other.record
+    }
 }
 
 /// Represents a complete module, broken down into its constituent parts
@@ -37,16 +50,16 @@ pub struct Module {
     pub vsn: Option<Expr>,
     pub author: Option<Expr>,
     pub compile: Option<CompileOptions>,
-    pub on_load: Option<ResolvedFunctionName>,
-    pub imports: HashSet<ResolvedFunctionName>,
-    pub exports: HashSet<ResolvedFunctionName>,
-    pub types: HashMap<ResolvedFunctionName, TypeDef>,
-    pub exported_types: HashSet<ResolvedFunctionName>,
+    pub on_load: Option<LocalFunctionName>,
+    pub imports: HashMap<LocalFunctionName, ResolvedFunctionName>,
+    pub exports: HashSet<LocalFunctionName>,
+    pub types: HashMap<LocalFunctionName, TypeDef>,
+    pub exported_types: HashSet<LocalFunctionName>,
     pub behaviours: HashSet<Ident>,
-    pub callbacks: HashMap<ResolvedFunctionName, Callback>,
-    pub records: HashMap<Symbol, Record>,
+    pub callbacks: HashMap<LocalFunctionName, Callback>,
+    pub records: HashMap<Symbol, DefinedRecord>,
     pub attributes: HashMap<Ident, UserAttribute>,
-    pub functions: BTreeMap<ResolvedFunctionName, NamedFunction>,
+    pub functions: BTreeMap<LocalFunctionName, NamedFunction>,
     // Used for module-level deprecation
     pub deprecation: Option<Deprecation>,
     // Used for function-level deprecation
@@ -70,6 +83,7 @@ impl Module {
     pub fn new(
         errs: &mut Vec<ParseError>,
         span: ByteSpan,
+        nid: &mut NodeIdGenerator,
         name: Ident,
         mut body: Vec<TopLevel>,
     ) -> Self {
@@ -80,7 +94,7 @@ impl Module {
             author: None,
             on_load: None,
             compile: None,
-            imports: HashSet::new(),
+            imports: HashMap::new(),
             exports: HashSet::new(),
             types: HashMap::new(),
             exported_types: HashSet::new(),
@@ -136,8 +150,7 @@ impl Module {
                 }
                 TopLevel::Attribute(Attribute::OnLoad(aspan, fname)) => {
                     if module.on_load.is_none() {
-                        let fname = fname.resolve(module.name.clone());
-                        module.on_load = Some(fname);
+                        module.on_load = Some(fname.to_local());
                         continue;
                     }
                     errs.push(to_lalrpop_err!(ParserError::Diagnostic(
@@ -156,9 +169,9 @@ impl Module {
                 TopLevel::Attribute(Attribute::Import(aspan, from_module, mut imports)) => {
                     for import in imports.drain(..) {
                         let import = import.resolve(from_module.clone());
-                        match module.imports.get(&import) {
+                        match module.imports.get(&import.to_local()) {
                             None => {
-                                module.imports.insert(import);
+                                module.imports.insert(import.to_local(), import);
                             }
                             Some(ResolvedFunctionName {
                                 span: ref prev_span,
@@ -180,12 +193,11 @@ impl Module {
                 }
                 TopLevel::Attribute(Attribute::Export(aspan, mut exports)) => {
                     for export in exports.drain(..) {
-                        let export = export.resolve(module.name.clone());
-                        match module.exports.get(&export) {
+                        match module.exports.get(&export.to_local()) {
                             None => {
-                                module.exports.insert(export);
+                                module.exports.insert(export.to_local());
                             }
-                            Some(ResolvedFunctionName {
+                            Some(LocalFunctionName {
                                 span: ref prev_span,
                                 ..
                             }) => {
@@ -208,13 +220,14 @@ impl Module {
                     let arity = ty.params.len();
                     let type_name = ResolvedFunctionName {
                         span: ty.name.span.clone(),
+                        id: nid.next(),
                         module: module.name.clone(),
                         function: ty.name.clone(),
                         arity,
                     };
-                    match module.types.get(&type_name) {
+                    match module.types.get(&type_name.to_local()) {
                         None => {
-                            module.types.insert(type_name, ty);
+                            module.types.insert(type_name.to_local(), ty);
                         }
                         Some(TypeDef {
                             span: ref prev_span,
@@ -236,12 +249,11 @@ impl Module {
                 }
                 TopLevel::Attribute(Attribute::ExportType(aspan, mut exports)) => {
                     for export in exports.drain(..) {
-                        let export = export.resolve(module.name.clone());
-                        match module.exported_types.get(&export) {
+                        match module.exported_types.get(&export.to_local()) {
                             None => {
-                                module.exported_types.insert(export);
+                                module.exported_types.insert(export.to_local());
                             }
-                            Some(ResolvedFunctionName {
+                            Some(LocalFunctionName {
                                 span: ref prev_span,
                                 ..
                             }) => {
@@ -316,13 +328,14 @@ impl Module {
                     // Check for redefinition
                     let cb_name = ResolvedFunctionName {
                         span: callback.span.clone(),
+                        id: nid.next(),
                         module: module.name.clone(),
                         function: callback.function.clone(),
                         arity,
                     };
-                    match module.callbacks.get(&cb_name) {
+                    match module.callbacks.get(&cb_name.to_local()) {
                         None => {
-                            module.callbacks.insert(cb_name, callback);
+                            module.callbacks.insert(cb_name.to_local(), callback);
                             continue;
                         }
                         Some(Callback {
@@ -376,6 +389,7 @@ impl Module {
                     // Check for redefinition
                     let spec_name = ResolvedFunctionName {
                         span: typespec.span.clone(),
+                        id: nid.next(),
                         module: module.name.clone(),
                         function: typespec.function.clone(),
                         arity,
@@ -529,27 +543,48 @@ impl Module {
                         }
                     }
                 }
-                TopLevel::Record(record) => {
-                    // TODO: Normalize records so that all fields have explicit initializers
-                    //   * Use `undefined` for fields that have no default value
-                    // TODO: Check for duplicate fields
+                TopLevel::Record(mut record) => {
                     let name = record.name.name.clone();
                     match module.records.get(&name) {
                         None => {
-                            module.records.insert(name, record);
+                            // FIXME: Remove the set when hashmap gets api
+                            // for getting keys.
+                            let mut fields = HashSet::<Ident>::new();
+                            let mut field_idx_map = HashMap::<Ident, usize>::new();
+                            for (idx, field) in record.fields.iter_mut().enumerate() {
+                                if field.value.is_none() {
+                                    field.value = Some(atom!(nid, undefined));
+                                }
+                                if let Some(prev) = fields.get(&field.name) {
+                                    errs.push(to_lalrpop_err!(ParserError::Diagnostic(
+                                        Diagnostic::new_error("duplicate field in record")
+                                            .with_label(
+                                                Label::new_primary(field.name.span)
+                                                    .with_message("duplicate field occurs here")
+                                            )
+                                            .with_label(
+                                                Label::new_primary(prev.span)
+                                                    .with_message("previous field")
+                                            )
+                                    )));
+                                }
+                                fields.insert(field.name);
+                                field_idx_map.insert(field.name, idx);
+                            }
+                            module.records.insert(name, DefinedRecord {
+                                record,
+                                field_idx_map,
+                            });
                         }
-                        Some(Record {
-                            span: ref prev_span,
-                            ..
-                        }) => {
+                        Some(prev) => {
                             errs.push(to_lalrpop_err!(ParserError::Diagnostic(
                                 Diagnostic::new_error("record already defined")
                                     .with_label(
-                                        Label::new_primary(record.span.clone())
+                                        Label::new_primary(record.span)
                                             .with_message("duplicate definition occurs here")
                                     )
                                     .with_label(
-                                        Label::new_secondary(prev_span.clone())
+                                        Label::new_secondary(prev.record.span)
                                             .with_message("previously defined here")
                                     )
                             )));
@@ -560,6 +595,7 @@ impl Module {
                     let name = &function.name;
                     let resolved_name = ResolvedFunctionName {
                         span: name.span.clone(),
+                        id: nid.next(),
                         module: module.name.clone(),
                         function: name.clone(),
                         arity: function.arity,
@@ -582,7 +618,7 @@ impl Module {
                         None => None,
                         Some(spec) => Some(spec.clone()),
                     };
-                    match module.functions.entry(resolved_name) {
+                    match module.functions.entry(resolved_name.to_local()) {
                         Entry::Vacant(f) => {
                             f.insert(function);
                         }
@@ -609,7 +645,10 @@ impl Module {
         }
 
         // Ensure internal pseudo-locals are defined
-        module.define_pseudolocals();
+        module.define_pseudolocals(nid);
+
+        // Auto imports
+        module.add_auto_imports(nid);
 
         // Verify on_load function exists
         if let Some(ref on_load_name) = module.on_load {
@@ -625,7 +664,7 @@ impl Module {
 
         // Check for orphaned type specs
         for (spec_name, spec) in &specs {
-            if !module.functions.contains_key(spec_name) {
+            if !module.functions.contains_key(&spec_name.to_local()) {
                 errs.push(to_lalrpop_err!(ParserError::Diagnostic(
                     Diagnostic::new_warning("type spec for undefined function").with_label(
                         Label::new_primary(spec.span.clone()).with_message(
@@ -639,43 +678,241 @@ impl Module {
         module
     }
 
+    fn add_auto_imports(&mut self, nid: &mut NodeIdGenerator) {
+
+        macro_rules! auto_imports {
+            ($($m:ident : $f:ident / $a:expr),*) => {
+                [
+                    $(
+                        ResolvedFunctionName {
+                            span: DUMMY_SPAN,
+                            id: nid.next(),
+                            module: Ident::from_str(stringify!($m)),
+                            function: Ident::from_str(stringify!($f)),
+                            arity: $a,
+                        },
+                    )*
+                ]
+            }
+        }
+
+        let autos = auto_imports! {
+            erlang:abs/1,
+            erlang:apply/2,
+            erlang:apply/3,
+            erlang:atom_to_binary/2,
+            erlang:atom_to_list/1,
+            erlang:binary_part/2,
+            erlang:binary_part/3,
+            erlang:binary_to_atom/2,
+            erlang:binary_to_existing_atom/2,
+            erlang:binary_to_float/1,
+            erlang:binary_to_integer/1,
+            erlang:binary_to_integer/2,
+            erlang:binary_to_list/1,
+            erlang:binary_to_list/3,
+            erlang:binary_to_term/1,
+            erlang:binary_to_term/2,
+            erlang:bit_size/1,
+            erlang:bitstring_to_list/1,
+            erlang:byte_size/1,
+            erlang:ceil/1,
+            erlang:check_old_code/1,
+            erlang:check_process_code/2,
+            erlang:check_process_code/3,
+            erlang:date/0,
+            erlang:delete_module/1,
+            erlang:demonitor/1,
+            erlang:demonitor/2,
+            erlang:disconnect_node/1,
+            erlang:element/2,
+            erlang:erase/0,
+            erlang:erase/1,
+            erlang:error/1,
+            erlang:error/2,
+            erlang:exit/1,
+            erlang:exit/2,
+            erlang:float/1,
+            erlang:float_to_binary/1,
+            erlang:float_to_binary/2,
+            erlang:float_to_list/1,
+            erlang:float_to_list/2,
+            erlang:floor/1,
+            erlang:garbage_collect/0,
+            erlang:garbage_collect/1,
+            erlang:garbage_collect/2,
+            erlang:get/0,
+            erlang:get/1,
+            erlang:get_keys/0,
+            erlang:get_keys/1,
+            erlang:group_leader/0,
+            erlang:group_leader/2,
+            erlang:halt/0,
+            erlang:halt/1,
+            erlang:halt/2,
+            erlang:hd/1,
+            erlang:integer_to_binary/1,
+            erlang:integer_to_binary/2,
+            erlang:integer_to_list/1,
+            erlang:integer_to_list/2,
+            erlang:iolist_size/1,
+            erlang:iolist_to_binary/1,
+            erlang:iolist_to_iovec/1,
+            erlang:is_alive/0,
+            erlang:is_atom/1,
+            erlang:is_binary/1,
+            erlang:is_bitstring/1,
+            erlang:is_boolean/1,
+            erlang:is_float/1,
+            erlang:is_function/1,
+            erlang:is_integer/1,
+            erlang:is_list/1,
+            erlang:is_map/1,
+            erlang:is_map_key/2,
+            erlang:is_number/1,
+            erlang:is_pid/1,
+            erlang:is_port/1,
+            erlang:is_process_alive/1,
+            erlang:is_record/2,
+            erlang:is_record/3,
+            erlang:is_reference/1,
+            erlang:is_tuple/1,
+            erlang:length/1,
+            erlang:link/1,
+            erlang:list_to_atom/1,
+            erlang:list_to_binary/1,
+            erlang:list_to_bitstring/1,
+            erlang:list_to_existing_atom/1,
+            erlang:list_to_float/1,
+            erlang:list_to_integer/1,
+            erlang:list_to_integer/2,
+            erlang:list_to_pid/1,
+            erlang:list_to_port/1,
+            erlang:list_to_ref/1,
+            erlang:list_to_tuple/1,
+            erlang:load_module/2,
+            erlang:make_ref/0,
+            erlang:map_get/2,
+            erlang:map_size/1,
+            erlang:max/2,
+            erlang:min/2,
+            erlang:module_loaded/1,
+            erlang:monitor/2,
+            erlang:monitor_node/2,
+            erlang:node/0,
+            erlang:node/1,
+            erlang:nodes/0,
+            erlang:nodes/1,
+            erlang:now/0,
+            erlang:open_port/2,
+            erlang:pid_to_list/1,
+            erlang:port_close/1,
+            erlang:port_command/2,
+            erlang:port_command/3,
+            erlang:port_connect/2,
+            erlang:port_control/3,
+            erlang:port_to_list/1,
+            erlang:pre_loaded/0,
+            erlang:process_flag/2,
+            erlang:process_flag/3,
+            erlang:process_info/1,
+            erlang:process_info/2,
+            erlang:processes/0,
+            erlang:purge_module/1,
+            erlang:put/2,
+            erlang:ref_to_list/1,
+            erlang:register/2,
+            erlang:registered/0,
+            erlang:round/1,
+            erlang:self/0,
+            erlang:setelement/3,
+            erlang:size/1,
+            erlang:spawn/1,
+            erlang:spawn/2,
+            erlang:spawn/3,
+            erlang:spawn/4,
+            erlang:spawn_link/1,
+            erlang:spawn_link/2,
+            erlang:spawn_link/3,
+            erlang:spawn_link/4,
+            erlang:spawn_monitor/1,
+            erlang:spawn_monitor/3,
+            erlang:spawn_opt/2,
+            erlang:spawn_opt/3,
+            erlang:spawn_opt/4,
+            erlang:spawn_opt/5,
+            erlang:split_binary/2,
+            erlang:statistics/1,
+            erlang:term_to_binary/1,
+            erlang:term_to_binary/2,
+            erlang:throw/1,
+            erlang:time/0,
+            erlang:tl/1,
+            erlang:trunc/1,
+            erlang:tuple_size/1,
+            erlang:tuple_to_list/1,
+            erlang:unlink/1,
+            erlang:unregister/1,
+            erlang:whereis/1
+        };
+
+        if let Some(compile) = self.compile.as_ref() {
+            if compile.no_auto_import { return; }
+
+            for fun in autos.iter() {
+                if !compile.no_auto_imports.contains(fun) {
+                    self.imports.insert(fun.to_local(), fun.clone());
+                }
+            }
+        } else {
+            for fun in autos.iter() {
+                self.imports.insert(fun.to_local(), fun.clone());
+            }
+        }
+
+    }
+
     // Every module in Erlang has some functions implicitly defined for internal use:
     //
     // * `module_info/0` (exported)
     // * `module_info/1` (exported)
     // * `record_info/2`
     // * `behaviour_info/1` (optional)
-    fn define_pseudolocals(&mut self) {
-        let mod_info_0 = fun!(module_info () ->
-            apply!(remote!(erlang, get_module_info), Expr::Literal(Literal::Atom(self.name.clone())))
+    fn define_pseudolocals(&mut self, nid: &mut NodeIdGenerator) {
+        let mod_info_0 = fun!(nid, module_info () ->
+            apply!(nid, remote!(nid, erlang, get_module_info), Expr::Literal(Literal::Atom(nid.next(), self.name.clone())))
         );
-        let mod_info_1 = fun!(module_info (Key) ->
-            apply!(remote!(erlang, get_module_info), Expr::Literal(Literal::Atom(self.name.clone())), var!(Key))
+        let mod_info_1 = fun!(nid, module_info (Key) ->
+            apply!(nid, remote!(nid, erlang, get_module_info), Expr::Literal(Literal::Atom(nid.next(), self.name.clone())), var!(nid, Key))
         );
 
         self.define_function(mod_info_0);
         self.define_function(mod_info_1);
 
         if self.callbacks.len() > 0 {
-            let callbacks = self.callbacks.iter().fold(nil!(), |acc, (cbname, cb)| {
+            let callbacks = self.callbacks.iter().fold(nil!(nid), |acc, (cbname, cb)| {
                 if cb.optional {
                     acc
                 } else {
                     cons!(
+                        nid,
                         tuple!(
-                            atom_from_sym!(cbname.function.name.clone()),
-                            int!(cbname.arity as i64)
+                            nid,
+                            atom_from_sym!(nid, cbname.function.name.clone()),
+                            int!(nid, cbname.arity as i64)
                         ),
                         acc
                     )
                 }
             });
-            let opt_callbacks = self.callbacks.iter().fold(nil!(), |acc, (cbname, cb)| {
+            let opt_callbacks = self.callbacks.iter().fold(nil!(nid), |acc, (cbname, cb)| {
                 if cb.optional {
                     cons!(
+                        nid,
                         tuple!(
-                            atom_from_sym!(cbname.function.name.clone()),
-                            int!(cbname.arity as i64)
+                            nid,
+                            atom_from_sym!(nid, cbname.function.name.clone()),
+                            int!(nid, cbname.arity as i64)
                         ),
                         acc
                     )
@@ -684,9 +921,9 @@ impl Module {
                 }
             });
 
-            let behaviour_info_1 = fun!(behaviour_info
-                                        (atom!(callbacks)) -> callbacks;
-                                        (atom!(optional_callbacks)) -> opt_callbacks);
+            let behaviour_info_1 = fun!(nid, behaviour_info
+                                        (atom!(nid, callbacks)) -> callbacks;
+                                        (atom!(nid, optional_callbacks)) -> opt_callbacks);
 
             self.define_function(behaviour_info_1);
         }
@@ -695,11 +932,12 @@ impl Module {
     fn define_function(&mut self, f: NamedFunction) {
         let name = ResolvedFunctionName {
             span: f.span.clone(),
+            id: f.id,
             module: self.name.clone(),
             function: f.name.clone(),
             arity: f.arity,
         };
-        self.functions.insert(name, f);
+        self.functions.insert(name.to_local(), f);
     }
 }
 impl PartialEq for Module {
@@ -774,7 +1012,7 @@ pub struct CompileOptions {
     // Warns when a function is unused
     pub warn_unused_function: bool,
     // Disables the unused function warning for the specified functions
-    pub no_warn_unused_functions: HashSet<ResolvedFunctionName>,
+    pub no_warn_unused_functions: HashSet<LocalFunctionName>,
     // Warns about unused imports
     pub warn_unused_import: bool,
     // Warns about unused variables
@@ -784,7 +1022,7 @@ pub struct CompileOptions {
     // Warns about missing type specs
     pub warn_missing_spec: bool,
     // Inlines the given functions
-    pub inline_functions: HashSet<ResolvedFunctionName>,
+    pub inline_functions: HashSet<LocalFunctionName>,
 }
 impl Default for CompileOptions {
     fn default() -> Self {
@@ -826,7 +1064,7 @@ impl CompileOptions {
         let mut diagnostics = Vec::new();
         match expr {
             // e.g. -compile(export_all).
-            &Expr::Literal(Literal::Atom(ref option_name)) => match option_name.as_str().get() {
+            &Expr::Literal(Literal::Atom(_id, ref option_name)) => match option_name.as_str().get() {
                 "export_all" => self.export_all = true,
                 "nowarn_export_all" => self.warn_export_all = false,
                 "nowarn_shadow_vars" => self.warn_shadow_vars = false,
@@ -847,35 +1085,36 @@ impl CompileOptions {
                 ref head, ref tail, ..
             }) => self.compiler_opts_from_list(&mut diagnostics, module, to_list(head, tail)),
             // e.g. -compile({nowarn_unused_function, [some_fun/0]}).
-            &Expr::Tuple(Tuple { ref elements, .. }) => {
-                if let Some((head, tail)) = elements.split_first() {
-                    if let &Expr::Literal(Literal::Atom(ref option_name)) = head {
-                        match option_name.as_str().get() {
-                            "no_auto_import" => {
-                                self.no_auto_imports(&mut diagnostics, module, tail);
-                            }
-                            "nowarn_unused_function" => {
-                                self.no_warn_unused_functions(&mut diagnostics, module, tail);
-                            }
-                            "inline" => {
-                                self.inline_functions(&mut diagnostics, module, tail);
-                            }
-                            "hipe" => {
-                                // Should we warn about this? I'm inclined to think
-                                // not, since we want to ignore warning spam.
-                            }
-                            _name => {
-                                diagnostics.push(
-                                    Diagnostic::new_warning("invalid compile option").with_label(
-                                        Label::new_primary(option_name.span).with_message(
-                                            "this option is either unsupported or unrecognized",
-                                        ),
+            &Expr::Tuple(Tuple { ref elements, .. }) if elements.len() == 2 => {
+                //if let Some((head, tail)) = elements.split_first() {
+                if let &Expr::Literal(Literal::Atom(_id, ref option_name)) = &elements[0] {
+                    let list = to_list_simple(&elements[1]);
+                    match option_name.as_str().get() {
+                        "no_auto_import" => {
+                            self.no_auto_imports(&mut diagnostics, module, &list);
+                        }
+                        "nowarn_unused_function" => {
+                            self.no_warn_unused_functions(&mut diagnostics, module, &list);
+                        }
+                        "inline" => {
+                            self.inline_functions(&mut diagnostics, module, &list);
+                        }
+                        "hipe" => {
+                            // Should we warn about this? I'm inclined to think
+                            // not, since we want to ignore warning spam.
+                        }
+                        _name => {
+                            diagnostics.push(
+                                Diagnostic::new_warning("invalid compile option").with_label(
+                                    Label::new_primary(option_name.span).with_message(
+                                        "this option is either unsupported or unrecognized",
                                     ),
-                                );
-                            }
+                                ),
+                            );
                         }
                     }
                 }
+                //}
             }
             term => {
                 diagnostics.push(
@@ -942,7 +1181,7 @@ impl CompileOptions {
             match fun {
                 Expr::FunctionName(FunctionName::PartiallyResolved(name)) => {
                     self.no_warn_unused_functions
-                        .insert(name.resolve(module.clone()));
+                        .insert(name.to_local());
                 }
                 other => {
                     diagnostics.push(
@@ -967,7 +1206,7 @@ impl CompileOptions {
             match fun {
                 Expr::FunctionName(FunctionName::PartiallyResolved(name)) => {
                     self.inline_functions
-                        .insert(name.resolve(module.clone()));
+                        .insert(name.to_local());
                 }
                 other => {
                     diagnostics.push(
@@ -982,6 +1221,25 @@ impl CompileOptions {
         }
     }
 
+}
+
+fn to_list_simple(mut expr: &Expr) -> Vec<Expr> {
+    let mut list = Vec::new();
+    loop {
+        match expr {
+            Expr::Cons(cons) => {
+                list.push((*cons.head).clone());
+                expr = &cons.tail;
+            }
+            Expr::Nil(_) => {
+                return list;
+            }
+            _ => {
+                list.push(expr.clone());
+                return list;
+            }
+        }
+    }
 }
 
 fn to_list(head: &Expr, tail: &Expr) -> Vec<Expr> {

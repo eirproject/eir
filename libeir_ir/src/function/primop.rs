@@ -31,11 +31,22 @@ impl BinOp {
 
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum LogicOp {
+    /// All arguments are equal
+    Eq,
+    And,
+    Or,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PrimOpKind {
 
     /// (lhs, rhs)
     BinOp(BinOp),
+
+    /// (terms..)
+    LogicOp(LogicOp),
 
     /// (terms..)
     Tuple,
@@ -47,11 +58,8 @@ pub enum PrimOpKind {
     Map,
 
     /// (terms..)
-    ValueList,
 
     /// (terms..)
-    LogicAnd,
-    /// (terms..)
-    LogicOr,
+    ValueList,
 
 }

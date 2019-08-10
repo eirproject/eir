@@ -3,6 +3,9 @@ use libeir_ir::{ Module, FunctionBuilder };
 mod compile_pattern;
 pub use self::compile_pattern::CompilePatternPass;
 
+mod naive_inline_closures;
+pub use self::naive_inline_closures::NaiveInlineClosuresPass;
+
 pub trait FunctionPass {
     fn run_function_pass(&mut self, b: &mut FunctionBuilder);
 }

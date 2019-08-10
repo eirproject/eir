@@ -42,10 +42,12 @@ impl ValueMap {
         if let Some(key) = self.back.get(&kind) {
             *key
         } else {
-            self.primary.push(ValueData {
+            let val = self.primary.push(ValueData {
                 kind,
                 usages: PooledEntitySet::new(),
-            })
+            });
+            self.back.insert(kind, val);
+            val
         }
     }
 

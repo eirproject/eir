@@ -48,6 +48,24 @@ pub enum Arity {
     Var(Ident),
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
+pub struct NodeId(pub usize);
+
+#[derive(Debug, Clone)]
+pub struct NodeIdGenerator(usize);
+impl NodeIdGenerator {
+
+    pub fn new() -> Self {
+        NodeIdGenerator(0)
+    }
+
+    pub fn next(&mut self) -> NodeId {
+        self.0 += 1;
+        NodeId(self.0)
+    }
+
+}
+
 /// The set of all binary operators which may be used in expressions
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOp {

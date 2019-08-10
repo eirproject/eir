@@ -6,7 +6,7 @@ pub enum Endianness {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum EntrySpecifier {
+pub enum BinaryEntrySpecifier {
     Integer {
         signed: bool,
         endianness: Endianness,
@@ -31,13 +31,13 @@ pub enum EntrySpecifier {
     },
 }
 
-impl EntrySpecifier {
+impl BinaryEntrySpecifier {
 
     pub fn has_size(&self) -> bool {
         match self {
-            EntrySpecifier::Utf8 => false,
-            EntrySpecifier::Utf16 { .. } => false,
-            EntrySpecifier::Utf32 { .. } => false,
+            BinaryEntrySpecifier::Utf8 => false,
+            BinaryEntrySpecifier::Utf16 { .. } => false,
+            BinaryEntrySpecifier::Utf32 { .. } => false,
             _ => true,
         }
     }

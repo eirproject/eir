@@ -85,8 +85,6 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
             }
         }
 
-        println!("NEW binds: {:#?}", leaf_bindings);
-
         MatchMatrix {
             data: data,
             variables: vars,
@@ -306,6 +304,10 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
             .iter().enumerate()
             .find(|(_, l)| **l == leaf)
             .map(|(idx, _)| &self.leaf_bindings[idx])
+    }
+
+    pub(crate) fn binds_for_head<'a>(&'a self) -> &'a HashMap<P::PatternNodeKey, P::CfgVariable> {
+        &self.leaf_bindings[0]
     }
 
     //pub(crate) fn iterate_clauses<'a>(&'a self) -> impl Iterator<Item = (LeafId, &'a [MatchMatrixElement<P>])> + 'a {

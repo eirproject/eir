@@ -5,7 +5,6 @@ use ::petgraph::graph::NodeIndex;
 
 mod generate_dot;
 
-use super::LeafId;
 use super::pattern::PatternProvider;
 
 pub type CfgNodeIndex = NodeIndex;
@@ -59,9 +58,13 @@ impl<P> PatternCfg<P> where P: PatternProvider {
     }
 
     pub(crate) fn add_child(&mut self, parent: CfgNodeIndex, typ: CfgEdge<P>,
-                            var: P::CfgVariable) -> CfgNodeIndex {
+                            var: P::CfgVariable,
+                            binds: HashMap<P::PatternNodeKey, P::CfgVariable>
+    ) -> CfgNodeIndex
+    {
         let child = self.graph.add_node(CfgNodeKind::Match(var));
         self.graph.add_edge(parent, child, typ);
+        self.leaf_bindings.insert(child, binds);
         child
     }
 

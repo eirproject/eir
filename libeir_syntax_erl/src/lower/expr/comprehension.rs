@@ -8,11 +8,12 @@ use libeir_ir::BinOp;
 
 use libeir_intern::{ Symbol, Ident };
 
-use crate::parser::ast::{ Expr, ListComprehension };
+use crate::parser::ast::{ Expr, ListComprehension, BinaryComprehension };
 
 use crate::lower::LowerCtx;
-use crate::lower::expr::{ lower_single };
+use crate::lower::expr::{ lower_single, lower_single_same_scope };
 use crate::lower::pattern::lower_clause;
+use crate::lower::expr::binary::lower_binary_expr;
 
 fn lower_qual<F>(ctx: &mut LowerCtx, b: &mut FunctionBuilder, inner: &F,
                  quals: &[Expr], mut block: IrBlock, mut acc: IrValue) -> (IrBlock, IrValue)
@@ -59,24 +60,29 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
                 ret_block = is_nil_block;
                 ret_val = loop_acc_arg;
 
-                let (unpack_ok_block, unpack_fail_block) = b.op_unpack_list_cell(non_nil_block, loop_list_arg);
+                let mut match_builder = b.op_match_build();
+                let unpack_ok_block = match_builder.push_list_cell(b);
+                let unpack_fail_block = match_builder.push_wildcard(b);
+                match_builder.finish(non_nil_block, loop_list_arg, b);
+
                 let head_val = b.block_args(unpack_ok_block)[0];
                 let tail_val = b.block_args(unpack_ok_block)[1];
 
                 {
                     let typ = b.value(Symbol::intern("error"));
                     let error = b.value(Symbol::intern("function_clause"));
-                    // TODO trace
-                    let trace = b.value(NilTerm);
-                    ctx.exc_stack.make_error_jump(b, unpack_fail_block, typ, error, trace);
+                    ctx.exc_stack.make_error_jump(
+                        b, unpack_fail_block, typ, error);
                 }
 
                 // When there is no match, continue iterating
                 let no_match = b.block_insert();
                 b.op_call(no_match, loop_block, &[tail_val, acc]);
 
+                block = unpack_ok_block;
+
                 match lower_clause(ctx, b, &mut block, [&*gen.pattern].iter().map(|i| *i), None) {
-                    Some(lowered) => {
+                    Ok(lowered) => {
 
                         let mut case_b = b.op_case_build();
                         case_b.match_on = Some(head_val);
@@ -95,18 +101,19 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
                         // Pop scope pushed in lower_clause
                         ctx.scope.pop(lowered.scope_token);
 
-                        case_b.finish(unpack_ok_block, b);
+                        case_b.finish(block, b);
 
                         (ret_block, ret_val)
                     }
-                    None => unimplemented!(), // TODO warn/error unreachable pattern
+                    Err(_) => unimplemented!(), // TODO warn/error unreachable pattern
                 }
             }
             Expr::BinaryGenerator(gen) => {
                 unimplemented!()
             }
             expr => {
-                let bool_val = map_block!(block, lower_single(ctx, b, block, expr));
+                let bool_val = map_block!(block, lower_single_same_scope(
+                    ctx, b, block, expr));
                 let (true_block, false_block, else_block) = b.op_if_bool(block, bool_val);
 
                 let join_block = b.block_insert();
@@ -133,6 +140,21 @@ pub(super) fn lower_list_comprehension_expr(ctx: &mut LowerCtx, b: &mut Function
     };
 
     let nil = b.value(NilTerm);
+    let val = map_block!(block, lower_qual(ctx, b, &inner, &compr.qualifiers, block, nil));
+    ctx.call_function(b, block, compr.span, Ident::from_str("lists"), Ident::from_str("reverse"), &[val])
+}
+
+pub(super) fn lower_binary_comprehension_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
+                                              compr: &BinaryComprehension) -> (IrBlock, IrValue) {
+    let inner = |ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock, acc: IrValue| {
+        match &*compr.body {
+            Expr::Binary(bin) =>
+                lower_binary_expr(ctx, b, block, Some(acc), bin),
+            _ => panic!(),
+        }
+    };
+
+    let nil = b.value(Vec::<u8>::new());
     let val = map_block!(block, lower_qual(ctx, b, &inner, &compr.qualifiers, block, nil));
     ctx.call_function(b, block, compr.span, Ident::from_str("lists"), Ident::from_str("reverse"), &[val])
 }

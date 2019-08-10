@@ -1,29 +1,35 @@
 use std::fmt::{ Display, Formatter, Result as FmtResult };
 use std::hash::{ Hash, Hasher };
 
-use num::cast::{ NumCast, cast };
+use rug::Integer;
+use num_traits::{ NumCast, cast };
 
 use libeir_intern::Symbol;
 
 use super::float::raw_double_bits;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct BigIntTerm(pub num_bigint::BigInt);
+pub struct BigIntTerm(pub Integer);
 impl BigIntTerm {
     #[inline]
-    pub fn value(&self) -> &num_bigint::BigInt {
+    pub fn value(&self) -> &Integer {
         &self.0
     }
 }
-impl Into<num_bigint::BigInt> for BigIntTerm {
+impl Into<rug::Integer> for BigIntTerm {
     #[inline]
-    fn into(self) -> num_bigint::BigInt {
+    fn into(self) -> Integer {
         self.0
     }
 }
 impl From<BigIntTerm> for AtomicTerm {
     fn from(data: BigIntTerm) -> Self {
         AtomicTerm::BigInt(data)
+    }
+}
+impl From<Integer> for AtomicTerm {
+    fn from(data: Integer) -> Self {
+        AtomicTerm::BigInt(BigIntTerm(data))
     }
 }
 impl Display for BigIntTerm {
@@ -147,16 +153,21 @@ impl Display for AtomTerm {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct BinaryTerm(pub Symbol);
+pub struct BinaryTerm(pub Vec<u8>);
 impl BinaryTerm {
     #[inline]
-    pub fn value(&self) -> &'static str {
-        self.0.as_str().get()
+    pub fn value(&self) -> &[u8] {
+        &self.0
     }
 }
 impl From<BinaryTerm> for AtomicTerm {
     fn from(data: BinaryTerm) -> Self {
         AtomicTerm::Binary(data)
+    }
+}
+impl From<Vec<u8>> for AtomicTerm {
+    fn from(data: Vec<u8>) -> Self {
+        AtomicTerm::Binary(BinaryTerm(data))
     }
 }
 
@@ -186,7 +197,8 @@ impl Display for AtomicTerm {
             AtomicTerm::Float(float) => write!(fmt, "{}", float),
             AtomicTerm::Atom(atom) => write!(fmt, "{}", atom),
             AtomicTerm::Nil => write!(fmt, "[]"),
-            _ => unimplemented!(),
+            AtomicTerm::Binary(bin) => write!(fmt, "bin"),
+            _ => unimplemented!("{:?}", self),
         }
     }
 }

@@ -272,6 +272,12 @@ impl fmt::Display for SymbolToken {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum DelayedSubstitution {
+    FunctionName,
+    FunctionArity,
+}
+
 /// This enum contains tokens produced by the lexer
 #[derive(Debug, Clone)]
 pub enum Token {
@@ -279,6 +285,7 @@ pub enum Token {
     EOF,
     // A tokenization error which may be recovered from
     Error(LexicalError),
+    DelayedSubstitution(DelayedSubstitution),
     // Docs
     Comment,
     Edoc,
@@ -503,6 +510,8 @@ impl fmt::Display for Token {
             Token::Error(_) => write!(f, "ERROR"),
             Token::Comment => write!(f, "COMMENT"),
             Token::Edoc => write!(f, "EDOC"),
+            Token::DelayedSubstitution(DelayedSubstitution::FunctionName) => write!(f, "STRING"),
+            Token::DelayedSubstitution(DelayedSubstitution::FunctionArity) => write!(f, "INTEGER"),
             // Literals
             Token::Char(ref c) => write!(f, "{}", c),
             Token::Integer(ref i) => write!(f, "{}", i),

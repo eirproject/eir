@@ -1,6 +1,6 @@
 use ::cranelift_entity::{ EntityList };
 
-use crate::{ Value, ValueKind };
+use crate::{ Value, ValueKind, LogicOp };
 use crate::ConstKind;
 use super::{ FunctionBuilder, PrimOpData, PrimOpKind, BinOp };
 
@@ -136,6 +136,34 @@ impl<'a> FunctionBuilder<'a> {
 
         let primop = self.fun.primops.push(PrimOpData {
             op: PrimOpKind::ValueList,
+            reads: entries_list,
+        }, &self.fun.pool);
+        self.fun.values.push(ValueKind::PrimOp(primop))
+    }
+
+    pub(crate) fn prim_value_list_from_entity_list(
+        &mut self, values: EntityList<Value>) -> Value {
+        let num = values.len(&self.fun.pool.value);
+        for n in 0..num {
+            let val = values.get(n, &self.fun.pool.value).unwrap();
+            if let Some(prim) = self.fun.value_primop(val) {
+                assert!(self.fun.primop_kind(prim) != &PrimOpKind::ValueList);
+            }
+        }
+
+        let primop = self.fun.primops.push(PrimOpData {
+            op: PrimOpKind::ValueList,
+            reads: values,
+        }, &self.fun.pool);
+        self.fun.values.push(ValueKind::PrimOp(primop))
+    }
+
+    pub fn prim_logic_op(&mut self, op: LogicOp, values: &[Value]) -> Value {
+        let mut entries_list = EntityList::new();
+        entries_list.extend(values.iter().cloned(), &mut self.fun.pool.value);
+
+        let primop = self.fun.primops.push(PrimOpData {
+            op: PrimOpKind::LogicOp(op),
             reads: entries_list,
         }, &self.fun.pool);
         self.fun.values.push(ValueKind::PrimOp(primop))

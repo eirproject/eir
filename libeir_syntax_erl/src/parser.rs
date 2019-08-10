@@ -47,6 +47,7 @@ use libeir_diagnostics::{CodeMap, FileName};
 use crate::lexer::{FileMapSource, Lexer, Scanner, Source};
 use crate::preprocessor::{MacroContainer, Preprocessed, Preprocessor};
 
+pub use self::ast::{NodeId, NodeIdGenerator};
 pub use self::errors::*;
 
 /// The type of result returned from parsing functions
@@ -130,20 +131,21 @@ pub trait Parse<T = Self> {
         let scanner = Scanner::new(source);
         let lexer = Lexer::new(scanner);
         let tokens = Preprocessor::new(config, lexer);
-        Self::parse_tokens(tokens)
+        let mut nid = NodeIdGenerator::new();
+        Self::parse_tokens(&mut nid, tokens)
     }
 
     /// Implemented by each parser, which should parse the token stream and produce a T
-    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(tokens: S) -> ParseResult<T>;
+    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(nid: &mut NodeIdGenerator, tokens: S) -> ParseResult<T>;
 }
 
 impl Parse for ast::Module {
     type Parser = grammar::ModuleParser;
 
-    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(tokens: S) -> ParseResult<ast::Module> {
+    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(nid: &mut NodeIdGenerator, tokens: S) -> ParseResult<ast::Module> {
         let mut errs = Vec::new();
         let result = Self::Parser::new()
-            .parse(&mut errs, tokens)
+            .parse(&mut errs, nid, tokens)
             .map_err(|e| e.map_error(|ei| ei.into()));
         to_parse_result(errs, result)
     }
@@ -152,10 +154,10 @@ impl Parse for ast::Module {
 impl Parse for ast::Expr {
     type Parser = grammar::ExprParser;
 
-    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(tokens: S) -> ParseResult<ast::Expr> {
+    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(nid: &mut NodeIdGenerator, tokens: S) -> ParseResult<ast::Expr> {
         let mut errs = Vec::new();
         let result = Self::Parser::new()
-            .parse(&mut errs, tokens)
+            .parse(&mut errs, nid, tokens)
             .map_err(|e| e.map_error(|ei| ei.into()));
         to_parse_result(errs, result)
     }
@@ -220,9 +222,9 @@ mod test {
     }
 
     macro_rules! module {
-        ($name:expr, $body:expr) => {{
+        ($nid:expr, $name:expr, $body:expr) => {{
             let mut errs = Vec::new();
-            let module = Module::new(&mut errs, ByteSpan::default(), $name, $body);
+            let module = Module::new(&mut errs, ByteSpan::default(), $nid, $name, $body);
             if errs.len() > 0 {
                 let emitter = StandardStreamEmitter::new(ColorChoice::Auto);
                 for err in errs.drain(..) {
@@ -238,7 +240,8 @@ mod test {
     #[test]
     fn parse_empty_module() {
         let result: Module = parse("-module(foo).");
-        let expected = module!(ident!("foo"), vec![]);
+        let mut nid = NodeIdGenerator::new();
+        let expected = module!(&mut nid, ident!("foo"), vec![]);
         assert_eq!(result, expected);
     }
 
@@ -251,30 +254,35 @@ foo([], Acc) -> Acc;
 foo([H|T], Acc) -> foo(T, [H|Acc]).
 ",
         );
+
+        let mut id_gen = NodeIdGenerator::new();
+        let nid = &mut id_gen;
+
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
             span: ByteSpan::default(),
             name: ident_opt!(foo),
-            params: vec![nil!(), var!(Acc)],
+            params: vec![nil!(nid), var!(nid, Acc)],
             guard: None,
-            body: vec![var!(Acc)],
+            body: vec![var!(nid, Acc)],
         });
         clauses.push(FunctionClause {
             span: ByteSpan::default(),
             name: ident_opt!(foo),
-            params: vec![cons!(var!(H), var!(T)), var!(Acc)],
+            params: vec![cons!(nid, var!(nid, H), var!(nid, T)), var!(nid, Acc)],
             guard: None,
-            body: vec![apply!(atom!(foo), var!(T), cons!(var!(H), var!(Acc)))],
+            body: vec![apply!(nid, atom!(nid, foo), var!(nid, T), cons!(nid, var!(nid, H), var!(nid, Acc)))],
         });
         let mut body = Vec::new();
         body.push(TopLevel::Function(NamedFunction {
             span: ByteSpan::default(),
+            id: nid.next(),
             name: ident!("foo"),
             arity: 2,
             clauses,
             spec: None,
         }));
-        let expected = module!(ident!(foo), body);
+        let expected = module!(nid, ident!(foo), body);
         assert_eq!(result, expected);
     }
 
@@ -296,63 +304,72 @@ unless(Value) ->
 
 ",
         );
+
+        let mut id_gen = NodeIdGenerator::new();
+        let nid = &mut id_gen;
+
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
             span: ByteSpan::default(),
             name: ident_opt!(unless),
-            params: vec![atom!(false)],
+            params: vec![atom!(nid, false)],
             guard: None,
-            body: vec![atom!(true)],
+            body: vec![atom!(nid, true)],
         });
         clauses.push(FunctionClause {
             span: ByteSpan::default(),
             name: ident_opt!(unless),
-            params: vec![atom!(true)],
+            params: vec![atom!(nid, true)],
             guard: None,
-            body: vec![atom!(false)],
+            body: vec![atom!(nid, false)],
         });
         clauses.push(FunctionClause {
             span: ByteSpan::default(),
             name: ident_opt!(unless),
-            params: vec![var!(Value)],
+            params: vec![var!(nid, Value)],
             guard: None,
             body: vec![Expr::If(If {
                 span: ByteSpan::default(),
+                id: nid.next(),
                 clauses: vec![
                     IfClause {
                         span: ByteSpan::default(),
+                        id: nid.next(),
                         guards: vec![
                             Guard {
                                 span: ByteSpan::default(),
                                 conditions: vec![Expr::BinaryExpr(BinaryExpr {
                                     span: ByteSpan::default(),
-                                    lhs: Box::new(var!(Value)),
+                                    id: nid.next(),
+                                    lhs: Box::new(var!(nid, Value)),
                                     op: BinaryOp::Equal,
-                                    rhs: Box::new(int!(0)),
+                                    rhs: Box::new(int!(nid, 0)),
                                 })],
                             },
                         ],
-                        body: vec![atom!(true)],
+                        body: vec![atom!(nid, true)],
                     },
                     IfClause {
                         span: ByteSpan::default(),
+                        id: nid.next(),
                         guards: vec![
                             Guard {
                                 span: ByteSpan::default(),
-                                conditions: vec![var!(Value)],
+                                conditions: vec![var!(nid, Value)],
                             },
                         ],
-                        body: vec![atom!(false)],
+                        body: vec![atom!(nid, false)],
                     },
                     IfClause {
                         span: ByteSpan::default(),
+                        id: nid.next(),
                         guards: vec![
                             Guard {
                                 span: ByteSpan::default(),
-                                conditions: vec![atom!(else)],
+                                conditions: vec![atom!(nid, else)],
                             },
                         ],
-                        body: vec![atom!(true)],
+                        body: vec![atom!(nid, true)],
                     },
                 ],
             })],
@@ -360,12 +377,13 @@ unless(Value) ->
         let mut body = Vec::new();
         body.push(TopLevel::Function(NamedFunction {
             span: ByteSpan::default(),
+            id: nid.next(),
             name: ident!(unless),
             arity: 1,
             clauses,
             spec: None,
         }));
-        let expected = module!(ident!(foo), body);
+        let expected = module!(nid, ident!(foo), body);
         assert_eq!(result, expected);
     }
 
@@ -384,42 +402,51 @@ typeof(Value) ->
 
 ",
         );
+
+        let mut id_gen = NodeIdGenerator::new();
+        let nid = &mut id_gen;
+
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
             span: ByteSpan::default(),
             name: ident_opt!(typeof),
-            params: vec![var!(Value)],
+            params: vec![var!(nid, Value)],
             guard: None,
             body: vec![Expr::Case(Case {
                 span: ByteSpan::default(),
-                expr: Box::new(var!(Value)),
+                id: nid.next(),
+                expr: Box::new(var!(nid, Value)),
                 clauses: vec![
                     Clause {
                         span: ByteSpan::default(),
-                        pattern: nil!(),
+                        id: nid.next(),
+                        pattern: nil!(nid),
                         guard: None,
-                        body: vec![atom!(nil)],
+                        body: vec![atom!(nid, nil)],
                     },
                     Clause {
                         span: ByteSpan::default(),
-                        pattern: cons!(var!(_), var!(_)),
+                        id: nid.next(),
+                        pattern: cons!(nid, var!(nid, _), var!(nid, _)),
                         guard: None,
-                        body: vec![atom!(list)],
+                        body: vec![atom!(nid, list)],
                     },
                     Clause {
                         span: ByteSpan::default(),
-                        pattern: var!(N),
+                        id: nid.next(),
+                        pattern: var!(nid, N),
                         guard: Some(vec![Guard {
                             span: ByteSpan::default(),
-                            conditions: vec![apply!(atom!(is_number), var!(N))],
+                            conditions: vec![apply!(nid, atom!(nid, is_number), var!(nid, N))],
                         }]),
-                        body: vec![var!(N)],
+                        body: vec![var!(nid, N)],
                     },
                     Clause {
                         span: ByteSpan::default(),
-                        pattern: var!(_),
+                        id: nid.next(),
+                        pattern: var!(nid, _),
                         guard: None,
-                        body: vec![atom!(other)],
+                        body: vec![atom!(nid, other)],
                     },
                 ],
             })],
@@ -427,12 +454,13 @@ typeof(Value) ->
         let mut body = Vec::new();
         body.push(TopLevel::Function(NamedFunction {
             span: ByteSpan::default(),
+            id: nid.next(),
             name: ident!(typeof),
             arity: 1,
             clauses,
             spec: None,
         }));
-        let expected = module!(ident!(foo), body);
+        let expected = module!(nid, ident!(foo), body);
         assert_eq!(result, expected);
     }
 
@@ -454,59 +482,71 @@ loop(State, Timeout) ->
     end.
 ",
         );
+
+        let mut id_gen = NodeIdGenerator::new();
+        let nid = &mut id_gen;
+
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
             span: ByteSpan::default(),
             name: ident_opt!(loop),
-            params: vec![var!(State), var!(Timeout)],
+            params: vec![var!(nid, State), var!(nid, Timeout)],
             guard: None,
             body: vec![Expr::Receive(Receive {
                 span: ByteSpan::default(),
+                id: nid.next(),
                 clauses: Some(vec![
                     Clause {
                         span: ByteSpan::default(),
-                        pattern: tuple!(var!(From), tuple!(var!(Ref), var!(Msg))),
+                        id: nid.next(),
+                        pattern: tuple!(nid, var!(nid, From), tuple!(nid, var!(nid, Ref), var!(nid, Msg))),
                         guard: None,
                         body: vec![
                             Expr::BinaryExpr(BinaryExpr {
                                 span: ByteSpan::default(),
-                                lhs: Box::new(var!(From)),
+                                id: nid.next(),
+                                lhs: Box::new(var!(nid, From)),
                                 op: BinaryOp::Send,
-                                rhs: Box::new(tuple!(var!(Ref), atom!(ok))),
+                                rhs: Box::new(tuple!(nid, var!(nid, Ref), atom!(nid, ok))),
                             }),
-                            apply!(atom!(handle_info), var!(Msg), var!(State)),
+                            apply!(nid, atom!(nid, handle_info), var!(nid, Msg), var!(nid, State)),
                         ],
                     },
                     Clause {
                         span: ByteSpan::default(),
-                        pattern: var!(_),
+                        id: nid.next(),
+                        pattern: var!(nid, _),
                         guard: None,
                         body: vec![apply!(
-                            atom!(exit),
+                            nid,
+                            atom!(nid, exit),
                             apply!(
-                                remote!(io_lib, format),
-                                Expr::Literal(Literal::String(ident!("unexpected message: ~p~n"))),
-                                cons!(var!(Msg), nil!())
+                                nid,
+                                remote!(nid, io_lib, format),
+                                Expr::Literal(Literal::String(nid.next(), ident!("unexpected message: ~p~n"))),
+                                cons!(nid, var!(nid, Msg), nil!(nid))
                             )
                         )],
                     },
                 ]),
                 after: Some(After {
                     span: ByteSpan::default(),
-                    timeout: Box::new(var!(Timeout)),
-                    body: vec![atom!(timeout)],
+                    id: nid.next(),
+                    timeout: Box::new(var!(nid, Timeout)),
+                    body: vec![atom!(nid, timeout)],
                 }),
             })],
         });
         let mut body = Vec::new();
         body.push(TopLevel::Function(NamedFunction {
             span: ByteSpan::default(),
+            id: nid.next(),
             name: ident!(loop),
             arity: 2,
             clauses,
             spec: None,
         }));
-        let expected = module!(ident!(foo), body);
+        let expected = module!(nid, ident!(foo), body);
         assert_eq!(result, expected);
     }
 
@@ -537,6 +577,10 @@ system_version() ->
 -endif.
 ",
         );
+
+        let mut id_gen = NodeIdGenerator::new();
+        let nid = &mut id_gen;
+
         let mut body = Vec::new();
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
@@ -544,10 +588,11 @@ system_version() ->
             name: ident_opt!(env),
             params: vec![],
             guard: None,
-            body: vec![atom!(test)],
+            body: vec![atom!(nid, test)],
         });
         let env_fun = NamedFunction {
             span: ByteSpan::default(),
+            id: nid.next(),
             name: ident!(env),
             arity: 0,
             clauses,
@@ -561,17 +606,18 @@ system_version() ->
             name: ident_opt!(system_version),
             params: vec![],
             guard: None,
-            body: vec![int!(21)],
+            body: vec![int!(nid, 21)],
         });
         let system_version_fun = NamedFunction {
             span: ByteSpan::default(),
+            id: nid.next(),
             name: ident!(system_version),
             arity: 0,
             clauses,
             spec: None,
         };
         body.push(TopLevel::Function(system_version_fun));
-        let expected = module!(ident!(foo), body);
+        let expected = module!(nid, ident!(foo), body);
         assert_eq!(result, expected);
     }
 
@@ -617,54 +663,64 @@ example(File) ->
     end.
 ",
         );
+
+        let mut id_gen = NodeIdGenerator::new();
+        let nid = &mut id_gen;
+
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
             span: ByteSpan::default(),
             name: ident_opt!(example),
-            params: vec![var!(File)],
+            params: vec![var!(nid, File)],
             guard: None,
             body: vec![Expr::Try(Try {
                 span: ByteSpan::default(),
-                exprs: vec![apply!(atom!(read), var!(File))],
+                id: nid.next(),
+                exprs: vec![apply!(nid, atom!(nid, read), var!(nid, File))],
                 clauses: Some(vec![Clause {
                     span: ByteSpan::default(),
-                    pattern: tuple!(atom!(ok), var!(Contents)),
+                    id: nid.next(),
+                    pattern: tuple!(nid, atom!(nid, ok), var!(nid, Contents)),
                     guard: None,
-                    body: vec![tuple!(atom!(ok), var!(Contents))],
+                    body: vec![tuple!(nid, atom!(nid, ok), var!(nid, Contents))],
                 }]),
                 catch_clauses: Some(vec![
                     TryClause {
                         span: ByteSpan::default(),
+                        id: nid.next(),
                         kind: Name::Atom(ident!(error)),
-                        error: tuple!(var!(Mod), var!(Code)),
+                        error: tuple!(nid, var!(nid, Mod), var!(nid, Code)),
                         trace: ident!(_),
                         guard: None,
                         body: vec![tuple!(
-                            atom!(error),
-                            apply!(remote!(var!(Mod), atom!(format_error)), var!(Code))
+                            nid,
+                            atom!(nid, error),
+                            apply!(nid, remote!(nid, var!(nid, Mod), atom!(nid, format_error)), var!(nid, Code))
                         )],
                     },
                     TryClause {
                         span: ByteSpan::default(),
+                        id: nid.next(),
                         kind: Name::Atom(ident!(throw)),
-                        error: var!(Reason),
+                        error: var!(nid, Reason),
                         trace: ident!(_),
                         guard: None,
-                        body: vec![tuple!(atom!(error), var!(Reason))],
+                        body: vec![tuple!(nid, atom!(nid, error), var!(nid, Reason))],
                     },
                 ]),
-                after: Some(vec![apply!(atom!(close), var!(File))]),
+                after: Some(vec![apply!(nid, atom!(nid, close), var!(nid, File))]),
             })],
         });
         let mut body = Vec::new();
         body.push(TopLevel::Function(NamedFunction {
             span: ByteSpan::default(),
+            id: nid.next(),
             name: ident!(example),
             arity: 1,
             clauses,
             spec: None,
         }));
-        let expected = module!(ident!(foo), body);
+        let expected = module!(nid, ident!(foo), body);
         assert_eq!(result, expected);
     }
 

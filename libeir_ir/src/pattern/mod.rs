@@ -4,7 +4,8 @@ use cranelift_entity::{ PrimaryMap, EntityList, ListPool, entity_impl };
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
 
-use crate::binary::EntrySpecifier;
+use crate::binary::BinaryEntrySpecifier;
+use crate::Const;
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PatternNode(u32);
@@ -81,9 +82,10 @@ struct PatternNodeData {
 #[derive(Debug, Clone)]
 pub enum PatternNodeKind {
     Wildcard,
+    Const(Const),
     Value(PatternValue),
     Binary {
-        specifier: EntrySpecifier,
+        specifier: BinaryEntrySpecifier,
         value: PatternNode,
         size: Option<PatternValue>,
 
@@ -109,13 +111,13 @@ pub enum PatternMergeFail {
     /// same time.
     /// The two nodes are the reason for this.
     Disjoint {
-        left: PatternNode,
+        left: Option<PatternNode>,
         right: PatternNode,
     },
     /// Merging is not supported. Only happens with binaries
     /// The two nodes are the reason for this.
     Failure {
-        left: PatternNode,
+        left: Option<PatternNode>,
         right: PatternNode,
     },
 }
@@ -150,7 +152,7 @@ impl PatternContainer {
         })
     }
 
-    pub fn binary(&mut self, node: PatternNode, specifier: EntrySpecifier, value: PatternNode,
+    pub fn binary(&mut self, node: PatternNode, specifier: BinaryEntrySpecifier, value: PatternNode,
                   size: Option<PatternValue>, remaining: PatternNode) {
         let mut data = &mut self.nodes[node];
         assert!(data.kind.is_none());
@@ -168,6 +170,13 @@ impl PatternContainer {
         let mut data = &mut self.nodes[node];
         assert!(data.kind.is_none());
         data.kind = Some(PatternNodeKind::Wildcard);
+        data.finished = true;
+    }
+
+    pub fn constant(&mut self, node: PatternNode, val: Const) {
+        let mut data = &mut self.nodes[node];
+        assert!(data.kind.is_none());
+        data.kind = Some(PatternNodeKind::Const(val));
         data.finished = true;
     }
 
@@ -271,90 +280,6 @@ impl PatternContainer {
         data.finished = true;
     }
 
-    pub fn merge(&mut self, map: &mut HashMap<PatternNode, PatternNode>,
-                 lhs: PatternNode, rhs: PatternNode) -> Result<PatternNode, PatternMergeFail>
-    {
-        // This clone is really cheap since entitylists are basically just an usize
-        let lhs_kind = self.nodes[lhs].kind.clone().unwrap();
-        let rhs_kind = self.nodes[rhs].kind.clone().unwrap();
-
-        match (lhs_kind, rhs_kind) {
-            (PatternNodeKind::Wildcard, _) => {
-                map.insert(lhs, rhs);
-                Ok(rhs)
-            },
-            (_, PatternNodeKind::Wildcard) => {
-                map.insert(rhs, lhs);
-                Ok(lhs)
-            },
-            (PatternNodeKind::Tuple(l1), PatternNodeKind::Tuple(l2)) => {
-                let l1_len = l1.len(&self.node_pool);
-                let l2_len = l2.len(&self.node_pool);
-                if l1_len == l2_len {
-                    let new_tup = self.node_empty();
-                    self.tuple(new_tup);
-                    for idx in 0..l1_len {
-                        let ln = l1.get(idx, &self.node_pool).unwrap();
-                        let rn = l2.get(idx, &self.node_pool).unwrap();
-
-                        let merged = self.merge(map, ln, rn)?;
-
-                        self.tuple_elem_push(new_tup, merged);
-                    }
-                    self.node_finish(new_tup);
-
-                    map.insert(lhs, new_tup);
-                    map.insert(rhs, new_tup);
-
-                    Ok(new_tup)
-                } else {
-                    Err(PatternMergeFail::Disjoint {
-                        left: lhs,
-                        right: rhs,
-                    })
-                }
-            }
-            (PatternNodeKind::Map { keys: k1, values: v1 }, PatternNodeKind::Map { keys: k2, values: v2 }) => {
-                let new_map = self.node_empty();
-                self.map(new_map);
-
-                for idx in 0..(k1.len(&self.value_pool)) {
-                    let k = k1.get(idx, &self.value_pool).unwrap();
-                    let v = v1.get(idx, &self.node_pool).unwrap();
-                    self.map_push(new_map, k, v);
-                }
-                for idx in 0..(k2.len(&self.value_pool)) {
-                    let k = k2.get(idx, &self.value_pool).unwrap();
-                    let v = v2.get(idx, &self.node_pool).unwrap();
-                    self.map_push(new_map, k, v);
-                }
-
-                self.node_finish(new_map);
-
-                map.insert(lhs, new_map);
-                map.insert(rhs, new_map);
-
-                Ok(new_map)
-            }
-            (PatternNodeKind::List { head: h1, tail: t1 }, PatternNodeKind::List { head: h2, tail: t2 }) => {
-                let new_head = self.merge(map, h1, h2)?;
-                let new_tail = self.merge(map, t1, t2)?;
-
-                let list = self.node_empty();
-                self.list(list, new_head, new_tail);
-
-                Ok(list)
-            }
-            // Patterns are incompatible
-            _ => {
-                Err(PatternMergeFail::Disjoint {
-                    left: lhs,
-                    right: rhs,
-                })
-            },
-        }
-    }
-
     pub fn copy_from(&mut self, clause: PatternClause, from: &PatternContainer) -> PatternClause {
         let from_clause = &from.clauses[clause];
 
@@ -434,6 +359,14 @@ impl PatternContainer {
         data.values.as_slice(&self.value_pool)
     }
 
+    pub fn clause_node_binds_iter<'a>(&'a self, clause: PatternClause
+    ) -> impl Iterator<Item = (PatternValue, PatternNode)> + 'a
+    {
+        let data = &self.clauses[clause];
+        data.node_binds_vals.as_slice(&self.value_pool).iter().cloned()
+            .zip(data.node_binds_keys.as_slice(&self.node_pool).iter().cloned())
+    }
+
     pub fn node_span(&self, node: PatternNode) -> ByteSpan {
         self.nodes[node].span
     }
@@ -506,3 +439,205 @@ fn copy_pattern_node(
     }
 }
 
+use crate::FunctionBuilder;
+
+impl<'a> FunctionBuilder<'a> {
+
+    pub fn merge_patterns(
+        &mut self,
+        map: &mut HashMap<PatternNode, PatternNode>,
+        lhs: PatternNode,
+        rhs: PatternNode,
+    ) -> Result<PatternNode, PatternMergeFail>
+    {
+        // This clone is really cheap since entitylists are basically just an usize
+        let lhs_kind = self.pat().nodes[lhs].kind.clone().unwrap();
+        let rhs_kind = self.pat().nodes[rhs].kind.clone().unwrap();
+        println!("MERGE {:?} {:?}", lhs_kind, rhs_kind);
+
+        match (lhs_kind, rhs_kind) {
+            (PatternNodeKind::Value(l_val), PatternNodeKind::Value(r_val)) if l_val == r_val => {
+                map.insert(rhs, lhs);
+                Ok(lhs)
+            }
+            (PatternNodeKind::Const(l), _) => self.merge_pattern_constant(map, rhs, l),
+            (_, PatternNodeKind::Const(r)) => self.merge_pattern_constant(map, lhs, r),
+            (PatternNodeKind::Wildcard, _) => {
+                map.insert(lhs, rhs);
+                Ok(rhs)
+            },
+            (_, PatternNodeKind::Wildcard) => {
+                map.insert(rhs, lhs);
+                Ok(lhs)
+            },
+            (PatternNodeKind::Tuple(l1), PatternNodeKind::Tuple(l2)) => {
+                let l1_len = l1.len(&self.pat().node_pool);
+                let l2_len = l2.len(&self.pat().node_pool);
+                if l1_len == l2_len {
+                    let new_tup = self.pat_mut().node_empty();
+                    self.pat_mut().tuple(new_tup);
+                    for idx in 0..l1_len {
+                        let ln = l1.get(idx, &self.pat().node_pool).unwrap();
+                        let rn = l2.get(idx, &self.pat().node_pool).unwrap();
+
+                        let merged = self.merge_patterns(map, ln, rn)?;
+
+                        self.pat_mut().tuple_elem_push(new_tup, merged);
+                    }
+                    self.pat_mut().node_finish(new_tup);
+
+                    map.insert(lhs, new_tup);
+                    map.insert(rhs, new_tup);
+
+                    Ok(new_tup)
+                } else {
+                    Err(PatternMergeFail::Disjoint {
+                        left: Some(lhs),
+                        right: rhs,
+                    })
+                }
+            }
+            (PatternNodeKind::Map { keys: k1, values: v1 }, PatternNodeKind::Map { keys: k2, values: v2 }) => {
+                let new_map = self.pat_mut().node_empty();
+                self.pat_mut().map(new_map);
+
+                for idx in 0..(k1.len(&self.pat().value_pool)) {
+                    let k = k1.get(idx, &self.pat().value_pool).unwrap();
+                    let v = v1.get(idx, &self.pat().node_pool).unwrap();
+                    self.pat_mut().map_push(new_map, k, v);
+                }
+                for idx in 0..(k2.len(&self.pat().value_pool)) {
+                    let k = k2.get(idx, &self.pat().value_pool).unwrap();
+                    let v = v2.get(idx, &self.pat().node_pool).unwrap();
+                    self.pat_mut().map_push(new_map, k, v);
+                }
+
+                self.pat_mut().node_finish(new_map);
+
+                map.insert(lhs, new_map);
+                map.insert(rhs, new_map);
+
+                Ok(new_map)
+            }
+            (PatternNodeKind::List { head: h1, tail: t1 }, PatternNodeKind::List { head: h2, tail: t2 }) => {
+                let new_head = self.merge_patterns(map, h1, h2)?;
+                let new_tail = self.merge_patterns(map, t1, t2)?;
+
+                let list = self.pat_mut().node_empty();
+                self.pat_mut().list(list, new_head, new_tail);
+
+                map.insert(lhs, list);
+                map.insert(rhs, list);
+
+                Ok(list)
+            }
+            // Patterns are incompatible
+            _ => {
+                Err(PatternMergeFail::Disjoint {
+                    left: Some(lhs),
+                    right: rhs,
+                })
+            },
+        }
+    }
+
+
+    pub fn merge_pattern_constant(
+        &mut self,
+        map: &mut HashMap<PatternNode, PatternNode>,
+        lhs: PatternNode,
+        rhs: Const,
+    ) -> Result<PatternNode, PatternMergeFail>
+    {
+        let lhs_kind = self.pat_mut().nodes[lhs].kind.clone().unwrap();
+        let rhs_kind = self.cons_mut().const_kind(rhs).clone();
+
+        use crate::{ ConstKind, AtomicTerm };
+
+        match (lhs_kind, rhs_kind) {
+            (PatternNodeKind::Const(l_const), _) if l_const == rhs => {
+                Ok(lhs)
+            }
+            (PatternNodeKind::Const(_), _) => {
+                Err(PatternMergeFail::Disjoint {
+                    left: None,
+                    right: lhs,
+                })
+            }
+            (PatternNodeKind::Wildcard, _) => {
+                let node = self.pat_mut().node_empty();
+                self.pat_mut().constant(node, rhs);
+                map.insert(lhs, node);
+                Ok(node)
+            }
+            (PatternNodeKind::Tuple(pat_entries),
+             ConstKind::Tuple { entries: const_entries }) => {
+                let pat_len = pat_entries.len(&self.pat().node_pool);
+                let const_len = const_entries.len(&self.cons().const_pool);
+
+                if pat_len != const_len {
+                    return Err(PatternMergeFail::Disjoint {
+                        left: None,
+                        right: lhs,
+                    });
+                }
+
+                let node = self.pat_mut().node_empty();
+                self.pat_mut().tuple(node);
+
+                for n in 0..pat_len {
+                    let pat_node = pat_entries
+                        .get(n, &self.pat().node_pool).unwrap();
+                    let const_node = const_entries
+                        .get(n, &self.cons().const_pool).unwrap();
+
+                    let new = self.merge_pattern_constant(map, pat_node, const_node)?;
+                    self.pat_mut().tuple_elem_push(node, new);
+                }
+
+                self.pat_mut().node_finish(node);
+                map.insert(lhs, node);
+
+                Ok(node)
+            }
+            (PatternNodeKind::Tuple(_), _) => {
+                Err(PatternMergeFail::Disjoint {
+                    left: None,
+                    right: lhs,
+                })
+            }
+            (PatternNodeKind::List { head: pat_head, tail: pat_tail },
+             ConstKind::ListCell { head: cons_head, tail: cons_tail }) => {
+                let head = self.merge_pattern_constant(map, pat_head, cons_head)?;
+                let tail = self.merge_pattern_constant(map, pat_tail, cons_tail)?;
+
+                let node = self.pat_mut().node_empty();
+                self.pat_mut().list(node, head, tail);
+                map.insert(lhs, node);
+
+                Ok(node)
+            }
+            (PatternNodeKind::List { .. }, _) => {
+                Err(PatternMergeFail::Disjoint {
+                    left: None,
+                    right: lhs,
+                })
+            }
+            (PatternNodeKind::Binary { .. },
+             ConstKind::Atomic(AtomicTerm::Binary(_))) => {
+                Err(PatternMergeFail::Failure {
+                    left: None,
+                    right: lhs,
+                })
+            }
+            (PatternNodeKind::Binary { .. }, _) => {
+                Err(PatternMergeFail::Disjoint {
+                    left: None,
+                    right: lhs,
+                })
+            }
+            (a, b) => unimplemented!("{:?} {:?}", a, b),
+        }
+    }
+
+}

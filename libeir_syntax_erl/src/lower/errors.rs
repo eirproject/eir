@@ -14,13 +14,17 @@ pub enum LowerError {
     /// Equality in a pattern caused two nodes to be merged.
     /// It has been shown to be unmatchable.
     #[fail(display = "patterns are fully disjoint and can never be matched")]
-    DisjointPatternUnionWarning { left: ByteSpan, right: ByteSpan },
+    DisjointPatternUnionWarning { left: Option<ByteSpan>, right: Option<ByteSpan> },
+    /// Pattern is constrained by two different constant
+    /// values, or is matched against an unmatchable value
+    #[fail(display = "pattern can never be matched")]
+    UnmatchablePatternWarning { pat: Option<ByteSpan>, reason: Option<ByteSpan> },
 
     /// Equality in a pattern caused two nodes to be merged,
     /// but merging these two nodes is not supported.
     /// Happens when trying to merge two binary patterns.
     #[fail(display = "patterns cannot be merged")]
-    UnsupportedPatternUnion { left: ByteSpan, right: ByteSpan },
+    UnsupportedPatternUnion { left: Option<ByteSpan>, right: ByteSpan },
 
     /// When parsing a string, an invalid character escape
     /// was encountered.
@@ -43,7 +47,13 @@ pub enum LowerError {
     #[fail(display = "invalid specifier for type in binary entry")]
     BinaryInvalidSpecifier { span: ByteSpan, typ: BinaryTypeName },
     #[fail(display = "type does not support size in binary entry")]
-    BinaryInvalidSize { span: ByteSpan, typ: BinaryTypeName }
+    BinaryInvalidSize { span: ByteSpan, typ: BinaryTypeName },
+
+    // Records
+    #[fail(display = "record field specified more than once")]
+    DuplicateRecordField { new: ByteSpan, old: ByteSpan },
+    #[fail(display = "record is not defined")]
+    UndefinedRecord { span: ByteSpan },
 
 }
 
@@ -60,26 +70,34 @@ impl LowerError {
                     )
             }
             LowerError::DisjointPatternUnionWarning { left, right } => {
-                Diagnostic::new_warning(msg)
-                    .with_label(
+                let mut dig = Diagnostic::new_warning(msg);
+                if let Some(left) = left {
+                    dig = dig.with_label(
                         Label::new_primary(*left)
                             .with_message("left pattern")
-                    )
-                    .with_label(
+                    );
+                }
+                if let Some(right) = right {
+                    dig = dig.with_label(
                         Label::new_primary(*right)
                             .with_message("right pattern")
-                    )
+                    );
+                }
+                dig
             }
             LowerError::UnsupportedPatternUnion { left, right } => {
-                Diagnostic::new_error(msg)
-                    .with_label(
-                        Label::new_primary(*left)
-                            .with_message("left pattern")
-                    )
-                    .with_label(
-                        Label::new_primary(*right)
-                            .with_message("right pattern")
-                    )
+                let mut dig = Diagnostic::new_warning(msg);
+                if let Some(left) = left {
+                    dig = dig
+                        .with_label(
+                            Label::new_primary(*left)
+                                .with_message("left pattern")
+                        );
+                }
+                dig.with_label(
+                    Label::new_primary(*right)
+                        .with_message("right pattern")
+                )
             }
             LowerError::InvalidStringEscape { span } => {
                 Diagnostic::new_error(msg)

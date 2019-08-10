@@ -6,11 +6,11 @@
 /// to make sure that the first element in each tuple is an atom
 #[allow(unused_macros)]
 macro_rules! kwlist {
-    ($($element:expr),*) => {
+    ($nid:expr, $($element:expr),*) => {
         let mut elements = vec![$($element),*];
         elements.reverse();
-        elements.fold(nil!(), |acc, (key, val)| {
-            cons!(Expr::Tuple(Tuple { span: ByteSpan::default(), elements: vec![key, val] }), acc)
+        elements.fold(nil!($nid), |acc, (key, val)| {
+            cons!($nid, Expr::Tuple(Tuple { span: ByteSpan::default(), id: $nid.next(), elements: vec![key, val] }), acc)
         })
     }
 }
@@ -22,12 +22,12 @@ macro_rules! kwlist {
 /// Like `kwlist!`, this produces a proper list
 #[allow(unused_macros)]
 macro_rules! list {
-    ($($element:expr),*) => {
+    ($nid:expr, $($element:expr),*) => {
         {
             let mut elements = vec![$($element),*];
             elements.reverse();
-            elements.iter().fold(nil!(), |acc, el| {
-                cons!(*el, acc)
+            elements.iter().fold(nil!($nid), |acc, el| {
+                cons!($nid, *el, acc)
             })
         }
     }
@@ -43,9 +43,10 @@ macro_rules! list {
 /// need to construct an improper list
 #[allow(unused_macros)]
 macro_rules! cons {
-    ($head:expr, $tail:expr) => {
+    ($nid:expr, $head:expr, $tail:expr) => {
         Expr::Cons(Cons {
             span: ByteSpan::default(),
+            id: $nid.next(),
             head: Box::new($head),
             tail: Box::new($tail),
         })
@@ -53,16 +54,17 @@ macro_rules! cons {
 }
 
 macro_rules! nil {
-    () => {
-        Expr::Nil(Nil(ByteSpan::default()))
+    ($nid:expr) => {
+        Expr::Nil(Nil(ByteSpan::default(), $nid.next()))
     };
 }
 
 /// Produces a tuple expression with the given elements
 macro_rules! tuple {
-    ($($element:expr),*) => {
+    ($nid:expr, $($element:expr),*) => {
         Expr::Tuple(Tuple{
             span: ByteSpan::default(),
+            id: $nid.next(),
             elements: vec![$($element),*],
         })
     }
@@ -70,26 +72,26 @@ macro_rules! tuple {
 
 /// Produces an integer literal expression
 macro_rules! int {
-    ($i:expr) => {
-        Expr::Literal(Literal::Integer(ByteSpan::default(), $i))
+    ($nid:expr, $i:expr) => {
+        Expr::Literal(Literal::Integer(ByteSpan::default(), $nid.next(), $i))
     };
 }
 
 /// Produces a literal expression which evaluates to an atom
 macro_rules! atom {
-    ($sym:ident) => {
-        Expr::Literal(Literal::Atom(Ident::with_empty_span(Symbol::intern(
+    ($nid:expr, $sym:ident) => {
+        Expr::Literal(Literal::Atom($nid.next(), Ident::with_empty_span(Symbol::intern(
             stringify!($sym),
         ))))
     };
-    ($sym:expr) => {
-        Expr::Literal(Literal::Atom(Ident::with_empty_span(Symbol::intern($sym))))
+    ($nid:expr, $sym:expr) => {
+        Expr::Literal(Literal::Atom($nid.next(), Ident::with_empty_span(Symbol::intern($sym))))
     };
 }
 
 macro_rules! atom_from_sym {
-    ($sym:expr) => {
-        Expr::Literal(Literal::Atom(Ident::with_empty_span($sym)))
+    ($nid:expr, $sym:expr) => {
+        Expr::Literal(Literal::Atom($nid.next(), Ident::with_empty_span($sym)))
     };
 }
 
@@ -124,11 +126,11 @@ macro_rules! ident_opt {
 
 /// Produces a variable expression
 macro_rules! var {
-    ($name:ident) => {
-        Expr::Var(ident!(stringify!($name)))
+    ($nid:expr, $name:ident) => {
+        Expr::Var(Var($nid.next(), ident!(stringify!($name))))
     };
-    (_) => {
-        Expr::Var(ident!(_))
+    ($nid:expr, _) => {
+        Expr::Var(Var($nid.next(), ident!(_)))
     };
 }
 
@@ -136,16 +138,18 @@ macro_rules! var {
 ///
 /// Expects the module/function to be identifier symbols
 macro_rules! remote {
-    ($module:ident, $function:ident) => {
+    ($nid: expr, $module:ident, $function:ident) => {
         Expr::Remote(Remote {
             span: ByteSpan::default(),
-            module: Box::new(atom!($module)),
-            function: Box::new(atom!($function)),
+            id: $nid.next(),
+            module: Box::new(atom!($nid, $module)),
+            function: Box::new(atom!($nid, $function)),
         })
     };
-    ($module:expr, $function:expr) => {
+    ($nid:expr, $module:expr, $function:expr) => {
         Expr::Remote(Remote {
             span: ByteSpan::default(),
+            id: $nid.next(),
             module: Box::new($module),
             function: Box::new($function),
         })
@@ -154,9 +158,10 @@ macro_rules! remote {
 
 /// Produces a function application expression
 macro_rules! apply {
-    ($callee:expr, $($args:expr),*) => {
+    ($nid:expr, $callee:expr, $($args:expr),*) => {
         Expr::Apply(Apply {
             span: ByteSpan::default(),
+            id: $nid.next(),
             callee: Box::new($callee),
             args: vec![$($args),*]
         })
@@ -165,12 +170,13 @@ macro_rules! apply {
 
 /// Produces a function definition
 macro_rules! fun {
-    ($name:ident ($($params:ident),*) -> $body:expr) => {
+    ($nid:expr, $name:ident ($($params:ident),*) -> $body:expr) => {
         {
-            let params = vec![$(var!($params)),*];
+            let params = vec![$(var!($nid, $params)),*];
             let arity = params.len();
             NamedFunction {
                 span: ByteSpan::default(),
+                id: $nid.next(),
                 name: ident!($name),
                 arity,
                 clauses: vec![
@@ -186,7 +192,7 @@ macro_rules! fun {
             }
         }
     };
-    ($name:ident $(($($params:expr),*) -> $body:expr);*) => {
+    ($nid:expr, $name:ident $(($($params:expr),*) -> $body:expr);*) => {
         {
             let mut clauses = Vec::new();
             $(
@@ -201,6 +207,7 @@ macro_rules! fun {
             let arity = clauses.first().as_ref().unwrap().params.len();
             NamedFunction {
                 span: ByteSpan::default(),
+                id: $nid.next(),
                 name: ident!($name),
                 arity,
                 clauses,

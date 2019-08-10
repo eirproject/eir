@@ -52,6 +52,6 @@ fn list_merge_pattern() {
     res.to_dot(&mut file).unwrap();
 
     println!("{:?}", res);
-    println!("{:#?}", res.leaf_bindings);
+    //println!("{:#?}", res.leaf_bindings);
 
 }

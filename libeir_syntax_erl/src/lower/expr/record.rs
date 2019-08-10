@@ -1,19 +1,17 @@
 use std::collections::HashMap;
 
 use libeir_ir::{
-    Module as IrModule,
     FunctionBuilder,
     Value as IrValue,
     Block as IrBlock,
     BinOp as IrBinOp,
 };
-use libeir_ir::constant::NilTerm;
 
 use libeir_intern::Symbol;
 
-use crate::parser::ast::{ Record, RecordAccess, RecordUpdate };
+use crate::parser::ast::{ Record, RecordAccess, RecordUpdate, RecordIndex };
 
-use crate::lower::LowerCtx;
+use crate::lower::{ LowerCtx, LowerError };
 use crate::lower::expr::lower_single;
 
 fn make_rec_fail(ctx: &mut LowerCtx, b: &mut FunctionBuilder, recname_val: IrValue) -> IrBlock {
@@ -25,10 +23,7 @@ fn make_rec_fail(ctx: &mut LowerCtx, b: &mut FunctionBuilder, recname_val: IrVal
     let badrecord_val = b.value(Symbol::intern("badrecord"));
     let fail_error = b.prim_tuple(&[badrecord_val, recname_val]);
 
-    // TODO: Trace
-    let fail_trace = b.value(NilTerm);
-
-    ctx.exc_stack.make_error_jump(b, block, fail_type, fail_error, fail_trace);
+    ctx.exc_stack.make_error_jump(b, block, fail_type, fail_error);
 
     fail_block
 }
@@ -38,15 +33,18 @@ pub(super) fn lower_record_access_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
     let rec_def = &ctx.module.records[&rec.name.name];
     let recname_val = b.value(rec.name);
 
-    let idx = rec_def.fields.iter().enumerate()
-        .find(|(_idx, field)| field.name.symbol() == rec.field.name)
-        .map(|(idx, _field)| idx)
-        .unwrap();
+    let idx = rec_def.field_idx_map[&rec.field];
 
     let fail_block = make_rec_fail(ctx, b, recname_val);
 
     let record_val = map_block!(block, lower_single(ctx, b, block, &rec.record));
-    let unpack_fail_block = map_block!(block, b.op_unpack_tuple(block, record_val, rec_def.fields.len()+1));
+
+    let mut match_builder = b.op_match_build();
+    let unpack_ok_block = match_builder.push_tuple(rec_def.record.fields.len() + 1, b);
+    let unpack_fail_block = match_builder.push_wildcard(b);
+    match_builder.finish(block, record_val, b);
+    block = unpack_ok_block;
+
     b.op_call(unpack_fail_block, fail_block, &[]);
 
     let recname_test_val = b.block_args(block)[0];
@@ -61,27 +59,29 @@ pub(super) fn lower_record_access_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
 
 pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
                                        rec: &RecordUpdate) -> (IrBlock, IrValue) {
+    // TODO Warn/error when updates overlap?
     let rec_def = &ctx.module.records[&rec.name.name];
     let recname_val = b.value(rec.name);
 
-    // Make a map of field_name => elem_idx
-    let mut field_idxs = HashMap::new();
-    for (idx, field) in rec_def.fields.iter().enumerate() {
-        assert!(!field_idxs.contains_key(&field.name.symbol()));
-        field_idxs.insert(field.name.symbol(), idx);
-    }
+    let num_fields = rec_def.record.fields.len();
 
     let fail_block = make_rec_fail(ctx, b, recname_val);
 
     // Unpack tuple
     let record_val = map_block!(block, lower_single(ctx, b, block, &rec.record));
-    let unpack_fail_block = map_block!(block, b.op_unpack_tuple(block, record_val, rec_def.fields.len()+1));
+
+    let mut match_builder = b.op_match_build();
+    let unpack_ok_block = match_builder.push_tuple(num_fields + 1, b);
+    let unpack_fail_block = match_builder.push_wildcard(b);
+    match_builder.finish(block, record_val, b);
+    block = unpack_ok_block;
+
     b.op_call(unpack_fail_block, fail_block, &[]);
 
     // Make a vector with all the values in the unpacked tuple
-    let mut elems = Vec::with_capacity(rec_def.fields.len());
-    for (idx, _field) in rec_def.fields.iter().enumerate() {
-        elems.push(b.block_args(block)[idx]);
+    let mut elems = Vec::with_capacity(num_fields);
+    for idx in 0..num_fields {
+        elems.push(b.block_args(block)[idx+1]);
     }
 
     // Check first tuple element
@@ -92,8 +92,9 @@ pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
 
     // Update fields
     for update in rec.updates.iter() {
-        let idx = field_idxs[&update.name.symbol()];
-        let new_val = map_block!(block, lower_single(ctx, b, block, update.value.as_ref().unwrap()));
+        let idx = rec_def.field_idx_map[&update.name];
+        let new_val = map_block!(block, lower_single(
+            ctx, b, block, update.value.as_ref().unwrap()));
         elems[idx] = new_val;
     }
 
@@ -111,24 +112,31 @@ pub(super) fn lower_record_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
     let rec_def = &ctx.module.records[&rec.name.name];
     let recname_val = b.value(rec.name);
 
-    // Make a map of field_name => elem_idx
-    let mut field_idxs = HashMap::new();
-    for (idx, field) in rec_def.fields.iter().enumerate() {
-        assert!(!field_idxs.contains_key(&field.name.symbol()));
-        field_idxs.insert(field.name.symbol(), idx);
-    }
+    let num_fields = rec_def.record.fields.len();
 
-    let mut elems = vec![None; rec_def.fields.len()];
+    let mut elems = vec![None; num_fields];
 
     // Populate values from expression
     for field in rec.fields.iter() {
-        let idx = field_idxs[&field.name.symbol()];
-        let new_val = map_block!(block, lower_single(ctx, b, block, field.value.as_ref().unwrap()));
+        let idx = rec_def.field_idx_map[&field.name];
+
+        if elems[idx].is_some() {
+            ctx.error(LowerError::DuplicateRecordField {
+                new: field.name.span,
+                old: rec.fields.iter()
+                    .find(|f| f.name == field.name)
+                    .unwrap()
+                    .name.span,
+            });
+        }
+
+        let new_val = map_block!(block, lower_single(
+            ctx, b, block, field.value.as_ref().unwrap()));
         elems[idx] = Some(new_val);
     }
 
     // Fill with defaults
-    for (idx, field) in rec_def.fields.iter().enumerate() {
+    for (idx, field) in rec_def.record.fields.iter().enumerate() {
         if elems[idx].is_none() {
             let new_val = if let Some(const_expr) = field.value.as_ref() {
                 // TODO: Allow only constants. This should be a separate lowering method!
@@ -148,4 +156,15 @@ pub(super) fn lower_record_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
     (block, tup)
 }
 
-
+pub(super) fn lower_record_index(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    block: IrBlock,
+    rec: &RecordIndex,
+) -> (IrBlock, IrValue)
+{
+    let rec_def = &ctx.module.records[&rec.name.name];
+    let index = rec_def.field_idx_map[&rec.field];
+    let val = b.value(index);
+    (block, val)
+}

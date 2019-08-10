@@ -64,25 +64,27 @@ impl<'a> BlockGraph<'a> {
 pub struct BlockEdge(Block, usize);
 
 pub struct BlockSuccessors<'a> {
-    fun: &'a Function,
-    block: Block,
-    pos: usize,
+    //fun: &'a Function,
+    //block: Block,
+    //pos: usize,
+    iter: PooledEntitySetIter<'a, Block>,
 }
 impl<'a> Iterator for BlockSuccessors<'a> {
     type Item = Block;
     fn next(&mut self) -> Option<Block> {
-        loop {
-            if let Some(val) = self.fun.blocks[self.block].reads.get(
-                self.pos, &self.fun.pool.value)
-            {
-                self.pos += 1;
-                if let Some(block) = self.fun.value_block(val) {
-                    return Some(block);
-                }
-            } else {
-                return None;
-            }
-        }
+        self.iter.next()
+        //loop {
+        //    if let Some(val) = self.fun.blocks[self.block].reads.get(
+        //        self.pos, &self.fun.pool.value)
+        //    {
+        //        self.pos += 1;
+        //        if let Some(block) = self.fun.value_block(val) {
+        //            return Some(block);
+        //        }
+        //    } else {
+        //        return None;
+        //    }
+        //}
     }
 }
 
@@ -113,9 +115,11 @@ impl<'a> IntoNeighbors for &'a BlockGraph<'a> {
     type Neighbors = BlockSuccessors<'a>;
     fn neighbors(self, block: Block) -> Self::Neighbors {
         BlockSuccessors {
-            fun: &self.fun,
-            block,
-            pos: 0,
+            //fun: &self.fun,
+            //block,
+            //pos: 0,
+            iter: self.fun.blocks[block].successors
+                .iter(&self.fun.pool.block_set),
         }
     }
 }
