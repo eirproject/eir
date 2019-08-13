@@ -2,6 +2,7 @@ steps:
 
   # Windows only: Install m4
   - script: |
+      choco install msys2
       pacman -S m4
     displayName: Install dependencies (windows)
     condition: eq(variables['Agent.OS'], 'Windows_NT')
