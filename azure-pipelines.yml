@@ -12,7 +12,7 @@ jobs:
       rust: $(nightly)
       cross: true
       crates:
-        pattern_compiler: []
+        pattern-compiler: []
         libeir_intern: []
         libeir_diagnostics: []
         libeir_util: []
