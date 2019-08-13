@@ -1,19 +1,19 @@
-use libeir_ir::FunctionIdent;
+
 use libeir_intern::Symbol;
 
-use crate::vm::{ VMState, WatchType };
+use crate::vm::{ VMState };
 use crate::module::{ NativeModule, NativeReturn };
 use crate::process::{ ProcessContext };
 
-use crate::term::{ Term, Pid, Reference };
+use crate::term::{ Term };
 use crate::term::{ ErlEq, ErlExactEq, ErlOrd };
 use crate::term::{ ListIteratorItem };
 
-use ::rug::{ Integer };
+
 use ::num_traits::{ Signed };
 
 use std::rc::Rc;
-use std::cell::RefCell;
+
 
 fn abs(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     if args.len() != 1 {
@@ -562,7 +562,7 @@ fn erase(_vm: &VMState, proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeR
     }
 }
 
-fn length(_vm: &VMState, proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
+fn length(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 1);
     let mut len = 0;
     for item in Term::list_iter(&args[0]) {

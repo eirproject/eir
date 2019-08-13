@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::module::{ NativeModule, ModuleType, ErlangModule, NativeReturn };
+use crate::module::{ NativeModule, ModuleType, ErlangModule };
 use crate::process::{ ProcessContext, CallExecutor, Continuation, TermCall };
 use crate::term::{ Term, Pid, Reference };
 

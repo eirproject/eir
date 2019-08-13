@@ -1,7 +1,7 @@
-use crate::{ PatternProvider, ExpandedClauseNodes };
 
-use ::petgraph::{ Graph, Direction };
-use ::petgraph::graph::NodeIndex;
+
+
+
 
 use super::{ SimplePatternProvider, NodeKind };
 

@@ -5,8 +5,10 @@ use either::Either;
 use libeir_ir::{
     FunctionBuilder,
     PatternNode,
-    PatternClause,
 };
+use libeir_intern::Ident;
+
+
 use super::{ Tree, TreeNode, TreeNodeKind, ConstraintKind };
 use super::super::{ ClauseLowerCtx, EqGuard };
 use crate::lower::LowerCtx;
@@ -69,9 +71,13 @@ impl Tree {
         }
     }
 
+    pub fn pseudo_binds(&self) -> Vec<Ident> {
+        self.resolved_binds.as_ref().unwrap().keys().cloned().collect()
+    }
+
     pub fn pseudo_bind(
         &self,
-        b: &mut FunctionBuilder,
+        _b: &mut FunctionBuilder,
         ctx: &mut LowerCtx,
     ) {
         let sentinel = ctx.sentinel();
@@ -142,7 +148,7 @@ fn lower_tree_node(
             b.pat_mut().value(p_node, cl_val);
             b.pat_mut().node_set_span(p_node, *span);
         }
-        TreeNodeKind::Value(_, Either::Right(node)) => {
+        TreeNodeKind::Value(_, Either::Right(_node)) => {
             unimplemented!()
         }
         TreeNodeKind::Wildcard => {

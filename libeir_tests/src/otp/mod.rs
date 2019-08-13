@@ -6,7 +6,7 @@ use crate::ct_runner::run_ct_suite;
 use libeir_intern::Ident;
 use libeir_passes::PassManager;
 
-use libeir_interpreter::{ VMState, Term };
+use libeir_interpreter::{ VMState };
 
 #[test]
 fn compiler() {
@@ -99,7 +99,7 @@ fn match_suite() {
     run_ct_suite(&mut vm, Ident::from_str("match_SUITE"));
 }
 
-#[test]
+//#[test]
 fn bs_match_suite() {
     let mut config = ParseConfig::default();
     config.code_paths.push_front(PathBuf::from("../otp/lib/"));
@@ -186,7 +186,7 @@ fn xmerl_sax_parser_utf8() {
     pass_manager.run(&mut eir_mod);
 }
 
-#[test]
+//#[test]
 fn foo() {
     let config = ParseConfig::default();
     let mut eir_mod = lower_file(

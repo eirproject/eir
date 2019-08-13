@@ -6,7 +6,7 @@ use libeir_ir::{
     Block as IrBlock,
     BinOp as IrBinOp,
 };
-use libeir_ir::constant::NilTerm;
+
 
 use libeir_intern::Symbol;
 
@@ -42,7 +42,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
     if let Some(clauses) = try_expr.clauses.as_ref() {
         let no_match = b.block_insert();
         {
-            let mut block = no_match;
+            let block = no_match;
             let typ_val = b.value(Symbol::intern("error"));
             let try_clause_val = b.value(Symbol::intern("try_clause"));
             let err_val = b.prim_tuple(&[try_clause_val, body_ret]);
@@ -56,24 +56,25 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
         for clause in clauses {
             match lower_clause(ctx, b, &mut block, [&clause.pattern].iter().map(|i| *i), clause.guard.as_ref()) {
                 Ok(lowered) => {
+                    let (scope_token, body) = lowered.make_body(ctx, b);
+
                     // Add to case
-                    let body_val = b.value(lowered.body);
+                    let body_val = b.value(body);
                     case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
                     for value in lowered.values.iter() {
                         case_b.push_value(*value, b);
                     }
 
-                    let (body_ret_block, body_ret) = lower_block(ctx, b, lowered.body, &clause.body);
+                    let (body_ret_block, body_ret) = lower_block(
+                        ctx, b, body, &clause.body);
 
                     // Call to join block
                     b.op_call(body_ret_block, join_block, &[body_ret]);
 
                     // Pop scope pushed in lower_clause
-                    ctx.scope.pop(lowered.scope_token);
+                    ctx.scope.pop(scope_token);
                 }
-                Err(lowered) => {
-                    ctx.scope.pop(lowered.scope_token);
-                },
+                Err(lowered) => {},
             }
             assert!(ctx.exc_stack.len() == entry_exc_height)
         }
@@ -108,8 +109,10 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
 
             match lower_clause(ctx, b, &mut block, [&kind_expr, &clause.error].iter().map(|i| *i), clause.guard.as_ref()) {
                 Ok(lowered) => {
+                    let (scope_token, body) = lowered.make_body(ctx, b);
+
                     // Add to case
-                    let body_val = b.value(lowered.body);
+                    let body_val = b.value(body);
                     case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
                     for value in lowered.values.iter() {
                         case_b.push_value(*value, b);
@@ -118,17 +121,16 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                     // Bind stack trace in scope
                     ctx.bind(clause.trace, exc_trace);
 
-                    let (body_ret_block, body_ret) = lower_block(ctx, b, lowered.body, &clause.body);
+                    let (body_ret_block, body_ret) = lower_block(
+                        ctx, b, body, &clause.body);
 
                     // Call to join block
                     b.op_call(body_ret_block, join_block, &[body_ret]);
 
                     // Pop scope pushed in lower_clause
-                    ctx.scope.pop(lowered.scope_token);
+                    ctx.scope.pop(scope_token);
                 }
-                Err(lowered) => {
-                    ctx.scope.pop(lowered.scope_token);
-                },
+                Err(lowered) => {},
             }
 
             assert!(ctx.exc_stack.len() == entry_exc_height)
@@ -236,7 +238,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
 
     // Error branch
     {
-        let mut error_block = b.block_insert();
+        let error_block = b.block_insert();
         let error_block_val = b.value(error_block);
         case_b.push_clause(error_clause, guard_val, error_block_val, b);
 
@@ -248,7 +250,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
 
     // Exit branch
     {
-        let mut exit_block = b.block_insert();
+        let exit_block = b.block_insert();
         let exit_block_val = b.value(exit_block);
         case_b.push_clause(exit_clause, guard_val, exit_block_val, b);
 

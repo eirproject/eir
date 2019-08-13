@@ -1,4 +1,4 @@
-use clap::{ Arg, App, SubCommand, ArgMatches, arg_enum, value_t };
+use clap::{ Arg, App, ArgMatches, arg_enum, value_t };
 
 use std::io::Read;
 use std::io::Write;

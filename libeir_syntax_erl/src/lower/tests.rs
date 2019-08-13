@@ -74,7 +74,7 @@ fn lower(input: &str, config: ParseConfig) -> Result<IrModule, ()> {
 
 #[test]
 fn fib_lower() {
-    let result = lower(
+    let _result = lower(
         "-module(fib).
 
 fib(X) when X < 2 -> 1;

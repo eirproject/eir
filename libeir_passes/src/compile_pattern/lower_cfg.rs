@@ -7,7 +7,7 @@ use libeir_ir::pattern::{ PatternClause, PatternNode };
 use pattern_compiler::{ PatternCfg, CfgNodeKind, EdgeRef, NodeIndex };
 
 use super::erlang_pattern_provider::{
-    ErlangPatternProvider, NodeKind, Var, Node, ValueOrConst,
+    ErlangPatternProvider, NodeKind, Var, ValueOrConst,
 };
 
 pub struct DecisionTreeDestinations {

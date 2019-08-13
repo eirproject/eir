@@ -1,4 +1,4 @@
-use ::std::cell::RefCell;
+
 use ::std::rc::Rc;
 use std::hash::{ Hash, Hasher };
 use std::cmp::{ Ord, Ordering };
@@ -397,7 +397,7 @@ impl Term {
                 buf.push(val.to_u8().unwrap() as char);
                 true
             }
-            Term::ListCell(head, tail) => {
+            Term::ListCell(_head, _tail) => {
                 unimplemented!()
                 //for item in head {
                 //    if !item.extend_erl_string(buf) {

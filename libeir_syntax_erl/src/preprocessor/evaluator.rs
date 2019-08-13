@@ -152,7 +152,7 @@ pub fn eval(expr: Expr) -> Result<Expr, PreprocessorError> {
         }
         Expr::UnaryExpr(UnaryExpr {
             span,
-            id,
+            id: _,
             op,
             operand,
         }) => {

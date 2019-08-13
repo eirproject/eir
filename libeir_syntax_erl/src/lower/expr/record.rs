@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+
 
 use libeir_ir::{
     FunctionBuilder,
@@ -16,7 +16,7 @@ use crate::lower::expr::lower_single;
 
 fn make_rec_fail(ctx: &mut LowerCtx, b: &mut FunctionBuilder, recname_val: IrValue) -> IrBlock {
     let fail_block = b.block_insert();
-    let mut block = fail_block;
+    let block = fail_block;
 
     let fail_type = b.value(Symbol::intern("error")); // TODO double check correct type
 

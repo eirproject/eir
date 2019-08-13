@@ -7,7 +7,7 @@ use either::Either;
 
 use cranelift_entity::{ PrimaryMap, SecondaryMap, EntityList, ListPool,
                         entity_impl };
-use cranelift_entity::packed_option::ReservedValue;
+
 
 use libeir_ir::{
     FunctionBuilder,
@@ -21,12 +21,11 @@ use libeir_ir::{
     PrimOp,
 };
 
-use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
+use libeir_diagnostics::{ ByteSpan };
 use libeir_intern::Ident;
 
 use crate::lower::{ lower_single, LowerCtx, LowerError };
-use crate::parser::ast::{ Expr, Var, Literal, BinaryExpr, BinaryOp, Binary,
-                          UnaryExpr, UnaryOp };
+
 
 mod from_expr;
 

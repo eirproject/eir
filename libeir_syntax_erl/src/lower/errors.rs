@@ -2,7 +2,7 @@ use libeir_diagnostics::{ ByteSpan, Diagnostic, Label };
 
 use super::expr::BinaryTypeName;
 
-use failure::{ Error, Fail };
+use failure::{ Fail };
 
 #[derive(Fail, Debug)]
 pub enum LowerError {

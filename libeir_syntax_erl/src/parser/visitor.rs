@@ -279,7 +279,7 @@ macro_rules! make_visitor {
                 self.walk_named_lambda(expr);
             }
 
-            fn visit_delayed_substitution(&mut self, expr: &'ast $($mutability)* DelayedSubstitution) {}
+            fn visit_delayed_substitution(&mut self, _expr: &'ast $($mutability)* DelayedSubstitution) {}
 
             // The `walk` functions are not meant to be overridden.
 

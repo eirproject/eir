@@ -21,7 +21,7 @@ use crate::parser::ast::{ Expr, Var, Literal };
 use crate::parser::ast::{ Apply, Remote, UnaryExpr };
 use crate::parser::ast::UnaryOp;
 use crate::parser::ast::{ FunctionName, LocalFunctionName };
-use crate::parser::ast::{ MapField };
+
 
 pub mod literal;
 use literal::lower_literal;
@@ -195,13 +195,14 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
 
             match lower_clause(ctx, b, &mut block, [&mat.pattern].iter().map(|i| &***i), None) {
                 Ok(lowered) => {
+                    let (_scope_token, body) = lowered.make_body(ctx, b);
 
                     let mut match_case = b.op_case_build();
                     match_case.match_on = Some(match_val);
                     match_case.no_match = Some(b.value(no_match));
 
                     // Add clause to match
-                    let body_val = b.value(lowered.body);
+                    let body_val = b.value(body);
                     match_case.push_clause(lowered.clause, lowered.guard, body_val, b);
                     for value in lowered.values.iter() {
                         match_case.push_value(*value, b);
@@ -212,15 +213,14 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                     // The scope pushed in lower_case will be popped by the
                     // calling `lower_block`.
 
-                    (lowered.body, match_val)
+                    (body, match_val)
                 }
-                Err(_) => {
+                Err(lowered) => {
                     b.op_call(block, no_match, &[]);
 
-                    let dummy_cont = b.block_insert();
-                    let dummy_val = b.block_arg_insert(dummy_cont);
+                    let (_scope_token, body) = lowered.make_body(ctx, b);
 
-                    (dummy_cont, dummy_val)
+                    (body, match_val)
                 }
             }
         }
@@ -306,26 +306,46 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                                        clause.guard.as_ref())
                     {
                         Ok(lowered) => {
+                            let scope_token = ctx.scope.push();
+                            let body = b.block_insert();
+
+                            let body_mapped = b.block_insert();
+
+                            // Map all matched values through receive_done.
+                            // This enables us to do things like copy from
+                            // a heap fragment to the main process heap.
+                            let mut recv_done_b = b.op_intrinsic_build(
+                                Symbol::intern("receive_done"));
+                            recv_done_b.push_value(body_mapped, b);
+                            for bind in lowered.binds.iter() {
+                                let val = b.block_arg_insert(body);
+                                recv_done_b.push_value(val, b);
+
+                                let mapped_val = b.block_arg_insert(body_mapped);
+                                if let Some(name) = bind {
+                                    ctx.bind(*name, mapped_val);
+                                }
+                            }
+                            recv_done_b.block = Some(body);
+                            recv_done_b.finish(b);
 
                             // Add to case
-                            let body_val = b.value(lowered.body);
+                            let body_val = b.value(body);
                             case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
                             for value in lowered.values.iter() {
                                 case_b.push_value(*value, b);
                             }
 
                             let (body_ret_block, body_ret) = lower_block(
-                                ctx, b, lowered.body, &clause.body);
+                                ctx, b, body_mapped, &clause.body);
 
                             // Call to join block
                             b.op_call(body_ret_block, join_block, &[body_ret]);
 
                             // Pop scope pushed in lower_clause
-                            ctx.scope.pop(lowered.scope_token);
+                            ctx.scope.pop(scope_token);
                         }
-                        Err(lowered) => {
-                            ctx.scope.pop(lowered.scope_token);
-                        },
+                        Err(_lowered) => {}
                     }
                     assert!(ctx.exc_stack.len() == entry_exc_height)
                 }

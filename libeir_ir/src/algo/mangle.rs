@@ -1,7 +1,7 @@
 use std::collections::{ HashMap, HashSet, BTreeSet };
 
 use crate::{ Function, FunctionBuilder };
-use crate::{ Value, Block, PrimOp };
+use crate::{ Value, Block };
 use crate::{ ValueKind, OpKind };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -195,7 +195,7 @@ impl Mangler {
                             RenameDest::Value(recv.map_const(*val)),
                         );
                     },
-                    ValueKind::PrimOp(prim) => {
+                    ValueKind::PrimOp(_prim) => {
                         unimplemented!()
                     },
                     ValueKind::Block(block) => {

@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 use std::ops::{ Not, BitAnd, BitOr };
-use std::cmp::{ Ord, PartialOrd, Ordering };
+use std::cmp::{ Ord };
 use std::hash::{ Hash, Hasher };
 use std::fmt::Debug;
 

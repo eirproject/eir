@@ -696,6 +696,31 @@ impl Module {
             }
         }
 
+        let self_fun = ResolvedFunctionName {
+            span: DUMMY_SPAN,
+            id: nid.next(),
+            module: Ident::from_str("erlang"),
+            function: Ident::from_str("self"),
+            arity: 0,
+        };
+        self.imports.insert(self_fun.to_local(), self_fun);
+        let self_fun = ResolvedFunctionName {
+            span: DUMMY_SPAN,
+            id: nid.next(),
+            module: Ident::from_str("erlang"),
+            function: Ident::from_str("spawn"),
+            arity: 3,
+        };
+        self.imports.insert(self_fun.to_local(), self_fun);
+        let self_fun = ResolvedFunctionName {
+            span: DUMMY_SPAN,
+            id: nid.next(),
+            module: Ident::from_str("erlang"),
+            function: Ident::from_str("is_integer"),
+            arity: 1,
+        };
+        self.imports.insert(self_fun.to_local(), self_fun);
+
         let autos = auto_imports! {
             erlang:abs/1,
             erlang:apply/2,
@@ -824,7 +849,6 @@ impl Module {
             erlang:register/2,
             erlang:registered/0,
             erlang:round/1,
-            erlang:self/0,
             erlang:setelement/3,
             erlang:size/1,
             erlang:spawn/1,
@@ -1174,7 +1198,7 @@ impl CompileOptions {
     fn no_warn_unused_functions(
         &mut self,
         diagnostics: &mut Vec<Diagnostic>,
-        module: &Ident,
+        _module: &Ident,
         funs: &[Expr],
     ) {
         for fun in funs {
@@ -1199,7 +1223,7 @@ impl CompileOptions {
     fn inline_functions(
         &mut self,
         diagnostics: &mut Vec<Diagnostic>,
-        module: &Ident,
+        _module: &Ident,
         funs: &[Expr],
     ) {
         for fun in funs {

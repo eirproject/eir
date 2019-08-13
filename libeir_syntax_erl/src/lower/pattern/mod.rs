@@ -1,10 +1,9 @@
-use std::collections::{ HashMap, HashSet };
+use std::collections::{ HashMap };
 
 use libeir_ir::{
     FunctionBuilder,
     Value as IrValue,
     Block as IrBlock,
-    Const,
 };
 use libeir_ir::pattern::{
     PatternClause,
@@ -12,13 +11,13 @@ use libeir_ir::pattern::{
     PatternValue,
     PatternMergeFail,
 };
-use libeir_ir::constant::{ NilTerm, BinaryTerm };
+
 
 use crate::parser::ast::{ Expr, Guard };
-use crate::parser::ast::{ Literal, BinaryExpr, BinaryOp, UnaryExpr, UnaryOp, Binary };
 
-use super::{ LowerCtx, lower_block, lower_single, ScopeToken };
-use super::errors::LowerError;
+
+use super::{ LowerCtx, lower_block, ScopeToken };
+
 
 use libeir_intern::{ Ident, Symbol };
 
@@ -64,7 +63,8 @@ struct ClauseLowerCtx {
 }
 
 impl ClauseLowerCtx {
-    fn clause_value(&mut self, b: &mut FunctionBuilder, val: IrValue) -> PatternValue {
+    pub fn clause_value(&mut self, b: &mut FunctionBuilder, val: IrValue
+    ) -> PatternValue {
         if let Some(pat_val) = self.value_dedup.get(&val) {
             *pat_val
         } else {
@@ -74,16 +74,46 @@ impl ClauseLowerCtx {
     }
 }
 
-pub struct LoweredClause {
+pub(crate) struct LoweredClause {
     pub clause: PatternClause,
-    pub body: IrBlock,
     pub guard: IrValue,
-    pub scope_token: ScopeToken,
     pub values: Vec<IrValue>,
+
+    pub binds: Vec<Option<Ident>>,
+}
+impl LoweredClause {
+    pub fn make_body(&self, ctx: &mut LowerCtx, b: &mut FunctionBuilder
+    ) -> (ScopeToken, IrBlock) {
+        let scope_token = ctx.scope.push();
+        let body_block = b.block_insert();
+
+        for bind in self.binds.iter() {
+            let val = b.block_arg_insert(body_block);
+            if let Some(name) = bind {
+                ctx.bind(*name, val);
+            }
+        }
+
+        (scope_token, body_block)
+    }
 }
 
-pub struct LoweredClauseFail {
-    pub scope_token: ScopeToken,
+pub(crate) struct UnreachableClause {
+    pub binds: Vec<Ident>,
+}
+impl UnreachableClause {
+    pub fn make_body(&self, ctx: &mut LowerCtx, b: &mut FunctionBuilder
+    ) -> (ScopeToken, IrBlock) {
+        let scope_token = ctx.scope.push();
+        let body_block = b.block_insert();
+
+        let sentinel = ctx.sentinel();
+        for bind in self.binds.iter() {
+            ctx.bind(*bind, sentinel);
+        }
+
+        (scope_token, body_block)
+    }
 }
 
 /// When this returns Some:
@@ -92,7 +122,9 @@ pub struct LoweredClauseFail {
 pub(super) fn lower_clause<'a, P>(
     ctx: &mut LowerCtx, b: &mut FunctionBuilder, pre_case: &mut IrBlock,
     patterns: P, guard: Option<&Vec<Guard>>,
-) -> Result<LoweredClause, LoweredClauseFail> where P: Iterator<Item = &'a Expr>
+) -> Result<LoweredClause, UnreachableClause>
+where
+    P: Iterator<Item = &'a Expr>,
 {
     assert!(b.fun().block_kind(*pre_case).is_none());
 
@@ -117,37 +149,43 @@ pub(super) fn lower_clause<'a, P>(
     tree.process(ctx, b);
 
     if tree.unmatchable {
-        let scope_tok = ctx.scope.push();
-        tree.pseudo_bind(b, ctx);
-        return Err(LoweredClauseFail {
-            scope_token: scope_tok,
+        return Err(UnreachableClause {
+            binds: tree.pseudo_binds(),
         });
     }
 
     tree.lower(b, &mut clause_ctx);
 
-    // Since we are merging nodes, we might have binds that no longer exist in the actual pattern.
-    // Update these according to the rename map.
-    //{
-    //    // Resolve multiple levels of renames.
-    //    let mut node_renames = clause_ctx.node_renames.clone();
-    //    loop {
-    //        let mut changed = false;
-    //        for val in node_renames.values_mut() {
-    //            if let Some(i) = clause_ctx.node_renames.get(&*val) {
-    //                changed = true;
-    //                *val = *i;
-    //            }
-    //        }
-    //        if !changed { break; }
-    //    }
+    // Construct guard lambda
+    let guard_lambda_block = clause_ctx.lower_guard(ctx, b, guard);
 
-    //    b.pat_mut().update_binds(pat_clause, &node_renames);
+    *pre_case = clause_ctx.pre_case;
+
+    // Construct body
+    //let scope_token = ctx.scope.push();
+
+    // Binds
+    //let body_block = b.block_insert();
+
+    //for bind in clause_ctx.binds.iter() {
+    //    let val = b.block_arg_insert(body_block);
+    //    if let Some(name) = bind {
+    //        ctx.bind(*name, val);
+    //    }
     //}
 
-    // Construct guard lambda
-    let guard_lambda_block = {
+    Ok(LoweredClause {
+        clause: pat_clause,
+        guard: b.value(guard_lambda_block),
+        values: clause_ctx.values,
 
+        binds: clause_ctx.binds,
+    })
+}
+
+impl ClauseLowerCtx {
+
+    fn lower_guard(&self, ctx: &mut LowerCtx, b: &mut FunctionBuilder, guard: Option<&Vec<Guard>>) -> IrBlock {
         let guard_lambda_block = b.block_insert();
 
         let ret_cont = b.block_arg_insert(guard_lambda_block);
@@ -164,7 +202,7 @@ pub(super) fn lower_clause<'a, P>(
         }
 
         // Binds
-        for bind in clause_ctx.binds.iter() {
+        for bind in self.binds.iter() {
             let val = b.block_arg_insert(guard_lambda_block);
             if let Some(name) = bind {
                 ctx.bind(*name, val);
@@ -185,7 +223,7 @@ pub(super) fn lower_clause<'a, P>(
         let two_atom = b.value(2);
 
         // Aux guards
-        for eq_guard in clause_ctx.eq_guards.iter() {
+        for eq_guard in self.eq_guards.iter() {
             let (next_block, next_block_val) = b.block_insert_get_val();
             let res_val = b.block_arg_insert(next_block);
 
@@ -258,29 +296,6 @@ pub(super) fn lower_clause<'a, P>(
         ctx.scope.pop(scope_tok);
 
         guard_lambda_block
-    };
-
-    *pre_case = clause_ctx.pre_case;
-
-    // Construct body
-    let scope_token = ctx.scope.push();
-
-    // Binds
-    let body_block = b.block_insert();
-
-    for bind in clause_ctx.binds.iter() {
-        let val = b.block_arg_insert(body_block);
-        if let Some(name) = bind {
-            ctx.bind(*name, val);
-        }
     }
 
-    Ok(LoweredClause {
-        clause: pat_clause,
-        body: body_block,
-        guard: b.value(guard_lambda_block),
-        scope_token,
-        values: clause_ctx.values,
-    })
 }
-

@@ -3,7 +3,7 @@ use std::io::Write;
 use petgraph::Direction;
 use petgraph::visit::EdgeRef;
 
-use crate::cfg::{ PatternCfg, CfgNodeKind };
+use crate::cfg::{ PatternCfg };
 use crate::pattern::PatternProvider;
 
 const DOT_BREAK: &str = "<br align=\"left\" />";
@@ -14,7 +14,7 @@ fn format_label(label: &str) -> String {
 
 impl<P> PatternCfg<P> where P: PatternProvider {
 
-    pub fn to_dot(&self, w: &mut Write) -> ::std::io::Result<()> {
+    pub fn to_dot(&self, w: &mut dyn Write) -> ::std::io::Result<()> {
 
         write!(w, "digraph g {{\n")?;
         write!(w, "node [labeljust=\"l\", shape=record, fontname=\"Courier New\"]\n")?;

@@ -3,18 +3,18 @@ use libeir_ir::{
     Value as IrValue,
     Block as IrBlock,
 };
-use libeir_ir::BinOp;
-use libeir_ir::constant::{ NilTerm, BinaryTerm };
+
+
 pub use libeir_ir::binary::{ Endianness, BinaryEntrySpecifier };
 
-use libeir_intern::{ Ident, Symbol };
-use libeir_diagnostics::DUMMY_SPAN;
+
+
 
 use crate::parser::ast::{ Expr, Literal, Binary, BitType, BinaryElement };
 
 use crate::lower::{ LowerCtx, LowerError };
 use crate::lower::expr::{ lower_single, lower_single_same_scope, lower_block };
-use crate::lower::pattern::lower_clause;
+
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum TypeName {

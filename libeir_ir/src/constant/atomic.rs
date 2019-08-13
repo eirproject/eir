@@ -197,7 +197,7 @@ impl Display for AtomicTerm {
             AtomicTerm::Float(float) => write!(fmt, "{}", float),
             AtomicTerm::Atom(atom) => write!(fmt, "{}", atom),
             AtomicTerm::Nil => write!(fmt, "[]"),
-            AtomicTerm::Binary(bin) => write!(fmt, "bin"),
+            AtomicTerm::Binary(_bin) => write!(fmt, "bin"),
             _ => unimplemented!("{:?}", self),
         }
     }

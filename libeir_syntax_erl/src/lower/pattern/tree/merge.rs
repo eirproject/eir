@@ -9,7 +9,7 @@ use libeir_ir::{
 use cranelift_entity::{ PrimaryMap, SecondaryMap, EntityList, ListPool,
                         entity_impl };
 
-use crate::lower::{ lower_single, LowerCtx, LowerError };
+use crate::lower::{ LowerCtx, LowerError };
 use super::{ Tree, TreeNode, TreeNodeKind };
 
 pub(crate) fn merge_tree_nodes(
@@ -148,7 +148,7 @@ fn merge_nodes(
             }
         }
         (TreeNodeKind::Cons { span: s1, head: h1, tail: t1 },
-         TreeNodeKind::Cons { span: s2, head: h2, tail: t2 }) => {
+         TreeNodeKind::Cons { span: _s2, head: h2, tail: t2 }) => {
             let h_m = merge_nodes(ctx, b, t, h1, h2);
             let t_m = merge_nodes(ctx, b, t, t1, t2);
             t.nodes.push(TreeNodeKind::Cons {

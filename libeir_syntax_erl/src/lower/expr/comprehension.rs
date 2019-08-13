@@ -16,7 +16,7 @@ use crate::lower::pattern::lower_clause;
 use crate::lower::expr::binary::lower_binary_expr;
 
 fn lower_qual<F>(ctx: &mut LowerCtx, b: &mut FunctionBuilder, inner: &F,
-                 quals: &[Expr], mut block: IrBlock, mut acc: IrValue) -> (IrBlock, IrValue)
+                 quals: &[Expr], mut block: IrBlock, acc: IrValue) -> (IrBlock, IrValue)
 where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, IrValue)
 {
     if quals.len() == 0 {
@@ -83,23 +83,24 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
 
                 match lower_clause(ctx, b, &mut block, [&*gen.pattern].iter().map(|i| *i), None) {
                     Ok(lowered) => {
+                        let (scope_token, body) = lowered.make_body(ctx, b);
 
                         let mut case_b = b.op_case_build();
                         case_b.match_on = Some(head_val);
                         case_b.no_match = Some(b.value(no_match));
 
                         // Add to case
-                        let body_val = b.value(lowered.body);
+                        let body_val = b.value(body);
                         case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
                         for value in lowered.values.iter() {
                             case_b.push_value(*value, b);
                         }
 
-                        let (cont, cont_val) = lower_qual(ctx, b, inner, &quals[1..], lowered.body, loop_acc_arg);
+                        let (cont, cont_val) = lower_qual(ctx, b, inner, &quals[1..], body, loop_acc_arg);
                         b.op_call(cont, loop_block, &[tail_val, cont_val]);
 
                         // Pop scope pushed in lower_clause
-                        ctx.scope.pop(lowered.scope_token);
+                        ctx.scope.pop(scope_token);
 
                         case_b.finish(block, b);
 
@@ -108,7 +109,7 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
                     Err(_) => unimplemented!(), // TODO warn/error unreachable pattern
                 }
             }
-            Expr::BinaryGenerator(gen) => {
+            Expr::BinaryGenerator(_gen) => {
                 unimplemented!()
             }
             expr => {
@@ -146,7 +147,7 @@ pub(super) fn lower_list_comprehension_expr(ctx: &mut LowerCtx, b: &mut Function
 
 pub(super) fn lower_binary_comprehension_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
                                               compr: &BinaryComprehension) -> (IrBlock, IrValue) {
-    let inner = |ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock, acc: IrValue| {
+    let inner = |ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock, acc: IrValue| {
         match &*compr.body {
             Expr::Binary(bin) =>
                 lower_binary_expr(ctx, b, block, Some(acc), bin),

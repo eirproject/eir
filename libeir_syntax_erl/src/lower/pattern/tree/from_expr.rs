@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+
 
 use either::Either;
 
 use cranelift_entity::{ PrimaryMap, SecondaryMap, EntityList, ListPool,
                         entity_impl };
-use cranelift_entity::packed_option::ReservedValue;
+
 
 use libeir_ir::{
     FunctionBuilder,
@@ -19,7 +19,7 @@ use libeir_ir::{
 };
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
-use libeir_intern::Ident;
+
 
 use rug::Integer;
 
@@ -312,7 +312,7 @@ fn pattern_to_tree_node(
                 b.cons_mut().from(Vec::<u8>::new()),
             ));
 
-            for (idx, elem) in elements.iter().enumerate().rev() {
+            for (_idx, elem) in elements.iter().enumerate().rev() {
                 let spec = elem.bit_type.as_ref()
                     .map(|b| specifier_from_parsed(&*b))
                     .unwrap_or(Ok(default_specifier()));

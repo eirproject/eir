@@ -3,7 +3,7 @@ use libeir_ir::{
     Value as IrValue,
     Block as IrBlock,
 };
-use libeir_ir::constant::NilTerm;
+
 
 use libeir_intern::{ Symbol, Ident };
 
@@ -16,7 +16,7 @@ use crate::lower::expr::{ lower_single, lower_single_same_scope };
 pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
                                 expr: &BinaryExpr) -> (IrBlock, IrValue)
 {
-    let BinaryExpr { lhs, rhs, op, id, span } = expr;
+    let BinaryExpr { lhs, rhs, op, id: _, span } = expr;
 
     match op {
         BinaryOp::AndAlso => {
@@ -61,7 +61,7 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
 
             // Nonbool branch
             {
-                let mut block = non1_block;
+                let block = non1_block;
 
                 let typ_val = b.value(Symbol::intern("error"));
                 let err_atom = b.value(Symbol::intern("badarg"));

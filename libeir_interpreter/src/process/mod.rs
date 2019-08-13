@@ -1,17 +1,17 @@
 use std::rc::Rc;
 use std::collections::HashMap;
 
-use rug::integer::Order;
+
 
 use libeir_ir::{ FunctionIdent, Block, Value, OpKind, BinOp, ValueKind, PrimOpKind };
-use libeir_ir::{ MatchKind, BasicType, MapPutUpdate };
+use libeir_ir::{ MapPutUpdate };
 use libeir_ir::{ BinaryEntrySpecifier, Endianness };
 use libeir_ir::constant::{ Const, ConstKind, AtomicTerm };
 use libeir_intern::{ Symbol, Ident };
 
 use libeir_util::binary::{ BitVec, BitSlice, integer_to_carrier, Endian };
 
-use crate::term::{ Term, Pid, ErlEq, ErlExactEq, MapTerm };
+use crate::term::{ Term, Pid, ErlEq, MapTerm };
 use crate::module::{ ModuleType, ErlangModule, ErlangFunction, NativeModule, NativeReturn };
 use crate::vm::VMState;
 
@@ -487,7 +487,7 @@ impl CallExecutor {
 
                 match specifier {
                     BinaryEntrySpecifier::Integer {
-                        signed, unit, endianness } =>
+                        signed: _, unit, endianness } =>
                     {
                         let size = size_term.unwrap().as_usize().unwrap();
                         let bit_size = *unit as usize * size;

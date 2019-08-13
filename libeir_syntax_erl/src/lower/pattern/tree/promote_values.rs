@@ -1,6 +1,6 @@
 //! Resolves values, promotes nodes to values, applies constraints
 
-use std::collections::{ HashMap, BTreeMap, BTreeSet };
+use std::collections::{ HashMap, BTreeSet };
 use either::Either;
 
 use libeir_ir::{

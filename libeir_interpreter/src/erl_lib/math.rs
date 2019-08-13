@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::term::{ Term, ErlEq, ErlExactEq };
+use crate::term::{ Term };
 use crate::process::{ ProcessContext };
 use crate::vm::VMState;
 use crate::module::{ NativeModule, NativeReturn };

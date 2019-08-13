@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+
 use std::cmp::{ Ord, PartialOrd, Ordering };
 use std::hash::{ Hash, Hasher };
 

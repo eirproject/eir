@@ -1,9 +1,9 @@
 use std::cmp::Ordering;
 use std::hash::{ Hash, Hasher };
 
-use num_traits::{ CheckedShl, CheckedShr };
+use num_traits::{ CheckedShr };
 
-use super::{ BitTransport, BitCarrier, BitRead, BitWrite };
+use super::{ BitCarrier, BitRead, BitWrite };
 use super::BitSlice;
 
 #[derive(Debug, Clone)]

@@ -5,7 +5,7 @@ use libeir_ir::{
     Block as IrBlock,
     IntoValue,
 };
-use libeir_ir::constant::NilTerm;
+
 
 use libeir_diagnostics::ByteSpan;
 use libeir_intern::{ Symbol, Ident };
@@ -201,7 +201,7 @@ fn lower_function(
     let entry = b.block_insert();
 
     match fun {
-        Function::Named(named) => {
+        Function::Named(_named) => {
             unimplemented!()
         }
         Function::Unnamed(lambda) => {
@@ -264,28 +264,27 @@ fn lower_function_base(
                                clause.guard.as_ref())
             {
                 Ok(lowered) => {
+                    let (scope_token, body) = lowered.make_body(ctx, b);
 
                     // Add to case
-                    let body_val = b.value(lowered.body);
+                    let body_val = b.value(body);
                     func_case.push_clause(lowered.clause, lowered.guard, body_val, b);
                     for value in lowered.values.iter() {
                         func_case.push_value(*value, b);
                     }
 
                     let (body_ret_block, body_ret) = lower_block(
-                        ctx, b, lowered.body, &clause.body);
+                        ctx, b, body, &clause.body);
 
                     // Call to join block
                     b.op_call(body_ret_block, join_block, &[body_ret]);
 
                     // Pop scope pushed in lower_clause
-                    ctx.scope.pop(lowered.scope_token);
+                    ctx.scope.pop(scope_token);
                 },
                 // When the pattern of the clause is unmatchable, we don't add it to
                 // the case.
-                Err(lowered) => {
-                    ctx.scope.pop(lowered.scope_token);
-                },
+                Err(lowered) => {},
             }
             assert!(ctx.exc_stack.len() == entry_exc_height)
         }

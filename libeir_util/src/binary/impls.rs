@@ -1,9 +1,9 @@
-use std::fmt::Debug;
-use std::cmp::{ Ord, PartialOrd, Ordering };
-use std::hash::{ Hash, Hasher };
+
+
+
 
 use super::{ BitTransport, BitCarrier, BitRead, BitWrite };
-use super::{ BitSlice, BitVec };
+
 
 macro_rules! impl_prim {
     ($typ:ty, $utyp:ty) => {

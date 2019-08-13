@@ -3,7 +3,7 @@ use libeir_ir::{
     Value as IrValue,
     Block as IrBlock,
 };
-use libeir_ir::constant::NilTerm;
+
 
 use libeir_intern::{ Symbol };
 
@@ -44,27 +44,28 @@ pub(super) fn lower_case_expr(
                            .map(|i| *i), clause.guard.as_ref())
         {
             Ok(lowered) => {
+                let (scope_token, body) = lowered.make_body(ctx, b);
 
                 // Add to case
-                let body_val = b.value(lowered.body);
+                let body_val = b.value(body);
                 case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
                 for value in lowered.values.iter() {
                     case_b.push_value(*value, b);
                 }
 
                 let (body_ret_block, body_ret) = lower_block_same_scope(
-                    ctx, b, lowered.body, &clause.body);
+                    ctx, b, body, &clause.body);
 
-                let binds = ctx.scope.pop_take(lowered.scope_token);
+                let binds = ctx.scope.pop_take(scope_token);
                 scope_merge.branch(body_ret_block, body_ret, binds);
             }
             Err(lowered) => {
-                let dummy_body = b.block_insert();
+                let (scope_tok, dummy_body) = lowered.make_body(ctx, b);
 
                 let (body_ret_block, body_ret) = lower_block_same_scope(
                     ctx, b, dummy_body, &clause.body);
 
-                let binds = ctx.scope.pop_take(lowered.scope_token);
+                let binds = ctx.scope.pop_take(scope_tok);
                 scope_merge.branch(body_ret_block, body_ret, binds);
             },
         }
@@ -80,12 +81,9 @@ pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut blo
 {
     let match_val = b.prim_value_list(&[]);
 
-    let join_block = b.block_insert();
-    let join_arg = b.block_arg_insert(join_block);
-
     let no_match = b.block_insert();
     {
-        let mut block = no_match;
+        let block = no_match;
         let typ_val = b.value(Symbol::intern("error"));
         let badmatch_val = b.value(Symbol::intern("badmatch"));
         let err_val = b.prim_tuple(&[badmatch_val, match_val]);
@@ -98,27 +96,34 @@ pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut blo
 
     let entry_exc_height = ctx.exc_stack.len();
 
+    let mut scope_merge = ScopeMerge::new();
+
     for clause in if_expr.clauses.iter() {
         match lower_clause(ctx, b, &mut block, [].iter(), Some(&clause.guards)) {
             Ok(lowered) => {
+                let (scope_token, body) = lowered.make_body(ctx, b);
 
                 // Add to case
-                let body_val = b.value(lowered.body);
+                let body_val = b.value(body);
                 case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
                 for value in lowered.values.iter() {
                     case_b.push_value(*value, b);
                 }
 
-                let (body_ret_block, body_ret) = lower_block(ctx, b, lowered.body, &clause.body);
-
-                // Call to join block
-                b.op_call(body_ret_block, join_block, &[body_ret]);
+                let (body_ret_block, body_ret) = lower_block(
+                    ctx, b, body, &clause.body);
 
                 // Pop scope pushed in lower_clause
-                ctx.scope.pop(lowered.scope_token);
+                let binds = ctx.scope.pop_take(scope_token);
+                scope_merge.branch(body_ret_block, body_ret, binds);
             }
             Err(lowered) => {
-                ctx.scope.pop(lowered.scope_token);
+                let (scope_token, body) = lowered.make_body(ctx, b);
+
+                let (body_ret_block, body_ret) = lower_block(ctx, b, body, &clause.body);
+
+                let binds = ctx.scope.pop_take(scope_token);
+                scope_merge.branch(body_ret_block, body_ret, binds);
             },
         }
         assert!(ctx.exc_stack.len() == entry_exc_height)
@@ -126,6 +131,5 @@ pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut blo
 
     case_b.finish(block, b);
 
-    (join_block, join_arg)
-
+    scope_merge.finish(ctx, b)
 }

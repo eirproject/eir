@@ -4,7 +4,7 @@ use std::io::{ Write, Error as IoError };
 
 use crate::{ Module, Function, FunctionIdent };
 use crate::{ Block, Value };
-use crate::{ OpKind, PrimOpKind };
+use crate::{ OpKind };
 use crate::ValueKind;
 use crate::pattern::{ PatternContainer, PatternNode, PatternNodeKind };
 
@@ -194,7 +194,7 @@ impl ToEirText for Module {
 impl ToEirText for Function {
     fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut dyn Write) -> std::io::Result<()> {
 
-        use petgraph::visit::IntoNeighbors;
+        
 
         ctx.annotate_function(self);
         let ident = self.ident();

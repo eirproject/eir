@@ -1,15 +1,10 @@
 use std::path::Path;
-use std::rc::Rc;
 
 use libeir_ir::{ Module, FunctionIdent };
 use libeir_syntax_erl::{ Parse, Parser, ParseConfig };
 use libeir_syntax_erl::ast::{ Module as ErlAstModule };
 use libeir_syntax_erl::lower_module;
-use libeir_intern::Ident;
 use libeir_diagnostics::{ Emitter, StandardStreamEmitter, ColorChoice };
-use libeir_passes::PassManager;
-
-use libeir_interpreter::{ VMState, Term, ErlEq };
 
 mod patterns;
 mod list_comprehensions;

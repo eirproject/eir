@@ -196,7 +196,7 @@ mod tests {
         let b1_a = b.block_arg_insert(b1);
 
         let b2 = b.block_insert();
-        let b2_b = b.block_arg_insert(b2);
+        let _b2_b = b.block_arg_insert(b2);
         let b2_c = b.block_arg_insert(b2);
 
         let b3 = b.block_insert();
