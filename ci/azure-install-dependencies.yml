@@ -4,6 +4,6 @@ steps:
   - script: |
       choco install msys2
       refreshenv
-      pacman -S m4
+      pacman -S --noconfirm m4
     displayName: Install dependencies (windows)
     condition: eq(variables['Agent.OS'], 'Windows_NT')
