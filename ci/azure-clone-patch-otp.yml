@@ -2,7 +2,7 @@ steps:
   - script: |
       set -e
       cd $(Build.SourcesDirectory)
-      git pull --recurse-submodules
+      git submodule update --init --recursive
       cd otp_build
       bash patch_tests.sh
     displayName: Clone and patch OTP
