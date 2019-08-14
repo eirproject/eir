@@ -40,7 +40,7 @@ pub(super) fn lower_case_expr(
     let mut scope_merge = ScopeMerge::new();
 
     for clause in case.clauses.iter() {
-        match lower_clause(ctx, b, &mut block, [&clause.pattern].iter()
+        match lower_clause(ctx, b, &mut block, false, [&clause.pattern].iter()
                            .map(|i| *i), clause.guard.as_ref())
         {
             Ok(lowered) => {
@@ -99,7 +99,9 @@ pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut blo
     let mut scope_merge = ScopeMerge::new();
 
     for clause in if_expr.clauses.iter() {
-        match lower_clause(ctx, b, &mut block, [].iter(), Some(&clause.guards)) {
+        match lower_clause(ctx, b, &mut block, false,
+                           [].iter(), Some(&clause.guards))
+        {
             Ok(lowered) => {
                 let (scope_token, body) = lowered.make_body(ctx, b);
 

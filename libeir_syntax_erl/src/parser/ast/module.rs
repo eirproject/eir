@@ -1,6 +1,7 @@
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
+use std::convert::TryInto;
 
 use libeir_diagnostics::{ByteSpan, DUMMY_SPAN, Diagnostic, Label};
 
@@ -10,7 +11,7 @@ use super::{Attribute, Deprecation, UserAttribute};
 use super::{Callback, Record, TypeDef, TypeSig, TypeSpec};
 use super::{Expr, Ident, Literal, Symbol};
 use super::{FunctionClause, FunctionName, NamedFunction, ResolvedFunctionName,
-            LocalFunctionName};
+            LocalFunctionName, PartiallyResolvedFunctionName};
 use super::{ParseError, ParserError};
 
 /// Represents expressions valid at the top level of a module body
@@ -1046,7 +1047,7 @@ pub struct CompileOptions {
     // Warns about missing type specs
     pub warn_missing_spec: bool,
     // Inlines the given functions
-    pub inline_functions: HashSet<LocalFunctionName>,
+    pub inline_functions: HashSet<ResolvedFunctionName>,
 }
 impl Default for CompileOptions {
     fn default() -> Self {
@@ -1088,13 +1089,36 @@ impl CompileOptions {
         let mut diagnostics = Vec::new();
         match expr {
             // e.g. -compile(export_all).
-            &Expr::Literal(Literal::Atom(_id, ref option_name)) => match option_name.as_str().get() {
+            &Expr::Literal(Literal::Atom(id, ref option_name)) => match option_name.as_str().get() {
                 "export_all" => self.export_all = true,
                 "nowarn_export_all" => self.warn_export_all = false,
                 "nowarn_shadow_vars" => self.warn_shadow_vars = false,
                 "nowarn_unused_function" => self.warn_unused_function = false,
                 "nowarn_unused_vars" => self.warn_unused_var = false,
                 "no_auto_import" => self.no_auto_import = true,
+                "inline_list_funcs" => {
+                    let funs = [
+                        ("lists", "all", 2),
+                        ("lists", "any", 2),
+                        ("lists", "foreach", 2),
+                        ("lists", "map", 2),
+                        ("lists", "flatmap", 2),
+                        ("lists", "filter", 2),
+                        ("lists", "foldl", 3),
+                        ("lists", "foldr", 3),
+                        ("lists", "mapfoldl", 3),
+                        ("lists", "mapfoldr", 3),
+                    ];
+                    for (m, f, a) in funs.iter() {
+                        self.inline_functions.insert(ResolvedFunctionName {
+                            span: option_name.span,
+                            id: id,
+                            module: Ident::from_str(m),
+                            function: Ident::from_str(f),
+                            arity: *a,
+                        });
+                    }
+                },
                 _name => {
                     diagnostics.push(
                         Diagnostic::new_warning("invalid compile option").with_label(
@@ -1223,25 +1247,43 @@ impl CompileOptions {
     fn inline_functions(
         &mut self,
         diagnostics: &mut Vec<Diagnostic>,
-        _module: &Ident,
+        module: &Ident,
         funs: &[Expr],
     ) {
         for fun in funs {
             match fun {
                 Expr::FunctionName(FunctionName::PartiallyResolved(name)) => {
                     self.inline_functions
-                        .insert(name.to_local());
+                        .insert(name.resolve(*module));
+                    continue;
                 }
-                other => {
-                    diagnostics.push(
-                        Diagnostic::new_warning("invalid compile option").with_label(
-                            Label::new_primary(other.span()).with_message(
-                                "expected function name/arity term for inline",
-                            ),
-                        ),
-                    );
+                Expr::Tuple(tup) if tup.elements.len() == 2 => {
+                    match (&tup.elements[0], &tup.elements[1]) {
+                        (Expr::Literal(Literal::Atom(_, name)),
+                         Expr::Literal(Literal::Integer(_, _, arity))) => {
+                            let local = PartiallyResolvedFunctionName {
+                                span: tup.span,
+                                id: tup.id,
+                                function: *name,
+                                arity: (*arity).try_into().unwrap(),
+                            };
+                            self.inline_functions
+                                .insert(local.resolve(*module));
+                            continue;
+                        }
+                        _ => (),
+                    }
                 }
+                _ => (),
             }
+
+            diagnostics.push(
+                Diagnostic::new_warning("invalid compile option").with_label(
+                    Label::new_primary(fun.span()).with_message(
+                        "expected function name/arity term for inline",
+                    ),
+                ),
+            );
         }
     }
 

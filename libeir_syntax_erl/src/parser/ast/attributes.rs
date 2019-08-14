@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 
 use libeir_diagnostics::ByteSpan;
 
-use super::{Expr, Ident, PartiallyResolvedFunctionName, Type};
+use super::{Expr, Ident, PartiallyResolvedFunctionName, Type, Name};
 
 /// Type definitions
 ///
@@ -109,7 +109,7 @@ pub struct TypeSig {
 #[derive(Debug, Clone)]
 pub struct TypeGuard {
     pub span: ByteSpan,
-    pub var: Ident,
+    pub var: Name,
     pub ty: Type,
 }
 impl PartialEq for TypeGuard {

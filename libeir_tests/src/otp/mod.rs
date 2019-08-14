@@ -99,7 +99,8 @@ fn match_suite() {
     run_ct_suite(&mut vm, Ident::from_str("match_SUITE"));
 }
 
-//#[test]
+#[ignore]
+#[test]
 fn bs_match_suite() {
     let mut config = ParseConfig::default();
     config.code_paths.push_front(PathBuf::from("../otp/lib/"));

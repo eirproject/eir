@@ -1,7 +1,6 @@
 use std::rc::Rc;
+use std::convert::TryInto;
 use std::collections::HashMap;
-
-
 
 use libeir_ir::{ FunctionIdent, Block, Value, OpKind, BinOp, ValueKind, PrimOpKind };
 use libeir_ir::{ MapPutUpdate };
@@ -250,6 +249,7 @@ impl CallExecutor {
 
     pub fn run_erlang_op(&mut self, _vm: &VMState, fun: &ErlangFunction, block: Block) -> TermCall {
         let reads = fun.fun.block_reads(block);
+        println!("OP: {:?}", fun.fun.block_kind(block).unwrap());
         match fun.fun.block_kind(block).unwrap() {
             OpKind::Call => {
                 TermCall {
@@ -503,61 +503,29 @@ impl CallExecutor {
                             val, bit_size, endian);
 
                         bin.push(carrier);
+                    }
+                    BinaryEntrySpecifier::Float {
+                        endianness: Endianness::Big, unit } =>
+                    {
+                        let size = size_term.unwrap().as_usize().unwrap();
+                        let bit_size = *unit as usize * size;
 
-                        //let bit_size = size * (*unit as usize);
-                        //assert!(bit_size % 8 == 0);
-                        //let byte_size = (bit_size + 7) / 8;
+                        assert!(bit_size == 32 || bit_size == 64);
 
-                        //let mut val = val_term.as_integer().unwrap().clone();
-                        //let sign = val >= 0;
-                        //let sign_xor = if sign { 0x00 } else { 0xff };
+                        let num = match &*val_term {
+                            Term::Float(flt) => flt.0,
+                            Term::Integer(int) => {
+                                let int_f = int.to_i64().unwrap();
+                                int_f as f64
+                            }
+                            _ => panic!(),
+                        };
 
-                        //if *signed {
-                        //    if !sign {
-                        //        val += 1;
-                        //    }
-                        //} else {
-                        //    assert!(&val >= &0);
-                        //}
-
-                        //let digits = val.to_digits::<u8>(match endianness {
-                        //    Endianness::Big => Order::Msf,
-                        //    Endianness::Little => unimplemented!(),
-                        //    Endianness::Native => Order::Msf,
-                        //});
-
-                        //let bef = bin.len();
-
-                        //let start;
-                        //if byte_size < digits.len() {
-                        //    start = 0;
-                        //    // zero padding
-                        //    for _ in 0..(digits.len() - byte_size) {
-                        //        bin.push(sign_xor);
-                        //    }
-                        //} else {
-                        //    start = digits.len() - byte_size;
-                        //}
-
-                        //// actual data
-                        //for n in start..digits.len() {
-                        //    bin.push(digits[n] ^ sign_xor);
-                        //}
-
-                        //assert!(bin.len() == bef + byte_size);
-
-                        //let val = if *signed {
-                        //    let val = val_term.as_i64().unwrap();
-                        //    assert!(val < 128 && val >= -128);
-                        //    val as u8
-                        //} else {
-                        //    println!("{:?}", val_term);
-                        //    let val = val_term.as_i64().unwrap();
-                        //    assert!(val < 256 && val >= 0);
-                        //    val as u8
-                        //};
-
-                        //bin.push(val as u8);
+                        match bit_size {
+                            32 => bin.push(&num),
+                            64 => bin.push(&num),
+                            _ => unreachable!(),
+                        }
                     }
                     BinaryEntrySpecifier::Bytes { unit: 1 } => {
                         let binary = val_term.as_binary().unwrap();

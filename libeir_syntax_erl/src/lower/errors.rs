@@ -38,6 +38,9 @@ pub enum LowerError {
     /// Unable to bind a variable in a scope, it is already bound.
     #[fail(display = "variable was already bound in scope")]
     AlreadyBound { new: ByteSpan, old: ByteSpan },
+    /// Variable binding shadowed other binding
+    #[fail(display = "binding shadowed previously bound variable")]
+    ShadowingBind { new: ByteSpan, old: ByteSpan },
 
     // Binary specifier parsing
     #[fail(display = "unknown specifier in binary entry")]
@@ -115,6 +118,17 @@ impl LowerError {
             }
             LowerError::AlreadyBound { new, old } => {
                 Diagnostic::new_error(msg)
+                    .with_label(
+                        Label::new_primary(*new)
+                            .with_message("variable was already bound in scope")
+                    )
+                    .with_label(
+                        Label::new_secondary(*old)
+                            .with_message("previously bound here")
+                    )
+            }
+            LowerError::ShadowingBind { new, old } => {
+                Diagnostic::new_warning(msg)
                     .with_label(
                         Label::new_primary(*new)
                             .with_message("variable was already bound in scope")

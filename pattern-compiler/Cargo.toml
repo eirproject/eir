@@ -10,6 +10,7 @@ repository = "https://github.com/hansihe/core_erlang/tree/master/pattern-compile
 
 [features]
 debug_table_print = ["prettytable-rs"]
+#default = ["debug_table_print"]
 
 [dependencies]
 either = "1.5"

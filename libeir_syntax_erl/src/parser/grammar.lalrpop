@@ -295,7 +295,7 @@ TypeSig: TypeSig = {
 
 TypeGuard: TypeGuard = {
     // is_subtype is not supported >OTP 19, but is allowed for backwards compatibility
-    <l:@L> <name:atom> "(" <var:Ident> "," <ty:TopType> ")" <r:@R> =>? {
+    <l:@L> <name:atom> "(" <var:TypeName> "," <ty:TopType> ")" <r:@R> =>? {
         match name.name.as_str().get() {
             "is_subtype" =>
                 Ok(TypeGuard { span: span!(l, r), var, ty }),
@@ -310,7 +310,7 @@ TypeGuard: TypeGuard = {
             }
         }
     },
-    <l:@L> <var:Ident> "::" <ty:TopType100> <r:@R>
+    <l:@L> <var:TypeName> "::" <ty:TopType100> <r:@R>
         => TypeGuard { span: span!(l, r), var, ty },
 };
 
@@ -363,6 +363,10 @@ Type700: Type = {
         => Type::Remote { span: span!(l, r), module, fun, args: Vec::new() },
     <l:@L> <module:atom> ":" <fun:atom> "(" <args:Comma<TopType>> ")" <r:@R>
         => Type::Remote { span: span!(l, r), module, fun, args },
+    Type800,
+};
+
+Type800: Type = {
     TypeMax,
 };
 
@@ -388,13 +392,23 @@ TypeMax: Type = {
     <l:@L> "#" <record:atom> "{" <ft:Comma<RecordFieldType>> "}" <r:@R>
         => Type::Record(span!(l, r), record, ft),
     BinaryType,
-    <name:atom_or_var>
+    <name:TypeName>
         => Type::Name(name),
     <l:@L> <i:int> <r:@R>
         => Type::Integer(span!(l, r), i),
     <l:@L> <c:char> <r:@R>
         => Type::Char(span!(l, r), c),
     FunType,
+};
+
+TypeName: Name = {
+    <name:atom_or_var>
+        => name,
+    // While this is stupid, generated code by elixir
+    // uses 'fun' as a variable a lot in in typespecs.
+    // Hack to make this work.
+    <l:@L> "fun" <r:@R>
+        => Name::Var(Ident::new(Symbol::intern("fun"), span!(l, r))),
 };
 
 BinaryType: Type = {
@@ -549,7 +563,7 @@ Expr100: Expr = {
     // so we just need to be aware that Expr::Match is really a pattern expression
     <l:@L> <lhs:Expr100> "=" <rhs:Expr140> <r:@R>
         => Expr::Match(Match { span: span!(l, r), id: nid.next(), pattern: Box::new(lhs), expr: Box::new(rhs) }),
-    Expr140
+    Expr140,
 };
 
 Expr140: Expr = {

@@ -1,7 +1,7 @@
 //! Small IR used to do linting and transformations on patterns
 //! before they are lowered to Eir.
 
-use std::collections::HashMap;
+use std::collections::{ HashMap, BTreeSet };
 
 use either::Either;
 
@@ -47,7 +47,7 @@ pub(crate) struct Tree {
 
     binds: SecondaryMap<TreeNode, Vec<Ident>>,
 
-    constraints: SecondaryMap<TreeNode, Vec<ConstraintKind>>,
+    constraints: SecondaryMap<TreeNode, BTreeSet<ConstraintKind>>,
     resolved_binds: Option<HashMap<Ident, TreeNode>>,
 }
 impl Tree {
@@ -71,9 +71,10 @@ impl Tree {
         &mut self,
         ctx: &mut LowerCtx,
         b: &mut FunctionBuilder,
+        shadow: bool,
     ) {
         merge_tree_nodes(ctx, b, self);
-        promote_values(ctx, b, self);
+        promote_values(ctx, b, self, shadow);
     }
 
     pub fn node_span(&self, node: TreeNode) -> Option<ByteSpan> {

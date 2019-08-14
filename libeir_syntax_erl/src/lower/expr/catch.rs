@@ -54,7 +54,10 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
         case_b.no_match = Some(b.value(no_match));
 
         for clause in clauses {
-            match lower_clause(ctx, b, &mut block, [&clause.pattern].iter().map(|i| *i), clause.guard.as_ref()) {
+            match lower_clause(ctx, b, &mut block, false,
+                               [&clause.pattern].iter().map(|i| *i),
+                               clause.guard.as_ref())
+            {
                 Ok(lowered) => {
                     let (scope_token, body) = lowered.make_body(ctx, b);
 
@@ -107,7 +110,10 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                 Name::Var(var) => Expr::Var(Var(NodeId(0), var)),
             };
 
-            match lower_clause(ctx, b, &mut block, [&kind_expr, &clause.error].iter().map(|i| *i), clause.guard.as_ref()) {
+            match lower_clause(ctx, b, &mut block, false,
+                               [&kind_expr, &clause.error].iter().map(|i| *i),
+                               clause.guard.as_ref())
+            {
                 Ok(lowered) => {
                     let (scope_token, body) = lowered.make_body(ctx, b);
 

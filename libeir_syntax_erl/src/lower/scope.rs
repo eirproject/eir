@@ -91,6 +91,21 @@ impl ScopeTracker {
         }
     }
 
+    pub fn bind_shadow(&mut self, ident: Ident, val: IrValue) -> Result<(), LowerError> {
+        if is_wildcard(ident) {
+            Ok(())
+        } else {
+            let ret = if let Some(prev_val) = self.stack.get(&ident) {
+                Err(LowerError::ShadowingBind {
+                    new: ident.span, old: prev_val.0.span })
+            } else {
+                Ok(())
+            };
+            self.stack.insert(ident, (ident, val));
+            ret
+        }
+    }
+
     pub fn height(&self) -> usize {
         self.stack.height()
     }
