@@ -89,6 +89,15 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    pub fn bind_shadow(&mut self, ident: Ident, val: IrValue) {
+        match self.scope.bind_shadow(ident, val) {
+            Ok(()) => (),
+            Err(err) => {
+                self.warn(err);
+            }
+        }
+    }
+
     pub fn bind(&mut self, ident: Ident, val: IrValue) {
         match self.scope.bind(ident, val) {
             Ok(()) => (),
@@ -260,7 +269,8 @@ fn lower_function_base(
 
         for clause in clauses.iter() {
 
-            match lower_clause(ctx, b, &mut block, clause.params.iter(),
+            match lower_clause(ctx, b, &mut block, true,
+                               clause.params.iter(),
                                clause.guard.as_ref())
             {
                 Ok(lowered) => {

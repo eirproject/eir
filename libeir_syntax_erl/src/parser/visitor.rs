@@ -404,7 +404,7 @@ macro_rules! make_visitor {
             fn walk_type(&mut self, _ty: &'ast $($mutability)* Type) {}
 
             fn walk_type_guard(&mut self, guard: &'ast $($mutability)* TypeGuard) {
-                self.visit_identifier(&$($mutability)* guard.var);
+                self.visit_name(&$($mutability)* guard.var);
                 self.visit_type(&$($mutability)* guard.ty);
             }
 

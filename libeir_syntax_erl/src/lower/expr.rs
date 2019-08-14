@@ -193,7 +193,9 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 ctx.exc_stack.make_error_jump(b, no_match, typ_val, err_val);
             }
 
-            match lower_clause(ctx, b, &mut block, [&mat.pattern].iter().map(|i| &***i), None) {
+            match lower_clause(ctx, b, &mut block, false,
+                               [&mat.pattern].iter().map(|i| &***i), None)
+            {
                 Ok(lowered) => {
                     let (_scope_token, body) = lowered.make_body(ctx, b);
 
@@ -301,7 +303,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 let entry_exc_height = ctx.exc_stack.len();
 
                 for clause in clauses.iter() {
-                    match lower_clause(ctx, b, &mut body_block,
+                    match lower_clause(ctx, b, &mut body_block, false,
                                        [&clause.pattern].iter().map(|i| *i),
                                        clause.guard.as_ref())
                     {

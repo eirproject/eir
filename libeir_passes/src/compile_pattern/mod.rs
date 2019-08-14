@@ -137,6 +137,11 @@ impl CompilePatternPass {
                 &value_map);
             let decision_tree = to_decision_tree(&mut provider);
 
+            {
+                let mut out = std::fs::File::create("pat_cfg.dot").unwrap();
+                decision_tree.to_dot(&mut out).unwrap();
+            }
+
             let mut out = Vec::new();
             decision_tree.to_dot(&mut out).unwrap();
 

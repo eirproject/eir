@@ -191,13 +191,13 @@ mod test {
     use crate::lexer::{Ident, Symbol};
     use crate::preprocessor::PreprocessorError;
 
-    fn parse<T>(input: &'static str) -> T
+    fn parse<'a, T>(input: &'a str) -> T
     where
         T: Parse<T>,
     {
         let config = ParseConfig::default();
         let parser = Parser::new(config);
-        let errs = match parser.parse_string::<&'static str, T>(input) {
+        let errs = match parser.parse_string::<&'a str, T>(input) {
             Ok(ast) => return ast,
             Err(errs) => errs,
         };
@@ -772,6 +772,16 @@ bar() -> - 2.
 bar() -> 2.
 ",
         );
+    }
+
+    #[test]
+    fn parse_elixir_enum_erl() {
+        use std::io::Read;
+        let mut file = std::fs::File::open("../test_data/Elixir.Enum.erl");
+        let mut string = String::new();
+        file.unwrap().read_to_string(&mut string);
+
+        let _result: Module = parse(&string);
     }
 
 }

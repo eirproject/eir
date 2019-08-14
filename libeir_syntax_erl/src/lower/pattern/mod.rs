@@ -79,6 +79,7 @@ pub(crate) struct LoweredClause {
     pub guard: IrValue,
     pub values: Vec<IrValue>,
 
+    pub shadow: bool,
     pub binds: Vec<Option<Ident>>,
 }
 impl LoweredClause {
@@ -90,7 +91,11 @@ impl LoweredClause {
         for bind in self.binds.iter() {
             let val = b.block_arg_insert(body_block);
             if let Some(name) = bind {
-                ctx.bind(*name, val);
+                if self.shadow {
+                    ctx.bind_shadow(*name, val);
+                } else {
+                    ctx.bind(*name, val);
+                }
             }
         }
 
@@ -99,6 +104,7 @@ impl LoweredClause {
 }
 
 pub(crate) struct UnreachableClause {
+    pub shadow: bool,
     pub binds: Vec<Ident>,
 }
 impl UnreachableClause {
@@ -109,7 +115,11 @@ impl UnreachableClause {
 
         let sentinel = ctx.sentinel();
         for bind in self.binds.iter() {
-            ctx.bind(*bind, sentinel);
+            if self.shadow {
+                ctx.bind_shadow(*bind, sentinel);
+            } else {
+                ctx.bind(*bind, sentinel);
+            }
         }
 
         (scope_token, body_block)
@@ -121,7 +131,7 @@ impl UnreachableClause {
 /// * The body is empty
 pub(super) fn lower_clause<'a, P>(
     ctx: &mut LowerCtx, b: &mut FunctionBuilder, pre_case: &mut IrBlock,
-    patterns: P, guard: Option<&Vec<Guard>>,
+    shadow: bool, patterns: P, guard: Option<&Vec<Guard>>,
 ) -> Result<LoweredClause, UnreachableClause>
 where
     P: Iterator<Item = &'a Expr>,
@@ -146,10 +156,11 @@ where
     for pattern in patterns {
         tree.add_root(ctx, b, &mut clause_ctx.pre_case, pattern);
     }
-    tree.process(ctx, b);
+    tree.process(ctx, b, shadow);
 
     if tree.unmatchable {
         return Err(UnreachableClause {
+            shadow,
             binds: tree.pseudo_binds(),
         });
     }
@@ -157,7 +168,7 @@ where
     tree.lower(b, &mut clause_ctx);
 
     // Construct guard lambda
-    let guard_lambda_block = clause_ctx.lower_guard(ctx, b, guard);
+    let guard_lambda_block = clause_ctx.lower_guard(ctx, b, shadow, guard);
 
     *pre_case = clause_ctx.pre_case;
 
@@ -179,13 +190,14 @@ where
         guard: b.value(guard_lambda_block),
         values: clause_ctx.values,
 
+        shadow,
         binds: clause_ctx.binds,
     })
 }
 
 impl ClauseLowerCtx {
 
-    fn lower_guard(&self, ctx: &mut LowerCtx, b: &mut FunctionBuilder, guard: Option<&Vec<Guard>>) -> IrBlock {
+    fn lower_guard(&self, ctx: &mut LowerCtx, b: &mut FunctionBuilder, shadow: bool, guard: Option<&Vec<Guard>>) -> IrBlock {
         let guard_lambda_block = b.block_insert();
 
         let ret_cont = b.block_arg_insert(guard_lambda_block);
@@ -205,7 +217,11 @@ impl ClauseLowerCtx {
         for bind in self.binds.iter() {
             let val = b.block_arg_insert(guard_lambda_block);
             if let Some(name) = bind {
-                ctx.bind(*name, val);
+                if shadow {
+                    ctx.scope.bind_shadow(*name, val);
+                } else {
+                    ctx.bind(*name, val);
+                }
             }
         }
 

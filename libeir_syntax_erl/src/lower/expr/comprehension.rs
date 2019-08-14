@@ -81,7 +81,9 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
 
                 block = unpack_ok_block;
 
-                match lower_clause(ctx, b, &mut block, [&*gen.pattern].iter().map(|i| *i), None) {
+                match lower_clause(ctx, b, &mut block, false,
+                                   [&*gen.pattern].iter().map(|i| *i), None)
+                {
                     Ok(lowered) => {
                         let (scope_token, body) = lowered.make_body(ctx, b);
 

@@ -21,16 +21,43 @@ struct PromoteCtx<'a, 'b> {
     ctx: &'a mut LowerCtx<'b>,
     binds: HashMap<Ident, TreeNode>,
     binds_scope: HashMapStack<Ident, TreeNode>,
+    shadow: bool,
 }
 impl<'a, 'b> PromoteCtx<'a, 'b> {
 
-    fn resolve(&self, ident: Ident) -> Option<Either<TreeNode, IrValue>> {
-        if let Ok(prev_bound) = self.ctx.scope.resolve(ident) {
-            assert!(!self.binds.contains_key(&ident));
-            Some(Either::Right(prev_bound))
-        } else {
+    fn resolve_or_bind(&mut self, hier: bool, ident: Ident, node: TreeNode
+    ) -> Option<Either<TreeNode, IrValue>>
+    {
+        if hier {
+            self.binds_scope.insert(ident, node);
+        }
+        if self.shadow {
             if let Some(bound_node) = self.binds.get(&ident) {
                 Some(Either::Left(*bound_node))
+            } else {
+                self.bind(ident, node);
+                None
+            }
+        } else {
+            if let Ok(prev_bound) = self.ctx.scope.resolve(ident) {
+                Some(Either::Right(prev_bound))
+            } else {
+                if let Some(bound_node) = self.binds.get(&ident) {
+                    Some(Either::Left(*bound_node))
+                } else {
+                    self.bind(ident, node);
+                    None
+                }
+            }
+        }
+    }
+
+    fn resolve_only(&self, ident: Ident) -> Option<Either<TreeNode, IrValue>> {
+        if let Some(bound_node) = self.binds_scope.get(&ident) {
+            Some(Either::Left(*bound_node))
+        } else {
+            if let Ok(prev_bound) = self.ctx.scope.resolve(ident) {
+                Some(Either::Right(prev_bound))
             } else {
                 None
             }
@@ -55,9 +82,9 @@ impl<'a, 'b> PromoteCtx<'a, 'b> {
         res
     }
 
-    fn hier_bind(&mut self, ident: Ident, node: TreeNode) {
-        self.binds_scope.insert(ident, node);
-    }
+    //fn hier_bind(&mut self, ident: Ident, node: TreeNode) {
+    //    self.binds_scope.insert(ident, node);
+    //}
 
 }
 
@@ -65,50 +92,39 @@ pub(crate) fn promote_values(
     ctx: &mut LowerCtx,
     b: &mut FunctionBuilder,
     t: &mut Tree,
+    shadow: bool,
 ) {
     let mut prom = PromoteCtx {
         ctx,
         binds: HashMap::new(),
         binds_scope: HashMapStack::new(),
+        shadow,
     };
+
+    prom.binds_scope.push();
 
     let num_root = t.roots.len();
     for n in 0..num_root {
         let root = t.roots[n];
-        promote_values_node(b, &mut prom, t, root, false);
+        process_constants_node(b, &mut prom, t, root, false);
+        promote_values_node(b, &mut prom, t, root);
     }
+
+    prom.binds_scope.push();
 
     t.resolved_binds = Some(prom.binds);
 }
 
-fn promote_values_node(
+fn process_constants_node(
     b: &mut FunctionBuilder,
     prom: &mut PromoteCtx,
     t: &mut Tree,
     node: TreeNode,
     hier_bind: bool,
 ) {
-    let kind = t.nodes[node].clone();
-
-    if hier_bind {
-        println!("HIER {:?}", t.binds[node]);
-        println!("BINDS BEFORE {:?}", prom.binds_scope);
-    }
-
     let constraints: BTreeSet<_> =
         t.binds[node].iter()
-        .flat_map(|ident| {
-            if hier_bind {
-                prom.hier_bind(*ident, node);
-            }
-            match prom.resolve(*ident) {
-                None => {
-                    prom.bind(*ident, node);
-                    None
-                }
-                Some(v) => Some(v),
-            }
-        })
+        .flat_map(|ident| prom.resolve_or_bind(hier_bind, *ident, node))
         .map(|v| {
             match v {
                 Either::Left(node) => ConstraintKind::Node(node),
@@ -123,10 +139,56 @@ fn promote_values_node(
         })
         .collect();
 
-    if hier_bind {
-        println!("BINDS AFTER {:?}", prom.binds_scope);
-    }
+    t.constraints[node] = constraints;
+}
 
+fn promote_values_node(
+    b: &mut FunctionBuilder,
+    prom: &mut PromoteCtx,
+    t: &mut Tree,
+    node: TreeNode,
+) {
+    let kind = t.nodes[node].clone();
+
+    //if hier_bind {
+    //    println!("HIER {:?}", t.binds[node]);
+    //    println!("BINDS BEFORE {:?}", prom.binds_scope);
+    //}
+
+    //let constraints: BTreeSet<_> =
+    //    t.binds[node].iter()
+    //    .flat_map(|ident| {
+    //        prom.resolve_or_bind(hier_bind, *ident, node)
+    //        //if hier_bind {
+    //        //    prom.hier_bind(*ident, node);
+    //        //}
+    //        //match prom.resolve(*ident) {
+    //        //    None => {
+    //        //        prom.bind(*ident, node);
+    //        //        None
+    //        //    }
+    //        //    Some(v) => Some(v),
+    //        //}
+    //    })
+    //    .map(|v| {
+    //        match v {
+    //            Either::Left(node) => ConstraintKind::Node(node),
+    //            Either::Right(val) => {
+    //                match b.fun().value_kind(val) {
+    //                    ValueKind::Const(cons) => ConstraintKind::Const(cons),
+    //                    ValueKind::PrimOp(prim) => ConstraintKind::PrimOp(prim),
+    //                    _ => ConstraintKind::Value(val),
+    //                }
+    //            }
+    //        }
+    //    })
+    //    .collect();
+
+    //if hier_bind {
+    //    println!("BINDS AFTER {:?}", prom.binds_scope);
+    //}
+
+    let constraints = &t.constraints[node];
     let mut const_iter = constraints.iter()
         .flat_map(|v| v.constant());
 
@@ -154,9 +216,6 @@ fn promote_values_node(
     // are more complete.
 
     // TODO: Check compatibility with TreeNode constraints.
-
-    // Add constraints
-    t.constraints[node] = constraints.iter().cloned().collect();
 
     match kind {
         TreeNodeKind::Atomic(span, c) => {
@@ -202,36 +261,32 @@ fn promote_values_node(
         TreeNodeKind::Tuple { elems, .. } => {
             for idx in 0..elems.len(&t.node_pool) {
                 let child = elems.get(idx, &t.node_pool).unwrap();
-                promote_values_node(b, prom, t, child, false);
+                process_constants_node(b, prom, t, child, false);
+            }
+
+            for idx in 0..elems.len(&t.node_pool) {
+                let child = elems.get(idx, &t.node_pool).unwrap();
+                promote_values_node(b, prom, t, child);
             }
         }
         TreeNodeKind::Cons { head, tail, .. } => {
-            promote_values_node(b, prom, t, head, false);
-            promote_values_node(b, prom, t, tail, false);
+            process_constants_node(b, prom, t, head, false);
+            process_constants_node(b, prom, t, tail, false);
+
+            promote_values_node(b, prom, t, head);
+            promote_values_node(b, prom, t, tail);
         }
         TreeNodeKind::Binary { value, tail, size, .. } => {
             let size_res = size.map(|v| match v {
                 // The size references another node
                 Either::Left(ident) => {
                     println!("{:?}", ident);
-                    println!("RESOLVED {:?}", prom.resolve(ident));
+                    println!("RESOLVED {:?}", prom.resolve_only(ident));
                     println!("BINDS_SCOPE {:?}", prom.binds_scope);
                     // We try to resolve it in the current pattern
-                    match prom.resolve(ident) {
+                    match prom.resolve_only(ident) {
                         // We found a node in the pattern
-                        Some(Either::Left(_node)) => {
-                            // Test if it's actually within scope
-                            if let Some(node) = prom.binds_scope.get(&ident) {
-                                Either::Left(*node)
-                            } else {
-                                prom.ctx.error(LowerError::UnresolvedVariable {
-                                    span: ident.span,
-                                });
-                                Either::Right(prom.ctx.sentinel())
-                            }
-                        }
-                        // Found a value, should never really happen
-                        Some(Either::Right(val)) => Either::Right(val),
+                        Some(inner) => inner,
                         // No value found, error and return sentinel
                         None => {
                             prom.ctx.error(LowerError::UnresolvedVariable {
@@ -250,13 +305,20 @@ fn promote_values_node(
             }
 
             prom.binds_scope.push();
-            promote_values_node(b, prom, t, value, true);
-            promote_values_node(b, prom, t, tail, false);
+            process_constants_node(b, prom, t, value, true);
+            process_constants_node(b, prom, t, tail, false);
+
+            promote_values_node(b, prom, t, value);
+            promote_values_node(b, prom, t, tail);
             prom.binds_scope.pop();
         }
         TreeNodeKind::Map { entries, .. } => {
             for (_k, v) in entries.iter() {
-                promote_values_node(b, prom, t, *v, false);
+                process_constants_node(b, prom, t, *v, false);
+            }
+
+            for (_k, v) in entries.iter() {
+                promote_values_node(b, prom, t, *v);
             }
         }
 
@@ -264,8 +326,11 @@ fn promote_values_node(
         // need to resolve scoping, so we handle it.
         TreeNodeKind::And { left, right } => {
             assert!(t.unmatchable);
-            promote_values_node(b, prom, t, left, false);
-            promote_values_node(b, prom, t, right, false);
+            process_constants_node(b, prom, t, left, false);
+            process_constants_node(b, prom, t, right, false);
+
+            promote_values_node(b, prom, t, left);
+            promote_values_node(b, prom, t, right);
         },
 
         TreeNodeKind::Value(_, _) => unreachable!(),

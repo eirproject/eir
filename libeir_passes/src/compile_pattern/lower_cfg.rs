@@ -27,11 +27,15 @@ impl<'a, 'b> LowerCtx<'a, 'b> {
     fn node_to_value(&self, node: PatternNode, idx: NodeIndex,
                      cfg: &PatternCfg<ErlangPatternProvider>) -> Value
     {
+        println!("LOOKUP IN NODEID: {:?}", idx);
         // PatternNode => PatternCfg Node
+        dbg!(node);
         let prov_node = self.provider.pattern_node_to_cfg_node(node);
         // PatternCfg Node => PatternCfg Var
+        dbg!(prov_node);
         let prov_var = cfg.leaf_bindings[&idx][&prov_node];
         // PatternCfg Var => Value
+        dbg!(prov_var);
         self.mapping[&prov_var]
     }
 
@@ -169,7 +173,7 @@ fn lower_cfg_rec(
                     NodeKind::Binary { specifier, size } => {
                         assert!(weight.variable_binds.len() == 2);
                         let size = size.map(|v| ctx.value_or_const_to_value(
-                            v, node, b, cfg));
+                            v, outgoing.target(), b, cfg));
                         let ok = match_builder.push_binary(specifier, size, b);
 
                         let args = b.block_args(ok);

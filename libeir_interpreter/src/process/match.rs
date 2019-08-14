@@ -32,6 +32,10 @@ pub fn match_op(
         match kind {
             MatchKind::Value => {
                 assert!(branch_args.len() == 1);
+                println!("MATCH VALUE {:?} == {:?}", unpack_term, branch_args[0]);
+
+                // MATCH VALUE Integer(12) == Integer(-175)
+
                 if unpack_term.erl_exact_eq(&*branch_args[0]) {
                     return TermCall {
                         fun: branches_elems[idx].clone(),
@@ -92,6 +96,8 @@ pub fn match_op(
             MatchKind::Binary(BinaryEntrySpecifier::Integer {
                 unit, endianness, signed
             }) => {
+                println!("BINMATCH {:?} {:?}", branch_args[0], unpack_term);
+
                 let size = branch_args[0].as_usize().unwrap();
                 let bit_len = (*unit as usize) * size;
 
@@ -107,6 +113,7 @@ pub fn match_op(
                             Endianness::Native => Endian::Big,
                         };
                         let int = carrier_to_integer(int_slice, *signed, endian);
+                        println!("MATCHED INT {:?}", int);
 
                         TermCall {
                             fun: branches_elems[idx].clone(),
@@ -131,6 +138,7 @@ pub fn match_op(
                             Endianness::Native => Endian::Big,
                         };
                         let int = carrier_to_integer(int_slice, *signed, endian);
+                        println!("MATCHED INT {:?}", int);
 
                         TermCall {
                             fun: branches_elems[idx].clone(),
