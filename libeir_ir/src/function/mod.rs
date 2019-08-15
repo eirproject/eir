@@ -56,6 +56,8 @@ pub struct BlockData {
 
     pub(crate) span: ByteSpan,
 
+    pub(crate) is_fun: bool,
+
     // Auxilary data for graph implementation
 
     // These will contain all the connected blocks, regardless
@@ -259,6 +261,8 @@ impl Function {
             op: None,
             reads: EntityList::new(),
 
+            is_fun: false,
+
             predecessors: PooledEntitySet::new(),
             successors: PooledEntitySet::new(),
 
@@ -323,6 +327,9 @@ impl Function {
         Ok(())
     }
 
+    pub fn block_annotated_fun(&self, block: Block) -> bool {
+        self.blocks[block].is_fun
+    }
 
 }
 

@@ -254,6 +254,18 @@ impl<'a> FunctionBuilder<'a> {
         self.value_buf = Some(value_buf);
     }
 
+    /// TODO temporary until we get a proper type system implemented.
+    /// IR generators are required to annotate blocks that meet the
+    /// following requirements with this:
+    /// 1. The first two arguments of the block are return and throw
+    ///    continuations respectively.
+    /// 2. Control flow only escapes the blocks control flow scope
+    ///    by one of these two continuations.
+    pub fn block_annotate_is_fun(&mut self, block: Block) {
+        assert!(self.fun.block_args(block).len() >= 2);
+        self.fun.blocks[block].is_fun = true;
+    }
+
 }
 
 #[cfg(test)]

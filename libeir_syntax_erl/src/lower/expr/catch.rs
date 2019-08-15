@@ -235,6 +235,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
     let guard = b.block_insert();
     let guard_val = b.value(guard);
     let guard_cont = b.block_arg_insert(guard);
+    let _guard_throw_cont = b.block_arg_insert(guard);
     let true_val = b.value(true);
     b.op_call(guard, guard_cont, &[true_val]);
 

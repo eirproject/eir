@@ -245,6 +245,8 @@ fn lower_function_base(
     }
     let args_list = b.prim_value_list(&args_val);
 
+    b.block_annotate_is_fun(block);
+
     // Join block after case
     let join_block = b.block_insert();
     let join_arg = b.block_arg_insert(join_block);

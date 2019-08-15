@@ -8,6 +8,8 @@ use libeir_passes::PassManager;
 
 use libeir_interpreter::{ VMState };
 
+use libeir_lowerutils::analyze;
+
 #[test]
 fn compiler() {
     let mut config = ParseConfig::default();
@@ -24,6 +26,10 @@ fn compiler() {
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
+
+    for fun in eir_mod.functions.values() {
+        analyze(fun);
+    }
 }
 
 #[test]

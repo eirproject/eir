@@ -295,6 +295,14 @@ fn lower_cfg_rec(
                 // First argument is the continuation
                 args.push(b.value(guard_cont));
 
+                // Second argument is throw continuation, unreachable
+                let throw_block = b.block_insert();
+                b.block_arg_insert(throw_block);
+                b.block_arg_insert(throw_block);
+                b.block_arg_insert(throw_block);
+                b.op_unreachable(throw_block);
+                args.push(b.value(throw_block));
+
                 let num_binds = b.pat().clause_binds(clause).len();
 
                 for bind_num in 0..num_binds {
@@ -305,6 +313,7 @@ fn lower_cfg_rec(
 
                 b.op_call(block, ctx.destinations.guards[leaf_num], &args);
 
+                args.remove(0);
                 args.remove(0);
             }
 

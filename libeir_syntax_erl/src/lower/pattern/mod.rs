@@ -201,6 +201,7 @@ impl ClauseLowerCtx {
         let guard_lambda_block = b.block_insert();
 
         let ret_cont = b.block_arg_insert(guard_lambda_block);
+        let _throw_cont = b.block_arg_insert(guard_lambda_block);
 
         let scope_tok = ctx.scope.push();
         {
@@ -225,6 +226,8 @@ impl ClauseLowerCtx {
             }
         }
 
+        b.block_annotate_is_fun(guard_lambda_block);
+
         // Body
         let mut block = guard_lambda_block;
 
@@ -245,12 +248,12 @@ impl ClauseLowerCtx {
 
             let (lhs, rhs) = match eq_guard {
                 EqGuard::EqValue(lhs_idx, rhs) => {
-                    let lhs = b.block_args(guard_lambda_block)[lhs_idx + 1];
+                    let lhs = b.block_args(guard_lambda_block)[lhs_idx + 2];
                     (lhs, *rhs)
                 }
                 EqGuard::EqBind(lhs_idx, rhs_idx) => {
-                    let lhs = b.block_args(guard_lambda_block)[lhs_idx + 1];
-                    let rhs = b.block_args(guard_lambda_block)[rhs_idx + 1];
+                    let lhs = b.block_args(guard_lambda_block)[lhs_idx + 2];
+                    let rhs = b.block_args(guard_lambda_block)[rhs_idx + 2];
                     (lhs, rhs)
                 }
             };

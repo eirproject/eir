@@ -11,3 +11,4 @@ libeir_syntax_erl = { path = "../libeir_syntax_erl" }
 libeir_diagnostics = { path = "../libeir_diagnostics" }
 libeir_intern = { path = "../libeir_intern" }
 libeir_interpreter = { path = "../libeir_interpreter" }
+libeir_lowerutils = { path = "../libeir_lowerutils" }
