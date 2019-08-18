@@ -7,8 +7,7 @@ use crate::module::{ NativeModule, NativeReturn };
 
 use libeir_intern::Symbol;
 
-use rug::ops::Pow;
-use num_traits::{ ToPrimitive };
+use num_traits::{ ToPrimitive, Pow };
 
 fn pow(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 2);

@@ -1,7 +1,7 @@
 use std::fmt::{ Display, Formatter, Result as FmtResult };
 use std::hash::{ Hash, Hasher };
 
-use rug::Integer;
+use num_bigint::BigInt;
 use num_traits::{ NumCast, cast };
 
 use libeir_intern::Symbol;
@@ -9,16 +9,16 @@ use libeir_intern::Symbol;
 use super::float::raw_double_bits;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct BigIntTerm(pub Integer);
+pub struct BigIntTerm(pub BigInt);
 impl BigIntTerm {
     #[inline]
-    pub fn value(&self) -> &Integer {
+    pub fn value(&self) -> &BigInt {
         &self.0
     }
 }
-impl Into<rug::Integer> for BigIntTerm {
+impl Into<BigInt> for BigIntTerm {
     #[inline]
-    fn into(self) -> Integer {
+    fn into(self) -> BigInt {
         self.0
     }
 }
@@ -27,8 +27,8 @@ impl From<BigIntTerm> for AtomicTerm {
         AtomicTerm::BigInt(data)
     }
 }
-impl From<Integer> for AtomicTerm {
-    fn from(data: Integer) -> Self {
+impl From<BigInt> for AtomicTerm {
+    fn from(data: BigInt) -> Self {
         AtomicTerm::BigInt(BigIntTerm(data))
     }
 }

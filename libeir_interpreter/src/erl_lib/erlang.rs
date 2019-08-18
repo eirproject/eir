@@ -1,5 +1,6 @@
 
 use libeir_intern::Symbol;
+use libeir_util::bigint_to_float::bigint_to_double;
 
 use crate::vm::{ VMState };
 use crate::module::{ NativeModule, NativeReturn };
@@ -43,11 +44,11 @@ fn add(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRe
         (Term::Integer(ref i1), Term::Integer(ref i2)) =>
             NativeReturn::Return { term: Term::Integer(i1.clone() + i2).into() },
         (Term::Integer(ref i1), Term::Float(f2)) => {
-            let f1 = i1.to_f64();
+            let f1 = bigint_to_double(i1);
             NativeReturn::Return { term: Term::Float((f1 + f2.0).into()).into() }
         }
         (Term::Float(f1), Term::Integer(ref i2)) => {
-            let f2 = i2.to_f64();
+            let f2 = bigint_to_double(i2);
             NativeReturn::Return { term: Term::Float((f1.0 + f2).into()).into() }
         }
         (Term::Float(f1), Term::Float(f2)) => {
@@ -71,11 +72,11 @@ fn sub(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRe
         (Term::Integer(ref i1), Term::Integer(ref i2)) =>
             NativeReturn::Return { term: Term::Integer(i1.clone() - i2).into() },
         (Term::Integer(ref int), Term::Float(ref flt)) => {
-            let flt_c = int.to_f64();
+            let flt_c = bigint_to_double(int);
             NativeReturn::Return { term: Term::Float((flt_c - flt.0).into()).into() }
         }
         (Term::Float(ref flt), Term::Integer(ref int)) => {
-            let flt_c = int.to_f64();
+            let flt_c = bigint_to_double(int);
             NativeReturn::Return { term: Term::Float((flt.0 - flt_c).into()).into() }
         }
         (Term::Float(flt1), Term::Float(flt2)) =>
@@ -120,12 +121,12 @@ fn div(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRe
     }
 
     let a1 = match &*args[0] {
-        Term::Integer(i1) => i1.to_f64(),
+        Term::Integer(i1) => bigint_to_double(i1),
         Term::Float(flt) => flt.0,
         _ => panic!(),
     };
     let a2 = match &*args[1] {
-        Term::Integer(i1) => i1.to_f64(),
+        Term::Integer(i1) => bigint_to_double(i1),
         Term::Float(flt) => flt.0,
         _ => panic!(),
     };

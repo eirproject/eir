@@ -11,8 +11,7 @@ use libeir_ir::{ FunctionIdent, Block };
 use libeir_util::binary::{ BitRead };
 use libeir_util::binary::{ BitVec, BitSlice, copy as bit_copy };
 
-//use ::num_bigint::BigInt;
-use ::rug::Integer;
+use ::num_bigint::BigInt;
 use ::num_traits::cast::ToPrimitive;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -130,7 +129,7 @@ impl Hash for MapTerm {
 #[derive(Debug, Clone)]
 pub enum Term {
     Nil,
-    Integer(Integer),
+    Integer(BigInt),
     Float(FloatTerm),
     Atom(Symbol),
     Tuple(Vec<Rc<Term>>),
@@ -479,7 +478,7 @@ impl Term {
         }
     }
 
-    pub fn as_integer(&self) -> Option<&Integer> {
+    pub fn as_integer(&self) -> Option<&BigInt> {
         if let Term::Integer(ref bigint) = self {
             Some(bigint)
         } else {

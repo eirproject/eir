@@ -11,8 +11,9 @@ default = ["hashbrown/raw-table"]
 cranelift-entity = "0.30.0"
 hashbrown = { git = "https://github.com/hansihe/hashbrown" }
 num-traits = "0.2.8"
+num-bigint = { git = "https://github.com/hansihe/num-bigint.git" }
 
-[dependencies.rug]
-version = "1.2"
-default-features = false
-features = ["integer", "float", "rand"]
+#[dependencies.rug]
+#version = "1.2"
+#default-features = false
+#features = ["integer", "float", "rand"]

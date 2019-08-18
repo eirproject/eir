@@ -2,6 +2,8 @@ use std::rc::Rc;
 use std::convert::TryInto;
 use std::collections::HashMap;
 
+use num_traits::cast::ToPrimitive;
+
 use libeir_ir::{ FunctionIdent, Block, Value, OpKind, BinOp, ValueKind, PrimOpKind };
 use libeir_ir::{ MapPutUpdate };
 use libeir_ir::{ BinaryEntrySpecifier, Endianness };

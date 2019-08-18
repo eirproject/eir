@@ -23,7 +23,9 @@ petgraph = "0.4.13"
 matches = "0.1.8"
 regex = "1"
 
-[dependencies.rug]
-version = "1.2"
-default-features = false
-features = ["integer", "float", "rand"]
+num-bigint = { git = "https://github.com/hansihe/num-bigint.git" }
+
+#[dependencies.rug]
+#version = "1.2"
+#default-features = false
+#features = ["integer", "float", "rand"]

@@ -1,5 +1,6 @@
 use failure::Error;
-use rug::Integer;
+//use rug::Integer;
+use num_bigint::BigInt;
 
 use libeir_diagnostics::ByteSpan;
 
@@ -590,7 +591,7 @@ fn eval_numeric_equality(
             return eval_numeric_equality(
                 span,
                 id,
-                Expr::Literal(Literal::BigInteger(xspan, xid, Integer::from(x))),
+                Expr::Literal(Literal::BigInteger(xspan, xid, x.into())),
                 op,
                 rhs,
             );
@@ -618,7 +619,7 @@ fn eval_numeric_equality(
                 id,
                 lhs,
                 op,
-                Expr::Literal(Literal::BigInteger(yspan, yid, Integer::from(y))),
+                Expr::Literal(Literal::BigInteger(yspan, yid, y.into())),
             );
         }
 
@@ -706,10 +707,10 @@ fn eval_arith(
 
             // Coerce to BigInt
             (Expr::Literal(Literal::Integer(_, _, x)), Expr::Literal(Literal::BigInteger(_, _, y))) => {
-                eval_op_bigint(span, id, Integer::from(x), op, y)?
+                eval_op_bigint(span, id, x.into(), op, y)?
             }
             (Expr::Literal(Literal::BigInteger(_, _, x)), Expr::Literal(Literal::Integer(_, _, y))) => {
-                eval_op_bigint(span, id, x, op, Integer::from(y))?
+                eval_op_bigint(span, id, x, op, y.into())?
             }
 
             // Coerce to float
@@ -752,11 +753,11 @@ fn eval_op_int(
 fn eval_op_bigint(
     span: ByteSpan,
     id: NodeId,
-    x: Integer,
+    x: BigInt,
     op: BinaryOp,
-    y: Integer,
+    y: BigInt,
 ) -> Result<Expr, PreprocessorError> {
-    let zero = Integer::new();
+    let zero: BigInt = 0.into();
     let result = match op {
         BinaryOp::Add => Expr::Literal(Literal::BigInteger(span, id, x + y)),
         BinaryOp::Sub => Expr::Literal(Literal::BigInteger(span, id, x - y)),

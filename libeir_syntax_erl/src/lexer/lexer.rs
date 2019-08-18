@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::str::FromStr;
 
-use rug::Integer;
+use num_bigint::BigInt;
 
 use libeir_diagnostics::{ByteIndex, ByteOffset, ByteSpan};
 
@@ -769,7 +769,7 @@ fn to_integer_literal(literal: &str, radix: u32) -> Token {
     if let Ok(i) = i64::from_str_radix(literal, radix) {
         return Token::Integer(i);
     }
-    let bi = Integer::from_str_radix(literal, radix as i32).unwrap();
+    let bi = BigInt::parse_bytes(literal.as_bytes(), radix).unwrap();
     Token::BigInteger(bi)
 }
 

@@ -1,6 +1,8 @@
 //-*- mode: rust -*-
-use rug::Integer;
 use libeir_diagnostics::{ByteSpan, ByteIndex, Diagnostic, Label};
+
+use num_bigint::BigInt;
+//use num_bigint::BigInt as Integer;
 
 use crate::lexer::{Token, DelayedSubstitution, Symbol, Ident};
 use crate::preprocessor::PreprocessorError;
@@ -1024,7 +1026,7 @@ BaseInt: i64 = {
     "-" <i:int> => -i,
     <i:int> => i,
 };
-BaseBigInt: Integer = {
+BaseBigInt: BigInt = {
     "-" <i:bigint> => -i,
     <i:bigint> => i,
 };
@@ -1043,7 +1045,7 @@ extern {
         // Literals
         char => Token::Char(<char>),
         int => Token::Integer(<i64>),
-        bigint => Token::BigInteger(<Integer>),
+        bigint => Token::BigInteger(<BigInt>),
         float => Token::Float(<f64>),
         "atom" => Token::Atom(<Symbol>),
         string => Token::String(<Symbol>),

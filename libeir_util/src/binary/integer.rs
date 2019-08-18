@@ -1,5 +1,6 @@
-use rug::Integer;
-use rug::integer::Order;
+//use rug::Integer;
+//use rug::integer::Order;
+use num_bigint::{ BigInt, Sign };
 
 use super::{ BitSlice, BitRead, BitWrite };
 
@@ -8,16 +9,16 @@ pub enum Endian {
     Big,
     Little,
 }
-impl Endian {
-    fn to_order(&self) -> Order {
-        match self {
-            Endian::Big => Order::Msf,
-            Endian::Little => Order::Lsf,
-        }
-    }
-}
+//impl Endian {
+//    fn to_order(&self) -> Order {
+//        match self {
+//            Endian::Big => Order::Msf,
+//            Endian::Little => Order::Lsf,
+//        }
+//    }
+//}
 
-pub fn integer_to_carrier(mut int: Integer, bits: usize, endian: Endian) -> BitSlice<Vec<u8>> {
+pub fn integer_to_carrier(mut int: BigInt, bits: usize, endian: Endian) -> BitSlice<Vec<u8>> {
 
     let negative = int < 0;
     if negative {
@@ -27,12 +28,28 @@ pub fn integer_to_carrier(mut int: Integer, bits: usize, endian: Endian) -> BitS
     let keep_bytes = (bits + 7) / 8;
     let aux_bits = bits % 8;
 
-    let needed_bytes = std::cmp::max(keep_bytes, int.significant_digits::<u8>());
+    let (_sign, mut digits) = match endian {
+        Endian::Big => int.to_bytes_be(),
+        Endian::Little => int.to_bytes_le(),
+    };
 
-    let mut digits: Vec<u8> = Vec::with_capacity(needed_bytes);
-    // Safe because write_digits always initializes all elements.
-    unsafe { digits.set_len(needed_bytes) };
-    int.write_digits(&mut digits, endian.to_order());
+    match endian {
+        Endian::Big => {
+            let mut new = Vec::new();
+
+            if keep_bytes > digits.len() {
+                new.resize(keep_bytes - digits.len(), 0);
+                new.extend(digits.iter());
+            } else {
+                new.extend(digits.iter().skip(digits.len() - keep_bytes));
+            }
+
+            digits = new;
+        }
+        Endian::Little => {
+            digits.resize(keep_bytes, 0);
+        }
+    }
 
     if negative {
         for digit in digits.iter_mut() {
@@ -103,7 +120,7 @@ where
     (buf, sign)
 }
 
-pub fn carrier_to_integer<C>(carrier: C, signed: bool, endian: Endian) -> Integer
+pub fn carrier_to_integer<C>(carrier: C, signed: bool, endian: Endian) -> BigInt
 where
     C: BitRead<T = u8>
 {
@@ -113,24 +130,30 @@ where
         for elem in buf.iter_mut() {
             *elem = !*elem;
         }
-        let mut int = Integer::from_digits(&buf, endian.to_order());
+        let mut int = match endian {
+            Endian::Big => BigInt::from_bytes_be(Sign::Plus, &buf),
+            Endian::Little => BigInt::from_bytes_le(Sign::Plus, &buf),
+        };
         int *= -1;
         int -= 1;
         int
     } else {
-        Integer::from_digits(&buf, endian.to_order())
+        match endian {
+            Endian::Big => BigInt::from_bytes_be(Sign::Plus, &buf),
+            Endian::Little => BigInt::from_bytes_le(Sign::Plus, &buf),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use rug::Integer;
+    use num_bigint::BigInt;
     use super::{ integer_to_carrier, carrier_to_integer, carrier_to_buf, Endian };
     use super::super::{ BitSlice, BitWrite };
 
     #[test]
     fn integer_adapter_basic() {
-        let int = Integer::from(0b00001111_00010000);
+        let int = BigInt::from(0b00001111_00010000);
 
         {
             let conv = integer_to_carrier(int.clone(), 16, Endian::Little);
@@ -152,7 +175,7 @@ mod tests {
 
     #[test]
     fn integer_adapter_unaligned() {
-        let int = Integer::from(0b00001111_00010000);
+        let int = BigInt::from(0b00001111_00010000);
 
         {
             let conv = integer_to_carrier(int.clone(), 12, Endian::Little);
@@ -188,7 +211,7 @@ mod tests {
     fn integer_adapter_negative() {
 
         {
-            let int = Integer::from(-5);
+            let int = BigInt::from(-5);
             let conv = integer_to_carrier(int.clone(), 16, Endian::Big);
             let mut out: i16 = 0;
             out.write(&conv);
@@ -197,7 +220,7 @@ mod tests {
         }
 
         {
-            let int = Integer::from(-10000);
+            let int = BigInt::from(-10000);
             let conv = integer_to_carrier(int.clone(), 16, Endian::Big);
             let mut out: i16 = 0;
             out.write(&conv);
@@ -211,7 +234,7 @@ mod tests {
     fn integer_carrier_to_buf() {
 
         {
-            let int = Integer::from(5);
+            let int = BigInt::from(5);
             let conv = integer_to_carrier(int.clone(), 16, Endian::Big);
             let mut buf: [u8; 2] = [0; 2];
             buf.write(&conv);
@@ -228,7 +251,7 @@ mod tests {
         }
 
         {
-            let int = Integer::from(0b00000101_01010101);
+            let int = BigInt::from(0b00000101_01010101);
             let conv = integer_to_carrier(int.clone(), 12, Endian::Big);
 
             let mut buf: [u8; 2] = [0; 2];
@@ -249,7 +272,7 @@ mod tests {
         }
 
         {
-            let int = Integer::from(0b00001010_10101010);
+            let int = BigInt::from(0b00001010_10101010);
             let conv = integer_to_carrier(int.clone(), 12, Endian::Big);
 
             let mut buf: [u8; 2] = [0; 2];
@@ -270,7 +293,7 @@ mod tests {
         }
 
         {
-            let int = Integer::from(0b00001010_10101010);
+            let int = BigInt::from(0b00001010_10101010);
             let conv = integer_to_carrier(int.clone(), 12, Endian::Little);
 
             let mut buf: [u8; 2] = [0; 2];
@@ -296,7 +319,7 @@ mod tests {
     fn integer_round_trip_basic() {
 
         {
-            let int = Integer::from(5);
+            let int = BigInt::from(5);
             let conv = integer_to_carrier(int.clone(), 16, Endian::Big);
             let mut buf: [u8; 2] = [0; 2];
             buf.write(&conv);
@@ -305,7 +328,7 @@ mod tests {
         }
 
         {
-            let int = Integer::from(-5);
+            let int = BigInt::from(-5);
             let conv = integer_to_carrier(int.clone(), 16, Endian::Big);
             let mut buf: [u8; 2] = [0; 2];
             buf.write(&conv);
@@ -314,7 +337,7 @@ mod tests {
         }
 
         {
-            let int = Integer::from(5);
+            let int = BigInt::from(5);
             let conv = integer_to_carrier(int.clone(), 16, Endian::Little);
             let mut buf: [u8; 2] = [0; 2];
             buf.write(&conv);
@@ -323,7 +346,7 @@ mod tests {
         }
 
         {
-            let int = Integer::from(-5);
+            let int = BigInt::from(-5);
             let conv = integer_to_carrier(int.clone(), 16, Endian::Little);
             let mut buf: [u8; 2] = [0; 2];
             buf.write(&conv);
@@ -337,7 +360,7 @@ mod tests {
     fn integer_round_trip_unaligned() {
 
         {
-            let int = Integer::from(5);
+            let int = BigInt::from(5);
             let conv = integer_to_carrier(int.clone(), 12, Endian::Big);
 
             let mut buf: [u8; 2] = [0; 2];
@@ -351,7 +374,7 @@ mod tests {
         }
 
         {
-            let int = Integer::from(5);
+            let int = BigInt::from(5);
             let conv = integer_to_carrier(int.clone(), 12, Endian::Little);
 
             let mut buf: [u8; 2] = [0; 2];
@@ -365,7 +388,7 @@ mod tests {
         }
 
         {
-            let int = Integer::from(-5);
+            let int = BigInt::from(-5);
             let conv = integer_to_carrier(int.clone(), 12, Endian::Big);
 
             let mut buf: [u8; 2] = [0; 2];
@@ -379,7 +402,7 @@ mod tests {
         }
 
         {
-            let int = Integer::from(-5);
+            let int = BigInt::from(-5);
             let conv = integer_to_carrier(int.clone(), 12, Endian::Little);
 
             let mut buf: [u8; 2] = [0; 2];

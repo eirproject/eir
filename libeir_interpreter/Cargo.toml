@@ -22,7 +22,9 @@ libeir_ir = { path = "../libeir_ir" }
 libeir_intern = { path = "../libeir_intern" }
 libeir_util = { path = "../libeir_util" }
 
-[dependencies.rug]
-version = "1.2"
-default-features = false
-features = ["integer", "float", "rand"]
+num-bigint = { git = "https://github.com/hansihe/num-bigint.git" }
+
+#[dependencies.rug]
+#version = "1.2"
+#default-features = false
+#features = ["integer", "float", "rand"]

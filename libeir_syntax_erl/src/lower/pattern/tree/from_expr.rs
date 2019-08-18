@@ -1,5 +1,4 @@
-
-
+use std::convert::TryInto;
 use either::Either;
 
 use cranelift_entity::{ PrimaryMap, SecondaryMap, EntityList, ListPool,
@@ -20,8 +19,7 @@ use libeir_ir::{
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
 
-
-use rug::Integer;
+use num_bigint::BigInt;
 
 use crate::lower::{ lower_single, LowerCtx, LowerError };
 use crate::parser::ast::{ Expr, Var, Literal, BinaryExpr, BinaryOp, Binary,
@@ -115,7 +113,7 @@ fn eval_const_expr(
             let rhs = eval_const_expr(ctx, b, pre_block, &binary.rhs);
             match (lhs, rhs) {
                 (AtomicTerm::Int(IntTerm(l)), AtomicTerm::Int(IntTerm(r))) =>
-                    AtomicTerm::BigInt(BigIntTerm(Integer::from(l) << (r as u32))),
+                    AtomicTerm::BigInt(BigIntTerm(BigInt::from(l) << r.try_into().unwrap())),
                 val => unimplemented!("{:?}", val),
             }
         }

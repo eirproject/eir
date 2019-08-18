@@ -3,7 +3,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::mem;
 
-use rug::Integer;
+use num_bigint::BigInt;
 
 use libeir_diagnostics::{ByteIndex, ByteSpan};
 
@@ -292,7 +292,7 @@ pub enum Token {
     // Literals
     Char(char),
     Integer(i64),
-    BigInteger(Integer),
+    BigInteger(BigInt),
     Float(f64),
     Atom(Symbol),
     String(Symbol),
