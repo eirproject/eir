@@ -8,6 +8,8 @@ mod function;
 
 // Auxiliary utilities
 mod algo;
+pub use algo::mangle::*;
+
 mod graph;
 pub mod text;
 

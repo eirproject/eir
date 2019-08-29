@@ -6,6 +6,9 @@ pub use self::compile_pattern::CompilePatternPass;
 mod naive_inline_closures;
 pub use self::naive_inline_closures::NaiveInlineClosuresPass;
 
+mod simplify_cfg;
+pub use self::simplify_cfg::SimplifyCfgPass;
+
 pub trait FunctionPass {
     fn run_function_pass(&mut self, b: &mut FunctionBuilder);
 }
@@ -49,6 +52,7 @@ impl PassManager {
 impl Default for PassManager {
     fn default() -> Self {
         let mut man = PassManager::new();
+        //man.push_function_pass(SimplifyCfgPass::new());
         man.push_function_pass(CompilePatternPass::new());
         man
     }

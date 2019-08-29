@@ -5,12 +5,14 @@ use libeir_intern::Symbol;
 
 use cranelift_entity::EntityList;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+use serde::{ Serialize, Deserialize };
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BasicType {
     Map,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MatchKind {
     /// One read, the value to test it against
     /// No arguments.
@@ -35,7 +37,7 @@ pub enum MatchKind {
     Wildcard,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MapPutUpdate {
     /// Value is put into map, regardless of already existing
     Put,

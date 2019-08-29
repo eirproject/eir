@@ -29,6 +29,8 @@ mod value;
 use value::ValueMap;
 pub use value::{ Value, ValueKind };
 
+//mod serialize;
+
 /// Block/continuation
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Block(u32);

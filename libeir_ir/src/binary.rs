@@ -1,11 +1,13 @@
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+use serde::{ Serialize, Deserialize };
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Endianness {
     Big,
     Little,
     Native,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BinaryEntrySpecifier {
     Integer {
         signed: bool,

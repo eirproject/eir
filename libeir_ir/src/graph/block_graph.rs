@@ -145,7 +145,7 @@ impl<E> VisitMap<E> for EntityVisitMap<E> where E: EntityRef {
     }
 }
 
-impl<'a> Visitable for &'a BlockGraph<'a> {
+impl<'a> Visitable for BlockGraph<'a> {
     type Map = EntityVisitMap<Block>;
     fn visit_map(&self) -> EntityVisitMap<Block> {
         let mut set = EntitySet::new();

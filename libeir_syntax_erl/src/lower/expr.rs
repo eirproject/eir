@@ -113,13 +113,15 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
             let arity_val = b.value(args.len());
 
             let callee_val = match &**callee {
-                Expr::Remote(Remote { span, module, function, .. }) => {
+                Expr::Remote(Remote { module, function, .. }) => {
                     let mod_val = map_block!(block, lower_single(ctx, b, block, module));
                     let fun_val = map_block!(block, lower_single(ctx, b, block, function));
 
-                    b.block_set_span(block, *span);
-                    block = b.op_capture_function(block, mod_val, fun_val, arity_val);
-                    b.block_args(block)[0]
+                    b.prim_capture_function(mod_val, fun_val, arity_val)
+
+                    //b.block_set_span(block, *span);
+                    //block = b.op_capture_function(block, mod_val, fun_val, arity_val);
+                    //b.block_args(block)[0]
                 }
                 Expr::Literal(Literal::Atom(_id, name)) => {
                     let local = LocalFunctionName {
@@ -128,21 +130,41 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                         arity: args.len(),
                     };
 
-                    let (module, function) = if let Some(resolved) =
-                        ctx.module.imports.get(&local)
-                    {
-                        assert!(resolved.arity == args.len());
-                        (resolved.module, resolved.function)
-                    } else {
+                    let (module, function) = if ctx.module.functions.contains_key(&local) {
                         (ctx.module.name, *name)
+                    } else {
+                        if let Some(resolved) =
+                            ctx.module.imports.get(&local)
+                        {
+                            assert!(resolved.arity == args.len());
+                            (resolved.module, resolved.function)
+                        } else {
+                            (ctx.module.name, *name)
+                        }
                     };
+
+                    //let (module, function) = if let Some(resolved) =
+                    //    ctx.module.imports.get(&local)
+                    //{
+                    //    assert!(resolved.arity == args.len());
+                    //    (resolved.module, resolved.function)
+                    //} else {
+                    //    (ctx.module.name, *name)
+                    //};
+
+                    //if m_module != module {
+                    //    println!("=_____=!!!!!!===== {:?} {:?} {:?}", m_module, module, function);
+                    //}
+
 
                     let mod_val = b.value(module);
                     let fun_val = b.value(function);
 
-                    b.block_set_span(block, *span);
-                    block = b.op_capture_function(block, mod_val, fun_val, arity_val);
-                    b.block_args(block)[0]
+                    b.prim_capture_function(mod_val, fun_val, arity_val)
+
+                    //b.block_set_span(block, *span);
+                    //block = b.op_capture_function(block, mod_val, fun_val, arity_val);
+                    //b.block_args(block)[0]
                 }
                 expr => {
                     map_block!(block, lower_single_same_scope(ctx, b, block, expr))
@@ -361,7 +383,6 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
             (join_block, join_arg)
         }
         Expr::FunctionName(name) => {
-            println!("ABCC {:?}", name);
             match name {
                 FunctionName::Resolved(resolved) => {
                     let module = b.value(resolved.module);
@@ -374,7 +395,6 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                     (block, fun_val)
                 }
                 FunctionName::PartiallyResolved(partial) => {
-                    println!("{:?}", ctx.module.imports);
                     let local = ctx.module.imports.get(&partial.to_local());
                     let resolved = if let Some(fun) = local {
                         fun.clone()

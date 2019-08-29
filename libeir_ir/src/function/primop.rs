@@ -1,4 +1,6 @@
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+use serde::{ Serialize, Deserialize };
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BinOp {
     /// ==
     Equal,
@@ -31,7 +33,7 @@ impl BinOp {
 
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum LogicOp {
     /// All arguments are equal
     Eq,
@@ -39,7 +41,7 @@ pub enum LogicOp {
     Or,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PrimOpKind {
 
     /// (lhs, rhs)
@@ -58,8 +60,14 @@ pub enum PrimOpKind {
     Map,
 
     /// (terms..)
-
-    /// (terms..)
     ValueList,
+
+    /// Returns a function of arity `a`.
+    /// If the function does not exists, this must return a function that
+    /// throws badarg when called.
+    /// For function capture semantics, the `CaptureFunction` op should be
+    /// used instead. This will throw badarg at capture time.
+    /// `(m, f, a)`
+    CaptureFunction,
 
 }

@@ -144,7 +144,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
 
         case_b.finish(block, b);
     } else {
-        b.op_call(block, catch_no_match_block, &[]);
+        b.op_call(exc_block, catch_no_match_block, &[]);
     }
 
     // After

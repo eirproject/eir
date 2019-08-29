@@ -107,14 +107,13 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
-    pub fn call_function<M, F>(&mut self, b: &mut FunctionBuilder, mut block: IrBlock, span: ByteSpan,
+    pub fn call_function<M, F>(&mut self, b: &mut FunctionBuilder, block: IrBlock, span: ByteSpan,
                                   m: M, f: F, args: &[IrValue]) -> (IrBlock, IrValue)
     where
         M: IntoValue, F: IntoValue
     {
         b.block_set_span(block, span);
-        block = b.op_capture_function(block, m, f, args.len());
-        let fun_val = b.block_args(block)[0];
+        let fun_val = b.prim_capture_function(m, f, args.len());
 
         let ok_block = b.block_insert();
         let ok_res = b.block_arg_insert(ok_block);

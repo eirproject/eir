@@ -115,7 +115,7 @@ fn is_lowercase(c: char) -> bool {
         || (c >= '\u{00f8}' && c <= '\u{00ff}')
 }
 fn is_namechar(c: char) -> bool {
-    is_uppercase(c) || is_lowercase(c) || is_digit(c) 
+    is_uppercase(c) || is_lowercase(c) || is_digit(c)
         || (c == '@') || (c == '_')
 }
 
@@ -267,7 +267,7 @@ impl<'input> Tokenizer<'input> {
                     let atom = &self.text[idx0+1..end-1];
                     Some(Ok((idx0, Tok::Atom(atom), end)))
                 }
-                
+
                 // Numbers
                 Some((idx0, c)) if is_digit(c) => {
                     let string = self.take_while(is_digit);
@@ -425,7 +425,7 @@ impl<'input> Tokenizer<'input> {
                         }
                     }
                 }
-                
+
                 Some((_idx1, '\n')) => {
                     self.bump();
                     continue 'outer;

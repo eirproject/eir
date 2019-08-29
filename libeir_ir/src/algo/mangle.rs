@@ -77,6 +77,11 @@ impl Mangler {
         arg
     }
 
+    /// Copies the signature of the entry block.
+    pub fn copy_entry(&mut self, fun: &Function) {
+        unimplemented!()
+    }
+
     pub fn add_rename<S, D>(&mut self, old: S, new: D)
     where
         S: RenameSource,

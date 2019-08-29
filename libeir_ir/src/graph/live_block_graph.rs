@@ -1,7 +1,10 @@
 use std::collections::HashSet;
 
 use petgraph::Direction;
-use petgraph::visit::{ GraphBase, IntoNeighbors, IntoNeighborsDirected };
+use petgraph::visit::{ GraphBase, IntoNeighbors, IntoNeighborsDirected, Visitable, Walker };
+use petgraph::visit::{ Dfs, DfsPostOrder };
+
+use cranelift_entity::{ EntityRef, EntitySet };
 
 use itertools::Either;
 
@@ -12,6 +15,7 @@ use crate::{ Block };
 
 use super::BlockGraph;
 use super::block_graph::{ BlockEdge, BlockSuccessors };
+use super::block_graph::EntityVisitMap;
 
 impl Function {
 
@@ -47,6 +51,25 @@ impl<'a> LiveBlockGraph<'a> {
             graph,
             live,
         }
+    }
+
+    pub fn dfs(&self) -> Dfs<Block, EntityVisitMap<Block>> {
+        self.graph.dfs()
+    }
+    pub fn dfs_iter(&'a self) -> impl Iterator<Item = Block> + 'a {
+        self.graph.dfs_iter()
+    }
+    pub fn dfs_post_order(&self) -> DfsPostOrder<Block, EntityVisitMap<Block>> {
+        self.graph.dfs_post_order()
+    }
+    pub fn outgoing(&'a self, block: Block) -> impl Iterator<Item = Block> + 'a {
+        self.graph.outgoing(block)
+    }
+
+    pub fn incoming(&'a self, block: Block) -> impl Iterator<Item = Block> + 'a {
+        self.graph.fun.blocks[block].predecessors
+            .iter(&self.graph.fun.pool.block_set)
+            .filter(move |b| self.live.contains(b))
     }
 
 }
@@ -95,6 +118,16 @@ impl<'a> IntoNeighborsDirected for &'a LiveBlockGraph<'a> {
             Direction::Outgoing => Either::Left(self.graph.neighbors(block)),
             Direction::Incoming => Either::Right(LiveBlockPredecessors::new(self, block)),
         }
+    }
+}
+
+impl<'a> Visitable for &'a LiveBlockGraph<'a> {
+    type Map = EntityVisitMap<Block>;
+    fn visit_map(&self) -> EntityVisitMap<Block> {
+        Visitable::visit_map(&self.graph)
+    }
+    fn reset_map(&self, map: &mut EntityVisitMap<Block>) {
+        Visitable::reset_map(&self.graph, map)
     }
 }
 

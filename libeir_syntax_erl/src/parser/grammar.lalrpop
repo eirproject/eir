@@ -43,7 +43,11 @@ Comma<T>: Vec<T> = {
 
 // Comma-delimited with zero or more elements
 CommaOpt<T>: Vec<T> = {
-    <v:(<T> ",")*> => v,
+    <vals:(<T> ",")*> <last: T?> => {
+        let mut vals = vals;
+        vals.extend(last);
+        vals
+    },
 };
 
 // Dash-delimited with at least one element
@@ -277,7 +281,7 @@ TypeDef: TypeDef = {
 };
 
 TypeDef100: TypeDef = {
-    <name:atom> "(" <params:CommaOpt<Ident>> ")" "::" <ty:TopType100> "." <r:@R>
+    <name:atom> "(" <params:CommaOpt<atom_or_var>> ")" "::" <ty:TopType100> "." <r:@R>
         => TypeDef { span: ByteSpan::default(), name, params, ty, opaque: false },
 };
 
@@ -317,7 +321,7 @@ TypeGuard: TypeGuard = {
 };
 
 TopType: Type = {
-    <l:@L> <name:Ident> "::" <ty:TopType100> <r:@R>
+    <l:@L> <name:atom_or_var> "::" <ty:TopType100> <r:@R>
         => Type::Annotated { span: span!(l, r), name, ty: Box::new(ty)  },
     TopType100,
 };

@@ -62,7 +62,7 @@ pub enum Type {
     Name(Name),
     Annotated {
         span: ByteSpan,
-        name: Ident,
+        name: Name,
         ty: Box<Type>,
     },
     Union {
@@ -131,7 +131,10 @@ impl Type {
     pub fn is_builtin_type(&self) -> bool {
         match self {
             &Type::Name(Name::Atom(Ident { ref name, .. })) => BUILTIN_TYPES.contains(&(*name, 0)),
-            &Type::Annotated { ref name, .. } => BUILTIN_TYPES.contains(&(name.name, 0)),
+            &Type::Annotated { ref name, .. } => match name {
+                Name::Atom(v) => BUILTIN_TYPES.contains(&(v.name, 0)),
+                Name::Var(v) => BUILTIN_TYPES.contains(&(v.name, 0)),
+            },
             &Type::Generic {
                 ref fun,
                 ref params,

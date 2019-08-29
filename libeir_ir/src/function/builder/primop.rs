@@ -1,6 +1,6 @@
 use ::cranelift_entity::{ EntityList };
 
-use crate::{ Value, ValueKind, LogicOp };
+use crate::{ Value, ValueKind, LogicOp, IntoValue };
 use crate::ConstKind;
 use super::{ FunctionBuilder, PrimOpData, PrimOpKind, BinOp };
 
@@ -164,6 +164,28 @@ impl<'a> FunctionBuilder<'a> {
 
         let primop = self.fun.primops.push(PrimOpData {
             op: PrimOpKind::LogicOp(op),
+            reads: entries_list,
+        }, &self.fun.pool);
+        self.fun.values.push(ValueKind::PrimOp(primop))
+    }
+
+    pub fn prim_capture_function<M, F, A>(
+        &mut self,
+        m: M, f: F, a: A) -> Value
+    where
+        M: IntoValue, F: IntoValue, A: IntoValue,
+    {
+        let m_val = self.value(m);
+        let f_val = self.value(f);
+        let a_val = self.value(a);
+
+        let mut entries_list = EntityList::new();
+        entries_list.push(m_val, &mut self.fun.pool.value);
+        entries_list.push(f_val, &mut self.fun.pool.value);
+        entries_list.push(a_val, &mut self.fun.pool.value);
+
+        let primop = self.fun.primops.push(PrimOpData {
+            op: PrimOpKind::CaptureFunction,
             reads: entries_list,
         }, &self.fun.pool);
         self.fun.values.push(ValueKind::PrimOp(primop))

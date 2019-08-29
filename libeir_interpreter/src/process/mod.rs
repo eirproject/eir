@@ -1,14 +1,13 @@
 use std::rc::Rc;
-use std::convert::TryInto;
 use std::collections::HashMap;
 
 use num_traits::cast::ToPrimitive;
 
-use libeir_ir::{ FunctionIdent, Block, Value, OpKind, BinOp, ValueKind, PrimOpKind };
+use libeir_ir::{ FunctionIdent, Block, Value, OpKind, BinOp, ValueKind, PrimOpKind, LogicOp };
 use libeir_ir::{ MapPutUpdate };
 use libeir_ir::{ BinaryEntrySpecifier, Endianness };
 use libeir_ir::constant::{ Const, ConstKind, AtomicTerm };
-use libeir_intern::{ Symbol, Ident };
+use libeir_intern::Ident;
 
 use libeir_util::binary::{ BitVec, BitSlice, integer_to_carrier, Endian };
 
@@ -197,7 +196,6 @@ impl CallExecutor {
 
                 Term::Map(map).into()
             }
-            kind => unimplemented!("{:?}", kind),
         }
     }
 
@@ -242,6 +240,37 @@ impl CallExecutor {
                         let lhs = self.make_term(fun, reads[0]);
                         let rhs = self.make_term(fun, reads[1]);
                         Term::new_bool(lhs.erl_eq(&*rhs)).into()
+                    }
+                    PrimOpKind::LogicOp(LogicOp::And) => {
+                        let mut acc = true;
+                        for read in reads.iter() {
+                            let term = self.make_term(fun, *read);
+                            let res = term.as_boolean().unwrap();
+                            acc = acc & res;
+                        }
+                        Term::new_bool(acc).into()
+                    }
+                    PrimOpKind::LogicOp(LogicOp::Or) => {
+                        let mut acc = false;
+                        for read in reads.iter() {
+                            let term = self.make_term(fun, *read);
+                            let res = term.as_boolean().unwrap();
+                            acc = acc | res;
+                        }
+                        Term::new_bool(acc).into()
+                    }
+                    PrimOpKind::CaptureFunction => {
+                        let module = self.make_term(fun, reads[0]).as_atom().unwrap();
+                        let name = self.make_term(fun, reads[1]).as_atom().unwrap();
+                        let arity = self.make_term(fun, reads[2]).as_usize().unwrap();
+
+                        let ident = FunctionIdent {
+                            module: Ident::with_empty_span(module),
+                            name: Ident::with_empty_span(name),
+                            arity,
+                        };
+
+                        Term::CapturedFunction { ident }.into()
                     }
                     kind => unimplemented!("{:?}", kind),
                 }
@@ -294,32 +323,6 @@ impl CallExecutor {
                     args: vec![Term::CapturedFunction { ident }.into()],
                 }
             }
-            OpKind::Intrinsic(name) if *name == Symbol::intern("bool_and") => {
-                let mut res = true;
-                for val in reads[1..].iter() {
-                    let term = self.make_term(fun, *val);
-                    let b = term.as_boolean().expect("non boolean argument to bool_and");
-                    res = res & b;
-                }
-
-                TermCall {
-                    fun: self.make_term(fun, reads[0]),
-                    args: vec![Term::new_bool(res).into()],
-                }
-            }
-            OpKind::Intrinsic(name) if *name == Symbol::intern("bool_or") => {
-                let mut res = false;
-                for val in reads[1..].iter() {
-                    let term = self.make_term(fun, *val);
-                    let b = term.as_boolean().expect("non boolean argument to bool_or");
-                    res = res | b;
-                }
-
-                TermCall {
-                    fun: self.make_term(fun, reads[0]),
-                    args: vec![Term::new_bool(res).into()],
-                }
-            }
             OpKind::IfBool => {
                 let call_n = if reads.len() == 4 {
                     let bool_term = self.make_term(fun, reads[3]);
@@ -352,121 +355,6 @@ impl CallExecutor {
             }
             OpKind::Match { branches } => {
                 self::r#match::match_op(self, fun, branches, block)
-                //let branches_elems = Term::as_value_list(
-                //    &self.make_term(fun, reads[0]));
-
-                //let unpack_term = self.make_term(fun, reads[1]);
-
-                ////println!("MATCH START {:?}", unpack_term);
-                //for (idx, kind) in branches.iter().enumerate() {
-                //    let branch_args = Term::as_value_list(
-                //        &self.make_term(fun, reads[idx + 2]));
-                //    //println!("MATCH KIND {:?} {:?}", kind, branch_args);
-                //    match kind {
-                //        MatchKind::Value => {
-                //            assert!(branch_args.len() == 1);
-                //            if unpack_term.erl_exact_eq(&*branch_args[0]) {
-                //                return TermCall {
-                //                    fun: branches_elems[idx].clone(),
-                //                    args: vec![],
-                //                };
-                //            }
-                //        }
-                //        MatchKind::ListCell => {
-                //            assert!(branch_args.len() == 0);
-                //            match &*unpack_term {
-                //                Term::ListCell(head, tail) => {
-                //                    return TermCall {
-                //                        fun: branches_elems[idx].clone(),
-                //                        args: vec![head.clone(), tail.clone()],
-                //                    };
-                //                }
-                //                _ => (),
-                //            }
-                //        }
-                //        MatchKind::Tuple(len) => {
-                //            assert!(branch_args.len() == 0);
-                //            match &*unpack_term {
-                //                Term::Tuple(elems) if elems.len() == *len => {
-                //                    return TermCall {
-                //                        fun: branches_elems[idx].clone(),
-                //                        args: elems.clone(),
-                //                    };
-                //                }
-                //                _ => (),
-                //            }
-                //        }
-                //        MatchKind::Type(BasicType::Map) => {
-                //            assert!(branch_args.len() == 0);
-                //            match &*unpack_term {
-                //                Term::Map(_) => {
-                //                    return TermCall {
-                //                        fun: branches_elems[idx].clone(),
-                //                        args: vec![],
-                //                    };
-                //                }
-                //                _ => (),
-                //            }
-                //        }
-                //        MatchKind::MapItem => {
-                //            assert!(branch_args.len() == 1);
-                //            match &*unpack_term {
-                //                Term::Map(map) => {
-                //                    if let Some(v) = map.get(&branch_args[0]) {
-                //                        return TermCall {
-                //                            fun: branches_elems[idx].clone(),
-                //                            args: vec![v.clone()],
-                //                        };
-                //                    }
-                //                }
-                //                _ => unreachable!(),
-                //            }
-                //        }
-                //        MatchKind::Binary(BinaryEntrySpecifier::Integer {
-                //            signed: false, unit: 1, ..
-                //        }) => {
-                //            match &*unpack_term {
-                //                Term::Binary(bin) => {
-                //                    if bin.len() >= 1 {
-                //                        return TermCall {
-                //                            fun: branches_elems[idx].clone(),
-                //                            args: vec![
-                //                                Term::Integer(bin[0].into()).into(),
-                //                                Term::Binary(bin[1..].to_owned()).into(),
-                //                            ],
-                //                        };
-                //                    }
-                //                }
-                //                _ => (),
-                //            }
-                //        }
-                //        MatchKind::Binary(BinaryEntrySpecifier::Bytes { unit: 8 }) => {
-                //            match &*unpack_term {
-                //                Term::Binary(bin) => {
-                //                    if bin.len() >= 1 {
-                //                        return TermCall {
-                //                            fun: branches_elems[idx].clone(),
-                //                            args: vec![
-                //                                unpack_term.clone(),
-                //                                Term::Binary(vec![]).into(),
-                //                            ],
-                //                        };
-                //                    }
-                //                }
-                //                _ => (),
-                //            }
-                //        }
-                //        MatchKind::Wildcard => {
-                //            assert!(branch_args.len() == 0);
-                //            return TermCall {
-                //                fun: branches_elems[idx].clone(),
-                //                args: vec![],
-                //            };
-                //        }
-                //        kind => unimplemented!("{:?}", kind),
-                //    }
-                //}
-                //panic!()
             }
             OpKind::BinaryPush { specifier } => {
                 let bin_term = self.make_term(fun, reads[2]);

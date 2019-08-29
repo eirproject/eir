@@ -23,7 +23,7 @@ pub struct TypeDef {
     pub span: ByteSpan,
     pub opaque: bool,
     pub name: Ident,
-    pub params: Vec<Ident>,
+    pub params: Vec<Name>,
     pub ty: Type,
 }
 impl PartialEq for TypeDef {

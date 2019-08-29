@@ -300,6 +300,8 @@ impl Module {
                     let first_sig = callback.sigs.first().unwrap();
                     let arity = first_sig.params.len();
 
+                    println!("yayay");
+
                     // Verify that all clauses match
                     if callback.sigs.len() > 1 {
                         for TypeSig {
@@ -334,15 +336,18 @@ impl Module {
                         function: callback.function.clone(),
                         arity,
                     };
+                    println!("{:?}", cb_name);
+                    println!("{:?}", cb_name.to_local());
                     match module.callbacks.get(&cb_name.to_local()) {
                         None => {
                             module.callbacks.insert(cb_name.to_local(), callback);
                             continue;
                         }
-                        Some(Callback {
-                            span: ref prev_span,
+                        Some(ref a @ Callback {
+                            //span: ref prev_span,
                             ..
                         }) => {
+                            println!("PREV: {:?}", a);
                             errs.push(to_lalrpop_err!(ParserError::Diagnostic(
                                 Diagnostic::new_error("cannot redefine callback")
                                     .with_label(
@@ -350,7 +355,7 @@ impl Module {
                                             .with_message("redefinition occurs here")
                                     )
                                     .with_label(
-                                        Label::new_secondary(prev_span.clone())
+                                        Label::new_secondary(a.span.clone())
                                             .with_message("callback first defined here")
                                     )
                             )));
@@ -500,6 +505,7 @@ impl Module {
                     }
                 }
                 TopLevel::Attribute(Attribute::Custom(attr)) => {
+                    println!("CUSTOM ATTR: {:?}", attr);
                     match attr.name.name.as_str().get() {
                         "module" => {
                             errs.push(to_lalrpop_err!(ParserError::Diagnostic(
@@ -513,6 +519,10 @@ impl Module {
                                             .with_message("module first declared here")
                                     )
                             )));
+                            continue;
+                        }
+                        "optional_callbacks" => {
+                            //if let Some(callback) = module.callbacks.get_mut()
                             continue;
                         }
                         "dialyzer" => {
@@ -697,31 +707,6 @@ impl Module {
             }
         }
 
-        let self_fun = ResolvedFunctionName {
-            span: DUMMY_SPAN,
-            id: nid.next(),
-            module: Ident::from_str("erlang"),
-            function: Ident::from_str("self"),
-            arity: 0,
-        };
-        self.imports.insert(self_fun.to_local(), self_fun);
-        let self_fun = ResolvedFunctionName {
-            span: DUMMY_SPAN,
-            id: nid.next(),
-            module: Ident::from_str("erlang"),
-            function: Ident::from_str("spawn"),
-            arity: 3,
-        };
-        self.imports.insert(self_fun.to_local(), self_fun);
-        let self_fun = ResolvedFunctionName {
-            span: DUMMY_SPAN,
-            id: nid.next(),
-            module: Ident::from_str("erlang"),
-            function: Ident::from_str("is_integer"),
-            arity: 1,
-        };
-        self.imports.insert(self_fun.to_local(), self_fun);
-
         let autos = auto_imports! {
             erlang:abs/1,
             erlang:apply/2,
@@ -791,6 +776,7 @@ impl Module {
             erlang:is_boolean/1,
             erlang:is_float/1,
             erlang:is_function/1,
+            erlang:is_function/2,
             erlang:is_integer/1,
             erlang:is_list/1,
             erlang:is_map/1,
@@ -851,6 +837,7 @@ impl Module {
             erlang:registered/0,
             erlang:round/1,
             erlang:setelement/3,
+            erlang:self/0,
             erlang:size/1,
             erlang:spawn/1,
             erlang:spawn/2,
@@ -1206,6 +1193,23 @@ impl CompileOptions {
                 Expr::FunctionName(FunctionName::PartiallyResolved(name)) => {
                     self.no_auto_imports.insert(name.resolve(module.clone()));
                 }
+                Expr::Tuple(tup) if tup.elements.len() == 2 => {
+                    match (&tup.elements[0], &tup.elements[1]) {
+                        (Expr::Literal(Literal::Atom(_, name)),
+                         Expr::Literal(Literal::Integer(_, _, arity))) => {
+                            let local = PartiallyResolvedFunctionName {
+                                span: tup.span,
+                                id: tup.id,
+                                function: *name,
+                                arity: (*arity).try_into().unwrap(),
+                            };
+                            self.no_auto_imports
+                                .insert(local.resolve(*module));
+                            continue;
+                        }
+                        _ => (),
+                    }
+                }
                 other => {
                     diagnostics.push(
                         Diagnostic::new_warning("invalid compile option").with_label(
@@ -1287,6 +1291,9 @@ impl CompileOptions {
         }
     }
 
+}
+
+fn walk_function_list() {
 }
 
 fn to_list_simple(mut expr: &Expr) -> Vec<Expr> {

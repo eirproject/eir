@@ -1,4 +1,6 @@
-use crate::ast::{ Module, Annotated, FunctionName, Constant,  
+//-*- mode: rust -*-
+
+use crate::ast::{ Module, Annotated, FunctionName, Constant,
 Function, FunctionDefinition, Expression, SingleExpression, Pattern,
 CaseClause, PrimOpCall, MapExactAssoc };
 use crate::lexer::Tok;

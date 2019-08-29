@@ -4,6 +4,7 @@ use libeir_ir::{
     FunctionBuilder,
     Value as IrValue,
     Block as IrBlock,
+    LogicOp,
 };
 use libeir_ir::pattern::{
     PatternClause,
@@ -231,11 +232,7 @@ impl ClauseLowerCtx {
         // Body
         let mut block = guard_lambda_block;
 
-        let (cond_block, cond_block_val) = b.block_insert_get_val();
-        let cond_res = b.block_arg_insert(cond_block);
-
-        let mut top_and = b.op_intrinsic_build(Symbol::intern("bool_and"));
-        top_and.push_value(cond_block_val, b);
+        let mut top_and = Vec::new();
 
         let erlang_atom = b.value(Ident::from_str("erlang"));
         let exact_eq_atom = b.value(Ident::from_str("=:="));
@@ -270,46 +267,34 @@ impl ClauseLowerCtx {
             b.op_call(block, fun_val, &[next_block_val, unreachable_err_val, lhs, rhs]);
             block = next_block;
 
-            top_and.push_value(res_val, b);
+            top_and.push(res_val);
         }
+
+        let mut or = Vec::new();
+        let mut and = Vec::new();
 
         // Clause guards
         if let Some(guard_seq) = guard {
-            let (or_block, or_block_val) = b.block_insert_get_val();
-            top_and.push_value(b.block_arg_insert(or_block), b);
-
-            let mut or = b.op_intrinsic_build(Symbol::intern("bool_or"));
-            or.push_value(or_block_val, b);
-
             for guard in guard_seq {
-                let (and_block, and_block_val) = b.block_insert_get_val();
-                or.push_value(b.block_arg_insert(and_block), b);
-
-                let mut and = b.op_intrinsic_build(Symbol::intern("bool_and"));
-                and.push_value(and_block_val, b);
-
                 for condition in guard.conditions.iter() {
                     let (block_new, val) = lower_block(
                         ctx, b, block, [condition].iter().map(|v| *v));
-                    and.push_value(val, b);
+                    and.push(val);
                     block = block_new;
                 }
 
-                and.block = Some(block);
-                and.finish(b);
-                block = and_block;
+                let val = b.prim_logic_op(LogicOp::And, &and);
+                and.clear();
+                or.push(val);
             }
 
-            or.block = Some(block);
-            or.finish(b);
-            block = or_block;
+            let val = b.prim_logic_op(LogicOp::Or, &or);
+            or.clear();
+            top_and.push(val);
         }
 
-        top_and.block = Some(block);
-        top_and.finish(b);
-        block = cond_block;
-
-        b.op_call(block, ret_cont, &[cond_res]);
+        let result_bool = b.prim_logic_op(LogicOp::And, &top_and);
+        b.op_call(block, ret_cont, &[result_bool]);
 
         ctx.exc_stack.pop_handler();
         ctx.scope.pop(scope_tok);
