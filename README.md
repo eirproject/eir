@@ -1,33 +1,25 @@
-# core_erlang
-Core Erlang compiler implemented in Rust
-
-Pictured below: CFG for `proplists:get_value/3`
-![Example CFG](example_cfg.png)
+# Eir Project
+Erlang compiler and IR implemented in Rust
 
 ## Details
 
-Current area of work: NIF generation proof of concept ([niffy](https://github.com/eirproject/niffy))
+Current features:
+* Unified Thorin based IR representation named Eir
+* Erlang frontend
+* Core frontend
+* Pattern match compilation passes
+* Basic optimization and cleanup passes
+* Naive interpreter used for testing
 
 The project is split into several crates:
-* `eir` - Contains the core IR data structures, validation, printing
-* `compiler` - The CORE Erlang -> Eir compiler
-* `gen_nif` - Eir -> LLVM backend. Can emit code for both NIFs and WASM, others easily addable.
-* `interpreter` - Reference interpreter for Eir
-* `pattern-compiler` - Generic implementation of [this paper](https://www.cs.tufts.edu/~nr/cs257/archive/luc-maranget/jun08.pdf). Used by pattern compilation Eir pass.
-* `tools` - Various command line utilities. (dot generation, eir text generation)
-* `util` - Utilities used by several other crates
-* `cps_transform` - Transforms normal Eir to CPS form Eir
-
-Other directories:
-* `otp_build` - Scripts for building parts of OTP directly to `.core` files
-* `test_data` - Data used for test suites
-
-Current features:
-* Compiles Core erlang to Eir (SSA resolving, lambda lifting)
-* Pattern match compilation
-* Simple optimizations on Eir
-* Performs CPS transformation
-* Various IR analysis utilities
-* Printing of Eir (both textual and dot graph)
-* Executes (part of, for now) Eir in reference interpreter
-* Generates LLVM IR for compilation into a NIF
+* `libeir_ir` - Contains the core Eir IR data structures, validation, printing
+* `libeir_syntax_erl` - Frontend for Erlang, lowers to Eir.
+* `libeir_syntax_core` - Frontend for Core Erlang, lowers to Eir.
+* `libeir_passes` - Compiler passes operating on Eir.
+* `libeir_lowerutils` - Utilities for lowering Eir to SSA form.
+* `libeir_interpreter` - Naive interpreter for Eir. Used to run OTP test suites.
+* `libeir_intern` - Symbol interning. Used by most other crates.
+* `libeir_diagnostics` - Source span handling and diagnostics printing.
+* `libeir_util` - Kitchen sink of utilities used by other crates.
+* `pattern-compiler` - A generic pattern matching tree compiler.
+* `tools` - CLI tools used to work with the IR.
