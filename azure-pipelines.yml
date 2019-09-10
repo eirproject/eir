@@ -1,0 +1,23 @@
+variables:
+  nightly: nightly-2019-08-08
+  RUSTFLAGS:
+
+jobs:
+
+  # Test crates
+  - template: ci/azure-test.yml
+    parameters:
+      name: test_eir
+      displayName: Test Eir
+      rust: $(nightly)
+      cross: true
+      crates:
+        pattern-compiler: []
+        libeir_intern: []
+        libeir_diagnostics: []
+        libeir_util: []
+        libeir_ir: []
+        libeir_passes: []
+        libeir_syntax_erl: []
+        libeir_tests: []
+

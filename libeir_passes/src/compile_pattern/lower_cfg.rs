@@ -27,11 +27,15 @@ impl<'a, 'b> LowerCtx<'a, 'b> {
     fn node_to_value(&self, node: PatternNode, idx: NodeIndex,
                      cfg: &PatternCfg<ErlangPatternProvider>) -> Value
     {
+        println!("LOOKUP IN NODEID: {:?}", idx);
         // PatternNode => PatternCfg Node
+        dbg!(node);
         let prov_node = self.provider.pattern_node_to_cfg_node(node);
         // PatternCfg Node => PatternCfg Var
+        dbg!(prov_node);
         let prov_var = cfg.leaf_bindings[&idx][&prov_node];
         // PatternCfg Var => Value
+        dbg!(prov_var);
         self.mapping[&prov_var]
     }
 

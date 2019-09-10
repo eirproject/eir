@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
 
-patch -o bs_match_SUITE_patched.erl ../otp/lib/compiler/test/bs_match_SUITE.erl bs_match_SUITE.erl.patch
+cp ../otp/lib/compiler/test/bs_match_SUITE.erl .
+patch -l --normal --verbose bs_match_SUITE.erl bs_match_SUITE.erl.patch
 
