@@ -309,17 +309,18 @@ impl PatternContainer {
         node_map.clear();
         self.tmp_node_map = Some(node_map);
 
-        self.clauses.push(PatternClauseData {
-            root_nodes: new_roots,
+        unimplemented!()
+        //self.clauses.push(PatternClauseData {
+        //    root_nodes: new_roots,
 
-            node_binds_keys: unimplemented!(),
-            node_binds_vals: unimplemented!(),
+        //    node_binds_keys: unimplemented!(),
+        //    node_binds_vals: unimplemented!(),
 
-            binds: new_binds,
-            values: new_values,
+        //    binds: new_binds,
+        //    values: new_values,
 
-            finished: true,
-        })
+        //    finished: true,
+        //})
     }
 
     /// Given a HashMap containing the mapping, this will go through all the

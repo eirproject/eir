@@ -4,17 +4,12 @@ use libeir_ir::{
     Block as IrBlock,
 };
 
-
 pub use libeir_ir::binary::{ Endianness, BinaryEntrySpecifier };
-
-
-
 
 use crate::parser::ast::{ Expr, Literal, Binary, BitType, BinaryElement };
 
 use crate::lower::{ LowerCtx, LowerError };
-use crate::lower::expr::{ lower_single, lower_single_same_scope, lower_block };
-
+use crate::lower::expr::lower_single_same_scope;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum TypeName {

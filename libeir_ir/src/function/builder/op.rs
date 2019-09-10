@@ -13,8 +13,6 @@ impl<'a> FunctionBuilder<'a> {
 
     pub fn op_call<'b, V>(&'b mut self, block: Block,
                        target: V, args: &[Value]) where V: IntoValue {
-        assert!(self.state.is_none());
-
         let target_val = self.value(target);
 
         let data = self.fun.blocks.get_mut(block).unwrap();
@@ -29,8 +27,6 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn op_trace_capture_raw(&mut self, block: Block) -> Block {
-        assert!(self.state.is_none());
-
         let cont = self.fun.block_insert();
         let cont_val = self.value(cont);
         self.fun.block_arg_insert(cont);
@@ -47,8 +43,6 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn op_intrinsic<'b>(&'b mut self, block: Block, name: Symbol, args: &[Value]) {
-        assert!(self.state.is_none());
-
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
@@ -68,8 +62,6 @@ impl<'a> FunctionBuilder<'a> {
     where
         M: IntoValue, F: IntoValue, A: IntoValue
     {
-        assert!(self.state.is_none());
-
         let cont = self.fun.block_insert();
         let cont_val = self.value(cont);
         self.fun.block_arg_insert(cont);
@@ -102,8 +94,6 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn op_unpack_value_list(&mut self, block: Block, list: Value, num: usize) -> Block {
-        assert!(self.state.is_none());
-
         let cont = self.fun.block_insert();
         let cont_val = self.value(cont);
         for _ in 0..num {
@@ -124,8 +114,6 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn op_if_bool(&mut self, block: Block, value: Value) -> (Block, Block, Block) {
-        assert!(self.state.is_none());
-
         let true_cont = self.fun.block_insert();
         let true_cont_val = self.value(true_cont);
         let false_cont = self.fun.block_insert();
@@ -149,8 +137,6 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn op_if_bool_strict(&mut self, block: Block, value: Value) -> (Block, Block) {
-        assert!(self.state.is_none());
-
         let true_cont = self.fun.block_insert();
         let true_cont_val = self.value(true_cont);
         let false_cont = self.fun.block_insert();
@@ -175,7 +161,6 @@ impl<'a> FunctionBuilder<'a> {
         if size.is_some() {
             assert!(specifier.has_size());
         }
-        assert!(self.state.is_none());
 
         let ok_cont = self.fun.block_insert();
         self.fun.block_arg_insert(ok_cont);
@@ -205,8 +190,6 @@ impl<'a> FunctionBuilder<'a> {
 
 
     pub fn op_unreachable(&mut self, block: Block) {
-        assert!(self.state.is_none());
-
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
@@ -299,8 +282,6 @@ impl CaseBuilder {
     }
 
     pub fn finish<'a>(mut self, block: Block, b: &mut FunctionBuilder<'a>) {
-        assert!(b.state.is_none());
-
         // Validate that the number of values matches between the
         // clauses and reads
         let mut num_values = 0;

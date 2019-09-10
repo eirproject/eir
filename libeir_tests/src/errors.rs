@@ -1,13 +1,11 @@
-use std::rc::Rc;
-
-use super::{ lower, write_dot };
+use super::lower;
 
 use libeir_ir::{ FunctionIdent };
 use libeir_syntax_erl::{ ParseConfig };
 use libeir_intern::{ Ident, Symbol };
 use libeir_passes::PassManager;
 
-use libeir_interpreter::{ VMState, Term, ErlEq };
+use libeir_interpreter::{ VMState, Term };
 
 #[test]
 fn test_basic_catch() {

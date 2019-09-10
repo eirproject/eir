@@ -1,12 +1,9 @@
 use libeir_ir::{
-    Module as IrModule,
     FunctionBuilder,
     Value as IrValue,
     Block as IrBlock,
-    BinOp as IrBinOp,
-    MapPutUpdate,
 };
-use libeir_ir::constant::{ IntTerm, AtomTerm, NilTerm, BinaryTerm, EmptyMap };
+use libeir_ir::constant::NilTerm;
 
 use libeir_intern::{ Ident, Symbol };
 use libeir_diagnostics::DUMMY_SPAN;

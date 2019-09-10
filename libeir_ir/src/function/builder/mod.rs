@@ -3,8 +3,7 @@ use super::ValueKind;
 use super::{ PrimOpData, PrimOpKind };
 use super::{ Function };
 
-use crate::{ BinOp, MapPutUpdate };
-//use crate::algo::Mangler;
+use crate::BinOp;
 use crate::constant::{ ConstantContainer, IntoConst };
 use crate::pattern::{ PatternContainer };
 
@@ -48,18 +47,8 @@ impl<T> IntoValue for T where T: IntoConst {
     }
 }
 
-#[derive(Debug, Clone)]
-enum BuilderState {
-    MapPut {
-        block: Block,
-        action: Vec<MapPutUpdate>,
-    },
-}
-
 pub struct FunctionBuilder<'a> {
     fun: &'a mut Function,
-
-    state: Option<BuilderState>,
 
     block_buf: Option<Vec<Block>>,
     value_buf: Option<Vec<Value>>,
@@ -76,8 +65,6 @@ impl<'a> FunctionBuilder<'a> {
         // reusable struct
         FunctionBuilder {
             fun,
-
-            state: None,
 
             block_buf: Some(Vec::new()),
             value_buf: Some(Vec::new()),

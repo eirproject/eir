@@ -1,8 +1,6 @@
 use std::cmp::Ordering;
 use std::hash::{ Hash, Hasher };
 
-use num_traits::{ CheckedShr };
-
 use super::{ BitCarrier, BitRead, BitWrite };
 use super::BitSlice;
 

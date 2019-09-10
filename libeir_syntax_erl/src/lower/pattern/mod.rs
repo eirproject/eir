@@ -1,4 +1,4 @@
-use std::collections::{ HashMap };
+use std::collections::HashMap;
 
 use libeir_ir::{
     FunctionBuilder,
@@ -8,9 +8,7 @@ use libeir_ir::{
 };
 use libeir_ir::pattern::{
     PatternClause,
-    PatternNode,
     PatternValue,
-    PatternMergeFail,
 };
 
 
@@ -20,11 +18,7 @@ use crate::parser::ast::{ Expr, Guard };
 use super::{ LowerCtx, lower_block, ScopeToken };
 
 
-use libeir_intern::{ Ident, Symbol };
-
-//mod prewalk;
-//mod lower;
-//mod collect_binds;
+use libeir_intern::Ident;
 
 mod tree;
 use tree::Tree;
@@ -220,7 +214,7 @@ impl ClauseLowerCtx {
             let val = b.block_arg_insert(guard_lambda_block);
             if let Some(name) = bind {
                 if shadow {
-                    ctx.scope.bind_shadow(*name, val);
+                    let _ = ctx.scope.bind_shadow(*name, val);
                 } else {
                     ctx.bind(*name, val);
                 }

@@ -1,3 +1,6 @@
+#![deny(warnings)]
+#![cfg(test)]
+
 use std::path::Path;
 
 use libeir_ir::{ Module, FunctionIdent };

@@ -3,7 +3,7 @@ use std::io::Write;
 use petgraph::Direction;
 use petgraph::visit::EdgeRef;
 
-use crate::cfg::{ PatternCfg, CfgNodeKind };
+use crate::cfg::PatternCfg;
 use crate::pattern::PatternProvider;
 
 const DOT_BREAK: &str = "<br align=\"left\" />";

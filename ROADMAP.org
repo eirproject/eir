@@ -1,0 +1,24 @@
+* Roadmap
+** 1. Cleanup
+*** Includes fixing all tech dept created leading up to the conference
+*** Setting up infrastructure for writing integration tests using the interpreter
+**** Ease work for Luke, Paul, improve confidence in high levels of compiler and the runtime
+** 2. Basic passes
+*** Unified cleanup pass
+**** Includes removal of call chains, tail call promotion, closure inlining in one pass.
+*** Simple branch elimination pass
+**** Removes superfluous branches
+** 3. Lower utilities
+*** Introduce a barebones more traditional IR (LIR)
+**** No passes operate on this (at least for now), eases lowering to other IRs
+** 4. Documentation
+*** Write gitbook-like documentation for EIR
+**** Critical for enabling others to work with the project efficiently
+** 5. BEAM assembly target
+*** Target BEAM assembly from LIR
+**** Enables more easy testing of compiler
+**** Comparing our optimization passes with the BEAM compiler
+***** Proves our approach of using a Thorin-like IR is beneficial
+** 6. Typing infrastructure
+*** This is critical for doing good native codegen
+

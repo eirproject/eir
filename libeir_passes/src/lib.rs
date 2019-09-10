@@ -1,3 +1,5 @@
+#[deny(warnings)]
+
 use libeir_ir::{ Module, FunctionBuilder };
 
 mod compile_pattern;

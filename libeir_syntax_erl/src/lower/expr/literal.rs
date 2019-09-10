@@ -31,7 +31,6 @@ pub(super) fn lower_literal(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: 
             }
         },
         Literal::Char(_id, _span, c) => b.value(*c),
-        _ => unimplemented!("{:?}", literal),
     };
     (block, value)
 }
@@ -41,7 +40,7 @@ pub fn tokenize_string(ident: Ident) -> Result<Vec<u64>, LowerError> {
 
     // http://erlang.org/doc/reference_manual/data_types.html#escape-sequences
 
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     enum StringState {
         Norm,
         Escape { start: usize },
@@ -143,19 +142,7 @@ pub fn tokenize_string(ident: Ident) -> Result<Vec<u64>, LowerError> {
                 }
             }
             StringState::Oct { start, digit_start, num } => {
-                let curr_valid = c.is_digit(8);
-
-                if num == 3 || !curr_valid {
-                    let parsed = u64::from_str_radix(&full[digit_start..idx], 8).unwrap();
-                    out.push(parsed);
-                    *state = StringState::Norm;
-                    process(state, out, ident, full, idx, c)?;
-                } else if num == 0 {
-                    unreachable!()
-                } else {
-                    *state = StringState::Oct { start, digit_start, num: num + 1 };
-                }
-
+                *state = StringState::Oct { start, digit_start, num: num + 1 };
             }
             StringState::HexStart { start } => {
                 match c {
@@ -170,7 +157,59 @@ pub fn tokenize_string(ident: Ident) -> Result<Vec<u64>, LowerError> {
                     }
                 }
             }
-            _ => unimplemented!(),
+            StringState::Hex2 { start, digit_start, num } => {
+                if !c.is_digit(16) {
+                    unimplemented!()
+                } else {
+                    *state = StringState::Hex2 { start, digit_start, num: num + 1 };
+                }
+            }
+            StringState::HexN { digit_start, .. } => {
+                if c == '}' {
+                    let parsed = u64::from_str_radix(&full[digit_start..idx], 16).unwrap();
+                    out.push(parsed);
+                    *state = StringState::Norm;
+                }
+            }
+            StringState::Control { .. } => {
+                let cl = c.to_ascii_lowercase();
+                if cl >= 'a' && cl <= 'z' {
+                    let num = (cl as u64 - 'a' as u64) + 1;
+                    out.push(num);
+                    *state = StringState::Norm;
+                } else {
+                    unimplemented!()
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn post_process(state: &mut StringState, out: &mut Vec<u64>, full: &str,
+                    idx: usize, c: Option<char>) -> Result<(), LowerError> {
+        match *state {
+            StringState::Oct { digit_start, num, .. } => {
+                if let Some(ci) = c {
+                    if num == 3 || !ci.is_digit(8) {
+                        let parsed = u64::from_str_radix(&full[digit_start..idx], 8).unwrap();
+                        out.push(parsed);
+                        *state = StringState::Norm;
+                    }
+                } else {
+                    let parsed = u64::from_str_radix(&full[digit_start..idx], 8).unwrap();
+                    out.push(parsed);
+                    *state = StringState::Norm;
+                }
+            }
+            StringState::Hex2 { digit_start, num, .. } => {
+                if num == 2 {
+                    let parsed = u64::from_str_radix(&full[digit_start..idx], 16).unwrap();
+                    out.push(parsed);
+                    *state = StringState::Norm;
+                }
+            }
+            _ => (),
         }
 
         Ok(())
@@ -179,8 +218,10 @@ pub fn tokenize_string(ident: Ident) -> Result<Vec<u64>, LowerError> {
     let mut chars = Vec::new();
     let mut state = StringState::Norm;
     for (idx, c) in string.char_indices() {
+        post_process(&mut state, &mut chars, string, idx, Some(c))?;
         process(&mut state, &mut chars, ident, string, idx, c)?;
     }
+    post_process(&mut state, &mut chars, string, string.len(), None)?;
 
     Ok(chars)
 }
@@ -195,4 +236,76 @@ pub fn intern_string_const(ident: Ident, c: &mut ConstantContainer) -> Result<Co
     }
 
     Ok(c.from(cons))
+}
+
+#[cfg(test)]
+mod tests {
+    use libeir_intern::Ident;
+
+    use super::tokenize_string;
+
+    #[test]
+    fn string_literal_parse() {
+        assert!(
+            tokenize_string(Ident::from_str("abc")).unwrap() ==
+                vec!['a' as u64, 'b' as u64, 'c' as u64]
+        );
+
+        assert!(
+            tokenize_string(Ident::from_str("a\\bc")).unwrap() ==
+                vec!['a' as u64, 8, 'c' as u64]
+        );
+
+        assert!(
+            tokenize_string(Ident::from_str("a\\b\\d\\e\\f\\n\\r\\s\\t\\vc")).unwrap() ==
+                vec!['a' as u64, 8, 127, 27, 12, 10, 13, ' ' as u64, 9, 11, 'c' as u64]
+        );
+
+        assert!(
+            tokenize_string(Ident::from_str("a\\'\\\"\\\\c")).unwrap() ==
+                vec!['a' as u64, '\'' as u64, '"' as u64, '\\' as u64, 'c' as u64]
+        );
+
+        assert!(
+            tokenize_string(Ident::from_str("a\\1\\12\\123c")).unwrap() ==
+                vec!['a' as u64, 0o1, 0o12, 0o123, 'c' as u64]
+        );
+        assert!(
+            tokenize_string(Ident::from_str("\\123")).unwrap() ==
+                vec![0o123]
+        );
+        assert!(
+            tokenize_string(Ident::from_str("\\12")).unwrap() ==
+                vec![0o12]
+        );
+        assert!(
+            tokenize_string(Ident::from_str("\\1")).unwrap() ==
+                vec![0o1]
+        );
+
+        assert!(
+            tokenize_string(Ident::from_str("a\\xffc")).unwrap() ==
+                vec!['a' as u64, 0xff, 'c' as u64]
+        );
+        assert!(
+            tokenize_string(Ident::from_str("\\xff")).unwrap() ==
+                vec![0xff]
+        );
+
+        assert!(
+            tokenize_string(Ident::from_str("\\x{ff}")).unwrap() ==
+                vec![0xff]
+        );
+        assert!(
+            tokenize_string(Ident::from_str("\\x{ffff}")).unwrap() ==
+                vec![0xffff]
+        );
+
+        assert!(
+            tokenize_string(Ident::from_str("\\^a\\^z")).unwrap() ==
+                vec![1, 26]
+        );
+
+    }
+
 }

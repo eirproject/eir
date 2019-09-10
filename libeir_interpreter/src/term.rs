@@ -748,21 +748,21 @@ impl ErlEq for Term {
              Term::CapturedFunction { ident: ref ident2 }) =>
                 ident1 == ident2,
             _ => {
-                crate::trace::warning_args(
-                    "WARNING: ErlEq might be unimplemented".to_string(),
-                    || {
-                        let mut event_args = std::collections::HashMap::new();
-                        event_args.insert(
-                            "lhs".to_string(),
-                            ::serde_json::Value::String(format!("{:?}", self))
-                        );
-                        event_args.insert(
-                            "rhs".to_string(),
-                            ::serde_json::Value::String(format!("{:?}", other))
-                        );
-                        event_args
-                    }
-                );
+                //crate::trace::warning_args(
+                //    "WARNING: ErlEq might be unimplemented".to_string(),
+                //    || {
+                //        let mut event_args = std::collections::HashMap::new();
+                //        event_args.insert(
+                //            "lhs".to_string(),
+                //            ::serde_json::Value::String(format!("{:?}", self))
+                //        );
+                //        event_args.insert(
+                //            "rhs".to_string(),
+                //            ::serde_json::Value::String(format!("{:?}", other))
+                //        );
+                //        event_args
+                //    }
+                //);
                 println!("WARNING: ErlEq might be unimplemented");
                 println!("  {:?} == {:?}", self, other);
                 false

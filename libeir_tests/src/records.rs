@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use super::{ lower, write_dot };
 
 use libeir_ir::{ FunctionIdent };

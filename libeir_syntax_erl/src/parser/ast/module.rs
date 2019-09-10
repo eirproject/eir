@@ -1293,9 +1293,6 @@ impl CompileOptions {
 
 }
 
-fn walk_function_list() {
-}
-
 fn to_list_simple(mut expr: &Expr) -> Vec<Expr> {
     let mut list = Vec::new();
     loop {

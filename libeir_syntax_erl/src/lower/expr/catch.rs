@@ -1,12 +1,9 @@
 use libeir_ir::{
-    Module as IrModule,
     FunctionBuilder,
     CaseBuilder,
     Value as IrValue,
     Block as IrBlock,
-    BinOp as IrBinOp,
 };
-
 
 use libeir_intern::Symbol;
 
@@ -77,7 +74,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                     // Pop scope pushed in lower_clause
                     ctx.scope.pop(scope_token);
                 }
-                Err(lowered) => {},
+                Err(_lowered) => {},
             }
             assert!(ctx.exc_stack.len() == entry_exc_height)
         }
@@ -136,7 +133,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                     // Pop scope pushed in lower_clause
                     ctx.scope.pop(scope_token);
                 }
-                Err(lowered) => {},
+                Err(_lowered) => {},
             }
 
             assert!(ctx.exc_stack.len() == entry_exc_height)

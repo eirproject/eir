@@ -3,7 +3,7 @@ use std::ops::Index;
 use cranelift_entity::{ PrimaryMap, EntityRef };
 use crate::aux_hash_map::{ AuxHashMap, AuxHash, AuxEq };
 
-type DedupPrimaryMap<K, V> = DedupAuxPrimaryMap<K, V, ()>;
+pub type DedupPrimaryMap<K, V> = DedupAuxPrimaryMap<K, V, ()>;
 
 #[derive(Debug, Clone)]
 pub struct DedupAuxPrimaryMap<K, V, C>

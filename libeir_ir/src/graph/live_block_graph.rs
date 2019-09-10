@@ -1,10 +1,8 @@
 use std::collections::HashSet;
 
 use petgraph::Direction;
-use petgraph::visit::{ GraphBase, IntoNeighbors, IntoNeighborsDirected, Visitable, Walker };
+use petgraph::visit::{ GraphBase, IntoNeighbors, IntoNeighborsDirected, Visitable };
 use petgraph::visit::{ Dfs, DfsPostOrder };
-
-use cranelift_entity::{ EntityRef, EntitySet };
 
 use itertools::Either;
 

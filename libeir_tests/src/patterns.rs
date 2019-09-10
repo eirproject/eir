@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use super::{ lower, write_dot };
+use super::lower;
 
 use libeir_ir::{ FunctionIdent };
 use libeir_syntax_erl::{ ParseConfig };

@@ -78,7 +78,7 @@ impl Mangler {
     }
 
     /// Copies the signature of the entry block.
-    pub fn copy_entry(&mut self, fun: &Function) {
+    pub fn copy_entry(&mut self, _fun: &Function) {
         unimplemented!()
     }
 

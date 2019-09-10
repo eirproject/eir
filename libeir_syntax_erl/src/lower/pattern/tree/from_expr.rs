@@ -1,16 +1,11 @@
 use std::convert::TryInto;
 use either::Either;
 
-use cranelift_entity::{ PrimaryMap, SecondaryMap, EntityList, ListPool,
-                        entity_impl };
-
+use cranelift_entity::EntityList;
 
 use libeir_ir::{
     FunctionBuilder,
-    Value as IrValue,
     Block,
-    Const,
-    BinaryEntrySpecifier,
     NilTerm,
     AtomicTerm,
     IntTerm,

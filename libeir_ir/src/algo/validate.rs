@@ -183,7 +183,7 @@ impl Function {
                         });
                     }
                     Ok(())
-                });
+                }).unwrap();
             }
         }
 

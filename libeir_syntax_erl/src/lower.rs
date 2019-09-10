@@ -76,9 +76,6 @@ impl<'a> LowerCtx<'a> {
         self.errors.push(err);
     }
 
-    pub fn try_resolve(&self, ident: Ident) -> Result<IrValue, LowerError> {
-        self.scope.resolve(ident)
-    }
     pub fn resolve(&mut self, ident: Ident) -> IrValue {
         match self.scope.resolve(ident) {
             Ok(val) => val,
@@ -180,6 +177,8 @@ pub fn lower_module(module: &Module) -> (Result<IrModule, ()>, Vec<LowerError>) 
         lower_top_function(&mut ctx, &mut builder, function);
         println!("FAIL: {:?}", ctx.failed);
     }
+
+    ctx.exc_stack.finish();
 
     //println!("{} {:#?}", ctx.failed, ctx.errors);
     //let emitter = libeir_diagnostics::StandardStreamEmitter::new(libeir_diagnostics::ColorChoice::Auto)
@@ -295,7 +294,7 @@ fn lower_function_base(
                 },
                 // When the pattern of the clause is unmatchable, we don't add it to
                 // the case.
-                Err(lowered) => {},
+                Err(_lowered) => {},
             }
             assert!(ctx.exc_stack.len() == entry_exc_height)
         }

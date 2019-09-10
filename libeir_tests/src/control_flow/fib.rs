@@ -1,4 +1,4 @@
-use crate::{ lower, write_dot };
+use crate::lower;
 
 use libeir_ir::{ FunctionIdent };
 use libeir_syntax_erl::{ ParseConfig };

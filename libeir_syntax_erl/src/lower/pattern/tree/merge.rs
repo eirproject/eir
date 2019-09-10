@@ -6,8 +6,7 @@ use libeir_ir::{
     FunctionBuilder,
 };
 
-use cranelift_entity::{ PrimaryMap, SecondaryMap, EntityList, ListPool,
-                        entity_impl };
+use cranelift_entity::EntityList;
 
 use crate::lower::{ LowerCtx, LowerError };
 use super::{ Tree, TreeNode, TreeNodeKind };

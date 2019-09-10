@@ -8,10 +8,8 @@ use libeir_ir::{
 };
 use libeir_intern::Ident;
 
-
 use super::{ Tree, TreeNode, TreeNodeKind, ConstraintKind };
 use super::super::{ ClauseLowerCtx, EqGuard };
-use crate::lower::LowerCtx;
 
 impl Tree {
 
@@ -73,17 +71,6 @@ impl Tree {
 
     pub fn pseudo_binds(&self) -> Vec<Ident> {
         self.resolved_binds.as_ref().unwrap().keys().cloned().collect()
-    }
-
-    pub fn pseudo_bind(
-        &self,
-        _b: &mut FunctionBuilder,
-        ctx: &mut LowerCtx,
-    ) {
-        let sentinel = ctx.sentinel();
-        for bind in self.resolved_binds.as_ref().unwrap().keys() {
-            ctx.bind(*bind, sentinel);
-        }
     }
 
 }

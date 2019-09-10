@@ -32,6 +32,7 @@ fn compiler() {
     }
 }
 
+#[ignore]
 #[test]
 fn beam_disasm() {
     let mut config = ParseConfig::default();
@@ -51,6 +52,7 @@ fn beam_disasm() {
 
 }
 
+#[ignore]
 #[test]
 fn core_parse() {
     let mut config = ParseConfig::default();
@@ -128,7 +130,8 @@ fn bs_match_suite() {
     run_ct_suite(&mut vm, Ident::from_str("bs_match_SUITE"));
 }
 
-//#[test]
+#[ignore]
+#[test]
 fn maps_suite() {
     let config = ParseConfig::default();
     let mut maps_eir_mod = lower_file(
@@ -175,6 +178,7 @@ fn xmerl_scan() {
     pass_manager.run(&mut eir_mod);
 }
 
+#[ignore]
 #[test]
 fn xmerl_sax_parser_utf8() {
     let mut config = ParseConfig::default();
@@ -193,7 +197,8 @@ fn xmerl_sax_parser_utf8() {
     pass_manager.run(&mut eir_mod);
 }
 
-//#[test]
+#[ignore]
+#[test]
 fn foo() {
     let config = ParseConfig::default();
     let mut eir_mod = lower_file(

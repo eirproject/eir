@@ -777,9 +777,9 @@ bar() -> 2.
     #[test]
     fn parse_elixir_enum_erl() {
         use std::io::Read;
-        let mut file = std::fs::File::open("../test_data/Elixir.Enum.erl");
+        let file = std::fs::File::open("../test_data/Elixir.Enum.erl");
         let mut string = String::new();
-        file.unwrap().read_to_string(&mut string);
+        file.unwrap().read_to_string(&mut string).unwrap();
 
         let _result: Module = parse(&string);
     }

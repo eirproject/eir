@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 use std::fmt::{ Display, Formatter };
 use std::collections::HashMap;
 use std::cmp::Ordering;

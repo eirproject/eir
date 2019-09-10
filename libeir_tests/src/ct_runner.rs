@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 
 use libeir_ir::FunctionIdent;
 use libeir_intern::{ Ident, Symbol };
@@ -88,7 +87,6 @@ fn get_suite_spec(vm: &mut VMState, module: Ident) -> SuiteSpec {
 
 pub fn run_ct_suite(vm: &mut VMState, module: Ident) {
     let spec = get_suite_spec(vm, module);
-    println!("{:?}", spec);
 
     let config = Term::Nil;
 

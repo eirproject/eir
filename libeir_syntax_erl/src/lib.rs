@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 mod lexer;
 mod parser;
 mod preprocessor;

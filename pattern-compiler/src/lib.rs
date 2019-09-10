@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 // Implements a variant of
 // http://www.cs.tufts.edu/~nr/cs257/archive/luc-maranget/jun08.pdf
 
@@ -25,7 +27,6 @@ pub struct MatchCompileContext<'a, P> where P: pattern::PatternProvider + 'a {
     pattern: &'a mut P,
 
     cfg: cfg::PatternCfg<P>,
-    //leaf_bindings: HashMap<NodeIndex, HashMap<P::PatternNodeKey, P::CfgVariable>>,
 
     root_matrix: matrix::MatchMatrix<P>,
     fail_leaf: NodeIndex,
@@ -41,13 +42,6 @@ impl<'a, P> MatchCompileContext<'a, P> where P: PatternProvider {
             .map(|idx| LeafId(idx))
             .collect();
 
-        //let leaf_bindings = leaves.iter()
-        //    .map(|leaf| {
-        //        let bindings: HashMap<P::PatternNodeKey, P::CfgVariable> = HashMap::new();
-        //        (*leaf, bindings)
-        //    })
-        //    .collect();
-
         let root_matrix = matrix::MatchMatrix::new(
             &root.nodes, leaves, root.variables);
 
@@ -55,7 +49,6 @@ impl<'a, P> MatchCompileContext<'a, P> where P: PatternProvider {
             pattern: pattern,
 
             cfg: cfg,
-            //leaf_bindings: leaf_bindings,
 
             root_matrix: root_matrix,
             fail_leaf: fail_leaf,

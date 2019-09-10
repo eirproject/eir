@@ -12,20 +12,15 @@ use cranelift_entity::{ PrimaryMap, SecondaryMap, EntityList, ListPool,
 use libeir_ir::{
     FunctionBuilder,
     Value as IrValue,
-    Block,
     Const,
     BinaryEntrySpecifier,
-    NilTerm,
-    AtomicTerm,
-    IntTerm,
     PrimOp,
 };
 
 use libeir_diagnostics::{ ByteSpan };
 use libeir_intern::Ident;
 
-use crate::lower::{ lower_single, LowerCtx, LowerError };
-
+use crate::lower::LowerCtx;
 
 mod from_expr;
 

@@ -15,10 +15,6 @@ impl ExceptionHandlerStack {
         self.stack.push((handler, true));
     }
 
-    pub fn push_anon_handler(&mut self, handler: Value) {
-        self.stack.push((handler, false));
-    }
-
     pub fn pop_handler(&mut self) {
         self.stack.pop();
     }

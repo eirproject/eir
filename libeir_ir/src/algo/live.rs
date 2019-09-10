@@ -63,7 +63,7 @@ fn dataflow_pass(
                     set.insert(v, pool);
                 }
                 Ok(())
-            });
+            }).unwrap();
         }
 
         // Remove the block arguments from the current set
