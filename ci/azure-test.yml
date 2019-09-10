@@ -19,7 +19,7 @@ jobs:
         parameters:
           rust_version: ${{ parameters.rust }}
 
-      - template: azure-install-dependencies.yml
+#      - template: azure-install-dependencies.yml
 
       - template: azure-clone-patch-otp.yml
 
