@@ -7,7 +7,7 @@ use cranelift_entity::{ EntityRef, EntitySet };
 
 use itertools::Either;
 
-use libeir_util::pooled_entity_set::PooledEntitySetIter;
+use libeir_util_datastructures::pooled_entity_set::PooledEntitySetIter;
 
 use crate::Function;
 use crate::{ Block };

@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use libeir_diagnostics::ByteSpan;
-use libeir_util::bigint_to_float::bigint_to_double;
+use libeir_util_num::bigint_to_double;
 use num_bigint::BigInt;
 
 use super::{NodeId};

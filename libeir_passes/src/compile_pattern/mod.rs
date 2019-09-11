@@ -1,13 +1,13 @@
-use ::matches::{ matches };
+use matches::{ matches };
 
 use std::collections::HashMap;
 
-use ::libeir_ir::OpKind;
-use ::libeir_ir::{ Value };
-use ::libeir_ir::{ Function, FunctionBuilder, Dialect };
-use ::libeir_ir::{ PatternNode, PatternValue };
+use libeir_ir::OpKind;
+use libeir_ir::{ Value };
+use libeir_ir::{ FunctionBuilder };
+use libeir_ir::{ PatternNode };
 
-use ::pattern_compiler::{ to_decision_tree };
+use libeir_util_pattern_compiler::{ to_decision_tree };
 
 mod erlang_pattern_provider;
 use self::erlang_pattern_provider::pattern_to_provider;
@@ -158,11 +158,4 @@ pub(super) enum ValueBind {
     Value(Value),
     Node(PatternNode),
 }
-
-struct PatternContext {
-    value_map: HashMap<PatternValue, ValueBind>,
-}
-
-
-
 

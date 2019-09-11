@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::ops::{ Index, IndexMut };
 
 use cranelift_entity::{ PrimaryMap, entity_impl };
-use libeir_util::pooled_entity_set::PooledEntitySet;
+use libeir_util_datastructures::pooled_entity_set::PooledEntitySet;
 use super::{ Block, Const, PrimOp };
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use libeir_ir::{FunctionBuilder, Mangler};
 use libeir_ir::{Value, Block, OpKind};
@@ -50,7 +50,7 @@ impl SimplifyCfgPass {
         self.block_calls.clear();
         self.map.clear();
 
-        let entry = b.fun().block_entry();
+        let _entry = b.fun().block_entry();
         let graph = b.fun().live_block_graph();
 
         // Collect all calls in the CFG

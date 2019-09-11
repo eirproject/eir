@@ -1,7 +1,7 @@
 use crate::{ Function, OpKind };
 use crate::{ Block, Value };
 
-use libeir_util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
+use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
 use cranelift_entity::ListPool;
 
 use std::collections::{ HashMap, HashSet };

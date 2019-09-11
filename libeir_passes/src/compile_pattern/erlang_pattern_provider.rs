@@ -1,5 +1,5 @@
 use cranelift_entity::{ PrimaryMap, EntityList, ListPool, entity_impl };
-use ::pattern_compiler::{ PatternProvider, ExpandedClauseNodes };
+use libeir_util_pattern_compiler::{ PatternProvider, ExpandedClauseNodes };
 
 use std::collections::{ HashMap, BTreeMap };
 

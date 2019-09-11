@@ -1,4 +1,3 @@
-
 use ::std::rc::Rc;
 use std::hash::{ Hash, Hasher };
 use std::cmp::{ Ord, Ordering };
@@ -8,8 +7,8 @@ use libeir_intern::{ Symbol, LocalInternedString };
 
 use libeir_ir::{ FunctionIdent, Block };
 
-use libeir_util::binary::{ BitRead };
-use libeir_util::binary::{ BitVec, BitSlice, copy as bit_copy };
+use libeir_util_binary::{ BitRead };
+use libeir_util_binary::{ BitVec, BitSlice, copy as bit_copy };
 
 use ::num_bigint::BigInt;
 use ::num_traits::cast::ToPrimitive;

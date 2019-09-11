@@ -1,18 +1,17 @@
 [workspace]
 
 members = [
-#    "libeir_hir",
     "libeir_diagnostics",
     "libeir_intern",
     "libeir_syntax_erl",
-#    "libeir_syntax_core",
-    "libeir_util",
     "libeir_ir",
     "libeir_passes",
     "libeir_interpreter",
     "libeir_tests",
-    "pattern-compiler",
-    "tools",
-#    "gen_nif",
     "libeir_lowerutils",
+    "tools",
+    "util/libeir_util_datastructures",
+    "util/libeir_util_pattern_compiler",
+    "util/libeir_util_binary",
+    "util/libeir_util_num",
 ]

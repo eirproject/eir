@@ -9,7 +9,7 @@ use libeir_ir::{ BinaryEntrySpecifier, Endianness };
 use libeir_ir::constant::{ Const, ConstKind, AtomicTerm };
 use libeir_intern::Ident;
 
-use libeir_util::binary::{ BitVec, BitSlice, integer_to_carrier, Endian };
+use libeir_util_binary::{ BitVec, BitSlice, integer_to_carrier, Endian };
 
 use crate::term::{ Term, Pid, ErlEq, MapTerm };
 use crate::module::{ ModuleType, ErlangModule, ErlangFunction, NativeModule, NativeReturn };

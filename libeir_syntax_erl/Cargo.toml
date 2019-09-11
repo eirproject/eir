@@ -13,7 +13,8 @@ build = "build.rs"
 libeir_diagnostics = { path = "../libeir_diagnostics" }
 libeir_ir = { path = "../libeir_ir" }
 libeir_intern = { path = "../libeir_intern" }
-libeir_util = { path = "../libeir_util" }
+libeir_util_datastructures = { path = "../util/libeir_util_datastructures" }
+libeir_util_num = { path = "../util/libeir_util_num" }
 
 cranelift-entity = "0.30.0"
 

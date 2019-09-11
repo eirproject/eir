@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 libeir_intern = { path = "../libeir_intern" }
 libeir_diagnostics = { path = "../libeir_diagnostics" }
-libeir_util = { path = "../libeir_util" } 
+libeir_util_datastructures = { path = "../util/libeir_util_datastructures" }
 
 string-intern = { version = "0.1.7", default-features = false }
 pretty = "0.3.3"

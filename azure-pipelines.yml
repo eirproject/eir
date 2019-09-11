@@ -20,4 +20,3 @@ jobs:
         libeir_passes: []
         libeir_syntax_erl: []
         libeir_tests: []
-

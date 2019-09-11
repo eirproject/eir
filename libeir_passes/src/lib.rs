@@ -1,4 +1,4 @@
-#[deny(warnings)]
+#![deny(warnings)]
 
 use libeir_ir::{ Module, FunctionBuilder };
 
@@ -8,8 +8,8 @@ pub use self::compile_pattern::CompilePatternPass;
 mod naive_inline_closures;
 pub use self::naive_inline_closures::NaiveInlineClosuresPass;
 
-mod simplify_cfg;
-pub use self::simplify_cfg::SimplifyCfgPass;
+//mod simplify_cfg;
+//pub use self::simplify_cfg::SimplifyCfgPass;
 
 pub trait FunctionPass {
     fn run_function_pass(&mut self, b: &mut FunctionBuilder);

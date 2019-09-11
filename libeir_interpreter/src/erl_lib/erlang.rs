@@ -1,6 +1,5 @@
-
 use libeir_intern::Symbol;
-use libeir_util::bigint_to_float::bigint_to_double;
+use libeir_util_num::bigint_to_double;
 
 use crate::vm::{ VMState };
 use crate::module::{ NativeModule, NativeReturn };

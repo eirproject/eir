@@ -1,6 +1,6 @@
 [package]
 authors = ["HansiHE <hansihe@hansihe.com>"]
-name = "pattern-compiler"
+name = "libeir_util_pattern_compiler"
 version = "0.1.0"
 edition = "2018"
 

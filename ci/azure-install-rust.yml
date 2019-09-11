@@ -23,7 +23,13 @@ steps:
       RUSTUP_TOOLCHAIN: ${{parameters.rust_version}}-gnu
     displayName: "Install rust (windows)"
     condition: eq(variables['Agent.OS'], 'Windows_NT')
+
   # All platforms.
+  # Add components
+  - ${{ each component in parameters.components }}:
+      - script: rustup component add ${{ component }}
+        displayName: Add rust component: ${{ component }}
+  # Print versions
   - script: |
         rustup toolchain list
         rustc -Vv

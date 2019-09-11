@@ -1,8 +1,7 @@
-
 use libeir_ir::{ Block, MatchKind, BasicType, BinaryEntrySpecifier, Endianness };
 
-use libeir_util::binary::{ BitCarrier };
-use libeir_util::binary::{ BitVec, BitSlice, carrier_to_integer, Endian };
+use libeir_util_binary::{ BitCarrier };
+use libeir_util_binary::{ BitVec, BitSlice, carrier_to_integer, Endian };
 
 use crate::{ Term };
 use crate::module::ErlangFunction;

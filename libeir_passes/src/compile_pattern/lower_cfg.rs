@@ -4,7 +4,7 @@ use libeir_ir::FunctionBuilder;
 use libeir_ir::{ Block, Value, BasicType };
 use libeir_ir::pattern::{ PatternClause, PatternNode };
 
-use pattern_compiler::{ PatternCfg, CfgNodeKind, EdgeRef, NodeIndex };
+use libeir_util_pattern_compiler::{ PatternCfg, CfgNodeKind, EdgeRef, NodeIndex };
 
 use super::erlang_pattern_provider::{
     ErlangPatternProvider, NodeKind, Var, ValueOrConst,

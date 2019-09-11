@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{ Function };
 use crate::{ Block, Value };
 
-use libeir_util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
+use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
 
 impl Function {
 

@@ -12,7 +12,7 @@ use libeir_ir::{
 use libeir_intern::Ident;
 use libeir_diagnostics::DUMMY_SPAN;
 
-use libeir_util::hashmap_stack::HashMapStack;
+use libeir_util_datastructures::hashmap_stack::HashMapStack;
 
 use crate::lower::{ LowerCtx, LowerError };
 use super::{ Tree, TreeNode, TreeNodeKind, ConstraintKind };
@@ -75,16 +75,8 @@ impl<'a, 'b> PromoteCtx<'a, 'b> {
             self.binds.insert(ident, node);
             None
         };
-        //if hier {
-        //    self.binds.insert(ident, node);
-        //    self.binds_scope.insert(node, ());
-        //}
         res
     }
-
-    //fn hier_bind(&mut self, ident: Ident, node: TreeNode) {
-    //    self.binds_scope.insert(ident, node);
-    //}
 
 }
 
@@ -149,44 +141,6 @@ fn promote_values_node(
     node: TreeNode,
 ) {
     let kind = t.nodes[node].clone();
-
-    //if hier_bind {
-    //    println!("HIER {:?}", t.binds[node]);
-    //    println!("BINDS BEFORE {:?}", prom.binds_scope);
-    //}
-
-    //let constraints: BTreeSet<_> =
-    //    t.binds[node].iter()
-    //    .flat_map(|ident| {
-    //        prom.resolve_or_bind(hier_bind, *ident, node)
-    //        //if hier_bind {
-    //        //    prom.hier_bind(*ident, node);
-    //        //}
-    //        //match prom.resolve(*ident) {
-    //        //    None => {
-    //        //        prom.bind(*ident, node);
-    //        //        None
-    //        //    }
-    //        //    Some(v) => Some(v),
-    //        //}
-    //    })
-    //    .map(|v| {
-    //        match v {
-    //            Either::Left(node) => ConstraintKind::Node(node),
-    //            Either::Right(val) => {
-    //                match b.fun().value_kind(val) {
-    //                    ValueKind::Const(cons) => ConstraintKind::Const(cons),
-    //                    ValueKind::PrimOp(prim) => ConstraintKind::PrimOp(prim),
-    //                    _ => ConstraintKind::Value(val),
-    //                }
-    //            }
-    //        }
-    //    })
-    //    .collect();
-
-    //if hier_bind {
-    //    println!("BINDS AFTER {:?}", prom.binds_scope);
-    //}
 
     let constraints = &t.constraints[node];
     let mut const_iter = constraints.iter()
@@ -280,9 +234,6 @@ fn promote_values_node(
             let size_res = size.map(|v| match v {
                 // The size references another node
                 Either::Left(ident) => {
-                    println!("{:?}", ident);
-                    println!("RESOLVED {:?}", prom.resolve_only(ident));
-                    println!("BINDS_SCOPE {:?}", prom.binds_scope);
                     // We try to resolve it in the current pattern
                     match prom.resolve_only(ident) {
                         // We found a node in the pattern

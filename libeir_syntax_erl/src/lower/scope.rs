@@ -1,6 +1,6 @@
 use std::collections::{ HashMap, HashSet };
 
-use libeir_util::hashmap_stack::HashMapStack;
+use libeir_util_datastructures::hashmap_stack::HashMapStack;
 
 use libeir_ir::{
     Value as IrValue,

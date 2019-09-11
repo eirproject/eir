@@ -4,9 +4,9 @@ use std::cmp::Eq;
 
 use cranelift_entity::{ EntityRef, PrimaryMap, ListPool, EntityList, entity_impl };
 
-use libeir_util::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
-use libeir_util::aux_hash_map::{ AuxHash, AuxEq };
-use libeir_util::dedup_aux_primary_map::DedupAuxPrimaryMap;
+use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
+use libeir_util_datastructures::aux_hash_map::{ AuxHash, AuxEq };
+use libeir_util_datastructures::dedup_aux_primary_map::DedupAuxPrimaryMap;
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
 

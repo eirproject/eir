@@ -20,7 +20,8 @@ serde_json = "1.0"
 
 libeir_ir = { path = "../libeir_ir" }
 libeir_intern = { path = "../libeir_intern" }
-libeir_util = { path = "../libeir_util" }
+libeir_util_binary = { path = "../util/libeir_util_binary" }
+libeir_util_num = { path = "../util/libeir_util_num" }
 
 num-bigint = { git = "https://github.com/hansihe/num-bigint.git" }
 
