@@ -193,9 +193,6 @@ impl ToEirText for Module {
 
 impl ToEirText for Function {
     fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut dyn Write) -> std::io::Result<()> {
-
-        
-
         ctx.annotate_function(self);
         let ident = self.ident();
 

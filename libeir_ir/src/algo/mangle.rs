@@ -1,4 +1,4 @@
-use std::collections::{ HashMap, HashSet, BTreeSet };
+use std::collections::{ BTreeSet, BTreeMap };
 
 use crate::{ Function, FunctionBuilder };
 use crate::{ Value, Block };
@@ -15,14 +15,14 @@ pub struct Mangler {
     entry: Option<Block>,
     num_args: usize,
 
-    values_map: HashMap<Value, RenameDest>,
-    blocks_map: HashMap<Block, RenameDest>,
+    values_map: BTreeMap<Value, RenameDest>,
+    blocks_map: BTreeMap<Block, RenameDest>,
 
     value_buf: Vec<Value>,
 
     values: Option<BTreeSet<Value>>,
 
-    scope: Option<HashSet<Block>>,
+    scope: Option<BTreeSet<Block>>,
     to_walk: Vec<Block>,
 }
 
@@ -33,14 +33,14 @@ impl Mangler {
             entry: None,
             num_args: 0,
 
-            values_map: HashMap::new(),
-            blocks_map: HashMap::new(),
+            values_map: BTreeMap::new(),
+            blocks_map: BTreeMap::new(),
 
             value_buf: Vec::new(),
 
             values: Some(BTreeSet::new()),
 
-            scope: Some(HashSet::new()),
+            scope: Some(BTreeSet::new()),
             to_walk: Vec::new(),
         }
     }
@@ -52,7 +52,7 @@ impl Mangler {
         self.num_args = 0;
 
         self.values_map.clear();
-        self.values_map.clear();
+        self.blocks_map.clear();
 
         self.value_buf.clear();
 
@@ -155,6 +155,7 @@ impl Mangler {
                 if self.blocks_map.contains_key(&block) { continue; }
                 scope.insert(block);
 
+                println!("AAA: {:?}", from.block_reads(block));
                 for read in from.block_reads(block) {
                     from.value_walk_nested_values::<_, ()>(*read, &mut |val| {
                         to_map_values.insert(val);
@@ -190,31 +191,8 @@ impl Mangler {
         }
 
         // Map values
-        {
-            for val in to_map_values.iter() {
-                let kind = recv.from().value_kind(*val);
-                match kind {
-                    ValueKind::Const(_) => {
-                        self.values_map.insert(
-                            *val,
-                            RenameDest::Value(recv.map_const(*val)),
-                        );
-                    },
-                    ValueKind::PrimOp(_prim) => {
-                        unimplemented!()
-                    },
-                    ValueKind::Block(block) => {
-                        let dest = self.blocks_map[&block];
-                        self.values_map.insert(*val, dest);
-                    },
-                    ValueKind::Argument(_block, _num) => {
-                        if !self.values_map.contains_key(val) {
-                            let mapped = recv.map_free_value(*val);
-                            self.values_map.insert(*val, mapped.into());
-                        }
-                    },
-                }
-            }
+        for val in to_map_values.iter() {
+            self.map(recv, *val);
         }
 
         let copy_body = |mang: &mut Mangler, recv: &mut R, from_block: Block, to_block: Block| {
@@ -228,8 +206,6 @@ impl Mangler {
                 let mapped = mang.values_map[&mang.value_buf[n]];
                 mang.value_buf[n] = match mapped {
                     RenameDest::Value(value) => value,
-                    RenameDest::EntryArg(idx) =>
-                        recv.to().block_args(new_entry)[idx.0],
                     RenameDest::Block(block) =>
                         recv.to().value(block),
                 };
@@ -246,6 +222,8 @@ impl Mangler {
             for read in mang.value_buf.iter().cloned() {
                 data.reads.push(read, &mut to_fun.pool.value);
             }
+
+            recv.to().graph_update_block(to_block);
         };
 
         // Set entry body
@@ -262,6 +240,41 @@ impl Mangler {
         self.clear();
 
         new_entry
+    }
+
+    fn map<'a, R>(&mut self, recv: &mut R, val: Value) -> RenameDest where R: MangleReceiver<'a> {
+        if let Some(to) = self.values_map.get(&val) {
+            return *to;
+        }
+
+        let kind = recv.from().value_kind(val);
+        let dest = match kind {
+            ValueKind::Const(_) => {
+                recv.map_const(val).into()
+            },
+            ValueKind::PrimOp(prim) => {
+                let kind = *recv.from().primop_kind(prim);
+
+                let mut buf: Vec<Value> = recv.from().primop_reads(prim).to_owned();
+                for val in buf.iter_mut() {
+                    let to = match self.map(recv, *val) {
+                        RenameDest::Value(value) => value,
+                        RenameDest::Block(block) => recv.to().value(block),
+                    };
+                    *val = to;
+                }
+
+                recv.to().prim_from_kind(kind, &buf).into()
+            },
+            ValueKind::Block(block) => {
+                self.blocks_map[&block]
+            },
+            ValueKind::Argument(_block, _num) => {
+                recv.map_free_value(val).into()
+            },
+        };
+        self.values_map.insert(val, dest);
+        dest
     }
 
 }
@@ -284,7 +297,7 @@ impl RenameSource for Value {
 pub enum RenameDest {
     Value(Value),
     Block(Block),
-    EntryArg(EntryArg),
+    //EntryArg(EntryArg),
 }
 impl From<Value> for RenameDest {
     fn from(val: Value) -> Self {
@@ -294,11 +307,6 @@ impl From<Value> for RenameDest {
 impl From<Block> for RenameDest {
     fn from(val: Block) -> Self {
         RenameDest::Block(val)
-    }
-}
-impl From<EntryArg> for RenameDest {
-    fn from(val: EntryArg) -> Self {
-        RenameDest::EntryArg(val)
     }
 }
 impl RenameDest {
@@ -311,13 +319,28 @@ impl RenameDest {
 }
 
 trait MangleReceiver<'b> {
+    /// The function container that is the source of the mangle.
     fn from<'a>(&'a mut self) -> &'a Function;
+
+    /// The function builder that is the destination of the mangle.
     fn to<'a>(&'a mut self) -> &'a mut FunctionBuilder<'b>;
+
+    /// Maps a constant.
+    /// This should return a value that is usable in the destination
+    /// function.
     fn map_const(&mut self, val: Value) -> Value;
+
+    /// Maps a free value.
+    /// A free value in this context is a value from outside
+    /// the scope of the mangle.
     fn map_free_value(&mut self, val: Value) -> Value;
+
+    /// Maps a block operation. This should return an OpKind that is
+    /// usable in the destination function.
     fn map_block_op(&mut self, block: Block) -> OpKind;
 }
 
+/// This receiver performs a mangle within a single function container.
 struct SingleMangleReceiver<'a, 'b> {
     fun: &'a mut FunctionBuilder<'b>,
 }
@@ -339,6 +362,8 @@ impl<'b, 'c> MangleReceiver<'b> for SingleMangleReceiver<'c, 'b> {
     }
 }
 
+/// This receiver performs a mangle across to another function container.
+/// In the basic case, this is simply a copy across function containers.
 struct CopyMangleReceiver<'a, 'b> {
     from: &'a Function,
     to: &'a mut FunctionBuilder<'b>,
@@ -394,8 +419,8 @@ mod tests {
 
         let nil_term = b.value(NilTerm);
         mangler.start(b1);
-        let ret_narg = mangler.add_argument();
-        mangler.add_rename(b1_ret, ret_narg);
+        let _ret_narg = mangler.add_argument();
+        //mangler.add_rename(b1_ret, ret_narg);
         mangler.add_rename(b1_arg, nil_term);
         let new_b1 = mangler.run(&mut b);
 

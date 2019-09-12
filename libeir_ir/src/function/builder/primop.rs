@@ -159,14 +159,46 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn prim_logic_op(&mut self, op: LogicOp, values: &[Value]) -> Value {
-        let mut entries_list = EntityList::new();
-        entries_list.extend(values.iter().cloned(), &mut self.fun.pool.value);
+        if values.iter().all(|v| self.fun.value_const(*v).is_some()) {
+            let true_const = self.value(true);
+            let false_const = self.value(false);
+            match op {
+                LogicOp::And => {
+                    let mut acc = true;
+                    for val in values {
+                        if *val == false_const {
+                            acc = false;
+                        } else {
+                            assert!(*val == true_const);
+                        }
+                    }
+                    self.value(acc)
+                }
+                LogicOp::Or => {
+                    let mut acc = false;
+                    for val in values {
+                        if *val == true_const {
+                            acc = true;
+                        } else {
+                            assert!(*val == false_const);
+                        }
+                    }
+                    self.value(acc)
+                }
+                LogicOp::Eq => {
+                    unimplemented!()
+                }
+            }
+        } else {
+            let mut entries_list = EntityList::new();
+            entries_list.extend(values.iter().cloned(), &mut self.fun.pool.value);
 
-        let primop = self.fun.primops.push(PrimOpData {
-            op: PrimOpKind::LogicOp(op),
-            reads: entries_list,
-        }, &self.fun.pool);
-        self.fun.values.push(ValueKind::PrimOp(primop))
+            let primop = self.fun.primops.push(PrimOpData {
+                op: PrimOpKind::LogicOp(op),
+                reads: entries_list,
+            }, &self.fun.pool);
+            self.fun.values.push(ValueKind::PrimOp(primop))
+        }
     }
 
     pub fn prim_capture_function<M, F, A>(
@@ -189,6 +221,33 @@ impl<'a> FunctionBuilder<'a> {
             reads: entries_list,
         }, &self.fun.pool);
         self.fun.values.push(ValueKind::PrimOp(primop))
+    }
+
+    pub fn prim_from_kind(&mut self, op: PrimOpKind, vals: &[Value]) -> Value {
+        match op {
+            PrimOpKind::ValueList => {
+                self.prim_value_list(vals)
+            }
+            PrimOpKind::Tuple => {
+                self.prim_tuple(vals)
+            }
+            PrimOpKind::CaptureFunction => {
+                assert!(vals.len() == 3);
+                self.prim_capture_function(vals[0], vals[1], vals[2])
+            }
+            PrimOpKind::LogicOp(op) => {
+                self.prim_logic_op(op, vals)
+            }
+            PrimOpKind::BinOp(op) => {
+                assert!(vals.len() == 2);
+                self.prim_binop(op, vals[0], vals[1])
+            }
+            PrimOpKind::ListCell => {
+                assert!(vals.len() == 2);
+                self.prim_list_cell(vals[0], vals[1])
+            }
+            p => unimplemented!("{:?}", p),
+        }
     }
 
 }

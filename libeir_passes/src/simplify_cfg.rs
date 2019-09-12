@@ -46,6 +46,8 @@ impl SimplifyCfgPass {
     }
 
     fn simplify_cfg(&mut self, b: &mut FunctionBuilder) {
+        //println!("{}", b.fun().to_text());
+
         self.calls.clear();
         self.block_calls.clear();
         self.map.clear();
@@ -105,6 +107,9 @@ impl SimplifyCfgPass {
 
             if !changed { break; }
         }
+
+        println!("{}", b.fun().to_text());
+        println!("{:?}", self.map);
 
         //self.mangler.start(entry);
         //self.mangler.copy_entry(b.fun());

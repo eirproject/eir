@@ -1,4 +1,4 @@
-#![deny(warnings)]
+//#![deny(warnings)]
 
 use libeir_ir::{ Module, FunctionBuilder };
 
@@ -8,8 +8,8 @@ pub use self::compile_pattern::CompilePatternPass;
 mod naive_inline_closures;
 pub use self::naive_inline_closures::NaiveInlineClosuresPass;
 
-//mod simplify_cfg;
-//pub use self::simplify_cfg::SimplifyCfgPass;
+mod simplify_cfg;
+pub use self::simplify_cfg::SimplifyCfgPass;
 
 pub trait FunctionPass {
     fn run_function_pass(&mut self, b: &mut FunctionBuilder);
@@ -40,12 +40,15 @@ impl PassManager {
             println!("============ {}", ident);
             let mut b = FunctionBuilder::new(fun);
             for pass in self.passes.iter_mut() {
+                println!("{}", b.fun().to_text());
                 match pass {
                     PassType::Function(fun_pass) => {
                         fun_pass.run_function_pass(&mut b);
                     }
                 }
             }
+            println!("{}", b.fun().to_text());
+            b.fun().graph_validate_global();
         }
     }
 
@@ -56,6 +59,7 @@ impl Default for PassManager {
         let mut man = PassManager::new();
         //man.push_function_pass(SimplifyCfgPass::new());
         man.push_function_pass(CompilePatternPass::new());
+        man.push_function_pass(NaiveInlineClosuresPass::new());
         man
     }
 }

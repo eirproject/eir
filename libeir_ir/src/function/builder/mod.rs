@@ -110,7 +110,7 @@ impl<'a> FunctionBuilder<'a> {
 
     /// Updates the successors in the graph from the reads.
     /// Mainly used in the builder.
-    fn graph_update_block(&mut self, block: Block) {
+    pub(crate) fn graph_update_block(&mut self, block: Block) {
         let mut block_buf = self.block_buf.take().unwrap();
         let mut value_buf = self.value_buf.take().unwrap();
         debug_assert!(block_buf.is_empty());

@@ -1,7 +1,7 @@
 #![deny(warnings)]
 
 use std::fmt::{ Display, Formatter };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::cmp::Ordering;
 
 use libeir_intern::Ident;
@@ -63,14 +63,14 @@ impl Display for FunctionIdent {
 #[derive(Debug)]
 pub struct Module {
     pub name: Ident,
-    pub functions: HashMap<FunctionIdent, Function>,
+    pub functions: BTreeMap<FunctionIdent, Function>,
 }
 impl Module {
 
     pub fn new(name: Ident) -> Self {
         Module {
             name,
-            functions: HashMap::new(),
+            functions: BTreeMap::new(),
         }
     }
 
