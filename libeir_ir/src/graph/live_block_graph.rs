@@ -31,8 +31,8 @@ impl Function {
 /// If back edges to non-live blocks are acceptable, it is recommended to use
 /// `BlockGraph` instead.
 pub struct LiveBlockGraph<'a> {
-    graph: BlockGraph<'a>,
-    live: HashSet<Block>,
+    pub graph: BlockGraph<'a>,
+    pub live: HashSet<Block>,
 }
 
 impl<'a> LiveBlockGraph<'a> {

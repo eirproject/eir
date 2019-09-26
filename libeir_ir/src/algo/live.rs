@@ -26,8 +26,12 @@ impl Function {
 /// for every additional nested cycle.
 #[derive(Debug)]
 pub struct LiveValues {
-    /// Values that need to exist at every block
+    /// Values that need to exist at every block.
+    /// Before block arguments.
     pub live: HashMap<Block, PooledEntitySet<Value>>,
+    /// Values that need to exist within every block.
+    /// After block arguments, before operation.
+    pub live_in: HashMap<Block, PooledEntitySet<Value>>,
     /// The pool where `ebb_live` and `flow_live` is allocated.
     pub pool: EntitySetPool,
 }
@@ -36,6 +40,7 @@ fn dataflow_pass(
     fun: &Function,
     pool: &mut EntitySetPool,
     live: &mut HashMap<Block, PooledEntitySet<Value>>,
+    live_in: &mut HashMap<Block, PooledEntitySet<Value>>,
 ) -> bool {
 
     let graph = fun.block_graph();
@@ -66,6 +71,12 @@ fn dataflow_pass(
             }).unwrap();
         }
 
+        // Update the live_after values
+        if !live_in.contains_key(&block) {
+            live_in.insert(block, PooledEntitySet::new());
+        }
+        live_in.get_mut(&block).unwrap().union(&set, pool);
+
         // Remove the block arguments from the current set
         for arg in fun.block_args(block) {
             set.remove(*arg, pool);
@@ -94,6 +105,9 @@ pub fn calculate_live_values(fun: &Function) -> LiveValues {
     let mut pool: EntitySetPool = EntitySetPool::new();
 
     let mut live: HashMap<Block, PooledEntitySet<Value>> = HashMap::new();
+    let mut live_in: HashMap<Block, PooledEntitySet<Value>> = HashMap::new();
+
+    println!("Name: {}", fun.ident());
 
     // Iterate dataflow until all dependencies have been resolved
     loop {
@@ -101,6 +115,7 @@ pub fn calculate_live_values(fun: &Function) -> LiveValues {
             fun,
             &mut pool,
             &mut live,
+            &mut live_in,
         );
         if res { break; }
     }
@@ -108,12 +123,13 @@ pub fn calculate_live_values(fun: &Function) -> LiveValues {
     // Validate that the live set at entry is empty
     {
         let entry = fun.block_entry();
-        assert!(live[&entry].size(&pool) == 0);
+        assert!(live[&entry].size(&pool) == 0, "{:?}", live[&entry].printer(&pool));
     }
 
     LiveValues {
         pool,
         live,
+        live_in,
     }
 }
 

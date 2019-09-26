@@ -145,3 +145,14 @@ pub enum OpKind {
     /// invalid state, should raise an unrecoverable runtime error.
     Unreachable,
 }
+
+impl OpKind {
+
+    pub fn is_call(&self) -> bool {
+        match self {
+            OpKind::Call => true,
+            _ => false,
+        }
+    }
+
+}

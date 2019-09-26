@@ -146,6 +146,11 @@ impl From<bool> for AtomicTerm {
         AtomTerm(sym).into()
     }
 }
+impl PartialEq<str> for AtomTerm {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
 impl Display for AtomTerm {
     fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
         write!(fmt, "a'{}'", self.0) // TODO escape

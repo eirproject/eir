@@ -12,8 +12,10 @@ mod function;
 mod algo;
 pub use algo::mangle::*;
 
-mod graph;
 pub mod text;
+
+mod graph;
+pub use graph::LiveBlockGraph;
 
 // Subcontainers
 pub mod constant;
@@ -41,7 +43,6 @@ pub use text::printer::{ ToEirText, ToEirTextContext };
 
 pub mod binary;
 pub use binary::{ BinaryEntrySpecifier, Endianness };
-
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd)]
 pub struct FunctionIdent {

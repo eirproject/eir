@@ -1,4 +1,4 @@
-#![deny(warnings)]
+//#![deny(warnings)]
 #![cfg(test)]
 
 use std::path::Path;

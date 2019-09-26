@@ -47,3 +47,26 @@ fun_shadowing(A, B) ->
     };
     assert!(vm.call(&run_fun, &[]).is_ok());
 }
+
+#[test]
+fn pattern_variable_shadowing_a() {
+
+    let mut eir_mod = lower(
+        "-module(shadowinga).
+
+fun_shadowing(A) ->
+    C = fun(B) -> B end,
+    C(A).
+
+",
+        ParseConfig::default()
+    ).unwrap();
+
+    let mut pass_manager = PassManager::default();
+    pass_manager.run(&mut eir_mod);
+
+    for (ident, fun) in eir_mod.functions.iter() {
+        fun.live_values();
+    }
+
+}

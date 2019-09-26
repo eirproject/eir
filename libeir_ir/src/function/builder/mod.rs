@@ -7,6 +7,8 @@ use crate::BinOp;
 use crate::constant::{ ConstantContainer, IntoConst };
 use crate::pattern::{ PatternContainer };
 
+use cranelift_entity::EntityList;
+
 use libeir_diagnostics::ByteSpan;
 
 mod op;
@@ -102,6 +104,27 @@ impl<'a> FunctionBuilder<'a> {
     pub fn value<T>(&mut self, v: T) -> Value where T: IntoValue {
         v.into_value(self)
     }
+
+    pub fn value_map<F>(&mut self, mut value: Value, map: &F) -> Value where F: Fn(Value) -> Option<Value> {
+        if let Some(new) = map(value) {
+            value = new;
+        }
+
+        match self.fun().value_kind(value) {
+            ValueKind::PrimOp(prim) => {
+                let mut values = self.fun().primop_reads(prim).to_owned();
+                for val in values.iter_mut() {
+                    let new_val = self.value_map(*val, map);
+                    *val = new_val;
+                }
+
+                let kind = self.fun().primop_kind(prim).clone();
+                self.prim_from_kind(kind, &values)
+            }
+            _ => value,
+        }
+    }
+
 
 }
 
@@ -239,6 +262,33 @@ impl<'a> FunctionBuilder<'a> {
 
         value_buf.clear();
         self.value_buf = Some(value_buf);
+    }
+
+    pub fn block_copy_body_map<F>(&mut self, from: Block, to: Block, map: &F) where F: Fn(Value) -> Option<Value> {
+        let op;
+        let span;
+        {
+            let from_data = &self.fun.blocks[from];
+            op = from_data.op.clone();
+            span = from_data.span;
+        }
+
+        let mut reads = EntityList::new();
+        {
+            let len = self.fun.block_reads(from).len();
+            for n in 0..len {
+                let val = self.fun.block_reads(from)[n];
+                let new = self.value_map(val, map);
+                reads.push(new, &mut self.fun.pool.value);
+            }
+        }
+
+        let to_data = &mut self.fun.blocks[to];
+        to_data.op = op;
+        to_data.reads = reads;
+        to_data.span = span;
+
+        self.graph_update_block(to);
     }
 
     /// TODO temporary until we get a proper type system implemented.

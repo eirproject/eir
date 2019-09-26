@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::{ ParseConfig, lower_file };
+use crate::{ ParseConfig, lower_file, lower };
 use crate::ct_runner::run_ct_suite;
 
 use libeir_intern::Ident;
@@ -212,4 +212,111 @@ fn foo() {
     pass_manager.run(&mut eir_mod);
 
     panic!("{:?}");
+}
+
+
+#[test]
+fn unary_op_1() {
+    let text = "
+-module(foo).
+
+unary_op_1(Vop@1) ->
+    %% If all optimizations are working as they should, there should
+    %% be no stack frame and all '=:=' tests should be coalesced into
+    %% a single select_val instruction.
+
+    case Vop@1 =:= '&' of
+        true ->
+            {non_associative,30};
+        false ->
+            case
+                case Vop@1 =:= '^' of
+                    true ->
+                        true;
+                    false ->
+                        case Vop@1 =:= 'not' of
+                            true ->
+                                true;
+                            false ->
+                                case Vop@1 =:= '+' of
+                                    true ->
+                                        true;
+                                    false ->
+                                        case Vop@1 =:= '-' of
+                                            true ->
+                                                true;
+                                            false ->
+                                                case Vop@1 =:= '~~~' of
+                                                    true ->
+                                                        true;
+                                                    false ->
+                                                        Vop@1 =:= '!'
+                                                end
+                                        end
+                                end
+                        end
+                end
+            of
+                true ->
+                    {non_associative,300};
+                false ->
+                    case Vop@1 =:= '@' of
+                        true ->
+                            {non_associative,320};
+                        false ->
+                            error
+                    end
+            end
+    end.
+";
+
+    let config = ParseConfig::default();
+    let mut eir_mod = lower(text, config).unwrap();
+
+    for fun in eir_mod.functions.values() {
+        fun.graph_validate_global();
+    }
+
+    let mut pass_manager = PassManager::default();
+    pass_manager.run(&mut eir_mod);
+
+    for fun in eir_mod.functions.values() {
+        fun.live_values();
+    }
+
+}
+
+#[test]
+fn unary_op_1_a() {
+    let text = "
+-module(foobarrr).
+
+unary_op_1(Vop@1) ->
+    case
+        case Vop@1 =:= '^' of
+            true ->
+                a;
+            false ->
+                b
+        end
+    of
+        true ->
+            c
+    end.
+";
+
+    let config = ParseConfig::default();
+    let mut eir_mod = lower(text, config).unwrap();
+
+    for fun in eir_mod.functions.values() {
+        fun.graph_validate_global();
+    }
+
+    let mut pass_manager = PassManager::default();
+    pass_manager.run(&mut eir_mod);
+
+    for fun in eir_mod.functions.values() {
+        fun.live_values();
+    }
+
 }

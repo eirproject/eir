@@ -15,6 +15,8 @@ pub struct Mangler {
     entry: Option<Block>,
     num_args: usize,
 
+    new_entry: Option<Block>,
+
     values_map: BTreeMap<Value, RenameDest>,
     blocks_map: BTreeMap<Block, RenameDest>,
 
@@ -32,6 +34,8 @@ impl Mangler {
         Mangler {
             entry: None,
             num_args: 0,
+
+            new_entry: None,
 
             values_map: BTreeMap::new(),
             blocks_map: BTreeMap::new(),
@@ -51,6 +55,8 @@ impl Mangler {
         self.entry = None;
         self.num_args = 0;
 
+        self.new_entry = None;
+
         self.values_map.clear();
         self.blocks_map.clear();
 
@@ -64,22 +70,34 @@ impl Mangler {
 
     /// Clears the mangler of all existing data, and starts a new transaction
     /// for the given entry block.
-    pub fn start(&mut self, block: Block) {
+    pub fn start(&mut self, block: Block, b: &mut FunctionBuilder) {
         self.clear();
         self.entry = Some(block);
+
+        let new_entry = b.block_insert();
+        self.new_entry = Some(new_entry);
     }
 
     /// Add an argument on the new entry block.
     /// The return value can be used to make renames using the `add_rename` method.
-    pub fn add_argument(&mut self) -> EntryArg {
-        let arg = EntryArg(self.num_args);
-        self.num_args += 1;
-        arg
+    pub fn add_argument(&mut self, b: &mut FunctionBuilder) -> Value {
+        b.block_arg_insert(self.new_entry.unwrap())
+        //let arg = EntryArg(self.num_args);
+        //self.num_args += 1;
+        //arg
     }
 
     /// Copies the signature of the entry block.
-    pub fn copy_entry(&mut self, _fun: &Function) {
-        unimplemented!()
+    pub fn copy_entry(&mut self, fun: &mut FunctionBuilder) {
+        let entry = self.entry.unwrap();
+        let new_entry = self.new_entry.unwrap();
+
+        let args_len = fun.fun().block_args(entry).len();
+        for n in 0..args_len {
+            let from = fun.fun().block_args(entry)[n];
+            let to = fun.block_arg_insert(new_entry);
+            self.add_rename(from, to);
+        }
     }
 
     pub fn add_rename<S, D>(&mut self, old: S, new: D)
@@ -113,10 +131,9 @@ impl Mangler {
 
         // Insert new entry block
         let entry = self.entry.unwrap();
-        let new_entry;
+        let new_entry = self.new_entry.unwrap();
         {
             let to = recv.to();
-            new_entry = to.block_insert();
             for _ in 0..self.num_args {
                 to.block_arg_insert(new_entry);
             }
@@ -149,15 +166,22 @@ impl Mangler {
             let from = recv.from();
             let graph = from.block_graph();
 
-            while let Some(block) = self.to_walk.pop() {
+            while let Some(mut block) = self.to_walk.pop() {
                 if scope.contains(&block) { continue; }
 
-                if self.blocks_map.contains_key(&block) { continue; }
+                if let Some(mapped) = self.blocks_map.get(&block) {
+                    if let RenameDest::Block(mapped_block) = mapped {
+                        block = *mapped_block;
+                    } else {
+                        continue;
+                    }
+                }
                 scope.insert(block);
 
-                println!("AAA: {:?}", from.block_reads(block));
+                println!("AAA {}: {:?}", block, from.block_reads(block));
                 for read in from.block_reads(block) {
                     from.value_walk_nested_values::<_, ()>(*read, &mut |val| {
+                        println!("A: {}", val);
                         to_map_values.insert(val);
                         Ok(())
                     }).unwrap();
@@ -190,9 +214,40 @@ impl Mangler {
             }
         }
 
+        // Propagate values
+        self.value_buf.clear();
+        self.value_buf.extend(self.values_map.keys());
+        for key in self.value_buf.iter() {
+            let val = self.values_map[key];
+            if let RenameDest::Value(target) = val {
+                if let Some(target_dest) = self.values_map.get(&target) {
+                    *self.values_map.get_mut(key).unwrap() = *target_dest;
+                }
+            }
+        }
+
+        to_map_values.extend(self.values_map.values().filter_map(|v| {
+            match v {
+                RenameDest::Value(val) => Some(val),
+                _ => None,
+            }
+        }));
+
         // Map values
         for val in to_map_values.iter() {
             self.map(recv, *val);
+        }
+
+        // Propagate values
+        self.value_buf.clear();
+        self.value_buf.extend(self.values_map.keys());
+        for key in self.value_buf.iter() {
+            let val = self.values_map[key];
+            if let RenameDest::Value(target) = val {
+                if let Some(target_dest) = self.values_map.get(&target) {
+                    *self.values_map.get_mut(key).unwrap() = *target_dest;
+                }
+            }
         }
 
         let copy_body = |mang: &mut Mangler, recv: &mut R, from_block: Block, to_block: Block| {
@@ -248,6 +303,7 @@ impl Mangler {
         }
 
         let kind = recv.from().value_kind(val);
+        println!("Map: {} {:?}", val, kind);
         let dest = match kind {
             ValueKind::Const(_) => {
                 recv.map_const(val).into()
@@ -255,7 +311,9 @@ impl Mangler {
             ValueKind::PrimOp(prim) => {
                 let kind = *recv.from().primop_kind(prim);
 
+                println!("Map PrimOp: {:?}", kind);
                 let mut buf: Vec<Value> = recv.from().primop_reads(prim).to_owned();
+                println!("Before: {:?}", buf);
                 for val in buf.iter_mut() {
                     let to = match self.map(recv, *val) {
                         RenameDest::Value(value) => value,
@@ -263,11 +321,12 @@ impl Mangler {
                     };
                     *val = to;
                 }
+                println!("After: {:?}", buf);
 
                 recv.to().prim_from_kind(kind, &buf).into()
             },
             ValueKind::Block(block) => {
-                self.blocks_map[&block]
+                self.blocks_map.get(&block).cloned().unwrap_or(RenameDest::Block(block))
             },
             ValueKind::Argument(_block, _num) => {
                 recv.map_free_value(val).into()
@@ -418,9 +477,9 @@ mod tests {
         let mut mangler = Mangler::new();
 
         let nil_term = b.value(NilTerm);
-        mangler.start(b1);
-        let _ret_narg = mangler.add_argument();
-        //mangler.add_rename(b1_ret, ret_narg);
+        mangler.start(b1, &mut b);
+        let ret_narg = mangler.add_argument(&mut b);
+        mangler.add_rename(b1_ret, ret_narg);
         mangler.add_rename(b1_arg, nil_term);
         let new_b1 = mangler.run(&mut b);
 

@@ -1,4 +1,7 @@
 use std::marker::PhantomData;
+
+use std::fmt::{Debug, Formatter};
+
 use ::cranelift_entity::EntityRef;
 use ::cranelift_entity::ListPool;
 use ::cranelift_entity::EntityList;
@@ -210,6 +213,13 @@ where
         true
     }
 
+    pub fn printer<'a, 'b>(&'a self, pool: &'b ListPool<PooledSetValue>) -> PooledEntitySetPrinter<'a, 'b, K> {
+        PooledEntitySetPrinter {
+            set: self,
+            pool,
+        }
+    }
+
 }
 
 pub struct PooledEntitySetIter<'a, T> where T: EntityRef {
@@ -245,6 +255,15 @@ impl<'a, T> Iterator for PooledEntitySetIter<'a, T> where T: EntityRef {
     }
 }
 
+pub struct PooledEntitySetPrinter<'a, 'b, T> where T: EntityRef {
+    set: &'a PooledEntitySet<T>,
+    pool: &'b ListPool<PooledSetValue>,
+}
+impl<'a, 'b, T> Debug for PooledEntitySetPrinter<'a, 'b, T> where T: EntityRef + Debug {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.debug_set().entries(self.set.iter(self.pool)).finish()
+    }
+}
 
 #[cfg(test)]
 mod test {

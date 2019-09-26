@@ -159,6 +159,16 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn prim_logic_op(&mut self, op: LogicOp, values: &[Value]) -> Value {
+        match (op, values.len()) {
+            (LogicOp::And, 0) => return self.value(true),
+            (LogicOp::And, 1) => return values[0],
+            (LogicOp::Or, 0) => return self.value(false),
+            (LogicOp::Or, 1) => return values[0],
+            (LogicOp::Eq, 0) => return self.value(true),
+            (LogicOp::Eq, 1) => return self.value(true),
+            _ => (),
+        }
+
         if values.iter().all(|v| self.fun.value_const(*v).is_some()) {
             let true_const = self.value(true);
             let false_const = self.value(false);

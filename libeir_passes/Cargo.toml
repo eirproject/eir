@@ -12,3 +12,5 @@ libeir_util_pattern_compiler = { path = "../util/libeir_util_pattern_compiler" }
 matches = "0.1.8"
 
 cranelift-entity = "0.30.0"
+
+petgraph = "0.4"

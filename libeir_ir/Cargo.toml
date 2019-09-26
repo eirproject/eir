@@ -18,7 +18,7 @@ num-traits = "0.2"
 
 cranelift-entity = "0.30.0"
 
-petgraph = "0.4.13"
+petgraph = "0.4"
 
 matches = "0.1.8"
 regex = "1"

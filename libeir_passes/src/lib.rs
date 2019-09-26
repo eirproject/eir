@@ -39,16 +39,17 @@ impl PassManager {
         for (ident, fun) in module.functions.iter_mut() {
             println!("============ {}", ident);
             let mut b = FunctionBuilder::new(fun);
+            b.fun().graph_validate_global();
             for pass in self.passes.iter_mut() {
-                println!("{}", b.fun().to_text());
+                //println!("{}", b.fun().to_text());
                 match pass {
                     PassType::Function(fun_pass) => {
                         fun_pass.run_function_pass(&mut b);
                     }
                 }
+                b.fun().graph_validate_global();
             }
-            println!("{}", b.fun().to_text());
-            b.fun().graph_validate_global();
+            //println!("{}", b.fun().to_text());
         }
     }
 
@@ -60,6 +61,7 @@ impl Default for PassManager {
         //man.push_function_pass(SimplifyCfgPass::new());
         man.push_function_pass(CompilePatternPass::new());
         man.push_function_pass(NaiveInlineClosuresPass::new());
+        man.push_function_pass(SimplifyCfgPass::new());
         man
     }
 }

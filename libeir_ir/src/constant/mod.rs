@@ -122,6 +122,15 @@ impl ConstantContainer {
         }
     }
 
+    pub fn as_bool(&self, val: Const) -> Option<bool> {
+        let kind = &self.const_values[val];
+        match kind {
+            ConstKind::Atomic(AtomicTerm::Atom(atom)) if atom == "true" => Some(true),
+            ConstKind::Atomic(AtomicTerm::Atom(atom)) if atom == "false" => Some(false),
+            _ => None,
+        }
+    }
+
     pub fn write(&self, val: Const, out: &mut dyn std::io::Write) {
         match &self.const_values[val] {
             ConstKind::Atomic(atomic) => {

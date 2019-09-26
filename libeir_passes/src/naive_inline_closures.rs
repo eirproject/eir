@@ -4,6 +4,7 @@ use libeir_ir::{Block, OpKind};
 
 use super::FunctionPass;
 
+/// Very basic closure inlining pass.
 pub struct NaiveInlineClosuresPass {
     calls_buf: Vec<(Block, Block)>,
     mangler: Mangler,
@@ -22,6 +23,7 @@ impl NaiveInlineClosuresPass {
 
 impl FunctionPass for NaiveInlineClosuresPass {
     fn run_function_pass(&mut self, b: &mut FunctionBuilder) {
+        println!("Inline Closures");
         self.inline_closures(b);
     }
 }
@@ -29,6 +31,8 @@ impl FunctionPass for NaiveInlineClosuresPass {
 impl NaiveInlineClosuresPass {
 
     pub fn inline_closures(&mut self, b: &mut FunctionBuilder) {
+        let entry = b.fun().block_entry();
+
         loop {
             self.calls_buf.clear();
 
@@ -39,8 +43,12 @@ impl NaiveInlineClosuresPass {
                 // 2. The target of the call operation is another block
                 // 3. There is at least one block argument to the block
 
+                // Block must not be entry
+                if entry == block {
+                    continue;
+                }
+
                 // OP must be Call
-                println!("{}", block);
                 if let OpKind::Call = b.fun().block_kind(block).unwrap() {
                     let reads = b.fun().block_reads(block);
 
@@ -55,14 +63,14 @@ impl NaiveInlineClosuresPass {
                         continue;
                     }
 
+                    // TODO: Check that the function itself is not called from the scope
+
                     self.calls_buf.push((block, target.unwrap()));
                 }
             }
 
-            println!("CALLS: {:?}", self.calls_buf);
-
             for (block, target) in self.calls_buf.iter().cloned() {
-                self.mangler.start(target);
+                self.mangler.start(target, b);
 
                 // Signature of new entry block has no arguments
 

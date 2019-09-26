@@ -120,3 +120,27 @@ create_5(A, B) -> #alien{name=A, planet=B}.
     }
 
 }
+
+#[test]
+fn record_creation_a() {
+    let mut eir_mod = lower("
+-module(woohoo).
+
+-record(person, {name, phone, address}).
+create_1(A) -> #person{name=A}.
+", ParseConfig::default()).unwrap();
+
+    let mut pass_manager = PassManager::default();
+    pass_manager.run(&mut eir_mod);
+
+    let fun = FunctionIdent {
+        module: Ident::from_str("woo"),
+        name: Ident::from_str("create_1"),
+        arity: 1,
+    };
+
+    let mut vm = VMState::new();
+    vm.add_builtin_modules();
+    vm.add_erlang_module(eir_mod);
+
+}
