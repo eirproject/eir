@@ -122,40 +122,40 @@ impl Module {
                         module.vsn = Some(vsn);
                         continue;
                     }
-                    errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                        Diagnostic::new_error("attribute is already defined")
+                    errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                        diagnostic: Diagnostic::new_error("attribute is already defined")
                             .with_label(
                                 Label::new_primary(aspan).with_message("redefinition occurs here")
                             )
                             .with_label(
                                 Label::new_secondary(module.vsn.clone().map(|v| v.span()).unwrap())
                                     .with_message("first defined here")
-                            )
-                    )));
+                            ),
+                    }));
                 }
                 TopLevel::Attribute(Attribute::Author(aspan, author)) => {
                     if module.author.is_none() {
                         module.author = Some(author);
                         continue;
                     }
-                    errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                        Diagnostic::new_error("attribute is already defined")
+                    errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                        diagnostic: Diagnostic::new_error("attribute is already defined")
                             .with_label(
                                 Label::new_primary(aspan).with_message("redefinition occurs here")
                             )
                             .with_label(
                                 Label::new_secondary(module.vsn.clone().map(|v| v.span()).unwrap())
                                     .with_message("first defined here")
-                            )
-                    )));
+                            ),
+                    }));
                 }
                 TopLevel::Attribute(Attribute::OnLoad(aspan, fname)) => {
                     if module.on_load.is_none() {
                         module.on_load = Some(fname.to_local());
                         continue;
                     }
-                    errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                        Diagnostic::new_error("on_load can only be defined once")
+                    errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                        diagnostic: Diagnostic::new_error("on_load can only be defined once")
                             .with_label(
                                 Label::new_primary(aspan).with_message("redefinition occurs here")
                             )
@@ -164,8 +164,8 @@ impl Module {
                                     module.on_load.clone().map(|v| v.span).unwrap()
                                 )
                                 .with_message("first defined here")
-                            )
-                    )))
+                            ),
+                    }))
                 }
                 TopLevel::Attribute(Attribute::Import(aspan, from_module, mut imports)) => {
                     for import in imports.drain(..) {
@@ -178,16 +178,16 @@ impl Module {
                                 span: ref prev_span,
                                 ..
                             }) => {
-                                errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                    Diagnostic::new_warning("unused import")
+                                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                    diagnostic: Diagnostic::new_warning("unused import")
                                         .with_label(Label::new_primary(aspan).with_message(
                                             "this import is a duplicate of a previous import"
                                         ))
                                         .with_label(
                                             Label::new_secondary(prev_span.clone())
                                                 .with_message("function was first imported here")
-                                        )
-                                )));
+                                        ),
+                                }));
                             }
                         }
                     }
@@ -202,8 +202,8 @@ impl Module {
                                 span: ref prev_span,
                                 ..
                             }) => {
-                                errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                    Diagnostic::new_warning("already exported")
+                                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                    diagnostic: Diagnostic::new_warning("already exported")
                                         .with_label(
                                             Label::new_primary(aspan)
                                                 .with_message("duplicate export occurs here")
@@ -211,8 +211,8 @@ impl Module {
                                         .with_label(
                                             Label::new_secondary(prev_span.clone())
                                                 .with_message("function was first exported here")
-                                        )
-                                )));
+                                        ),
+                                }));
                             }
                         }
                     }
@@ -234,8 +234,8 @@ impl Module {
                             span: ref prev_span,
                             ..
                         }) => {
-                            errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                Diagnostic::new_warning("type is already defined")
+                            errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                diagnostic: Diagnostic::new_warning("type is already defined")
                                     .with_label(
                                         Label::new_primary(ty.span)
                                             .with_message("redefinition occurs here")
@@ -243,8 +243,8 @@ impl Module {
                                     .with_label(
                                         Label::new_secondary(prev_span.clone())
                                             .with_message("type was first defined here")
-                                    )
-                            )));
+                                    ),
+                            }));
                         }
                     }
                 }
@@ -258,8 +258,8 @@ impl Module {
                                 span: ref prev_span,
                                 ..
                             }) => {
-                                errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                    Diagnostic::new_warning("type already exported")
+                                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                    diagnostic: Diagnostic::new_warning("type already exported")
                                         .with_label(
                                             Label::new_primary(aspan)
                                                 .with_message("duplicate export occurs here")
@@ -267,8 +267,8 @@ impl Module {
                                         .with_label(
                                             Label::new_secondary(prev_span.clone())
                                                 .with_message("type was first exported here")
-                                        )
-                                )));
+                                        ),
+                                }));
                             }
                         }
                     }
@@ -282,8 +282,8 @@ impl Module {
                             span: ref prev_span,
                             ..
                         }) => {
-                            errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                Diagnostic::new_warning("duplicate behaviour declaration")
+                            errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                diagnostic: Diagnostic::new_warning("duplicate behaviour declaration")
                                     .with_label(
                                         Label::new_primary(aspan)
                                             .with_message("duplicate declaration occurs here")
@@ -291,16 +291,14 @@ impl Module {
                                     .with_label(
                                         Label::new_secondary(prev_span.clone())
                                             .with_message("first declaration occurs here")
-                                    )
-                            )));
+                                    ),
+                            }));
                         }
                     }
                 }
                 TopLevel::Attribute(Attribute::Callback(callback)) => {
                     let first_sig = callback.sigs.first().unwrap();
                     let arity = first_sig.params.len();
-
-                    println!("yayay");
 
                     // Verify that all clauses match
                     if callback.sigs.len() > 1 {
@@ -311,8 +309,8 @@ impl Module {
                         } in &callback.sigs[1..]
                         {
                             if params.len() != arity {
-                                errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                    Diagnostic::new_error("mismatched arity")
+                                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                    diagnostic: Diagnostic::new_error("mismatched arity")
                                         .with_label(
                                             Label::new_primary(sigspan.clone()).with_message(
                                                 format!("expected arity of {}", arity)
@@ -323,8 +321,8 @@ impl Module {
                                                 .with_message(
                                                     "expected arity was derived from this clause"
                                                 )
-                                        )
-                                )));
+                                        ),
+                                }));
                             }
                         }
                     }
@@ -348,8 +346,8 @@ impl Module {
                             ..
                         }) => {
                             println!("PREV: {:?}", a);
-                            errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                Diagnostic::new_error("cannot redefine callback")
+                            errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                diagnostic: Diagnostic::new_error("cannot redefine callback")
                                     .with_label(
                                         Label::new_primary(callback.span)
                                             .with_message("redefinition occurs here")
@@ -357,8 +355,8 @@ impl Module {
                                     .with_label(
                                         Label::new_secondary(a.span.clone())
                                             .with_message("callback first defined here")
-                                    )
-                            )));
+                                    ),
+                            }));
                         }
                     }
                 }
@@ -375,8 +373,8 @@ impl Module {
                         } in &typespec.sigs[1..]
                         {
                             if params.len() != arity {
-                                errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                    Diagnostic::new_error("mismatched arity")
+                                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                    diagnostic: Diagnostic::new_error("mismatched arity")
                                         .with_label(
                                             Label::new_primary(sigspan.clone()).with_message(
                                                 format!("expected arity of {}", arity)
@@ -387,8 +385,8 @@ impl Module {
                                                 .with_message(
                                                     "expected arity was derived from this clause"
                                                 )
-                                        )
-                                )));
+                                        ),
+                                }));
                             }
                         }
                     }
@@ -408,8 +406,8 @@ impl Module {
                             span: ref prev_span,
                             ..
                         }) => {
-                            errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                Diagnostic::new_error("spec already defined")
+                            errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                diagnostic: Diagnostic::new_error("spec already defined")
                                     .with_label(
                                         Label::new_primary(typespec.span)
                                             .with_message("redefinition occurs here")
@@ -417,8 +415,8 @@ impl Module {
                                     .with_label(
                                         Label::new_secondary(prev_span.clone())
                                             .with_message("spec first defined here")
-                                    )
-                            )));
+                                    ),
+                            }));
                         }
                     }
                 }
@@ -427,8 +425,8 @@ impl Module {
                         let (opts, mut validation_errs) =
                             CompileOptions::from_expr(&module.name, &compile);
                         module.compile = Some(opts);
-                        for err in validation_errs.drain(..) {
-                            errs.push(to_lalrpop_err!(ParserError::Diagnostic(err)));
+                        for diagnostic in validation_errs.drain(..) {
+                            errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic { diagnostic }));
                         }
                         continue;
                     }
@@ -436,8 +434,8 @@ impl Module {
                         if let Err(mut validation_errs) =
                             opts.merge_from_expr(&module.name, &compile)
                         {
-                            for err in validation_errs.drain(..) {
-                                errs.push(to_lalrpop_err!(ParserError::Diagnostic(err)));
+                            for diagnostic in validation_errs.drain(..) {
+                                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic { diagnostic }));
                             }
                         }
                     }
@@ -455,13 +453,13 @@ impl Module {
                                     span: ref orig_span,
                                     ..
                                 }) => {
-                                    errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                            Diagnostic::new_warning("redundant deprecation")
-                                                .with_label(Label::new_primary(dspan.clone())
-                                                    .with_message("this module is already deprecated by a previous declaration"))
-                                                .with_label(Label::new_secondary(orig_span.clone())
-                                                    .with_message("deprecation first declared here"))
-                                        )));
+                                    errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                        diagnostic: Diagnostic::new_warning("redundant deprecation")
+                                            .with_label(Label::new_primary(dspan.clone())
+                                                        .with_message("this module is already deprecated by a previous declaration"))
+                                            .with_label(Label::new_secondary(orig_span.clone())
+                                                        .with_message("deprecation first declared here")),
+                                    }));
                                 }
                                 Some(Deprecation::Function { .. }) => unreachable!(),
                             },
@@ -472,13 +470,13 @@ impl Module {
                                     span: ref mspan, ..
                                 }) = module.deprecation
                                 {
-                                    errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                        Diagnostic::new_warning("redundant deprecation")
+                                    errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                        diagnostic: Diagnostic::new_warning("redundant deprecation")
                                             .with_label(Label::new_primary(*fspan)
-                                                .with_message("module is deprecated, so deprecating functions is redundant"))
+                                                        .with_message("module is deprecated, so deprecating functions is redundant"))
                                             .with_label(Label::new_secondary(mspan.clone())
-                                                .with_message("module deprecation occurs here"))
-                                    )));
+                                                        .with_message("module deprecation occurs here"))
+                                    }));
                                     continue;
                                 }
 
@@ -490,13 +488,13 @@ impl Module {
                                         span: ref prev_span,
                                         ..
                                     }) => {
-                                        errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                            Diagnostic::new_warning("redundant deprecation")
+                                        errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                            diagnostic: Diagnostic::new_warning("redundant deprecation")
                                                 .with_label(Label::new_primary(*fspan)
-                                                    .with_message("this function is already deprecated by a previous declaration"))
+                                                            .with_message("this function is already deprecated by a previous declaration"))
                                                 .with_label(Label::new_secondary(prev_span.clone())
-                                                    .with_message("deprecation first declared here"))
-                                        )));
+                                                            .with_message("deprecation first declared here"))
+                                        }));
                                     }
                                     Some(Deprecation::Module { .. }) => unreachable!(),
                                 }
@@ -508,8 +506,8 @@ impl Module {
                     println!("CUSTOM ATTR: {:?}", attr);
                     match attr.name.name.as_str().get() {
                         "module" => {
-                            errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                Diagnostic::new_error("multiple module declarations")
+                            errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                diagnostic: Diagnostic::new_error("multiple module declarations")
                                     .with_label(
                                         Label::new_primary(attr.span.clone())
                                             .with_message("invalid declaration occurs here")
@@ -517,8 +515,8 @@ impl Module {
                                     .with_label(
                                         Label::new_secondary(module.name.span.clone())
                                             .with_message("module first declared here")
-                                    )
-                            )));
+                                    ),
+                            }));
                             continue;
                         }
                         "optional_callbacks" => {
@@ -539,8 +537,8 @@ impl Module {
                             span: ref prev_span,
                             ..
                         }) => {
-                            errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                Diagnostic::new_warning("redefined attribute")
+                            errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                diagnostic: Diagnostic::new_warning("redefined attribute")
                                     .with_label(
                                         Label::new_primary(attr.span.clone())
                                             .with_message("redefinition occurs here")
@@ -549,7 +547,7 @@ impl Module {
                                         Label::new_secondary(prev_span.clone())
                                             .with_message("previously defined here")
                                     )
-                            )));
+                            }));
                             module.attributes.insert(attr.name.clone(), attr);
                         }
                     }
@@ -567,8 +565,8 @@ impl Module {
                                     field.value = Some(atom!(nid, undefined));
                                 }
                                 if let Some(prev) = fields.get(&field.name) {
-                                    errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                        Diagnostic::new_error("duplicate field in record")
+                                    errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                        diagnostic: Diagnostic::new_error("duplicate field in record")
                                             .with_label(
                                                 Label::new_primary(field.name.span)
                                                     .with_message("duplicate field occurs here")
@@ -576,8 +574,8 @@ impl Module {
                                             .with_label(
                                                 Label::new_primary(prev.span)
                                                     .with_message("previous field")
-                                            )
-                                    )));
+                                            ),
+                                    }));
                                 }
                                 fields.insert(field.name);
                                 field_idx_map.insert(field.name, idx);
@@ -588,8 +586,8 @@ impl Module {
                             });
                         }
                         Some(prev) => {
-                            errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                Diagnostic::new_error("record already defined")
+                            errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                diagnostic: Diagnostic::new_error("record already defined")
                                     .with_label(
                                         Label::new_primary(record.span)
                                             .with_message("duplicate definition occurs here")
@@ -597,8 +595,8 @@ impl Module {
                                     .with_label(
                                         Label::new_secondary(prev.record.span)
                                             .with_message("previously defined here")
-                                    )
-                            )));
+                                    ),
+                            }));
                         }
                     }
                 }
@@ -618,12 +616,12 @@ impl Module {
                         .unwrap_or(false);
                     function.spec = match specs.get(&resolved_name) {
                         None if warn_missing_specs => {
-                            errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                Diagnostic::new_warning("missing function spec").with_label(
+                            errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                diagnostic: Diagnostic::new_warning("missing function spec").with_label(
                                     Label::new_primary(function.span.clone())
                                         .with_message("expected type spec for this function")
                                 )
-                            )));
+                            }));
                             None
                         }
                         None => None,
@@ -635,19 +633,19 @@ impl Module {
                         }
                         Entry::Occupied(initial_def) => {
                             let def = initial_def.into_mut();
-                            errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                                Diagnostic::new_error(
+                            errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                                diagnostic: Diagnostic::new_error(
                                     "clauses from the same function should be grouped together"
                                 )
-                                .with_label(
-                                    Label::new_primary(function.span.clone())
-                                        .with_message("found more clauses here")
-                                )
-                                .with_label(
-                                    Label::new_secondary(def.span.clone())
-                                        .with_message("function is first defined here")
-                                )
-                            )));
+                                    .with_label(
+                                        Label::new_primary(function.span.clone())
+                                            .with_message("found more clauses here")
+                                    )
+                                    .with_label(
+                                        Label::new_secondary(def.span.clone())
+                                            .with_message("function is first defined here")
+                                    )
+                            }));
                             def.clauses.append(&mut function.clauses);
                         }
                     }
@@ -664,25 +662,25 @@ impl Module {
         // Verify on_load function exists
         if let Some(ref on_load_name) = module.on_load {
             if !module.functions.contains_key(on_load_name) {
-                errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                    Diagnostic::new_error("invalid on_load function").with_label(
+                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                    diagnostic: Diagnostic::new_error("invalid on_load function").with_label(
                         Label::new_primary(on_load_name.span.clone())
                             .with_message("this function is not defined in this module")
-                    )
-                )));
+                    ),
+                }));
             }
         }
 
         // Check for orphaned type specs
         for (spec_name, spec) in &specs {
             if !module.functions.contains_key(&spec_name.to_local()) {
-                errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                    Diagnostic::new_warning("type spec for undefined function").with_label(
+                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                    diagnostic: Diagnostic::new_warning("type spec for undefined function").with_label(
                         Label::new_primary(spec.span.clone()).with_message(
                             "this type spec has no corresponding function definition"
                         )
                     )
-                )));
+                }));
             }
         }
 

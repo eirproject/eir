@@ -1,36 +1,36 @@
 use std::hash::{Hash, Hasher};
 
-use failure::Fail;
+use snafu::Snafu;
 
 use libeir_diagnostics::{ByteIndex, ByteSpan, Diagnostic, Label};
 
 use super::token::{Token, TokenType};
 
 /// An enum of possible errors that can occur during lexing.
-#[derive(Fail, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Snafu)]
 pub enum LexicalError {
-    #[fail(display = "{}", reason)]
+    #[snafu(display("{}", reason))]
     InvalidFloat { span: ByteSpan, reason: String },
 
-    #[fail(display = "{}", reason)]
+    #[snafu(display("{}", reason))]
     InvalidRadix { span: ByteSpan, reason: String },
 
     /// Occurs when a string literal is not closed (e.g. `"this is an unclosed string`)
     /// It is also implicit that hitting this error means we've reached EOF, as we'll scan the
     /// entire input looking for the closing quote
-    #[fail(display = "Unclosed string literal")]
+    #[snafu(display("Unclosed string literal"))]
     UnclosedString { span: ByteSpan },
 
     /// Like UnclosedStringLiteral, but for quoted atoms
-    #[fail(display = "Unclosed atom literal")]
+    #[snafu(display("Unclosed atom literal"))]
     UnclosedAtom { span: ByteSpan },
 
     /// Occurs when an escape sequence is encountered but the code is unsupported or unrecognized
-    #[fail(display = "{}", reason)]
+    #[snafu(display("{}", reason))]
     InvalidEscape { span: ByteSpan, reason: String },
 
     /// Occurs when we encounter an unexpected character
-    #[fail(display = "Encountered unexpected character '{}'", found)]
+    #[snafu(display("Encountered unexpected character '{}'", found))]
     UnexpectedCharacter { start: ByteIndex, found: char },
 }
 impl Hash for LexicalError {
@@ -81,9 +81,8 @@ impl LexicalError {
     }
 }
 
-/// Produced when converting from LexicalToken to {Atom,Ident,String,Symbol}Token
-#[derive(Fail, Debug, Clone)]
-#[fail(display = "expected token of {}, got {}", expected, token)]
+// Produced when converting from LexicalToken to {Atom,Ident,String,Symbol}Token
+#[derive(Debug, Clone)]
 pub struct TokenConvertError {
     pub span: ByteSpan,
     pub token: Token,

@@ -2,60 +2,60 @@ use libeir_diagnostics::{ ByteSpan, Diagnostic, Label };
 
 use super::expr::BinaryTypeName;
 
-use failure::{ Fail };
+use snafu::Snafu;
 
-#[derive(Fail, Debug)]
+#[derive(Debug, Snafu)]
 pub enum LowerError {
 
     /// An invalid expression occurred in a pattern
-    #[fail(display = "an invalid expression occurred in a pattern")]
+    #[snafu(display("an invalid expression occurred in a pattern"))]
     NotAllowedInPattern { span: ByteSpan },
 
     /// Equality in a pattern caused two nodes to be merged.
     /// It has been shown to be unmatchable.
-    #[fail(display = "patterns are fully disjoint and can never be matched")]
+    #[snafu(display("patterns are fully disjoint and can never be matched"))]
     DisjointPatternUnionWarning { left: Option<ByteSpan>, right: Option<ByteSpan> },
     /// Pattern is constrained by two different constant
     /// values, or is matched against an unmatchable value
-    #[fail(display = "pattern can never be matched")]
+    #[snafu(display("pattern can never be matched"))]
     UnmatchablePatternWarning { pat: Option<ByteSpan>, reason: Option<ByteSpan> },
 
     /// Equality in a pattern caused two nodes to be merged,
     /// but merging these two nodes is not supported.
     /// Happens when trying to merge two binary patterns.
-    #[fail(display = "patterns cannot be merged")]
+    #[snafu(display("patterns cannot be merged"))]
     UnsupportedPatternUnion { left: Option<ByteSpan>, right: ByteSpan },
 
     /// When parsing a string, an invalid character escape
     /// was encountered.
-    #[fail(display = "invalid character escape in string")]
+    #[snafu(display("invalid character escape in string"))]
     InvalidStringEscape { span: ByteSpan },
 
     /// Unable to resolve a variable in scope.
-    #[fail(display = "could not resolve variable")]
+    #[snafu(display("could not resolve variable"))]
     UnresolvedVariable { span: ByteSpan },
 
     /// Unable to bind a variable in a scope, it is already bound.
-    #[fail(display = "variable was already bound in scope")]
+    #[snafu(display("variable was already bound in scope"))]
     AlreadyBound { new: ByteSpan, old: ByteSpan },
     /// Variable binding shadowed other binding
-    #[fail(display = "binding shadowed previously bound variable")]
+    #[snafu(display("binding shadowed previously bound variable"))]
     ShadowingBind { new: ByteSpan, old: ByteSpan },
 
     // Binary specifier parsing
-    #[fail(display = "unknown specifier in binary entry")]
+    #[snafu(display("unknown specifier in binary entry"))]
     BinaryUnknownSpecifier { span: ByteSpan },
-    #[fail(display = "conflicting specifiers in binary entry")]
+    #[snafu(display("conflicting specifiers in binary entry"))]
     BinaryConflictingSpecifier { new: ByteSpan, old: ByteSpan },
-    #[fail(display = "invalid specifier for type in binary entry")]
+    #[snafu(display("invalid specifier for type in binary entry"))]
     BinaryInvalidSpecifier { span: ByteSpan, typ: BinaryTypeName },
-    #[fail(display = "type does not support size in binary entry")]
+    #[snafu(display("type does not support size in binary entry"))]
     BinaryInvalidSize { span: ByteSpan, typ: BinaryTypeName },
 
     // Records
-    #[fail(display = "record field specified more than once")]
+    #[snafu(display("record field specified more than once"))]
     DuplicateRecordField { new: ByteSpan, old: ByteSpan },
-    #[fail(display = "record is not defined")]
+    #[snafu(display("record is not defined"))]
     UndefinedRecord { span: ByteSpan },
 
 }

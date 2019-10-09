@@ -5,14 +5,10 @@ pub use libeir_intern::symbol::{Ident, InternedString, LocalInternedString, Symb
 
 mod errors;
 mod lexer;
-mod scanner;
-mod source;
 mod token;
 
 pub use self::errors::{LexicalError, TokenConvertError};
 pub use self::lexer::Lexer;
-pub use self::scanner::Scanner;
-pub use self::source::{FileMapSource, Source, SourceError};
 pub use self::token::{AtomToken, IdentToken, StringToken, SymbolToken, IntegerToken, TokenType};
 pub use self::token::{LexicalToken, Token, DelayedSubstitution};
 

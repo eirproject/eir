@@ -62,3 +62,13 @@ impl TextFormatter for BufferTextFormatter {
 }
 
 pub mod parser;
+pub use parser::{
+    function as parse_function,
+    function_unwrap as parse_function_unwrap,
+    function_map as parse_function_map,
+    function_map_unwrap as parse_function_map_unwrap,
+    module as parse_module,
+    module_unwrap as parse_module_unwrap,
+};
+
+pub mod ast;

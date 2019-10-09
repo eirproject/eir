@@ -93,26 +93,40 @@ impl<'a> FunctionBuilder<'a> {
         CaseBuilder::new()
     }
 
+    pub fn op_unpack_value_list_next(&mut self, block: Block, target: Value, list: Value, num: usize) {
+        let data = self.fun.blocks.get_mut(block).unwrap();
+        assert!(data.op.is_none());
+        assert!(data.reads.is_empty());
+
+        data.op = Some(OpKind::UnpackValueList(num));
+        data.reads.push(target, &mut self.fun.pool.value);
+        data.reads.push(list, &mut self.fun.pool.value);
+
+        self.graph_update_block(block);
+    }
     pub fn op_unpack_value_list(&mut self, block: Block, list: Value, num: usize) -> Block {
         let cont = self.fun.block_insert();
         let cont_val = self.value(cont);
         for _ in 0..num {
             self.fun.block_arg_insert(cont);
         }
+        self.op_unpack_value_list_next(block, cont_val, list, num);
+        cont
+    }
 
+    pub fn op_if_bool_next(&mut self, block: Block, t: Value, f: Value, o: Value, value: Value) {
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
-        data.op = Some(OpKind::UnpackValueList(num));
-        data.reads.push(cont_val, &mut self.fun.pool.value);
-        data.reads.push(list, &mut self.fun.pool.value);
+        data.op = Some(OpKind::IfBool);
+        data.reads.push(t, &mut self.fun.pool.value);
+        data.reads.push(f, &mut self.fun.pool.value);
+        data.reads.push(o, &mut self.fun.pool.value);
+        data.reads.push(value, &mut self.fun.pool.value);
 
         self.graph_update_block(block);
-
-        cont
     }
-
     pub fn op_if_bool(&mut self, block: Block, value: Value) -> (Block, Block, Block) {
         let true_cont = self.fun.block_insert();
         let true_cont_val = self.value(true_cont);
@@ -121,37 +135,30 @@ impl<'a> FunctionBuilder<'a> {
         let non_cont = self.fun.block_insert();
         let non_cont_val = self.value(non_cont);
 
+        self.op_if_bool_next(block, true_cont_val, false_cont_val, non_cont_val, value);
+
+        (true_cont, false_cont, non_cont)
+    }
+
+    pub fn op_if_bool_strict_next(&mut self, block: Block, t: Value, f: Value, value: Value) {
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
         data.op = Some(OpKind::IfBool);
-        data.reads.push(true_cont_val, &mut self.fun.pool.value);
-        data.reads.push(false_cont_val, &mut self.fun.pool.value);
-        data.reads.push(non_cont_val, &mut self.fun.pool.value);
+        data.reads.push(t, &mut self.fun.pool.value);
+        data.reads.push(f, &mut self.fun.pool.value);
         data.reads.push(value, &mut self.fun.pool.value);
 
         self.graph_update_block(block);
-
-        (true_cont, false_cont, non_cont)
     }
-
     pub fn op_if_bool_strict(&mut self, block: Block, value: Value) -> (Block, Block) {
         let true_cont = self.fun.block_insert();
         let true_cont_val = self.value(true_cont);
         let false_cont = self.fun.block_insert();
         let false_cont_val = self.value(false_cont);
 
-        let data = self.fun.blocks.get_mut(block).unwrap();
-        assert!(data.op.is_none());
-        assert!(data.reads.is_empty());
-
-        data.op = Some(OpKind::IfBool);
-        data.reads.push(true_cont_val, &mut self.fun.pool.value);
-        data.reads.push(false_cont_val, &mut self.fun.pool.value);
-        data.reads.push(value, &mut self.fun.pool.value);
-
-        self.graph_update_block(block);
+        self.op_if_bool_strict_next(block, true_cont_val, false_cont_val, value);
 
         (true_cont, false_cont)
     }

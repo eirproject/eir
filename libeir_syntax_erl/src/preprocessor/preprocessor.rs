@@ -3,21 +3,24 @@ use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use failure::{format_err, Error};
 use termcolor::ColorChoice;
+
+use snafu::ResultExt;
 
 use libeir_diagnostics::{ByteIndex, ByteSpan, CodeMap, Diagnostic, Label};
 use libeir_diagnostics::{Emitter, StandardStreamEmitter};
+use libeir_util_parse::Source;
 
 use crate::lexer::{symbols, IdentToken, Lexed, LexicalToken, Symbol, Token,
                    DelayedSubstitution};
-use crate::lexer::{Lexer, Source};
+use crate::lexer::Lexer;
 use crate::parser::{ ParseConfig, NodeIdGenerator };
 
 use super::macros::Stringify;
 use super::token_reader::{TokenBufferReader, TokenReader, TokenStreamReader};
 use super::{Directive, MacroContainer, MacroIdent, MacroCall, MacroDef};
 use super::{Preprocessed, PreprocessorError, Result};
+use super::errors;
 
 pub struct Preprocessor<Reader: TokenReader> {
     codemap: Arc<Mutex<CodeMap>>,
@@ -200,7 +203,7 @@ where
 
     fn expand_userdefined_macro(&self, call: MacroCall) -> Result<VecDeque<LexicalToken>> {
         let definition = match self.macros.get(&call) {
-            None => return Err(PreprocessorError::UndefinedMacro(call)),
+            None => return Err(PreprocessorError::UndefinedMacro { call }),
             Some(def) => def,
         };
         match *definition {
@@ -226,11 +229,11 @@ where
                         "expected {} arguments at call site, but given {}",
                         arity, argc
                     );
-                    return Err(PreprocessorError::BadMacroCall(
+                    return Err(PreprocessorError::BadMacroCall {
                         call,
-                        definition.clone(),
-                        err,
-                    ));
+                        def: definition.clone(),
+                        reason: err,
+                    });
                 }
                 let bindings = def
                     .variables
@@ -273,7 +276,7 @@ where
                 }
             } else if let Some(stringify) = reader.try_read::<Stringify>()? {
                 let tokens = match bindings.get(&stringify.name.symbol()) {
-                    None => return Err(PreprocessorError::UndefinedStringifyMacro(stringify)),
+                    None => return Err(PreprocessorError::UndefinedStringifyMacro { call: stringify }),
                     Some(tokens) => tokens,
                 };
                 let string = tokens.iter().map(|t| t.to_string()).collect::<String>();
@@ -320,11 +323,13 @@ where
                             MacroDef::String(d.name.symbol()));
             }
             Directive::Include(ref d) if !ignore => {
-                let path = d.include(&self.include_paths)?;
+                let path = d.include(&self.include_paths)
+                    .context(errors::BadDirective)?;
                 self.reader.inject_include(path)?;
             }
             Directive::IncludeLib(ref d) if !ignore => {
-                let path = d.include_lib(&self.code_paths)?;
+                let path = d.include_lib(&self.code_paths)
+                    .context(errors::BadDirective)?;
                 println!("{:?}", path);
                 self.reader.inject_include(path)?;
             }
@@ -348,10 +353,10 @@ where
                 self.branches.push(Branch::new(entered));
             }
             Directive::Else(_) => match self.branches.last_mut() {
-                None => return Err(PreprocessorError::OrphanedElse(directive)),
+                None => return Err(PreprocessorError::OrphanedElse { directive }),
                 Some(branch) => {
                     match branch.switch_to_else_branch() {
-                        Err(_) => return Err(PreprocessorError::OrphanedElse(directive)),
+                        Err(_) => return Err(PreprocessorError::OrphanedElse { directive }),
                         Ok(_) => (),
                     };
                 }
@@ -359,7 +364,7 @@ where
             Directive::Elif(ref d) => {
                 // Treat this like -endif followed by -if(Cond)
                 match self.branches.pop() {
-                    None => return Err(PreprocessorError::OrphanedElse(directive)),
+                    None => return Err(PreprocessorError::OrphanedElse { directive }),
                     Some(_) => {
                         let entered = self.eval_conditional(d.span(), d.condition.clone())?;
                         self.branches.push(Branch::new(entered));
@@ -367,13 +372,13 @@ where
                 }
             }
             Directive::Endif(_) => match self.branches.pop() {
-                None => return Err(PreprocessorError::OrphanedEnd(directive)),
+                None => return Err(PreprocessorError::OrphanedEnd { directive }),
                 Some(_) => (),
             },
             Directive::Error(ref d) if !ignore => {
                 let span = d.span();
                 let err = d.message.symbol().as_str().get().to_string();
-                return Err(PreprocessorError::CompilerError(Some(span), err));
+                return Err(PreprocessorError::CompilerError { span: Some(span), reason: err });
             }
             Directive::Warning(ref d) if !ignore => {
                 if self.no_warn {
@@ -382,7 +387,7 @@ where
                 if self.warnings_as_errors {
                     let span = d.span();
                     let err = d.message.symbol().as_str().get().to_string();
-                    return Err(PreprocessorError::CompilerError(Some(span), err));
+                    return Err(PreprocessorError::CompilerError { span: Some(span), reason: err });
                 }
                 let span = d.span();
                 let warn = d.message.symbol().as_str().get();
@@ -419,9 +424,9 @@ where
                 Expr::Literal(Literal::Atom(_, Ident { ref name, .. })) if *name == symbols::False => {
                     Ok(false)
                 }
-                _other => return Err(PreprocessorError::InvalidConditional(span)),
+                _other => return Err(PreprocessorError::InvalidConditional { span }),
             },
-            Err(errs) => return Err(PreprocessorError::ParseError(span, errs)),
+            Err(errors) => return Err(PreprocessorError::ParseError { span, errors }),
         }
     }
 }
@@ -453,9 +458,9 @@ impl Branch {
             entered,
         }
     }
-    pub fn switch_to_else_branch(&mut self) -> std::result::Result<(), Error> {
+    pub fn switch_to_else_branch(&mut self) -> Result<()> {
         if !self.then_branch {
-            return Err(format_err!("orphaned else"));
+            return Err(PreprocessorError::OrphanedBranchElse);
         }
         self.then_branch = false;
         self.entered = !self.entered;

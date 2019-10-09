@@ -209,11 +209,11 @@ DeprecatedAttribute: Attribute = {
                 ]))
             }
             other => {
-                Err(to_lalrpop_err!(PreprocessorError::Diagnostic(
-                    Diagnostic::new_warning("invalid deprecated attribute")
+                Err(to_lalrpop_err!(PreprocessorError::ShowDiagnostic {
+                    diagnostic: Diagnostic::new_warning("invalid deprecated attribute")
                         .with_label(Label::new_primary(span!(l, r))
                             .with_message("expected 'module', '{module, Flag}', 'Function/Arity', or '{Function/Arity, Flag}'"))
-                )))
+                }))
             }
         }
     },
@@ -247,11 +247,11 @@ DeprecatedFlag: DeprecatedFlag = {
             "next_version" => DeprecatedFlag::NextVersion,
             "next_major_release" => DeprecatedFlag::NextMajorRelease,
             other => {
-                errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                    Diagnostic::new_warning("invalid deprecation flag")
+                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                    diagnostic: Diagnostic::new_warning("invalid deprecation flag")
                         .with_label(Label::new_primary(span!(l, r))
-                            .with_message(format!("expected one of 'eventually', 'next_version', or 'next_major_release', got '{}'", other)))
-                )));
+                            .with_message(format!("expected one of 'eventually', 'next_version', or 'next_major_release', got '{}'", other))),
+                }));
                 DeprecatedFlag::Eventually
             }
         }
@@ -307,11 +307,11 @@ TypeGuard: TypeGuard = {
                 Ok(TypeGuard { span: span!(l, r), var, ty }),
             name => {
                 Err(lalrpop_util::ParseError::User {
-                    error: PreprocessorError::Diagnostic(
-                        Diagnostic::new_error("invalid type constraint")
+                    error: PreprocessorError::ShowDiagnostic {
+                        diagnostic: Diagnostic::new_error("invalid type constraint")
                             .with_label(Label::new_primary(span!(l, r))
-                                .with_message(format!("expected constraint in the form `Name :: Type`")))
-                    )
+                                .with_message(format!("expected constraint in the form `Name :: Type`"))),
+                    }
                 })
             }
         }

@@ -1,55 +1,72 @@
-// 1. Go through all live + read values in the target
-// 2. If the value is already processed, skip
-// 2. Go through all nested values, add to process list
-// 3. If the value is not relevant to the phi, skip
-// 4. Walk and merge phi nodes
-// 5. Add phi destinations to process list
-// 6. If all destinations have the same from value, add to static map
-//    else add to cond map
-
-
-
-
-use libeir_ir::{FunctionIdent, Function};
-use libeir_intern::{Ident, Symbol};
-
 use crate::FunctionPass;
 use super::SimplifyCfgPass;
+
+use libeir_ir::parse_function_unwrap;
 
 #[test]
 fn primop_in_chain() {
 
-    let ident = FunctionIdent {
-        module: Ident::from_str("foo"),
-        name: Ident::from_str("foo"),
-        arity: 0,
-    };
-    let mut function = Function::new(ident);
+    let mut fun = parse_function_unwrap("
+foo:bar/1 {
+    entry(%ret, %thr, %a):
+        unpack <> arity 0 => b1;
+    b1():
+        b2(%a);
+    b2(%b):
+        %prim = {%b};
+        b3(%prim);
+    b3(%c):
+        %ret(%c);
+}
+");
+    let mut b = fun.builder();
 
-    let mut b = function.builder();
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
 
-    let entry = b.block_insert();
-    let entry_arg_1 = b.block_arg_insert(entry);
-    let entry_arg_2 = b.block_arg_insert(entry);
-    b.block_set_entry(entry);
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    assert!(out.len() == 0);
 
-    let false_val = b.prim_value_list(&[]);
-    let block_1 = b.op_unpack_value_list(entry, false_val, 0);
+    let after = parse_function_unwrap("
+foo:bar/1 {
+    entry(%ret, %thr, %a):
+        unpack <> arity 0 => b1;
+    b1():
+        %ret({%a});
+}
+");
 
-    let block_2 = b.block_insert();
-    let block_2_arg_1 = b.block_arg_insert(block_2);
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 
-    let block_3 = b.block_insert();
-    let block_3_arg_1 = b.block_arg_insert(block_3);
+}
 
-    b.op_call(block_1, block_2, &[entry_arg_2]);
+#[test]
+#[ignore]
+fn split_primop_in_chain() {
 
-    let tup = b.prim_tuple(&[block_2_arg_1]);
-    b.op_call(block_2, block_3, &[tup]);
+    let mut fun = parse_function_unwrap("
+foo:bar/3 {
+    entry(%ret, %thr, %a, %b, %c):
+        if_bool %a b_true b_false;
 
-    b.op_call(block_3, entry_arg_1, &[block_3_arg_1]);
+    b_true():
+        b_true1(%b);
+      b_true1(%bb):
+        b_join({%bb});
 
-    println!("{}", b.fun().to_text());
+    b_false():
+        b_false1(%c);
+      b_false1(%cc):
+        b_join({%cc});
+
+    b_join(%d):
+        b_join1({%d});
+      b_join1(%dd):
+        %ret(%dd);
+}
+");
+    let mut b = fun.builder();
 
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
@@ -58,54 +75,54 @@ fn primop_in_chain() {
 
     let mut out = Vec::new();
     b.fun().validate(&mut out);
-    println!("{:?}", out);
     assert!(out.len() == 0);
+
+    let after = parse_function_unwrap("
+foo:bar/1 {
+    entry(%ret, %thr, %a):
+        unpack <> arity 0 => b1;
+    b1():
+        %ret({%a});
+}
+");
+
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 
 }
 
 #[test]
 fn tail_call_elimination() {
-    let ident = FunctionIdent {
-        module: Ident::from_str("foo"),
-        name: Ident::from_str("foo"),
-        arity: 0,
-    };
-    let mut function = Function::new(ident);
 
-    let mut b = function.builder();
-
-    let entry = b.block_insert();
-    let entry_arg_1 = b.block_arg_insert(entry);
-    let entry_arg_2 = b.block_arg_insert(entry);
-    b.block_set_entry(entry);
-
-    let block_2 = b.block_insert();
-    let block_2_val = b.value(block_2);
-    let block_3 = b.block_insert();
-    let block_3_val = b.value(block_3);
-
-    let block_1 = b.op_capture_function(entry, Symbol::intern("foo"),
-                                        Symbol::intern("foo"), 0);
-    let block_1_arg_1 = b.fun().block_args(block_1)[0];
-    b.op_call(block_1, block_1_arg_1, &[block_2_val, block_3_val]);
-
-    let block_2_arg_1 = b.block_arg_insert(block_2);
-    b.op_call(block_2, entry_arg_1, &[block_2_arg_1]);
-
-    let block_3_arg_1 = b.block_arg_insert(block_3);
-    let block_3_arg_2 = b.block_arg_insert(block_3);
-    let block_3_arg_3 = b.block_arg_insert(block_3);
-    b.op_call(block_3, entry_arg_2, &[block_3_arg_1, block_3_arg_2, block_3_arg_3]);
-
-    println!("{}", b.fun().to_text());
+    let mut fun = parse_function_unwrap("
+foo:bar/0 {
+    entry(%ret, %thr):
+        b1(a'foo':a'foo'/0);
+    b1(%fun):
+        %fun(b2, b3);
+    b2(%ret_arg):
+        %ret(%ret_arg);
+    b3(%thr_a, %thr_b, %thr_c):
+        %thr(%thr_a, %thr_b, %thr_c);
+}
+");
+    let mut b = fun.builder();
 
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
 
-    println!("{}", b.fun().to_text());
-
     let mut out = Vec::new();
     b.fun().validate(&mut out);
-    println!("{:?}", out);
     assert!(out.len() == 0);
+
+    let after = parse_function_unwrap("
+foo:bar/0 {
+    entry(%ret, %thr):
+        b1(a'foo':a'foo'/0);
+    b1(%a):
+        %a(%ret, %thr);
+}
+");
+
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
+
 }

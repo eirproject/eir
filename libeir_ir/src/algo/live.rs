@@ -107,8 +107,6 @@ pub fn calculate_live_values(fun: &Function) -> LiveValues {
     let mut live: HashMap<Block, PooledEntitySet<Value>> = HashMap::new();
     let mut live_in: HashMap<Block, PooledEntitySet<Value>> = HashMap::new();
 
-    println!("Name: {}", fun.ident());
-
     // Iterate dataflow until all dependencies have been resolved
     loop {
         let res = dataflow_pass(
@@ -135,40 +133,28 @@ pub fn calculate_live_values(fun: &Function) -> LiveValues {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ FunctionIdent, Function, FunctionBuilder };
-    use crate::NilTerm;
-    use libeir_intern::Ident;
 
     #[test]
     fn test_simple() {
 
-        // b1(ret):
-        //     b2()
-        // b2():
-        //     b3()
-        // b3():
-        //     ret()
+        let (ir, map) = crate::parse_function_map_unwrap("
+foo:bar/1 {
+    b1(%ret, %thr):
+        b2();
+    b2():
+        b3();
+    b3():
+        %ret([]);
+}
+");
 
-        let ident = FunctionIdent {
-            module: Ident::from_str("woo"),
-            name: Ident::from_str("woo"),
-            arity: 1,
-        };
-        let mut fun = Function::new(ident);
-        let mut b = FunctionBuilder::new(&mut fun);
+        let b1 = map.get_block("b1");
+        let b2 = map.get_block("b2");
+        let b3 = map.get_block("b3");
 
-        let b1 = b.block_insert();
-        b.block_set_entry(b1);
-        let b1_ret = b.block_arg_insert(b1);
-        let _b1_nonused = b.block_arg_insert(b1);
-        let b2 = b.block_insert();
-        let b3 = b.block_insert();
+        let b1_ret = map.get_value("ret");
 
-        b.op_call(b1, b2, &[]);
-        b.op_call(b2, b3, &[]);
-        b.op_call(b3, b1_ret, &[]);
-
-        let live = b.fun().live_values();
+        let live = ir.live_values();
 
         let b1_live = &live.live[&b1];
         assert!(b1_live.size(&live.pool) == 0);
@@ -185,58 +171,32 @@ mod tests {
     #[test]
     fn test_cycle() {
 
-        // b1(ret, a):
-        //     b2(a, [])
-        // b2(b, c):
-        //     b3()
-        // b3():
-        //     b4()
-        // b4():
-        //     b5(b6, c)
-        // b5(e, f):
-        //     b2(e, f)
-        // b6():
-        //     ret()
+        let (ir, map) = crate::parse_function_map_unwrap("
+foo:bar/1 {
+    b1(%ret, %thr, %a):
+        b2(%a, []);
+    b2(%b, %c):
+        b3();
+    b3():
+        b4();
+    b4():
+        b5(b6, %c);
+    b5(%e, %f):
+        b2(%e, %f);
+    b6():
+        %ret();
+}
+");
 
-        let ident = FunctionIdent {
-            module: Ident::from_str("woo"),
-            name: Ident::from_str("woo"),
-            arity: 1,
-        };
-        let mut fun = Function::new(ident);
-        let mut b = FunctionBuilder::new(&mut fun);
+        let b1 = map.get_block("b1");
+        let b3 = map.get_block("b3");
+        let b5 = map.get_block("b5");
+        let b6 = map.get_block("b6");
 
-        let b1 = b.block_insert();
-        b.block_set_entry(b1);
-        let b1_ret = b.block_arg_insert(b1);
-        let b1_a = b.block_arg_insert(b1);
+        let b1_ret = map.get_value("ret");
+        let b2_c = map.get_value("c");
 
-        let b2 = b.block_insert();
-        let _b2_b = b.block_arg_insert(b2);
-        let b2_c = b.block_arg_insert(b2);
-
-        let b3 = b.block_insert();
-
-        let b4 = b.block_insert();
-
-        let b5 = b.block_insert();
-        let b5_e = b.block_arg_insert(b5);
-        let b5_f = b.block_arg_insert(b5);
-
-        let b6 = b.block_insert();
-        let b6_val = b.value(b6);
-
-        let nil_const = b.value(NilTerm);
-        b.op_call(b1, b2, &[b1_a, nil_const]);
-        b.op_call(b2, b3, &[]);
-        b.op_call(b3, b4, &[]);
-        b.op_call(b4, b5, &[b6_val, b2_c]);
-        b.op_call(b5, b2, &[b5_e, b5_f]);
-        b.op_call(b6, b1_ret, &[]);
-
-        println!("{}", b.fun().to_text());
-
-        let live = b.fun().live_values();
+        let live = ir.live_values();
 
         let b1_live = &live.live[&b1];
         assert!(b1_live.size(&live.pool) == 0);
@@ -253,7 +213,6 @@ mod tests {
         let b6_live = &live.live[&b6];
         assert!(b6_live.size(&live.pool) == 1);
         assert!(b6_live.contains(b1_ret, &live.pool));
-
     }
 
 }

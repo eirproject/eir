@@ -3,11 +3,13 @@ name = "libeir_ir"
 version = "0.1.0"
 authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
 edition = "2018"
+build = "build.rs"
 
 [dependencies]
 libeir_intern = { path = "../libeir_intern" }
 libeir_diagnostics = { path = "../libeir_diagnostics" }
 libeir_util_datastructures = { path = "../util/libeir_util_datastructures" }
+libeir_util_parse = { path = "../util/libeir_util_parse" }
 
 string-intern = { version = "0.1.7", default-features = false }
 pretty = "0.3.3"
@@ -27,6 +29,16 @@ num-bigint = { git = "https://github.com/hansihe/num-bigint.git" }
 
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1.1"
+
+lalrpop-util = "0.17"
+
+snafu = "0.5"
+
+[dev-dependencies]
+pretty_assertions = "0.6"
+
+[build-dependencies]
+lalrpop = "0.17"
 
 #[dependencies.rug]
 #version = "1.2"

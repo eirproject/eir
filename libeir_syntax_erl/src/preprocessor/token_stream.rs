@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
-use crate::lexer::{Lexed, Lexer, Source};
+use libeir_util_parse::Source;
+use crate::lexer::{Lexed, Lexer};
 
 pub struct TokenStream<S> {
     eof: bool,

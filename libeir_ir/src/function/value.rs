@@ -51,6 +51,10 @@ impl ValueMap {
         }
     }
 
+    pub fn get(&self, kind: ValueKind) -> Option<Value> {
+        self.back.get(&kind).cloned()
+    }
+
 }
 
 impl Index<Value> for ValueMap {

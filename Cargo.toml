@@ -14,4 +14,5 @@ members = [
     "util/libeir_util_pattern_compiler",
     "util/libeir_util_binary",
     "util/libeir_util_num",
+    "util/libeir_util_parse",
 ]

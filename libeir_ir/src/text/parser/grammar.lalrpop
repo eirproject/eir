@@ -1,0 +1,209 @@
+//-*- mode: rust -*-
+
+use libeir_diagnostics::{ByteIndex, ByteSpan, Diagnostic, Label as DiagLabel};
+use libeir_intern::Ident;
+use libeir_util_parse::ErrorReceiver;
+
+use num_traits::ToPrimitive;
+
+use crate::constant::Integer;
+use crate::text::parser::lexer::Token;
+use crate::text::ast::{Module, ModuleItem, Function, FunctionItem, Label,
+                       Op, CallOp, Value, Assignment, UnpackValueListOp,
+                       IfBoolOp};
+use super::errors::{ParserError, ParserErrors};
+
+grammar(errors: &mut dyn ErrorReceiver<ParserError, ParserError>);
+
+#[inline]
+Comma<T>: Vec<T> = {
+    <v:(<T> ",")*> <e:T?> => {
+        let mut v = v;
+        if let Some(n) = e {
+            v.push(n);
+        }
+        v
+    }
+};
+
+pub Module: Module = {
+    <name:ident> "{" <items:ModuleItem*> "}" => {
+        Module {
+            name: name,
+            items,
+        }
+    }
+};
+
+ModuleItem: ModuleItem = {
+    <Function> => ModuleItem::Function(<>),
+};
+
+pub StandaloneFunction: (Ident, Function) = {
+    <module:ident> ":" <name:ident> "/" <arity:integer> "{" <items:FunctionItem*> "}" => {
+        (
+            module,
+            Function {
+                name: name,
+                arity: arity,
+                items,
+            }
+        )
+    }
+};
+
+Function: Function = {
+    <name:ident> "/" <arity:integer> "{" <items:FunctionItem*> "}" => {
+        Function {
+            name: name,
+            arity: arity,
+            items,
+        }
+    }
+};
+
+FunctionItem: FunctionItem = {
+
+    // Assignments
+    <FunctionAssignItem> ";" => <>,
+
+    // Operations
+    <FunctionOp> ";" => FunctionItem::Op(<>),
+
+    // Label
+    <l:@L> <name:Value> "(" <args:Comma<Value>> ")" ":" <r:@R> => {
+        let span = ByteSpan::new(l, r);
+        if name.block().is_none() {
+            errors.error(
+                Diagnostic::new_error("label name must be block")
+                    .with_label(DiagLabel::new_primary(span))
+                    .into()
+            );
+        }
+        for arg in args.iter() {
+            if arg.value().is_none() {
+                errors.error(
+                    Diagnostic::new_error("argument to label must be value")
+                        .with_label(DiagLabel::new_primary(span))
+                        .into()
+                );
+            }
+        }
+        FunctionItem::Label(Label { name: name, args })
+    },
+
+};
+
+#[inline]
+FunctionAssignItem: FunctionItem = {
+    <l:@L> <lhs:Value> "=" <rhs:Value> <r:@R> => {
+        if lhs.value().is_none() {
+            errors.error(
+                Diagnostic::new_error("assignment must be to a value")
+                    .with_label(DiagLabel::new_primary(ByteSpan::new(l, r)))
+                    .into()
+            );
+        }
+
+        FunctionItem::Assignment(Assignment {
+            lhs,
+            rhs,
+        })
+    }
+};
+
+#[inline]
+FunctionOp: Op = {
+
+    // Call
+    <target:Value> "(" <args:Comma<Value>> ")" => {
+        Op::Call(CallOp {
+            target,
+            args,
+        })
+    },
+
+    // UnpackValueList
+    "unpack" <value:Value> "arity" <arity:integer> "=>" <block:Value> => {
+        Op::UnpackValueList(UnpackValueListOp {
+            arity: arity.to_usize().unwrap(),
+            value,
+            block,
+        })
+    },
+
+    "if_bool" <value:Value> <tru:Value> <fal:Value> <or:Value?> => {
+        Op::IfBool(IfBoolOp {
+            value,
+            tru,
+            fal,
+            or,
+        })
+    },
+
+    // Unreachable
+    "unreachable" => Op::Unreachable,
+
+};
+
+Value: Value = {
+    <m:Value> ":" <f:Value> "/" <a:Value100> =>
+        Value::CaptureFunction(Box::new(m), Box::new(f), Box::new(a)),
+    Value100,
+};
+
+Value100: Value = {
+    "[" "]" =>
+        Value::Nil,
+    "{" <Comma<Value>> "}" =>
+        Value::Tuple(<>),
+    "<" <Comma<Value>> ">" =>
+        Value::ValueList(<>),
+    ValueMax,
+};
+
+ValueMax: Value = {
+    "%" <ident> => Value::Value(<>),
+    <atom> => Value::Atom(<>),
+    <integer> => Value::Integer(<>),
+    <ident> => Value::Block(<>),
+};
+
+extern {
+    type Location = ByteIndex;
+    type Error = ParserError;
+
+    enum Token {
+        "EOF" => Token::EOF,
+
+        ident => Token::Ident(<Ident>),
+
+        atom => Token::Atom(<Ident>),
+        integer => Token::Integer(<Integer>),
+        float => Token::Float(<Ident>),
+
+        "(" => Token::ParenOpen,
+        ")" => Token::ParenClose,
+        "{" => Token::CurlyOpen,
+        "}" => Token::CurlyClose,
+        "[" => Token::SquareOpen,
+        "]" => Token::SquareClose,
+        "<" => Token::Less,
+        ">" => Token::Greater,
+        "%" => Token::Percent,
+        "%{" => Token::MapOpen,
+        ":" => Token::Colon,
+        ";" => Token::Semicolon,
+        "," => Token::Comma,
+        "?" => Token::Question,
+        "/" => Token::ForwardSlash,
+        "=" => Token::Equals,
+        "=>" => Token::FatArrow,
+
+        "unpack" => Token::UnpackValueList,
+        "unreachable" => Token::Unreachable,
+        "arity" => Token::Arity,
+        "if_bool" => Token::IfBool,
+    }
+
+}

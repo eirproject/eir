@@ -15,14 +15,15 @@ libeir_ir = { path = "../libeir_ir" }
 libeir_intern = { path = "../libeir_intern" }
 libeir_util_datastructures = { path = "../util/libeir_util_datastructures" }
 libeir_util_num = { path = "../util/libeir_util_num" }
+libeir_util_parse = { path = "../util/libeir_util_parse" }
 
 cranelift-entity = "0.30.0"
 
 rustc-hash = "1.0"
-lalrpop-util = "0.16"
+lalrpop-util = "0.17"
 glob = "0.2"
 termcolor = "0.3"
-failure = "0.1"
+snafu = "0.5"
 itertools = "0.8"
 lazy_static = "1.2"
 either = "1.5"
@@ -38,4 +39,4 @@ num-bigint = { git = "https://github.com/hansihe/num-bigint.git" }
 pretty_assertions = "0.5"
 
 [build-dependencies]
-lalrpop = "0.16"
+lalrpop = "0.17"

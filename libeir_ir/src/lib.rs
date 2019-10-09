@@ -31,7 +31,7 @@ pub use function::{ AttributeKey, AttributeValue };
 pub use function::builder::{ FunctionBuilder, CaseBuilder, IntoValue };
 
 pub use algo::live::LiveValues;
-//pub use algo::mangle::Mangler;
+pub use algo::mangle::Mangler;
 
 pub use constant::{ ConstantContainer, Const, ConstKind, AtomicTerm };
 pub use constant::{ AtomTerm, BigIntTerm, IntTerm, FloatTerm, BinaryTerm, NilTerm };
@@ -39,6 +39,11 @@ pub use constant::{ EmptyMap };
 
 pub use pattern::{ PatternNode, PatternValue, PatternClause, PatternContainer };
 
+pub use text::{
+    parse_function, parse_function_unwrap,
+    parse_function_map, parse_function_map_unwrap,
+    parse_module, parse_module_unwrap
+};
 pub use text::printer::{ ToEirText, ToEirTextContext };
 
 pub mod binary;

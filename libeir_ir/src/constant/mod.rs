@@ -9,6 +9,8 @@ use cranelift_entity::{ PrimaryMap, ListPool, EntityList, entity_impl };
 mod atomic;
 pub use atomic::*;
 mod float;
+mod integer;
+pub use integer::*;
 
 /// These entities has the property that if they are equal, they
 /// represent the same value.
@@ -143,6 +145,14 @@ impl ConstantContainer {
 
     pub fn tuple_builder(&self) -> TupleBuilder {
         TupleBuilder::new()
+    }
+
+    pub fn eq_other(&self, l: Const, r_cont: &ConstantContainer, r: Const) -> bool {
+        match (&self.const_values[l], &r_cont.const_values[r]) {
+            (ConstKind::Atomic(la), ConstKind::Atomic(ra)) if la == ra => true,
+            (ConstKind::Atomic(_), ConstKind::Atomic(_)) => false,
+            _ => unimplemented!(),
+        }
     }
 
 }

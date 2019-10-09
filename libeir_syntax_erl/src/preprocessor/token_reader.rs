@@ -4,15 +4,18 @@ use std::fmt::Display;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use snafu::ResultExt;
+
 use libeir_diagnostics::CodeMap;
+use libeir_util_parse::{FileMapSource, Scanner, Source};
 
 use crate::lexer::{AtomToken, SymbolToken, TokenConvertError};
-use crate::lexer::{FileMapSource, Scanner, Source};
 use crate::lexer::{Lexed, Lexer, LexicalToken, Symbol, Token};
 
 use super::macros::NoArgsMacroCall;
 use super::token_stream::TokenStream;
 use super::{MacroContainer, MacroCall, PreprocessorError, Result};
+use super::errors;
 
 pub trait TokenReader: Sized {
     type Source;
@@ -125,7 +128,8 @@ impl TokenReader for TokenBufferReader {
     where
         P: AsRef<Path>,
     {
-        let source = FileMapSource::from_path(self.codemap.clone(), path)?;
+        let source = FileMapSource::from_path(self.codemap.clone(), path)
+            .context(errors::Source)?;
         let scanner = Scanner::new(source);
         let lexer = Lexer::new(scanner);
         let mut tokens: VecDeque<Lexed> = lexer.collect();
@@ -138,13 +142,9 @@ impl TokenReader for TokenBufferReader {
         if let Some(token) = self.unread.pop_front() {
             return Ok(Some(token));
         }
-        match self.tokens.pop_front() {
-            None => Ok(None),
-            Some(Err(e)) => Err(e.into()),
-            Some(Ok(t)) => {
-                Ok(Some(t))
-            }
-        }
+        self.tokens.pop_front()
+            .transpose()
+            .context(errors::Lexical)
     }
 
     fn read_token(&mut self) -> Result<LexicalToken> {
@@ -185,7 +185,8 @@ where
     where
         P: AsRef<Path>,
     {
-        let source = Source::from_path(self.codemap.clone(), path)?;
+        let source = Source::from_path(self.codemap.clone(), path)
+            .context(errors::Source)?;
         let scanner = Scanner::new(source);
         let lexer = Lexer::new(scanner);
         self.tokens.include(lexer);
@@ -196,11 +197,9 @@ where
         if let Some(token) = self.unread.pop_front() {
             return Ok(Some(token));
         }
-        match self.tokens.next() {
-            None => Ok(None),
-            Some(Err(e)) => Err(e.into()),
-            Some(Ok(t)) => Ok(Some(t)),
-        }
+        self.tokens.next()
+            .transpose()
+            .context(errors::Lexical)
     }
 
     fn read_token(&mut self) -> Result<LexicalToken> {
@@ -230,11 +229,11 @@ pub trait ReadFrom: Sized {
         R: TokenReader<Source = S>,
     {
         Self::read_from(reader).map(Some).or_else(|e| match e {
-            PreprocessorError::UnexpectedToken(token, _) => {
+            PreprocessorError::UnexpectedToken { token, .. } => {
                 reader.unread_token(token.clone());
                 return Ok(None);
             }
-            PreprocessorError::InvalidTokenType(token, _) => {
+            PreprocessorError::InvalidTokenType { token, .. } => {
                 reader.unread_token(token.clone());
                 return Ok(None);
             }
@@ -252,11 +251,11 @@ pub trait ReadFrom: Sized {
     {
         Self::read_from(reader)
             .map_err(|err| match err {
-                PreprocessorError::UnexpectedToken(token, _) => {
-                    PreprocessorError::UnexpectedToken(token, vec![expected.to_string()])
+                PreprocessorError::UnexpectedToken { token, .. } => {
+                    PreprocessorError::UnexpectedToken { token, expected: vec![expected.to_string()], }
                 }
-                PreprocessorError::InvalidTokenType(token, _) => {
-                    PreprocessorError::InvalidTokenType(token, expected.to_string())
+                PreprocessorError::InvalidTokenType { token, .. } => {
+                    PreprocessorError::InvalidTokenType { token, expected: expected.to_string(), }
                 }
                 _ => err,
             })
@@ -264,10 +263,10 @@ pub trait ReadFrom: Sized {
                 if token.expect(expected) {
                     Ok(token)
                 } else {
-                    Err(PreprocessorError::UnexpectedToken(
-                        token.into(),
-                        vec![expected.to_string()],
-                    ))
+                    Err(PreprocessorError::UnexpectedToken {
+                        token: token.into(),
+                        expected: vec![expected.to_string()],
+                    })
                 }
             })
     }

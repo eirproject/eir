@@ -324,12 +324,12 @@ impl NamedFunction {
         let (head, rest) = clauses.split_first().unwrap();
 
         if head.name.is_none() {
-            return Err(to_lalrpop_err!(PreprocessorError::Diagnostic(
-                Diagnostic::new_error("expected named function").with_label(
+            return Err(to_lalrpop_err!(PreprocessorError::ShowDiagnostic {
+                diagnostic: Diagnostic::new_error("expected named function").with_label(
                     Label::new_primary(head.span)
                         .with_message("this clause has no name, but a name is required here")
-                )
-            )));
+                ),
+            }));
         }
 
         let head_span = &head.span;
@@ -341,8 +341,8 @@ impl NamedFunction {
         let mut last_clause = head_span.clone();
         for clause in rest.iter() {
             if clause.name.is_none() {
-                return Err(to_lalrpop_err!(PreprocessorError::Diagnostic(
-                    Diagnostic::new_error("expected named function clause")
+                return Err(to_lalrpop_err!(PreprocessorError::ShowDiagnostic {
+                    diagnostic: Diagnostic::new_error("expected named function clause")
                         .with_label(
                             Label::new_primary(clause.span).with_message(
                                 "this clause has no name, but a name is required here"
@@ -352,8 +352,8 @@ impl NamedFunction {
                             Label::new_secondary(last_clause).with_message(
                                 "expected a clause with the same name as this clause"
                             )
-                        )
-                )));
+                        ),
+                }));
             }
 
             let clause_span = &clause.span;
@@ -362,29 +362,29 @@ impl NamedFunction {
             let clause_arity = clause_params.len();
 
             if clause_name != name {
-                errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                    Diagnostic::new_error("unterminated function clause")
+                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                    diagnostic: Diagnostic::new_error("unterminated function clause")
                         .with_label(Label::new_primary(last_clause.clone()).with_message(
                             "this clause ends with ';', indicating that another clause follows"
                         ))
                         .with_label(
                             Label::new_secondary(clause_span.clone())
                                 .with_message("but this clause has a different name")
-                        )
-                )));
+                        ),
+                }));
                 continue;
             }
             if clause_arity != arity {
-                errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                    Diagnostic::new_error("unterminated function clause")
+                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                    diagnostic: Diagnostic::new_error("unterminated function clause")
                         .with_label(Label::new_primary(last_clause.clone()).with_message(
                             "this clause ends with ';', indicating that another clause follows"
                         ))
                         .with_label(
                             Label::new_secondary(clause_span.clone())
                                 .with_message("but this clause has a different arity")
-                        )
-                )));
+                        ),
+                }));
                 continue;
             }
 
@@ -437,8 +437,8 @@ impl Lambda {
             let clause_arity = clause_params.len();
 
             if clause_name.is_some() {
-                return Err(to_lalrpop_err!(PreprocessorError::Diagnostic(
-                    Diagnostic::new_error("mismatched function clause")
+                return Err(to_lalrpop_err!(PreprocessorError::ShowDiagnostic {
+                    diagnostic: Diagnostic::new_error("mismatched function clause")
                         .with_label(
                             Label::new_primary(clause_span.clone())
                                 .with_message("this clause is named")
@@ -446,20 +446,20 @@ impl Lambda {
                         .with_label(Label::new_secondary(last_clause.clone()).with_message(
                             "but this clause is unnamed, all clauses must share the same name"
                         ))
-                )));
+                }));
             }
 
             if clause_arity != arity {
-                errs.push(to_lalrpop_err!(ParserError::Diagnostic(
-                    Diagnostic::new_error("mismatched function clause")
+                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                    diagnostic: Diagnostic::new_error("mismatched function clause")
                         .with_label(Label::new_primary(clause_span.clone()).with_message(
                             "the arity of this clause does not match the previous clause"
                         ))
                         .with_label(
                             Label::new_secondary(last_clause.clone())
                                 .with_message("this is the previous clause")
-                        )
-                )));
+                        ),
+                }));
                 continue;
             }
 

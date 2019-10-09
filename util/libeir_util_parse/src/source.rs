@@ -1,11 +1,9 @@
 use std::char;
-use std::env;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use failure::Fail;
+use snafu::{Snafu, ResultExt};
 
-use crate::util;
 use libeir_diagnostics::{ByteIndex, ByteOffset, ByteSpan, CodeMap, Diagnostic, FileMap, FileName};
 
 pub type SourceResult<T> = std::result::Result<T, SourceError>;
@@ -22,39 +20,33 @@ pub trait Source: Sized {
     fn slice(&self, span: ByteSpan) -> &str;
 }
 
-#[derive(Fail, Debug)]
+#[derive(Debug, Snafu)]
 pub enum SourceError {
-    #[fail(display = "{}", _0)]
-    IO(std::io::Error),
+    #[snafu(display("{}", source))]
+    IO {
+        source: std::io::Error,
+    },
 
-    #[fail(display = "invalid source path")]
-    InvalidPath(String),
+    #[snafu(display("invalid source path"))]
+    InvalidPath {
+        reason: String,
+    },
 
-    #[fail(display = "invalid environment variable '{}'", _1)]
-    InvalidEnvironmentVariable(std::env::VarError, String),
-}
-impl std::convert::From<std::io::Error> for SourceError {
-    fn from(err: std::io::Error) -> SourceError {
-        SourceError::IO(err)
-    }
+    #[snafu(display("{}", source))]
+    PathVariableSubstitute {
+        source: crate::util::PathVariableSubstituteError,
+    },
+
 }
 impl SourceError {
     pub fn to_diagnostic(&self) -> Diagnostic {
         match self {
-            SourceError::IO(ref err) => Diagnostic::new_error(err.to_string()),
-            SourceError::InvalidPath(ref reason) => {
+            SourceError::IO { source } => Diagnostic::new_error(source.to_string()),
+            SourceError::InvalidPath { reason } => {
                 Diagnostic::new_error(format!("invalid path: {}", reason))
             }
-            SourceError::InvalidEnvironmentVariable(env::VarError::NotPresent, ref var) => {
-                Diagnostic::new_error(format!(
-                    "invalid environment variable '{}': not defined",
-                    var
-                ))
-            }
-            SourceError::InvalidEnvironmentVariable(_, ref var) => Diagnostic::new_error(format!(
-                "invalid environment variable '{}': contains invalid unicode data",
-                var
-            )),
+            SourceError::PathVariableSubstitute { source } =>
+                source.to_diagnostic(),
         }
     }
 }
@@ -199,12 +191,14 @@ impl FileMapSource {
 }
 impl Source for FileMapSource {
     fn from_path<P: AsRef<Path>>(codemap: Arc<Mutex<CodeMap>>, path: P) -> SourceResult<Self> {
-        let path = util::substitute_path_variables(path)?;
+        let path = crate::util::substitute_path_variables(path)
+            .context(PathVariableSubstitute)?;
         let filemap = {
             codemap
                 .lock()
                 .unwrap()
-                .add_filemap_from_disk(FileName::real(path))?
+                .add_filemap_from_disk(FileName::real(path))
+                .context(IO)?
         };
         Ok(FileMapSource::new(filemap))
     }

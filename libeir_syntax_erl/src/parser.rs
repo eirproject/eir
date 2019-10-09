@@ -42,9 +42,10 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use libeir_util_parse::{Scanner, FileMapSource, Source};
 use libeir_diagnostics::{CodeMap, FileName};
 
-use crate::lexer::{FileMapSource, Lexer, Scanner, Source};
+use crate::lexer::Lexer;
 use crate::preprocessor::{MacroContainer, Preprocessed, Preprocessor};
 
 pub use self::ast::{NodeId, NodeIdGenerator};
@@ -635,7 +636,9 @@ system_version() ->
 ",
         );
         match errs.pop() {
-            Some(ParserError::Preprocessor(PreprocessorError::CompilerError(_, _))) => (),
+            Some(ParserError::Preprocessor {
+                source: PreprocessorError::CompilerError { .. },
+            }) => (),
             Some(err) => panic!(
                 "expected compiler error, but got a different error instead: {:?}",
                 err

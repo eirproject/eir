@@ -304,6 +304,10 @@ impl Function {
         self.blocks[block].reads.as_slice(&self.pool.value)
     }
 
+    pub fn block_value(&self, block: Block) -> Value {
+        self.values.get(ValueKind::Block(block)).unwrap()
+    }
+
     pub fn block_walk_nested_values<F, R>(&self, block: Block,
                                           visit: &mut F) -> Result<(), R>
     where
@@ -331,6 +335,25 @@ impl Function {
 
     pub fn block_annotated_fun(&self, block: Block) -> bool {
         self.blocks[block].is_fun
+    }
+
+    pub fn block_op_eq(&self, lb: Block, r_fun: &Function, rb: Block) -> bool {
+        match (self.block_kind(lb).unwrap(), r_fun.block_kind(rb).unwrap()) {
+            (OpKind::Case { .. }, _) => unimplemented!(),
+            (_, OpKind::Case { .. }) => unimplemented!(),
+            (OpKind::Call, OpKind::Call) => true,
+            (OpKind::CaptureFunction, OpKind::CaptureFunction) => true,
+            (OpKind::IfBool, OpKind::IfBool) => true,
+            (OpKind::Intrinsic(sym1), OpKind::Intrinsic(sym2)) if sym1 == sym2 => true,
+            (OpKind::TraceCaptureRaw, OpKind::TraceCaptureRaw) => true,
+            (OpKind::TraceConstruct, OpKind::TraceConstruct) => true,
+            (OpKind::MapPut { action: a1 }, OpKind::MapPut { action: a2 }) if a1 == a2 => true,
+            (OpKind::UnpackValueList(n1), OpKind::UnpackValueList(n2)) if n1 == n2 => true,
+            (OpKind::BinaryPush { specifier: s1 }, OpKind::BinaryPush { specifier: s2 }) if s1 == s2 => true,
+            (OpKind::Match { branches: b1 }, OpKind::Match { branches: b2 }) if b1 == b2 => true,
+            (OpKind::Unreachable, OpKind::Unreachable) => true,
+            _ => false,
+        }
     }
 
 }

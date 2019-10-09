@@ -5,9 +5,9 @@ use num_bigint::BigInt;
 
 use libeir_diagnostics::{ByteIndex, ByteOffset, ByteSpan};
 
+use libeir_util_parse::{Source, Scanner};
+
 use super::errors::LexicalError;
-use super::scanner::Scanner;
-use super::source::Source;
 use super::token::*;
 use super::{Lexed, Symbol};
 
@@ -779,6 +779,7 @@ mod test {
     use std::sync::Arc;
 
     use libeir_diagnostics::{ByteIndex, ByteSpan, FileMap, FileName};
+    use libeir_util_parse::{FileMapSource, Scanner};
     use pretty_assertions::assert_eq;
 
     use crate::lexer::*;

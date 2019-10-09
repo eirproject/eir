@@ -1,41 +1,53 @@
 use std::convert::From;
 
+use libeir_util_parse::SourceError;
 use libeir_diagnostics::{ByteIndex, ByteSpan, Diagnostic, Label};
-use failure::Fail;
+use snafu::Snafu;
 
-use crate::lexer::{SourceError, Token};
+use crate::lexer::{Token};
 use crate::preprocessor::PreprocessorError;
 
 pub type ParseError = lalrpop_util::ParseError<ByteIndex, Token, ParserError>;
 
-#[derive(Fail, Debug)]
+#[derive(Debug, Snafu)]
 pub enum ParserError {
-    #[fail(display = "{}", _0)]
-    Preprocessor(#[fail(cause)] PreprocessorError),
 
-    #[fail(display = "{}", _0)]
-    Source(#[fail(cause)] SourceError),
+    #[snafu(visibility(pub), display("{}", source))]
+    Preprocessor {
+        source: PreprocessorError,
+    },
 
-    #[fail(display = "i/o error")]
-    IO(#[fail(cause)] std::io::Error),
+    #[snafu(display("{}", source))]
+    Source {
+        source: SourceError,
+    },
 
-    #[fail(display = "{}", _0)]
-    Diagnostic(Diagnostic),
+    #[snafu(display("{}", diagnostic))]
+    ShowDiagnostic {
+        diagnostic: Diagnostic,
+    },
 
-    #[fail(display = "invalid token")]
-    InvalidToken { span: ByteSpan },
+    #[snafu(display("invalid token"))]
+    InvalidToken {
+        span: ByteSpan,
+    },
 
-    #[fail(display = "unrecognized token")]
+    #[snafu(display("unrecognized token"))]
     UnrecognizedToken {
         span: ByteSpan,
         expected: Vec<String>,
     },
 
-    #[fail(display = "extra token")]
-    ExtraToken { span: ByteSpan },
+    #[snafu(display("extra token"))]
+    ExtraToken {
+        span: ByteSpan,
+    },
 
-    #[fail(display = "unexpected eof")]
-    UnexpectedEOF { expected: Vec<String> },
+    #[snafu(display("unexpected eof"))]
+    UnexpectedEOF {
+        expected: Vec<String>,
+    },
+
 }
 impl From<ParseError> for ParserError {
     fn from(err: ParseError) -> ParserError {
@@ -63,28 +75,13 @@ impl From<ParseError> for ParserError {
         }
     }
 }
-impl From<std::io::Error> for ParserError {
-    fn from(err: std::io::Error) -> ParserError {
-        ParserError::IO(err)
-    }
-}
-impl From<PreprocessorError> for ParserError {
-    fn from(err: PreprocessorError) -> ParserError {
-        ParserError::Preprocessor(err)
-    }
-}
-impl From<SourceError> for ParserError {
-    fn from(err: SourceError) -> ParserError {
-        ParserError::Source(err)
-    }
-}
 impl ParserError {
     pub fn span(&self) -> Option<ByteSpan> {
         match self {
-            ParserError::Preprocessor(ref err) => err.span(),
-            ParserError::InvalidToken { ref span, .. } => Some(span.clone()),
-            ParserError::UnrecognizedToken { ref span, .. } => Some(span.clone()),
-            ParserError::ExtraToken { ref span, .. } => Some(span.clone()),
+            ParserError::Preprocessor{ source } => source.span(),
+            ParserError::InvalidToken { span, .. } => Some(span.clone()),
+            ParserError::UnrecognizedToken { span, .. } => Some(span.clone()),
+            ParserError::ExtraToken { span, .. } => Some(span.clone()),
             _ => None,
         }
     }
@@ -92,12 +89,12 @@ impl ParserError {
     pub fn to_diagnostic(&self) -> Diagnostic {
         let span = self.span();
         let msg = self.to_string();
-        match *self {
-            ParserError::Diagnostic(ref d) => d.clone(),
-            ParserError::Preprocessor(ref err) => err.to_diagnostic(),
-            ParserError::Source(ref err) => err.to_diagnostic(),
-            ParserError::IO(_) => Diagnostic::new_error("i/o failed")
-                .with_label(Label::new_primary(span.unwrap()).with_message(msg)),
+        match self {
+            ParserError::ShowDiagnostic { diagnostic } => diagnostic.clone(),
+            ParserError::Preprocessor { source } => source.to_diagnostic(),
+            ParserError::Source { source } => source.to_diagnostic(),
+            //ParserError::IO { .. } => Diagnostic::new_error("i/o failed")
+            //    .with_label(Label::new_primary(span.unwrap()).with_message(msg)),
             ParserError::UnrecognizedToken { ref expected, .. } => {
                 Diagnostic::new_error(format!("expected: {}", expected.join(", ")))
                     .with_label(Label::new_primary(span.unwrap()).with_message(msg))
@@ -106,6 +103,21 @@ impl ParserError {
                 Diagnostic::new_error(msg).with_label(Label::new_primary(span.unwrap()))
             }
             _ => Diagnostic::new_error(msg),
+        }
+    }
+}
+
+impl From<SourceError> for ParserError {
+    fn from(source: SourceError) -> Self {
+        ParserError::Source {
+            source,
+        }
+    }
+}
+impl From<PreprocessorError> for ParserError {
+    fn from(source: PreprocessorError) -> Self {
+        ParserError::Preprocessor {
+            source,
         }
     }
 }

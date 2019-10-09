@@ -199,11 +199,17 @@ impl ReadFrom for MacroArg {
                     };
                 }
                 Token::RBrace | Token::RBracket | Token::BinaryEnd if stack.is_empty() => {
-                    return Err(PreprocessorError::UnexpectedToken(token.clone(), vec![Token::RParen.to_string()]));
+                    return Err(PreprocessorError::UnexpectedToken {
+                        token: token.clone(),
+                        expected: vec![Token::RParen.to_string()],
+                    });
                 }
                 Token::Comma if stack.is_empty() => {
                     if arg.len() == 0 {
-                        return Err(PreprocessorError::UnexpectedToken(token.clone(), vec![]));
+                        return Err(PreprocessorError::UnexpectedToken {
+                            token: token.clone(),
+                            expected: vec![],
+                        });
                     }
                     reader.unread_token(token.clone().into());
                     return Ok(Some(MacroArg { tokens: arg }));
@@ -217,8 +223,10 @@ impl ReadFrom for MacroArg {
                         Some(LexicalToken(_, t2, _)) => {
                             let closing = t2.get_closing_token();
                             if token.1 != closing {
-                                return Err(PreprocessorError::UnexpectedToken(
-                                    token.clone(), vec![closing.to_string()]));
+                                return Err(PreprocessorError::UnexpectedToken {
+                                    token: token.clone(),
+                                    expected: vec![closing.to_string()],
+                                });
                             }
                         }
                     }

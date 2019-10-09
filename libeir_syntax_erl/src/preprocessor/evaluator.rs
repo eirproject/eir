@@ -1,5 +1,3 @@
-use failure::Error;
-//use rug::Integer;
 use num_bigint::BigInt;
 
 use libeir_diagnostics::ByteSpan;
@@ -118,7 +116,7 @@ pub fn eval(expr: Expr) -> Result<Expr, PreprocessorError> {
             updates: eval_record(updates)?,
         }),
         Expr::Begin(Begin { span, .. }) => {
-            return Err(PreprocessorError::InvalidConstExpression(span));
+            return Err(PreprocessorError::InvalidConstExpression { span });
         }
         Expr::Apply(Apply {
             span,
@@ -126,18 +124,15 @@ pub fn eval(expr: Expr) -> Result<Expr, PreprocessorError> {
             args,
             ..
         }) => {
-            let args = eval_list(args)?;
+            let _args = eval_list(args)?;
             match eval(*callee)? {
                 Expr::Literal(Literal::Atom(_, Ident { ref name, .. })) => match builtin(*name) {
                     None => {
-                        return Err(PreprocessorError::InvalidConstExpression(span));
+                        return Err(PreprocessorError::InvalidConstExpression { span });
                     }
-                    Some(fun) => match fun(args) {
-                        Err(err) => return Err(PreprocessorError::BuiltinFailed(span, err)),
-                        Ok(expr) => expr,
-                    },
+                    Some(_) => unimplemented!(),
                 },
-                _ => return Err(PreprocessorError::InvalidConstExpression(span)),
+                _ => return Err(PreprocessorError::InvalidConstExpression { span }),
             }
         }
         Expr::BinaryExpr(BinaryExpr {
@@ -161,7 +156,9 @@ pub fn eval(expr: Expr) -> Result<Expr, PreprocessorError> {
             return eval_unary_op(span, op, operand);
         }
         expr => {
-            return Err(PreprocessorError::InvalidConstExpression(expr.span()));
+            return Err(PreprocessorError::InvalidConstExpression {
+                span: expr.span(),
+            });
         }
     };
 
@@ -311,7 +308,7 @@ fn eval_binary_op(
         | BinaryOp::Band
         | BinaryOp::Bsl
         | BinaryOp::Bsr => eval_shift(span, id, lhs, op, rhs),
-        _ => return Err(PreprocessorError::InvalidConstExpression(span)),
+        _ => return Err(PreprocessorError::InvalidConstExpression { span }),
     }
 }
 
@@ -333,7 +330,7 @@ fn eval_unary_op(span: ByteSpan, op: UnaryOp, rhs: Expr) -> Result<Expr, Preproc
                 Expr::Literal(Literal::Float(id, span, i * -1.0))
             }
             Expr::Literal(Literal::Float(_, _, _)) => rhs,
-            _ => return Err(PreprocessorError::InvalidConstExpression(span)),
+            _ => return Err(PreprocessorError::InvalidConstExpression { span }),
         },
         UnaryOp::Minus => match rhs {
             Expr::Literal(Literal::Integer(id, span, i)) if i > 0 => {
@@ -351,14 +348,14 @@ fn eval_unary_op(span: ByteSpan, op: UnaryOp, rhs: Expr) -> Result<Expr, Preproc
                 Expr::Literal(Literal::Float(id, span, i * -1.0))
             }
             Expr::Literal(Literal::Float(_, _, _)) => rhs,
-            _ => return Err(PreprocessorError::InvalidConstExpression(span)),
+            _ => return Err(PreprocessorError::InvalidConstExpression { span }),
         },
         UnaryOp::Bnot => match rhs {
             Expr::Literal(Literal::Integer(id, span, i)) => Expr::Literal(Literal::Integer(id, span, !i)),
             Expr::Literal(Literal::BigInteger(id, span, i)) => {
                 Expr::Literal(Literal::BigInteger(id, span, !i))
             }
-            _ => return Err(PreprocessorError::InvalidConstExpression(span)),
+            _ => return Err(PreprocessorError::InvalidConstExpression { span }),
         },
         UnaryOp::Not => match rhs {
             Expr::Literal(Literal::Atom(id, Ident { name, span })) if name == symbols::True => {
@@ -373,7 +370,7 @@ fn eval_unary_op(span: ByteSpan, op: UnaryOp, rhs: Expr) -> Result<Expr, Preproc
                     span,
                 }))
             }
-            _ => return Err(PreprocessorError::InvalidConstExpression(span)),
+            _ => return Err(PreprocessorError::InvalidConstExpression { span }),
         },
     };
     Ok(expr)
@@ -387,7 +384,7 @@ fn eval_boolean(
     rhs: Expr,
 ) -> Result<Expr, PreprocessorError> {
     if !is_boolean(&lhs) || !is_boolean(&rhs) {
-        return Err(PreprocessorError::InvalidConstExpression(span));
+        return Err(PreprocessorError::InvalidConstExpression { span });
     }
     let left = is_true(&lhs);
     let right = is_true(&rhs);
@@ -636,7 +633,7 @@ fn eval_numeric_equality(
             );
         }
 
-        _ => return Err(PreprocessorError::InvalidConstExpression(span)),
+        _ => return Err(PreprocessorError::InvalidConstExpression { span }),
     };
 
     Ok(result)
@@ -721,11 +718,11 @@ fn eval_arith(
                 eval_op_float(span, id, x, op, y as f64)?
             }
 
-            _ => return Err(PreprocessorError::InvalidConstExpression(span)),
+            _ => return Err(PreprocessorError::InvalidConstExpression { span }),
         };
         Ok(result)
     } else {
-        return Err(PreprocessorError::InvalidConstExpression(span));
+        return Err(PreprocessorError::InvalidConstExpression { span });
     }
 }
 
@@ -740,9 +737,9 @@ fn eval_op_int(
         BinaryOp::Add => Expr::Literal(Literal::Integer(span, id, x + y)),
         BinaryOp::Sub => Expr::Literal(Literal::Integer(span, id, x - y)),
         BinaryOp::Multiply => Expr::Literal(Literal::Integer(span, id, x * y)),
-        BinaryOp::Divide if y == 0 => return Err(PreprocessorError::InvalidConstExpression(span)),
+        BinaryOp::Divide if y == 0 => return Err(PreprocessorError::InvalidConstExpression{ span }),
         BinaryOp::Divide => Expr::Literal(Literal::Float(span, id, (x as f64) / (y as f64))),
-        BinaryOp::Div if y == 0 => return Err(PreprocessorError::InvalidConstExpression(span)),
+        BinaryOp::Div if y == 0 => return Err(PreprocessorError::InvalidConstExpression { span }),
         BinaryOp::Div => Expr::Literal(Literal::Integer(span, id, x / y)),
         BinaryOp::Rem => Expr::Literal(Literal::Integer(span, id, x % y)),
         _ => unreachable!(),
@@ -762,8 +759,8 @@ fn eval_op_bigint(
         BinaryOp::Add => Expr::Literal(Literal::BigInteger(span, id, x + y)),
         BinaryOp::Sub => Expr::Literal(Literal::BigInteger(span, id, x - y)),
         BinaryOp::Multiply => Expr::Literal(Literal::BigInteger(span, id, x * y)),
-        BinaryOp::Divide => return Err(PreprocessorError::InvalidConstExpression(span)),
-        BinaryOp::Div if y == zero => return Err(PreprocessorError::InvalidConstExpression(span)),
+        BinaryOp::Divide => return Err(PreprocessorError::InvalidConstExpression { span }),
+        BinaryOp::Div if y == zero => return Err(PreprocessorError::InvalidConstExpression { span }),
         BinaryOp::Div => Expr::Literal(Literal::BigInteger(span, id, x / y)),
         BinaryOp::Rem => Expr::Literal(Literal::BigInteger(span, id, x % y)),
         _ => unreachable!(),
@@ -783,11 +780,11 @@ fn eval_op_float(
         BinaryOp::Sub => Ok(Expr::Literal(Literal::Float(span, id, x - y))),
         BinaryOp::Multiply => Ok(Expr::Literal(Literal::Float(span, id, x * y))),
         BinaryOp::Divide if y == 0.0 => {
-            return Err(PreprocessorError::InvalidConstExpression(span))
+            return Err(PreprocessorError::InvalidConstExpression { span })
         }
         BinaryOp::Divide => Ok(Expr::Literal(Literal::Float(span, id, x / y))),
-        BinaryOp::Div => return Err(PreprocessorError::InvalidConstExpression(span)),
-        BinaryOp::Rem => return Err(PreprocessorError::InvalidConstExpression(span)),
+        BinaryOp::Div => return Err(PreprocessorError::InvalidConstExpression { span }),
+        BinaryOp::Rem => return Err(PreprocessorError::InvalidConstExpression { span }),
         _ => unreachable!(),
     }
 }
@@ -811,7 +808,7 @@ fn eval_shift(
             };
             Ok(result)
         }
-        _ => return Err(PreprocessorError::InvalidConstExpression(span)),
+        _ => return Err(PreprocessorError::InvalidConstExpression { span }),
     }
 }
 
@@ -843,6 +840,6 @@ fn is_true(e: &Expr) -> bool {
     }
 }
 
-fn builtin(_name: Symbol) -> Option<&'static fn(Vec<Expr>) -> Result<Expr, Error>> {
+fn builtin(_name: Symbol) -> Option<&'static fn(Vec<Expr>) -> Result<Expr, ()>> {
     None
 }

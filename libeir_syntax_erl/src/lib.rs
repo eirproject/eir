@@ -3,7 +3,6 @@
 mod lexer;
 mod parser;
 mod preprocessor;
-mod util;
 mod lower;
 
 pub use self::lexer::*;
