@@ -45,6 +45,7 @@ pub enum ParserError {
 
     #[snafu(display("unexpected eof"))]
     UnexpectedEOF {
+        span: ByteSpan,
         expected: Vec<String>,
     },
 
@@ -55,12 +56,15 @@ impl From<ParseError> for ParserError {
             lalrpop_util::ParseError::InvalidToken { location } => ParserError::InvalidToken {
                 span: ByteSpan::new(location, location),
             },
-            lalrpop_util::ParseError::UnrecognizedToken {
-                token: None,
+            lalrpop_util::ParseError::UnrecognizedEOF {
+                location,
                 expected,
-            } => ParserError::UnexpectedEOF { expected },
+            } => ParserError::UnexpectedEOF {
+                span: ByteSpan::new(location, location),
+                expected,
+            },
             lalrpop_util::ParseError::UnrecognizedToken {
-                token: Some((start, _, end)),
+                token: (start, _, end),
                 expected,
             } => ParserError::UnrecognizedToken {
                 span: ByteSpan::new(start, end),
