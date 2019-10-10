@@ -108,6 +108,14 @@ impl Mangler {
         old.add(new.into(), self);
     }
 
+    pub fn add_rename_recursive<S, D>(&mut self, old: S, new: D)
+    where
+        S: RenameSource,
+        D: Into<RenameDest>,
+    {
+        old.add(new.into(), self);
+    }
+
     /// Runs lambda mangling on a single function container
     pub fn run(&mut self, fun: &mut FunctionBuilder) -> Block {
         let mut recv = SingleMangleReceiver {
@@ -449,32 +457,28 @@ impl<'b, 'c> MangleReceiver<'b> for CopyMangleReceiver<'c, 'b> {
 #[cfg(test)]
 mod tests {
 
-    use crate::{ FunctionIdent, Function, FunctionBuilder };
     use crate::NilTerm;
-    use libeir_intern::Ident;
     use super::Mangler;
 
     #[test]
     fn test_simple_mangle() {
 
-        let ident = FunctionIdent {
-            module: Ident::from_str("woo"),
-            name: Ident::from_str("woo"),
-            arity: 1,
-        };
-        let mut fun = Function::new(ident);
-        let mut b = FunctionBuilder::new(&mut fun);
+        let (mut ir, map) = crate::parse_function_map_unwrap("
+foo:bar/1 {
+    entry(%ret, %thr, %a):
+        b1();
+    b1():
+        %ret(%a);
+}
+");
 
-        let b1 = b.block_insert();
-        let b1_ret = b.block_arg_insert(b1);
-        let b1_arg = b.block_arg_insert(b1);
-
-        let b2 = b.block_insert();
-
-        b.op_call(b1, b2, &[]);
-        b.op_call(b2, b1_ret, &[b1_arg]);
+        let mut b = ir.builder();
 
         let mut mangler = Mangler::new();
+
+        let b1 = map.get_block("entry");
+        let b1_ret = map.get_value("ret");
+        let b1_arg = map.get_value("a");
 
         let nil_term = b.value(NilTerm);
         mangler.start(b1, &mut b);
@@ -483,23 +487,100 @@ mod tests {
         mangler.add_rename(b1_arg, nil_term);
         let new_b1 = mangler.run(&mut b);
 
-        {
-            let b1_args = b.block_args(new_b1);
-            assert!(b1_args.len() == 1);
+        let after = crate::parse_function_unwrap("
+foo:bar/1 {
+    entry(%ret):
+        b1();
+    b1():
+        %ret([]);
+}
+");
 
-            let b1_reads = b.block_reads(new_b1);
-            assert!(b1_reads.len() == 1);
-            let new_b2 = b.fun().value_block(b1_reads[0]).unwrap();
-            assert!(new_b2 != b2);
+        assert!(b.fun().graph_eq(new_b1, &after, after.block_entry()).is_ok());
 
-            let b2_args = b.block_args(new_b2);
-            assert!(b2_args.len() == 0);
+    }
 
-            let b2_reads = b.block_reads(new_b2);
-            assert!(b2_reads.len() == 2);
-            assert!(b2_reads[0] == b1_args[0]);
-            assert!(b2_reads[1] == nil_term);
-        }
+    #[test]
+    fn test_mangle_primop() {
+
+        let (mut ir, map) = crate::parse_function_map_unwrap("
+foo:bar/1 {
+    entry(%ret, %thr, %a):
+        %ret({%a});
+}
+");
+
+        let mut b = ir.builder();
+
+        let mut mangler = Mangler::new();
+
+        let b1 = map.get_block("entry");
+        let b1_arg = map.get_value("a");
+
+        let nil_term = b.value(NilTerm);
+        mangler.start(b1, &mut b);
+        mangler.copy_entry(&mut b);
+        mangler.add_rename(b1_arg, nil_term);
+        let new_b1 = mangler.run(&mut b);
+
+        let after = crate::parse_function_unwrap("
+foo:bar/1 {
+    entry(%ret, %thr, %a):
+        %ret({[]});
+}
+");
+
+        assert!(b.fun().graph_eq(new_b1, &after, after.block_entry()).is_ok());
+
+    }
+
+    #[test]
+    fn test_mangle_recursive() {
+
+        let (mut ir, map) = crate::parse_function_map_unwrap("
+foo:bar/2 {
+    entry(%ret, %thr, %a, %b):
+        b2(%a);
+    b1(%m):
+        %ret(%t);
+    b2(%p):
+        %ret(%p);
+
+    ! This just exists to have a dummy variable available
+    dummy(%t):
+        %t();
+}
+");
+
+        let mut b = ir.builder();
+
+        let mut mangler = Mangler::new();
+
+        let entry = map.get_block("entry");
+        let b1 = map.get_block("b1");
+        let b2 = map.get_block("b2");
+        let vb = map.get_value("b");
+        let vt = map.get_value("t");
+
+        mangler.start(entry, &mut b);
+        mangler.copy_entry(&mut b);
+        mangler.add_rename(b2, b1);
+        mangler.add_rename(vt, vb);
+        let new_entry = mangler.run(&mut b);
+
+        b.block_set_entry(new_entry);
+        println!("{}", b.fun().to_text());
+
+        let after = crate::parse_function_unwrap("
+foo:bar/2 {
+    entry(%ret, %thr, %a, %b):
+        b1(%a);
+    b1(%m):
+        %ret(%b);
+}
+");
+
+        assert!(b.fun().graph_eq(new_entry, &after, after.block_entry()).is_ok());
 
     }
 

@@ -151,7 +151,16 @@ impl ConstantContainer {
         match (&self.const_values[l], &r_cont.const_values[r]) {
             (ConstKind::Atomic(la), ConstKind::Atomic(ra)) if la == ra => true,
             (ConstKind::Atomic(_), ConstKind::Atomic(_)) => false,
-            _ => unimplemented!(),
+            (ConstKind::Tuple { entries: t1 }, ConstKind::Tuple { entries: t2 }) => {
+                let s1 = t1.as_slice(&self.const_pool);
+                let s2 = t2.as_slice(&r_cont.const_pool);
+                if s1.len() != s2.len() { return false; }
+                for (e1, e2) in s1.iter().zip(s2.iter()) {
+                    if !self.eq_other(*e1, r_cont, *e2) { return false; }
+                }
+                true
+            },
+            l => unimplemented!("{:?}", l),
         }
     }
 

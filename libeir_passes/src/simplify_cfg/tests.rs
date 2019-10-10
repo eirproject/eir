@@ -42,6 +42,45 @@ foo:bar/1 {
 }
 
 #[test]
+fn double_primop_in_chain() {
+
+    let mut fun = parse_function_unwrap("
+foo:bar/1 {
+    entry(%ret, %thr, %a):
+        unpack <> arity 0 => b1;
+    b1():
+        b2(%a);
+    b2(%b):
+        b3({%b});
+    b3(%c):
+        b4({%c});
+    b4(%d):
+        %ret(%d);
+}
+");
+    let mut b = fun.builder();
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    assert!(out.len() == 0);
+
+    let after = parse_function_unwrap("
+foo:bar/1 {
+    entry(%ret, %thr, %a):
+        unpack <> arity 0 => b1;
+    b1():
+        %ret({%a});
+}
+");
+
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
+
+}
+
+#[test]
 #[ignore]
 fn split_primop_in_chain() {
 
