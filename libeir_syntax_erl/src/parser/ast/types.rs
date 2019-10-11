@@ -102,7 +102,7 @@ pub enum Type {
     Map(ByteSpan, Vec<Type>),
     Tuple(ByteSpan, Vec<Type>),
     Record(ByteSpan, Ident, Vec<Type>),
-    Binary(ByteSpan, i64, i64),
+    Binary(ByteSpan, Box<Type>, Box<Type>),
     Integer(ByteSpan, i64),
     Char(ByteSpan, char),
     AnyFun(ByteSpan),
@@ -258,7 +258,7 @@ impl PartialEq for Type {
             (&Type::Record(_, ref x1, ref x2), &Type::Record(_, ref y1, ref y2)) => {
                 (x1 == y1) && (x2 == y2)
             }
-            (&Type::Binary(_, m1, n1), &Type::Binary(_, m2, n2)) => (m1 == m2) && (n1 == n2),
+            (&Type::Binary(_, ref m1, ref n1), &Type::Binary(_, ref m2, ref n2)) => (m1 == m2) && (n1 == n2),
             (&Type::Integer(_, x), &Type::Integer(_, y)) => x == y,
             (&Type::Char(_, x), &Type::Char(_, y)) => x == y,
             (&Type::AnyFun(_), &Type::AnyFun(_)) => true,

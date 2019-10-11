@@ -778,6 +778,17 @@ bar() -> 2.
     }
 
     #[test]
+    fn parse_binary_spec_constant() {
+        let _result: Module = parse(
+            "-module(foo).
+
+-type txs_hash() :: <<_:(32 * 8)>>.
+-type a() :: <<_:A * (12 * 8)>>.
+",
+        );
+    }
+
+    #[test]
     fn parse_elixir_enum_erl() {
         use std::io::Read;
 

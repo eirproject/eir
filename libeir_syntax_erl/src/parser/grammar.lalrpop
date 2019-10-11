@@ -1,5 +1,5 @@
 //-*- mode: rust -*-
-use libeir_diagnostics::{ByteSpan, ByteIndex, Diagnostic, Label};
+use libeir_diagnostics::{ByteSpan, ByteIndex, Diagnostic, Label, DUMMY_SPAN};
 
 use num_bigint::BigInt;
 //use num_bigint::BigInt as Integer;
@@ -419,13 +419,11 @@ TypeName: Name = {
 
 BinaryType: Type = {
     <l:@L> "<<" ">>" <r:@R>
-        => Type::Binary(span!(l, r), 0, 0),
-    <l:@L> "<<" ident ":" <m:int> ">>" <r:@R>
-        => Type::Binary(span!(l, r), m, 0),
-    <l:@L> "<<" ident ":" ident "*" <n:int> ">>" <r:@R>
-        => Type::Binary(span!(l, r), 0, n),
-    <l:@L> "<<" ident ":" <m:int> "," ident ":" ident "*" <n:int> ">>" <r:@R>
-        => Type::Binary(span!(l, r), m, n),
+        => Type::Binary(span!(l, r), Box::new(Type::Integer(DUMMY_SPAN, 0)), Box::new(Type::Integer(DUMMY_SPAN, 0))),
+    <l:@L> "<<" ident ":" <m:TopType> ">>" <r:@R>
+        => Type::Binary(span!(l, r), Box::new(m), Box::new(Type::Integer(DUMMY_SPAN, 0))),
+    <l:@L> "<<" ident ":" <m:TopType> "," ident ":" <n:TopType> ">>" <r:@R>
+        => Type::Binary(span!(l, r), Box::new(m), Box::new(n)),
 };
 
 FunType: Type = {
