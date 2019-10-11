@@ -26,19 +26,23 @@ impl<'a> FunctionBuilder<'a> {
         self.graph_update_block(block);
     }
 
-    pub fn op_trace_capture_raw(&mut self, block: Block) -> Block {
-        let cont = self.fun.block_insert();
-        let cont_val = self.value(cont);
-        self.fun.block_arg_insert(cont);
-
+    pub fn op_trace_capture_raw_next(&mut self, block: Block, next: Value) {
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
         data.op = Some(OpKind::TraceCaptureRaw);
-        data.reads.push(cont_val, &mut self.fun.pool.value);
+        data.reads.push(next, &mut self.fun.pool.value);
 
         self.graph_update_block(block);
+    }
+    pub fn op_trace_capture_raw(&mut self, block: Block) -> Block {
+        let cont = self.fun.block_insert();
+        let cont_val = self.value(cont);
+        self.fun.block_arg_insert(cont);
+
+        self.op_trace_capture_raw_next(block, cont_val);
+
         cont
     }
 

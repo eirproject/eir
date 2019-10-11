@@ -54,6 +54,10 @@ impl<'a> BlockGraph<'a> {
         DfsPostOrder::new(self, self.fun.block_entry())
     }
 
+    pub fn dfs_post_order_iter(&'a self) -> impl Iterator<Item = Block> + 'a {
+        self.dfs_post_order().iter(self)
+    }
+
     pub fn outgoing(&'a self, block: Block) -> impl Iterator<Item = Block> + 'a {
         self.fun.blocks[block].successors.iter(&self.fun.pool.block_set)
     }

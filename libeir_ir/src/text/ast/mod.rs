@@ -50,6 +50,7 @@ pub enum Op {
     UnpackValueList(UnpackValueListOp),
     Call(CallOp),
     IfBool(IfBoolOp),
+    TraceCaptureRaw(TraceCaptureRawOp),
     Unreachable,
 }
 
@@ -72,6 +73,11 @@ pub struct IfBoolOp {
     pub tru: Value,
     pub fal: Value,
     pub or: Option<Value>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct TraceCaptureRawOp {
+    pub then: Value,
 }
 
 #[derive(Debug, PartialEq, Eq)]

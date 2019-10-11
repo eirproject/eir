@@ -72,7 +72,7 @@ foo:bar/1 {
     entry(%ret, %thr, %a):
         unpack <> arity 0 => b1;
     b1():
-        %ret({%a});
+        %ret({{%a}});
 }
 ");
 
@@ -81,7 +81,6 @@ foo:bar/1 {
 }
 
 #[test]
-#[ignore]
 fn split_primop_in_chain() {
 
     let mut fun = parse_function_unwrap("
@@ -117,11 +116,63 @@ foo:bar/3 {
     assert!(out.len() == 0);
 
     let after = parse_function_unwrap("
-foo:bar/1 {
-    entry(%ret, %thr, %a):
-        unpack <> arity 0 => b1;
-    b1():
-        %ret({%a});
+foo:bar/3 {
+    entry(%ret, %thr, %a, %b, %c):
+        if_bool %a b_true b_false;
+    b_true():
+        %ret({{%b}});
+    b_false():
+        %ret({{%c}});
+}
+");
+
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
+
+}
+
+#[test]
+fn two_split_primop_in_chain() {
+
+    let mut fun = parse_function_unwrap("
+foo:bar/5 {
+    entry(%ret, %thr, %a, %b, %c, %B, %C):
+        if_bool %a b_true b_false;
+
+    b_true():
+        b_true1(%b, %B);
+      b_true1(%bb, %BB):
+        b_join({%bb}, {%BB});
+
+    b_false():
+        b_false1(%c, %C);
+      b_false1(%cc, %CC):
+        b_join({%cc}, {%CC});
+
+    b_join(%d, %e):
+        b_join1({%d}, {%e});
+      b_join1(%dd, %ee):
+        %ret({%dd, %ee});
+}
+");
+    let mut b = fun.builder();
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    println!("{}", b.fun().to_text());
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    assert!(out.len() == 0);
+
+    let after = parse_function_unwrap("
+foo:bar/5 {
+    entry(%ret, %thr, %a, %b, %c, %B, %C):
+        if_bool %a b_true b_false;
+    b_true():
+        %ret({{{%b}}, {{%B}}});
+    b_false():
+        %ret({{{%c}}, {{%C}}});
 }
 ");
 

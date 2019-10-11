@@ -26,10 +26,6 @@ fn compiler() {
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
-
-    for fun in eir_mod.functions.values() {
-        analyze(fun);
-    }
 }
 
 #[ignore]
@@ -160,6 +156,7 @@ fn maps_suite() {
     run_ct_suite(&mut vm, Ident::from_str("map_SUITE"));
 }
 
+#[ignore]
 #[test]
 fn xmerl_scan() {
     let mut config = ParseConfig::default();

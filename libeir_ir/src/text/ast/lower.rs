@@ -246,6 +246,10 @@ impl ast::Function {
                                     b.op_if_bool_strict_next(block, tru, fal, value);
                                 }
                             }
+                            ast::Op::TraceCaptureRaw(trace_op) => {
+                                let then = lower_value(errors, b, &mut scope, &trace_op.then)?;
+                                b.op_trace_capture_raw_next(block, then);
+                            }
                             ast::Op::Unreachable => {
                                 b.op_unreachable(block);
                             }

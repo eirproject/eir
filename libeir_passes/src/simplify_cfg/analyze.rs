@@ -38,6 +38,7 @@ pub struct ChainAnalysis {
 
     pub entry_edges: Vec<(Block, Block)>,
 
+    pub orig_args: BTreeSet<Value>,
     pub args: BTreeSet<Value>,
 
     pub cond_map: BTreeMap<Value, BTreeMap<Block, Value>>,
@@ -215,10 +216,11 @@ pub fn analyze_chain(
     // The arguments that need to placed to the new target block.
     let mut args = BTreeSet::new();
 
+    let orig_args = fun.block_args(target).iter().cloned().collect();
+
     let mut to_visit: VecDeque<_> = primary_conds.iter().map(|v| (true, *v)).collect();
     let mut visited = BTreeSet::new();
     while let Some((as_arg, read)) = to_visit.pop_front() {
-        println!("({}, {})", as_arg, read);
 
         // If the value is already visited, skip
         if visited.contains(&read) { continue; }
@@ -299,6 +301,7 @@ pub fn analyze_chain(
         blocks: chain_blocks.clone(),
         entry_edges: entry_edges.iter().cloned().collect(),
         args,
+        orig_args,
         cond_map,
         static_map,
         // TODO:

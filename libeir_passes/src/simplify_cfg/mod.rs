@@ -96,15 +96,13 @@ impl SimplifyCfgPass {
 
 impl FunctionPass for SimplifyCfgPass {
     fn run_function_pass(&mut self, b: &mut FunctionBuilder) {
-        println!("SimplifyCfgPass");
-        //self.simplify_cfg(b);
-        self.simplify_cfg_2(b);
+        self.simplify_cfg(b);
     }
 }
 
 impl SimplifyCfgPass {
 
-    fn simplify_cfg_2(&mut self, b: &mut FunctionBuilder) {
+    fn simplify_cfg(&mut self, b: &mut FunctionBuilder) {
         // TODO: Allocate data structures in pass
 
         self.map.clear();
@@ -115,8 +113,8 @@ impl SimplifyCfgPass {
 
         let analysis = analyze::analyze_graph(b.fun(), &graph);
 
-        println!("Before simplify: {}", b.fun().to_text());
-        println!("{:#?}", analysis);
+        //println!("Before simplify: {}", b.fun().to_text());
+        //println!("{:#?}", analysis);
 
         for (target, blocks) in analysis.chains.iter() {
             // TODO: Temporarily skip a chain if it includes the entry block.
@@ -138,18 +136,15 @@ impl SimplifyCfgPass {
 
         }
 
-        println!("Before simplify mangle: {}", b.fun().to_text());
-
         self.mangler.start(entry, b);
         self.mangler.copy_entry(b);
-        println!("Map: {:?}", self.map);
         for (from, to) in self.map.iter() {
             self.mangler.add_rename(*from, *to);
         }
         let new_entry = self.mangler.run(b);
         b.block_set_entry(new_entry);
 
-        println!("After simplify: {}", b.fun().to_text());
+        //println!("After simplify: {}", b.fun().to_text());
     }
 
     fn rewrite_chain_generic(
@@ -159,8 +154,8 @@ impl SimplifyCfgPass {
         b: &mut FunctionBuilder,
     ) {
 
-        println!("====");
-        println!("{:#?}", chain_analysis);
+        //println!("====");
+        //println!("{:#?}", chain_analysis);
 
         for (from, to) in chain_analysis.static_map.iter() {
             self.map.insert(*from, *to);
@@ -170,7 +165,7 @@ impl SimplifyCfgPass {
 
             let entry_analysis = analyze::analyze_entry_edge(
                 &analysis, &chain_analysis, 0);
-            println!("EE: {:#?}", entry_analysis);
+            //println!("EE 1: {:#?}", entry_analysis);
 
             if chain_analysis.target == entry_analysis.callee { return; }
 
@@ -205,7 +200,7 @@ impl SimplifyCfgPass {
             for n in 0..chain_analysis.entry_edges.len() {
                 let entry_analysis = analyze::analyze_entry_edge(
                     &analysis, &chain_analysis, n);
-                println!("EE: {:#?}", entry_analysis);
+                //println!("EE 2: {:#?}", entry_analysis);
 
                 if chain_analysis.target == entry_analysis.callee { continue; }
 
@@ -225,8 +220,8 @@ impl SimplifyCfgPass {
         chain_analysis: &analyze::ChainAnalysis,
         b: &mut FunctionBuilder,
     ) {
-        println!("====");
-        println!("{:#?}", chain_analysis);
+        //println!("====");
+        //println!("{:#?}", chain_analysis);
 
         for (from, to) in chain_analysis.static_map.iter() {
             self.map.insert(*from, *to);
@@ -238,7 +233,7 @@ impl SimplifyCfgPass {
 
                     let entry_analysis = analyze::analyze_entry_edge(
                         &analysis, &chain_analysis, n);
-                    println!("EE: {:#?}", entry_analysis);
+                    //println!("EE 3: {:#?}", entry_analysis);
 
                     let call_target_equal_to_callee = {
                         let fun = b.fun();
@@ -269,8 +264,20 @@ impl SimplifyCfgPass {
                         b.block_copy_body_map(
                             chain_analysis.target,
                             entry_analysis.callee,
-                            &|val| Some(entry_analysis.mappings.get(&val)
-                                        .cloned().unwrap_or(val))
+                            &|mut val| {
+                                loop {
+                                    if let Some(v) = chain_analysis.static_map.get(&val) {
+                                        val = *v;
+                                        continue;
+                                    }
+                                    if let Some(v) = entry_analysis.mappings.get(&val) {
+                                        val = *v;
+                                        continue;
+                                    }
+                                    break;
+                                }
+                                Some(val)
+                            }
                         );
                     }
 

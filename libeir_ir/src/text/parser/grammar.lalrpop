@@ -10,7 +10,7 @@ use crate::constant::Integer;
 use crate::text::parser::lexer::Token;
 use crate::text::ast::{Module, ModuleItem, Function, FunctionItem, Label,
                        Op, CallOp, Value, Assignment, UnpackValueListOp,
-                       IfBoolOp};
+                       IfBoolOp, TraceCaptureRawOp};
 use super::errors::{ParserError, ParserErrors};
 
 grammar(errors: &mut dyn ErrorReceiver<ParserError, ParserError>);
@@ -141,6 +141,12 @@ FunctionOp: Op = {
         })
     },
 
+    "trace_capture_raw" <then:Value> => {
+        Op::TraceCaptureRaw(TraceCaptureRawOp {
+            then,
+        })
+    },
+
     // Unreachable
     "unreachable" => Op::Unreachable,
 
@@ -163,10 +169,10 @@ Value100: Value = {
 };
 
 ValueMax: Value = {
-    "%" <ident> => Value::Value(<>),
     <atom> => Value::Atom(<>),
     <integer> => Value::Integer(<>),
     <ident> => Value::Block(<>),
+    <variable> => Value::Value(<>),
 };
 
 extern {
@@ -177,6 +183,7 @@ extern {
         "EOF" => Token::EOF,
 
         ident => Token::Ident(<Ident>),
+        variable => Token::Variable(<Ident>),
 
         atom => Token::Atom(<Ident>),
         integer => Token::Integer(<Integer>),
@@ -204,6 +211,7 @@ extern {
         "unreachable" => Token::Unreachable,
         "arity" => Token::Arity,
         "if_bool" => Token::IfBool,
+        "trace_capture_raw" => Token::TraceCaptureRaw,
     }
 
 }

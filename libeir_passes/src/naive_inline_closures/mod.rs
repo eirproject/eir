@@ -4,6 +4,9 @@ use libeir_ir::{Block, OpKind};
 
 use super::FunctionPass;
 
+#[cfg(test)]
+mod tests;
+
 /// Very basic closure inlining pass.
 pub struct NaiveInlineClosuresPass {
     calls_buf: Vec<(Block, Block)>,
@@ -23,6 +26,7 @@ impl NaiveInlineClosuresPass {
 
 impl FunctionPass for NaiveInlineClosuresPass {
     fn run_function_pass(&mut self, b: &mut FunctionBuilder) {
+        println!("{}", b.fun().to_text());
         println!("Inline Closures");
         self.inline_closures(b);
     }
@@ -36,7 +40,7 @@ impl NaiveInlineClosuresPass {
         loop {
             self.calls_buf.clear();
 
-            for block in b.fun().block_graph().dfs_iter() {
+            for block in b.fun().block_graph().dfs_post_order_iter() {
                 // We perform inlining if the block satisfies the following
                 // conditions:
                 // 1. The block is a call operation
@@ -68,6 +72,8 @@ impl NaiveInlineClosuresPass {
                     self.calls_buf.push((block, target.unwrap()));
                 }
             }
+
+            println!("{:?}", self.calls_buf);
 
             for (block, target) in self.calls_buf.iter().cloned() {
                 self.mangler.start(target, b);

@@ -69,6 +69,7 @@ pub enum Token {
     // Identifiers
     /// something
     Ident(Ident),
+    Variable(Ident),
 
     // Atomics
     /// a'true'
@@ -104,6 +105,7 @@ pub enum Token {
     ValueList,
     Tuple,
     Arity,
+    TraceCaptureRaw,
 
 }
 
@@ -117,6 +119,7 @@ lazy_static! {
         map.insert(Symbol::intern("tuple"), Token::Tuple);
         map.insert(Symbol::intern("unpack"), Token::UnpackValueList);
         map.insert(Symbol::intern("arity"), Token::Arity);
+        map.insert(Symbol::intern("trace_capture_raw"), Token::TraceCaptureRaw);
         map
     };
 }
@@ -306,7 +309,8 @@ where
             '>' => pop!(self, Token::Greater),
             '%' => match self.peek() {
                 '{' => pop2!(self, Token::MapOpen),
-                _ => pop!(self, Token::Percent),
+                c if c.is_alphanumeric() => self.lex_variable(),
+                _ => unimplemented!(),
             },
             ',' => pop!(self, Token::Comma),
             ':' => pop!(self, Token::Colon),
@@ -350,6 +354,24 @@ where
         } else {
             Token::Ident(ident)
         }
+    }
+
+    fn lex_variable(&mut self) -> Token {
+        let c = self.pop();
+        debug_assert!(c == '%');
+
+        loop {
+            match self.read() {
+                '_' => self.skip(),
+                '0'..='9' => self.skip(),
+                c if c.is_alphabetic() => self.skip(),
+                _ => break,
+            }
+        }
+
+        let ident = self.ident();
+
+        Token::Variable(ident)
     }
 
     fn lex_integer(&mut self) -> Token {
