@@ -369,7 +369,8 @@ where
             }
         }
 
-        let ident = self.ident();
+        let symbol = Symbol::intern(&self.slice()[1..]);
+        let ident = Ident::new(symbol, self.span());
 
         Token::Variable(ident)
     }

@@ -1,16 +1,12 @@
-use std::collections::{HashSet, BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
-use petgraph::Graph;
-
-use libeir_ir::{Function, FunctionBuilder, Mangler};
-use libeir_ir::{Value, Block, OpKind};
-use libeir_ir::{LiveValues, LiveBlockGraph};
-
-use cranelift_entity::{PrimaryMap, entity_impl};
+use libeir_ir::{FunctionBuilder, Mangler};
+use libeir_ir::{Value, OpKind};
 
 use super::FunctionPass;
 
 mod analyze;
+mod rewrite;
 
 #[cfg(test)]
 mod tests;
@@ -113,13 +109,10 @@ impl SimplifyCfgPass {
 
         let analysis = analyze::analyze_graph(b.fun(), &graph);
 
-        //println!("Before simplify: {}", b.fun().to_text());
-        //println!("{:#?}", analysis);
+        println!("Before simplify: {}", b.fun().to_text());
+        println!("{:#?}", analysis);
 
-        for (target, blocks) in analysis.chains.iter() {
-            // TODO: Temporarily skip a chain if it includes the entry block.
-            // We should fix this by instead generating a new entry block.
-            if blocks.contains(&entry) { continue; }
+        for (target, _blocks) in analysis.chains.iter() {
 
             // TODO remove
             let graph = b.fun().live_block_graph();
@@ -127,11 +120,11 @@ impl SimplifyCfgPass {
                 *target, &b.fun(), &graph, &live, &analysis);
 
             if chain_analysis.renames_required {
-                self.rewrite_chain_generic(&analysis, &chain_analysis, b);
+                rewrite::rewrite_chain_generic(self, &analysis, &chain_analysis, b);
             } else {
                 // When the renames from the chain are not used outside of
                 // the target block, we can generate better IR.
-                self.rewrite_chain_norenames(&analysis, &chain_analysis, b);
+                rewrite::rewrite_chain_norenames(self, &analysis, &chain_analysis, b);
             }
 
         }
@@ -144,147 +137,7 @@ impl SimplifyCfgPass {
         let new_entry = self.mangler.run(b);
         b.block_set_entry(new_entry);
 
-        //println!("After simplify: {}", b.fun().to_text());
-    }
-
-    fn rewrite_chain_generic(
-        &mut self,
-        analysis: &analyze::GraphAnalysis,
-        chain_analysis: &analyze::ChainAnalysis,
-        b: &mut FunctionBuilder,
-    ) {
-
-        //println!("====");
-        //println!("{:#?}", chain_analysis);
-
-        for (from, to) in chain_analysis.static_map.iter() {
-            self.map.insert(*from, *to);
-        }
-
-        if chain_analysis.entry_edges.len() == 1 || chain_analysis.args.len() == 0 {
-
-            let entry_analysis = analyze::analyze_entry_edge(
-                &analysis, &chain_analysis, 0);
-            //println!("EE 1: {:#?}", entry_analysis);
-
-            if chain_analysis.target == entry_analysis.callee { return; }
-
-            for value in chain_analysis.args.iter() {
-                let mapped = entry_analysis.mappings[value];
-                self.map.insert(*value, mapped);
-            }
-
-            b.block_clear(entry_analysis.callee);
-            b.block_copy_body_map(
-                chain_analysis.target,
-                entry_analysis.callee,
-                &|val| Some(val),
-            );
-
-        } else {
-
-            // Create the new terminal block
-            let new_target_block = b.block_insert();
-
-            // Insert the arguments and insert the mappings for them
-            let mut new_target_args = Vec::new();
-            for value in chain_analysis.args.iter() {
-                let mapped = b.block_arg_insert(new_target_block);
-                new_target_args.push(mapped);
-                self.map.insert(*value, mapped);
-            }
-
-            b.block_copy_body_map(chain_analysis.target, new_target_block,
-                                  &|val| Some(val));
-
-            for n in 0..chain_analysis.entry_edges.len() {
-                let entry_analysis = analyze::analyze_entry_edge(
-                    &analysis, &chain_analysis, n);
-                //println!("EE 2: {:#?}", entry_analysis);
-
-                if chain_analysis.target == entry_analysis.callee { continue; }
-
-                b.block_clear(entry_analysis.callee);
-                // TODO: Map args with entry_analysis.mappings
-                b.op_call(entry_analysis.callee, new_target_block,
-                          &entry_analysis.args);
-            }
-
-        }
-
-    }
-
-    fn rewrite_chain_norenames(
-        &mut self,
-        analysis: &analyze::GraphAnalysis,
-        chain_analysis: &analyze::ChainAnalysis,
-        b: &mut FunctionBuilder,
-    ) {
-        //println!("====");
-        //println!("{:#?}", chain_analysis);
-
-        for (from, to) in chain_analysis.static_map.iter() {
-            self.map.insert(*from, *to);
-        }
-
-        match b.fun().block_kind(chain_analysis.target).unwrap() {
-            OpKind::Call => {
-                for n in 0..chain_analysis.entry_edges.len() {
-
-                    let entry_analysis = analyze::analyze_entry_edge(
-                        &analysis, &chain_analysis, n);
-                    //println!("EE 3: {:#?}", entry_analysis);
-
-                    let call_target_equal_to_callee = {
-                        let fun = b.fun();
-
-                        let c = &fun.block_reads(chain_analysis.target)[1..];
-                        let t = fun.block_args(entry_analysis.callee);
-
-                        c.len() == t.len() && c.iter().zip(t.iter())
-                            .all(|(from, to)| {
-                                let mapped = chain_analysis.static_map.get(from)
-                                    .or_else(|| entry_analysis.mappings.get(from))
-                                    .unwrap_or(from);
-                                mapped == to
-                            })
-                    };
-
-                    if call_target_equal_to_callee {
-                        // The callee can be replaced by the call target
-                        let callee_val = b.value(entry_analysis.callee);
-                        let call_target = b.fun().block_reads(
-                            chain_analysis.target)[0];
-                        self.map.insert(callee_val, call_target);
-                    } else {
-                        // If the callee is the target, we don't change anything
-                        if entry_analysis.callee == chain_analysis.target { continue; }
-
-                        b.block_clear(entry_analysis.callee);
-                        b.block_copy_body_map(
-                            chain_analysis.target,
-                            entry_analysis.callee,
-                            &|mut val| {
-                                loop {
-                                    if let Some(v) = chain_analysis.static_map.get(&val) {
-                                        val = *v;
-                                        continue;
-                                    }
-                                    if let Some(v) = entry_analysis.mappings.get(&val) {
-                                        val = *v;
-                                        continue;
-                                    }
-                                    break;
-                                }
-                                Some(val)
-                            }
-                        );
-                    }
-
-                }
-            }
-            _ => self.rewrite_chain_generic(analysis, chain_analysis, b),
-        }
+        println!("After simplify: {}", b.fun().to_text());
     }
 
 }

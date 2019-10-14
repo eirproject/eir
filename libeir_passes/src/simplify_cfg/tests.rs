@@ -9,8 +9,6 @@ fn primop_in_chain() {
     let mut fun = parse_function_unwrap("
 foo:bar/1 {
     entry(%ret, %thr, %a):
-        unpack <> arity 0 => b1;
-    b1():
         b2(%a);
     b2(%b):
         %prim = {%b};
@@ -31,8 +29,6 @@ foo:bar/1 {
     let after = parse_function_unwrap("
 foo:bar/1 {
     entry(%ret, %thr, %a):
-        unpack <> arity 0 => b1;
-    b1():
         %ret({%a});
 }
 ");
@@ -47,8 +43,6 @@ fn double_primop_in_chain() {
     let mut fun = parse_function_unwrap("
 foo:bar/1 {
     entry(%ret, %thr, %a):
-        unpack <> arity 0 => b1;
-    b1():
         b2(%a);
     b2(%b):
         b3({%b});
@@ -70,8 +64,6 @@ foo:bar/1 {
     let after = parse_function_unwrap("
 foo:bar/1 {
     entry(%ret, %thr, %a):
-        unpack <> arity 0 => b1;
-    b1():
         %ret({{%a}});
 }
 ");
@@ -207,12 +199,44 @@ foo:bar/0 {
     let after = parse_function_unwrap("
 foo:bar/0 {
     entry(%ret, %thr):
-        b1(a'foo':a'foo'/0);
-    b1(%a):
-        %a(%ret, %thr);
+        a'foo':a'foo'/0(%ret, %thr);
 }
 ");
 
     assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 
+}
+
+#[test]
+fn recursive_simplification() {
+
+    let mut fun = parse_function_unwrap("
+foo:bar/0 {
+    entry(%ret, %thr):
+        b(a'true');
+    b(%sec):
+        if_bool %sec b_true b_false;
+    b_false():
+        unreachable;
+    b_true():
+        %ret(a'yay');
+}
+");
+    let mut b = fun.builder();
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    assert!(out.len() == 0);
+
+    let after = parse_function_unwrap("
+foo:bar/0 {
+    entry(%ret, %thr):
+        %ret(a'yay');
+}
+");
+
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 }

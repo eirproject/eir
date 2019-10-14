@@ -15,4 +15,5 @@ members = [
     "util/libeir_util_binary",
     "util/libeir_util_num",
     "util/libeir_util_parse",
+    "util/libeir_util_prof",
 ]

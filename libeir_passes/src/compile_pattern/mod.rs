@@ -18,6 +18,9 @@ use self::lower_cfg::DecisionTreeDestinations;
 
 use super::FunctionPass;
 
+#[cfg(test)]
+mod tests;
+
 pub struct CompilePatternPass {
 }
 

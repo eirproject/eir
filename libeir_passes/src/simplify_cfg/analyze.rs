@@ -1,15 +1,18 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use libeir_ir::{Block, Value, OpKind, ValueKind};
+use libeir_ir::{Block, Value, OpKind, ValueKind, PrimOpKind};
 use libeir_ir::{Function, LiveBlockGraph, LiveValues};
 
 #[derive(Debug)]
 pub struct GraphAnalysis {
+    pub entry: Block,
+
     pub static_branches: BTreeMap<Block, Value>,
     pub static_branches_blocks: BTreeMap<Block, Block>,
 
     pub chains: BTreeMap<Block, BTreeSet<Block>>,
     pub phis: BTreeMap<Value, (Block, BTreeMap<Block, Value>)>,
+    pub static_renames: BTreeMap<Value, Value>,
 }
 
 impl GraphAnalysis {
@@ -36,7 +39,8 @@ pub struct ChainAnalysis {
     pub target: Block,
     pub blocks: BTreeSet<Block>,
 
-    pub entry_edges: Vec<(Block, Block)>,
+    // None represents function entry
+    pub entry_edges: Vec<(Option<Block>, Block)>,
 
     pub orig_args: BTreeSet<Value>,
     pub args: BTreeSet<Value>,
@@ -49,7 +53,7 @@ pub struct ChainAnalysis {
 
 #[derive(Debug)]
 pub struct EntryEdgeAnalysis {
-    pub caller: Block,
+    //pub caller: Block,
     pub callee: Block,
 
     // The mappings that are specific for this entry edge.
@@ -62,58 +66,162 @@ pub struct EntryEdgeAnalysis {
     pub args: Vec<Value>,
 }
 
+fn follow(renames: &BTreeMap<Value, Value>, mut val: Value) -> Value {
+    while let Some(next) = renames.get(&val) {
+        val = *next;
+    }
+    val
+}
+
 pub fn analyze_graph(
     fun: &Function,
     graph: &LiveBlockGraph,
 ) -> GraphAnalysis
 {
+    let entry = fun.block_entry();
 
     let mut static_branches = BTreeMap::new();
     let mut phis = BTreeMap::new();
+    let mut static_renames = BTreeMap::new();
 
-    // Populate `static_branches` and `phis`
+    // Find all blocks we care about, these are the ones we iterate over
+    let mut relevant_blocks = BTreeSet::new();
     for block in graph.dfs_iter() {
-        let reads = fun.block_reads(block);
-
         match fun.block_kind(block).unwrap() {
             OpKind::Call => {
-                let target = reads[0];
-                static_branches.insert(block, target);
-
-                if let Some(target_block) = fun.value_block(target) {
-                    for (read, arg) in reads[1..].iter()
-                        .zip(fun.block_args(target_block))
-                    {
-                        if !phis.contains_key(arg) {
-                            phis.insert(*arg, (target_block, BTreeMap::new()));
-                        }
-                        phis.get_mut(&arg).unwrap().1.insert(block, *read);
-                    }
-                }
+                relevant_blocks.insert(block);
             }
             OpKind::IfBool => {
-                let val = match reads.len() {
-                    3 => reads[2],
-                    4 => reads[3],
-                    _ => panic!(),
-                };
-
-                if let Some(cons) = fun.value_const(val) {
-                    let branch = match fun.cons().as_bool(cons) {
-                        Some(true) => 0,
-                        Some(false) => 1,
-                        None => if reads.len() == 3 {
-                            panic!("IfBool without fallback branch on non-bool value")
-                        } else {
-                            2
-                        },
-                    };
-                    let target = reads[branch];
-                    static_branches.insert(block, target);
-                }
+                relevant_blocks.insert(block);
+            }
+            OpKind::UnpackValueList(_) => {
+                relevant_blocks.insert(block);
             }
             _ => (),
         }
+    }
+
+    let mut handled_blocks = BTreeSet::new();
+    loop {
+        let mut changed = false;
+
+        // Populate `static_branches` and `phis`
+        for block in relevant_blocks.iter() {
+            if handled_blocks.contains(block) { continue; }
+
+            let reads = fun.block_reads(*block);
+
+            match fun.block_kind(*block).unwrap() {
+                OpKind::Call => {
+                    let target = follow(&static_renames, reads[0]);
+                    static_branches.insert(*block, target);
+
+                    if let Some(target_block) = fun.value_block(target) {
+
+                        // If there is only one predecessor to the target, this is a static rename
+                        let incoming_count = graph.incoming(target_block).count();
+                        assert!(incoming_count > 0);
+                        if graph.incoming(target_block).count() == 1 {
+                            for (read, arg) in reads[1..].iter()
+                                .zip(fun.block_args(target_block))
+                            {
+                                static_renames.insert(*arg, *read);
+                            }
+                        }
+
+                        for (read, arg) in reads[1..].iter()
+                            .zip(fun.block_args(target_block))
+                        {
+                            if !phis.contains_key(arg) {
+                                phis.insert(*arg, (target_block, BTreeMap::new()));
+                            }
+                            phis.get_mut(&arg).unwrap().1.insert(*block, *read);
+                        }
+
+                        changed = true;
+                        handled_blocks.insert(*block);
+                    }
+                }
+                OpKind::IfBool => {
+                    let val = match reads.len() {
+                        3 => reads[2],
+                        4 => reads[3],
+                        _ => panic!(),
+                    };
+                    let val = follow(&static_renames, val);
+
+                    if let Some(cons) = fun.value_const(val) {
+                        let branch = match fun.cons().as_bool(cons) {
+                            Some(true) => 0,
+                            Some(false) => 1,
+                            None => if reads.len() == 3 {
+                                panic!("IfBool without fallback branch on non-bool value")
+                            } else {
+                                2
+                            },
+                        };
+                        let target = reads[branch];
+                        static_branches.insert(*block, target);
+
+                        changed = true;
+                        handled_blocks.insert(*block);
+                    }
+                }
+                OpKind::UnpackValueList(n) => {
+                    assert!(reads.len() == 2);
+
+                    let target = reads[0];
+                    let list = reads[1];
+
+                    if let Some(target_block) = fun.value_block(target) {
+                        let target_args = fun.block_args(target_block);
+                        assert!(*n == target_args.len());
+                        if let Some(prim) = fun.value_primop(list) {
+                            if let PrimOpKind::ValueList = fun.primop_kind(prim) {
+                                let prim_reads = fun.primop_reads(prim);
+                                assert!(target_args.len() == prim_reads.len());
+
+                                // If there is only one predecessor to the target, this is a static rename
+                                let incoming_count = graph.incoming(target_block).count();
+                                assert!(incoming_count > 0);
+                                if graph.incoming(target_block).count() == 1 {
+                                    for (read, arg) in reads[1..].iter()
+                                        .zip(fun.block_args(target_block))
+                                    {
+                                        static_renames.insert(*arg, *read);
+                                    }
+                                }
+
+                                for (read, arg) in prim_reads.iter()
+                                    .zip(target_args.iter())
+                                {
+                                    if !phis.contains_key(arg) {
+                                        phis.insert(*arg, (target_block, BTreeMap::new()));
+                                    }
+                                    phis.get_mut(&arg).unwrap().1.insert(*block, *read);
+                                }
+
+                                changed = true;
+                                handled_blocks.insert(*block);
+
+                                static_branches.insert(*block, target);
+                            } else {
+                                panic!()
+                            }
+                        }
+                    }
+
+                }
+                _ => (),
+            }
+        }
+
+        println!("yay");
+        dbg!(&static_renames);
+        dbg!(&phis);
+        dbg!(&static_branches);
+
+        if !changed { break; }
     }
 
     // Generate `static_branches_blocks`
@@ -148,9 +256,11 @@ pub fn analyze_graph(
     }
 
     GraphAnalysis {
+        entry,
         static_branches,
         static_branches_blocks,
         phis,
+        static_renames,
         chains,
     }
 }
@@ -176,6 +286,11 @@ fn expand_phi(phi_entry: Value, analysis: &GraphAnalysis) -> BTreeMap<Block, Val
             }
             entries.extend(new_entries.iter());
         }
+        //if let Some((from_block, from_value)) = analysis.static_renames.get(&v) {
+        //    assert!(!entries.contains_key(from_block));
+        //    to_walk.push(*from_value);
+        //    entries.insert(*from_block, *from_value);
+        //}
     }
 
     entries
@@ -192,10 +307,13 @@ pub fn analyze_chain(
 
     // Find the entry points into the chain
     let mut entry_edges = BTreeSet::new();
+    if chain_blocks.contains(&analysis.entry) {
+        entry_edges.insert((None, analysis.entry));
+    }
     for chain_block in chain_blocks.iter() {
         for incoming_block in graph.incoming(*chain_block) {
             if chain_blocks.contains(&incoming_block) { continue; }
-            entry_edges.insert((incoming_block, *chain_block));
+            entry_edges.insert((Some(incoming_block), *chain_block));
         }
     }
 
@@ -207,7 +325,7 @@ pub fn analyze_chain(
 
     // These are value mappings for the chain that don't depend on any control
     // flow in the chain.
-    let mut static_map = BTreeMap::new();
+    let mut static_map: BTreeMap<Value, Value> = BTreeMap::new();
 
     // These are value mappings that do depend on control flow in the chain.
     // The values in here refer to a phi node in `self.phis`.
@@ -321,7 +439,7 @@ pub fn analyze_entry_edge(
     chain_analysis: &ChainAnalysis,
     num: usize,
 ) -> EntryEdgeAnalysis {
-    let (caller, callee) = chain_analysis.entry_edges[num];
+    let (_caller, callee) = chain_analysis.entry_edges[num];
 
     // Specialize each of the phis for the current entry edge
     let map: BTreeMap<Value, Value> = chain_analysis.cond_map.iter()
@@ -348,7 +466,7 @@ pub fn analyze_entry_edge(
         .map(|v| map[v]).collect();
 
     EntryEdgeAnalysis {
-        caller,
+        //caller,
         callee,
 
         mappings: map,
