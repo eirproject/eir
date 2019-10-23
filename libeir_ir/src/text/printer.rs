@@ -4,15 +4,13 @@ use std::io::{ Write, Error as IoError };
 
 use crate::{ Module, Function, FunctionIdent };
 use crate::{ Block, Value };
-use crate::{ OpKind };
+use crate::{ OpKind, PrimOpKind, BinOp, MatchKind, BasicType, BinaryEntrySpecifier, Endianness };
 use crate::ValueKind;
 use crate::pattern::{ PatternContainer, PatternNode, PatternNodeKind };
 
 use cranelift_entity::EntityRef;
 
-use petgraph::visit::Dfs;
-
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque, BTreeSet};
 
 // Desired syntax:
 
@@ -204,10 +202,21 @@ impl ToEirText for Function {
         write!(out, "\n")?;
 
         // Blocks
-        let block_graph = self.block_graph();
-        let mut block_dfs = Dfs::new(&block_graph, self.block_entry());
+        let mut walked = BTreeSet::new();
+        let mut to_walk = VecDeque::new();
+        to_walk.push_back(self.block_entry());
 
-        while let Some(block) = block_dfs.next(&block_graph) {
+        while let Some(block) = to_walk.pop_front() {
+            if walked.contains(&block) { continue; }
+            walked.insert(block);
+
+            self.block_walk_nested_values::<_, Result<(), ()>>(block, &mut |v| {
+                if let Some(inner) = self.value_block(v) {
+                    to_walk.push_back(inner);
+                }
+                Ok(())
+            }).unwrap();
+
             block.to_eir_text_fun(ctx, self, indent+1, out)?;
             write!(out, "\n")?;
         }
@@ -233,6 +242,17 @@ fn format_pattern(_ctx: &mut ToEirTextContext, pat: &PatternContainer, _indent: 
     Ok(())
 }
 
+fn get_value_list<'a>(fun: &'a Function, value: Value) -> Option<&'a [Value]> {
+    if let Some(prim) = fun.value_primop(value) {
+        match fun.primop_kind(prim) {
+            crate::PrimOpKind::ValueList =>
+                return Some(fun.primop_reads(prim)),
+            _ => (),
+        }
+    }
+    None
+}
+
 impl ToEirTextFun for Block {
     fn to_eir_text_fun(&self, ctx: &mut ToEirTextContext, fun: &Function,
                        indent: usize, out: &mut dyn Write)
@@ -250,15 +270,55 @@ impl ToEirTextFun for Block {
                     write_indent(out, indent+1)?;
                     write!(out, "%{} = ", value.index())?;
 
+                    let reads = fun.primop_reads(prim);
+
                     match fun.primop_kind(prim) {
-                        kind => write!(out, "{:?}", kind)?,
+                        PrimOpKind::CaptureFunction => {
+                            assert!(reads.len() == 3);
+                            format_value(reads[0], fun, out)?;
+                            write!(out, ":")?;
+                            format_value(reads[1], fun, out)?;
+                            write!(out, "/")?;
+                            format_value(reads[2], fun, out)?;
+                        }
+                        PrimOpKind::ListCell => {
+                            assert!(reads.len() == 2);
+                            write!(out, "[")?;
+                            format_value(reads[0], fun, out)?;
+                            write!(out, " | ")?;
+                            format_value(reads[1], fun, out)?;
+                            write!(out, "]")?;
+                        }
+                        PrimOpKind::ValueList => {
+                            write!(out, "<")?;
+                            format_value_list(reads, fun, out)?;
+                            write!(out, ">")?;
+                        }
+                        PrimOpKind::BinOp(BinOp::Equal) => {
+                            assert!(reads.len() == 2);
+                            format_value(reads[0], fun, out)?;
+                            write!(out, " == ")?;
+                            format_value(reads[1], fun, out)?;
+                        }
+                        PrimOpKind::Tuple => {
+                            write!(out, "{{")?;
+                            for (i, value) in reads.iter().enumerate() {
+                                if i != 0 {
+                                    write!(out, ", ")?;
+                                }
+                                format_value(*value, fun, out)?;
+                            }
+                            write!(out, "}}")?;
+                        }
+                        kind => {
+                            write!(out, "{:?}", kind)?;
+                            write!(out, "(")?;
+                            format_value_list(reads, fun, out)?;
+                            write!(out, ")")?;
+                        },
                     }
 
-                    write!(out, "(")?;
-                    format_value_list(fun.primop_reads(prim), fun, out)?;
-                    write!(out, ")")?;
-
-                    write!(out, "\n")?;
+                    write!(out, ";\n")?;
                 }
                 _ => (),
             }
@@ -347,6 +407,79 @@ impl ToEirTextFun for Block {
                     write!(out, "}}")?;
 
                 }
+                OpKind::Match { branches } => {
+                    let targets_opt = get_value_list(fun, args[0]);
+                    let targets_one = &[args[0]];
+                    let targets = targets_opt.unwrap_or(targets_one);
+
+                    write!(out, "match ")?;
+                    format_value(args[1], fun, out)?;
+                    write!(out, " {{\n")?;
+
+                    for ((kind, arg), target) in branches.iter()
+                        .zip(args[2..].iter())
+                        .zip(targets.iter())
+                    {
+                        write_indent(out, indent + 2)?;
+                        match kind {
+                            MatchKind::Value => {
+                                write!(out, "value ")?;
+                                format_value(*arg, fun, out)?;
+                            }
+                            MatchKind::ListCell => {
+                                write!(out, "[]")?;
+                            }
+                            MatchKind::Wildcard => {
+                                write!(out, "_")?;
+                            }
+                            MatchKind::Tuple(n) => {
+                                write!(out, "{{}} arity {}", n)?;
+                            }
+                            MatchKind::Type(BasicType::Map) => {
+                                write!(out, "type %{{}}")?;
+                            }
+                            MatchKind::MapItem => {
+                                write!(out, "%{{ ")?;
+                                format_value(*arg, fun, out)?;
+                                write!(out, "}}")?;
+                            }
+                            MatchKind::Binary(spec) => {
+                                write!(out, "binary ")?;
+
+                                match spec {
+                                    BinaryEntrySpecifier::Integer { signed, endianness, unit } => {
+                                        if *signed {
+                                            write!(out, "signed ")?;
+                                        } else {
+                                            write!(out, "unsigned ")?;
+                                        }
+                                        match *endianness {
+                                            Endianness::Big => write!(out, "big ")?,
+                                            Endianness::Little => write!(out, "little ")?,
+                                            Endianness::Native => write!(out, "native ")?,
+                                        }
+                                        write!(out, "unit {} ", unit)?;
+                                        write!(out, "size ")?;
+                                        format_value(*arg, fun, out)?;
+                                    }
+                                    BinaryEntrySpecifier::Bytes { unit } => {
+                                        write!(out, "unit {} ", unit)?;
+                                        write!(out, "size ")?;
+                                        format_value(*arg, fun, out)?;
+                                    }
+                                    _ => unimplemented!("{:?}", spec),
+                                }
+
+                            }
+                        }
+                        write!(out, " => ")?;
+                        format_value(*target, fun, out)?;
+                        write!(out, ";\n")?;
+                    }
+
+                    write_indent(out, indent + 1)?;
+                    write!(out, "}}")?;
+                }
                 OpKind::Call => {
                     format_value(args[0], fun, out)?;
                     write!(out, "(")?;
@@ -358,14 +491,53 @@ impl ToEirTextFun for Block {
                     format_value_list(args, fun, out)?;
                     write!(out, ")")?;
                 }
+                OpKind::Unreachable => {
+                    write!(out, "unreachable")?;
+                }
+                OpKind::IfBool => {
+                    match args.len() {
+                        3 => {
+                            write!(out, "if_bool ")?;
+                            format_value(args[2], fun, out)?;
+                            write!(out, " ")?;
+                            format_value(args[0], fun, out)?;
+                            write!(out, " ")?;
+                            format_value(args[1], fun, out)?;
+                        }
+                        4 => {
+                            write!(out, "if_bool ")?;
+                            format_value(args[3], fun, out)?;
+                            write!(out, " ")?;
+                            format_value(args[0], fun, out)?;
+                            write!(out, " ")?;
+                            format_value(args[1], fun, out)?;
+                            write!(out, " ")?;
+                            format_value(args[2], fun, out)?;
+                        }
+                        _ => panic!(),
+                    }
+                }
+                OpKind::TraceCaptureRaw => {
+                    assert!(args.len() == 1);
+                    write!(out, "trace_capture_raw ")?;
+                    format_value(args[0], fun, out)?;
+                }
+                OpKind::UnpackValueList(n) => {
+                    assert!(args.len() == 2);
+                    write!(out, "unpack ")?;
+                    format_value(args[1], fun, out)?;
+                    write!(out, " arity {} => ", n)?;
+                    format_value(args[0], fun, out)?;
+                }
                 _ => {
                     write!(out, "{:?}(", kind)?;
                     format_value_list(args, fun, out)?;
                     write!(out, ")")?;
                 }
             }
-        }
 
+            write!(out, ";")?;
+        }
 
         Ok(())
     }

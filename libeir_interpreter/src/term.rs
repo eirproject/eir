@@ -556,7 +556,7 @@ impl Term {
     pub fn as_value_list(term: &Rc<Term>) -> Vec<Rc<Term>> {
         match &**term {
             Term::ValueList(val) => val.clone(),
-            _ => panic!("is not value list {:?}", term),
+            _ => vec![term.clone()],
         }
     }
 

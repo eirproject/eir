@@ -1,16 +1,18 @@
 //-*- mode: rust -*-
 
 use libeir_diagnostics::{ByteIndex, ByteSpan, Diagnostic, Label as DiagLabel};
-use libeir_intern::Ident;
+use libeir_intern::{Ident, Symbol};
 use libeir_util_parse::ErrorReceiver;
 
 use num_traits::ToPrimitive;
 
+use crate::{BasicType, BinOp};
 use crate::constant::Integer;
 use crate::text::parser::lexer::Token;
 use crate::text::ast::{Module, ModuleItem, Function, FunctionItem, Label,
                        Op, CallOp, Value, Assignment, UnpackValueListOp,
-                       IfBoolOp, TraceCaptureRawOp};
+                       IfBoolOp, TraceCaptureRawOp, MatchEntry, MatchKind,
+                       MatchOp};
 use super::errors::{ParserError, ParserErrors};
 
 grammar(errors: &mut dyn ErrorReceiver<ParserError, ParserError>);
@@ -147,32 +149,106 @@ FunctionOp: Op = {
         })
     },
 
+    "match" <value:Value> "{" <entries:MatchEntry*> "}" => {
+        Op::Match(MatchOp {
+            value,
+            entries,
+        })
+    },
+
+    "case" <value:Value> "{" <entries:CaseEntry*> "}" => {
+        unimplemented!();
+    },
+
     // Unreachable
     "unreachable" => Op::Unreachable,
 
 };
 
+CaseEntry: () = {
+    "<" <patterns:Comma<CasePattern>> ">" <guard: ("guard" <Value>)?> "=>" <target:Value> => {
+        unimplemented!();
+    },
+    <pattern:CasePattern> <guard: ("guard" <Value>)?> "=>" <target:Value> => {
+        unimplemented!();
+    },
+};
+
+CasePattern: () = {
+    "{" <children:Comma<CasePattern>> "}" => {
+        unimplemented!();
+    },
+    "[" <head:Comma<CasePattern>> <tail: ("|" <CasePattern>)?> "]" => {
+        unimplemented!();
+    },
+};
+
+MatchEntry: MatchEntry = {
+    <kind:MatchKind> "=>" <target:Value> ";" => {
+        MatchEntry {
+            target,
+            kind,
+        }
+    }
+};
+
+MatchKind: MatchKind = {
+    "value" <value:Value> =>
+        MatchKind::Value(value),
+    "type" "%{" "}" =>
+        MatchKind::Type(BasicType::Map),
+    "{" "}" "arity" <arity:integer> =>
+        MatchKind::Tuple(arity.to_usize().unwrap()),
+    "[" "]" =>
+        MatchKind::ListCell,
+    "%{" <key:Value> "}" =>
+        MatchKind::MapItem(key),
+    "_" =>
+        MatchKind::Wildcard,
+};
+
 Value: Value = {
     <m:Value> ":" <f:Value> "/" <a:Value100> =>
         Value::CaptureFunction(Box::new(m), Box::new(f), Box::new(a)),
+    <left:Value> <op:BinOp> <right:Value100> =>
+        Value::BinOp(Box::new(left), op, Box::new(right)),
     Value100,
 };
 
 Value100: Value = {
-    "[" "]" =>
-        Value::Nil,
+    ValueMax
+};
+
+ValueMax: Value = {
+    "[" <head:Comma<Value>> <tail:("|" <Value>)?> "]" => {
+        if head.len() == 0 {
+            if let Some(tail) = tail {
+                tail
+            } else {
+                Value::Nil
+            }
+        } else {
+            Value::List(head, tail.map(Box::new))
+        }
+    },
     "{" <Comma<Value>> "}" =>
         Value::Tuple(<>),
     "<" <Comma<Value>> ">" =>
         Value::ValueList(<>),
-    ValueMax,
-};
-
-ValueMax: Value = {
     <atom> => Value::Atom(<>),
     <integer> => Value::Integer(<>),
-    <ident> => Value::Block(<>),
+    <Block> => Value::Block(<>),
     <variable> => Value::Value(<>),
+};
+
+BinOp: BinOp = {
+    "==" => BinOp::Equal,
+};
+
+Block: Ident = {
+    <ident> => <>,
+    <l:@L> "type" <r:@R> =>
+        Ident::new(Symbol::intern("type"), ByteSpan::new(l, r)),
 };
 
 extern {
@@ -205,13 +281,21 @@ extern {
         "?" => Token::Question,
         "/" => Token::ForwardSlash,
         "=" => Token::Equals,
+        "==" => Token::EqualsEquals,
         "=>" => Token::FatArrow,
+        "_" => Token::Underscore,
+        "|" => Token::Pipe,
 
         "unpack" => Token::UnpackValueList,
         "unreachable" => Token::Unreachable,
         "arity" => Token::Arity,
         "if_bool" => Token::IfBool,
         "trace_capture_raw" => Token::TraceCaptureRaw,
+        "value" => Token::Value,
+        "match" => Token::Match,
+        "type" => Token::Type,
+        "case" => Token::Case,
+        "guard" => Token::Guard,
     }
 
 }

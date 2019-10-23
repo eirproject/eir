@@ -79,3 +79,13 @@ impl From<i64> for Integer {
         Integer::from_i64(i).unwrap()
     }
 }
+impl From<i32> for Integer {
+    fn from(i: i32) -> Integer {
+        Integer::from_i32(i).unwrap()
+    }
+}
+impl From<usize> for Integer {
+    fn from(i: usize) -> Integer {
+        Integer::from_usize(i).unwrap()
+    }
+}

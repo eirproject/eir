@@ -131,6 +131,10 @@ impl<'a> FunctionBuilder<'a> {
                 != Some(&PrimOpKind::ValueList)
         }));
 
+        if values.len() == 1 {
+            return values[0];
+        }
+
         let mut entries_list = EntityList::new();
         entries_list.extend(values.iter().cloned(), &mut self.fun.pool.value);
 

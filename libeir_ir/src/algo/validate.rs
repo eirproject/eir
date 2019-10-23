@@ -1,4 +1,4 @@
-use crate::{ Function, OpKind };
+use crate::{ Function, OpKind, MatchKind };
 use crate::{ Block, Value };
 
 use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
@@ -23,6 +23,13 @@ pub enum ValidationError {
         actual: usize,
     },
 
+    ValueCallArity {
+        caller: Block,
+        callee: Value,
+        attempted: usize,
+        actual: usize,
+    },
+
     /// The arity of the block marked as entry did not match with the identifier
     EntryArityMismatch,
 
@@ -36,6 +43,17 @@ pub enum ValidationError {
         block: Block,
     }
 
+}
+
+fn get_value_list<'a>(fun: &'a Function, value: Value) -> Option<&'a [Value]> {
+    if let Some(prim) = fun.value_primop(value) {
+        match fun.primop_kind(prim) {
+            crate::PrimOpKind::ValueList =>
+                return Some(fun.primop_reads(prim)),
+            _ => (),
+        }
+    }
+    None
 }
 
 impl Function {
@@ -69,14 +87,92 @@ impl Function {
     fn validate_blocks(&self, errors: &mut Vec<ValidationError>) {
         let block_graph = self.block_graph();
 
+        let entry = self.block_entry();
+        let ret_val = self.block_args(entry)[0];
+        let thr_val = self.block_args(entry)[1];
+
         let mut dfs = block_graph.dfs();
         while let Some(block) = dfs.next(&block_graph) {
             if let Some(kind) = self.block_kind(block) {
-                #[allow(clippy::single_match)]
+
+                let reads = self.block_reads(block);
+
                 match kind {
                     OpKind::Call => {
-                        let reads = self.block_reads(block);
-                        self.validate_call_to(errors, block, reads[0], reads.len() - 1);
+                        self.validate_call_to(
+                            errors, block, reads[0], reads.len() - 1);
+                        if reads[0] == ret_val {
+                            if reads.len() != 2 {
+                                errors.push(ValidationError::ValueCallArity {
+                                    caller: block,
+                                    callee: ret_val,
+                                    attempted: reads.len() - 1,
+                                    actual: 1,
+                                });
+                            }
+                        }
+                        if reads[0] == thr_val {
+                            if reads.len() != 4 {
+                                errors.push(ValidationError::ValueCallArity {
+                                    caller: block,
+                                    callee: thr_val,
+                                    attempted: reads.len() - 1,
+                                    actual: 3,
+                                });
+                            }
+                        }
+                    }
+                    OpKind::IfBool => {
+                        self.validate_call_to(
+                            errors, block, reads[0], 0);
+                        self.validate_call_to(
+                            errors, block, reads[1], 0);
+                        if reads.len() == 4 {
+                            self.validate_call_to(
+                                errors, block, reads[2], 0);
+                        } else {
+                            assert!(reads.len() == 3);
+                        }
+                    }
+                    OpKind::UnpackValueList(n) => {
+                        self.validate_call_to(
+                            errors, block, reads[0], *n);
+                    }
+                    OpKind::Match { branches } => {
+                        let targets_opt = get_value_list(self, reads[0]);
+                        let other_targets = &[reads[0]];
+                        let targets = targets_opt.unwrap_or(other_targets);
+
+                        assert!(targets.len() == branches.len());
+                        for (branch, target) in branches.iter().zip(targets.iter()) {
+                            match branch {
+                                MatchKind::ListCell => {
+                                    self.validate_call_to(
+                                        errors, block, *target, 2);
+                                },
+                                MatchKind::MapItem => {
+                                    self.validate_call_to(
+                                        errors, block, *target, 1);
+                                },
+                                MatchKind::Tuple(n) => {
+                                    self.validate_call_to(
+                                        errors, block, *target, *n);
+                                },
+                                MatchKind::Type(_) => {
+                                    self.validate_call_to(
+                                        errors, block, *target, 0);
+                                },
+                                MatchKind::Value => {
+                                    self.validate_call_to(
+                                        errors, block, *target, 0);
+                                },
+                                MatchKind::Wildcard => {
+                                    self.validate_call_to(
+                                        errors, block, *target, 0);
+                                },
+                                _ => (),
+                            }
+                        }
                     }
                     _ => (), // TODO validate more types
                 }

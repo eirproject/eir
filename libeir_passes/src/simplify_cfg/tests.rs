@@ -240,3 +240,143 @@ foo:bar/0 {
 
     assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 }
+
+#[test]
+fn value_list_removal() {
+
+    let mut fun = parse_function_unwrap("
+foo:bar/2 {
+    entry(%ret, %thr, %a, %b):
+        unpack <%a, %b> arity 2 => cont;
+    cont(%aa, %bb):
+        %ret(%aa);
+}
+");
+    let mut b = fun.builder();
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    assert!(out.len() == 0);
+
+    let after = parse_function_unwrap("
+foo:bar/2 {
+    entry(%ret, %thr, %a, %b):
+        %ret(%a);
+}
+");
+
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
+}
+
+#[test]
+fn partial_loop() {
+
+let mut fun = parse_function_unwrap("
+foo:bar/1 {
+    block1(%3, %4, %5):
+        block8(%5, []);
+    block8(%30, %31):
+        match %30 {
+            [] => block11;
+        };
+    block11(%36, %37):
+        block28(%36);
+    block28(%81):
+        block17(%81);
+    block17(%53):
+        %54 = [%53 | %31];
+        block8(%37, %54);
+}
+");
+    let mut b = fun.builder();
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    println!("{:?}", out);
+    assert!(out.len() == 0);
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    b.fun().live_values();
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    assert!(out.len() == 0);
+
+}
+
+#[test]
+fn tight_partial_loop() {
+    let mut fun = parse_function_unwrap("
+foo:perms/1 {
+    block0(%1, %2, %3):
+        block1(%3, []);
+    block1(%5, %6):
+        block2();
+    block2():
+        match %5 {
+            [] => block3;
+        };
+    block3(%9, %10):
+        %14 = [%9 | %6];
+        block1(%10, %14);
+}
+");
+    let mut b = fun.builder();
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    println!("{:?}", out);
+    assert!(out.len() == 0);
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    b.fun().live_values();
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    assert!(out.len() == 0);
+}
+
+#[test]
+fn aa() {
+    let mut fun = parse_function_unwrap("
+foo:do_map_vars_used/1 {
+    block0(%1, %2, %3):
+        block1(%3);
+    block1(%5):
+        block2(%5);
+    block2(%7):
+        %12 = {%7};
+        block3(%12);
+    block3(%9):
+        block4(%9);
+    block4(%11):
+        %13 = <>;
+        match %11 {};
+}
+");
+    let mut b = fun.builder();
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    println!("{:?}", out);
+    assert!(out.len() == 0);
+
+    b.fun().live_values();
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    b.fun().live_values();
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    assert!(out.len() == 0);
+
+}

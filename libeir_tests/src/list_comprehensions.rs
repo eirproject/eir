@@ -17,14 +17,28 @@ fn test_list_comprehension_single_filter() {
 woo(N) -> [1 || erlang:is_integer(N)].
 ", ParseConfig::default()).unwrap();
 
+    for fun in eir_mod.functions.values() {
+        let mut out = Vec::new();
+        fun.validate(&mut out);
+        assert!(out.len() == 0);
+    }
+
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
+
+    for fun in eir_mod.functions.values() {
+        let mut out = Vec::new();
+        fun.validate(&mut out);
+        assert!(out.len() == 0);
+    }
 
     let fun = FunctionIdent {
         module: Ident::from_str("woo"),
         name: Ident::from_str("woo"),
         arity: 1,
     };
+
+    println!("{}", eir_mod.to_text());
 
     let mut vm = VMState::new();
     vm.add_builtin_modules();
@@ -47,14 +61,28 @@ fn test_list_comprehension_single_list_generator() {
 woo(L) -> [X*2 || X <- L].
 ", ParseConfig::default()).unwrap();
 
+    for fun in eir_mod.functions.values() {
+        let mut out = Vec::new();
+        fun.validate(&mut out);
+        assert!(out.len() == 0);
+    }
+
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
+
+    for fun in eir_mod.functions.values() {
+        let mut out = Vec::new();
+        fun.validate(&mut out);
+        assert!(out.len() == 0);
+    }
 
     let fun = FunctionIdent {
         module: Ident::from_str("woo"),
         name: Ident::from_str("woo"),
         arity: 1,
     };
+
+    println!("{}", eir_mod.to_text());
 
     let mut vm = VMState::new();
     vm.add_builtin_modules();
@@ -93,8 +121,21 @@ comb([]) -> [[]];
 comb(L) -> [[A, B] || A <- L, B <- L].
 ", ParseConfig::default()).unwrap();
 
+    for fun in eir_mod.functions.values() {
+        let mut out = Vec::new();
+        fun.validate(&mut out);
+        assert!(out.len() == 0);
+    }
+
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
+
+    for fun in eir_mod.functions.values() {
+        let mut out = Vec::new();
+        fun.validate(&mut out);
+        println!("{:?}", out);
+        assert!(out.len() == 0);
+    }
 
     let fun = FunctionIdent {
         module: Ident::from_str("woo"),
@@ -126,6 +167,33 @@ comb(L) -> [[A, B] || A <- L, B <- L].
 }
 
 #[test]
+fn test_perm2() {
+    let mut eir_mod = lower("
+-module(woo).
+
+perms(L) -> [H || H <- L].
+", ParseConfig::default()).unwrap();
+
+    for fun in eir_mod.functions.values() {
+        let mut out = Vec::new();
+        fun.validate(&mut out);
+        assert!(out.len() == 0);
+    }
+
+    let mut pass_manager = PassManager::default();
+    pass_manager.run(&mut eir_mod);
+
+    for fun in eir_mod.functions.values() {
+        let mut out = Vec::new();
+        fun.validate(&mut out);
+        println!("{:?}", out);
+        assert!(out.len() == 0);
+    }
+
+    println!("{}", eir_mod.to_text());
+}
+
+#[test]
 fn test_list_comprehension_permutations() {
     let mut eir_mod = lower("
 -module(woo).
@@ -134,8 +202,22 @@ perms([]) -> [[]];
 perms(L) -> [[H|T] || H <- L, T <- perms(L--[H])].
 ", ParseConfig::default()).unwrap();
 
+    for fun in eir_mod.functions.values() {
+        let mut out = Vec::new();
+        fun.validate(&mut out);
+        assert!(out.len() == 0);
+    }
+
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
+
+    for fun in eir_mod.functions.values() {
+        let mut out = Vec::new();
+        fun.validate(&mut out);
+        assert!(out.len() == 0);
+    }
+
+    println!("{}", eir_mod.to_text());
 
     let fun = FunctionIdent {
         module: Ident::from_str("woo"),

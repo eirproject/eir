@@ -2,7 +2,7 @@ use libeir_ir::Block;
 
 use super::AnalysisContext;
 
-pub(super) fn propagate_if_bool(ctx: &mut AnalysisContext, block: Block) -> bool {
+pub(super) fn propagate(ctx: &mut AnalysisContext, block: Block) -> bool {
 
     let reads = ctx.fun.block_reads(block);
 

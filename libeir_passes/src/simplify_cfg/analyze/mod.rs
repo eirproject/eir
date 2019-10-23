@@ -49,7 +49,7 @@ pub struct ChainAnalysis {
     pub orig_args: BTreeSet<Value>,
     pub args: BTreeSet<Value>,
 
-    pub cond_map: BTreeMap<Value, BTreeMap<Block, Value>>,
+    pub cond_map: BTreeMap<Value, (Block, BTreeMap<Block, Value>)>,
     pub static_map: BTreeMap<Value, Value>,
 
     pub renames_required: bool,
@@ -176,32 +176,38 @@ pub fn analyze_graph(
         phis: &mut phis,
     };
 
+    // Propagate value renames until we reach an equilibrium.
+    // This will perform branch elimination and constant propagation
+    // in one single step.
     let mut handled_blocks = BTreeSet::new();
     loop {
         let mut changed = false;
 
-        // Populate `static_branches` and `phis`
         for block in relevant_blocks.iter() {
+            // If the block is already statically resolved, we can skip it.
             if handled_blocks.contains(block) { continue; }
 
             ctx.init_block(*block);
 
             let res = match fun.block_kind(*block).unwrap() {
                 OpKind::Call =>
-                    self::call::propagate_call(&mut ctx, *block),
+                    self::call::propagate(&mut ctx, *block),
                 OpKind::IfBool =>
-                    self::if_bool::propagate_if_bool(&mut ctx, *block),
+                    self::if_bool::propagate(&mut ctx, *block),
                 OpKind::UnpackValueList(n) =>
                     self::unpack_value_list::propagate(&mut ctx, *block, *n),
                 _ => unreachable!(),
             };
 
+            // If the propagation implementation indicated that it has been
+            // resolved, then we have a change in this iteration.
             if res {
                 changed = true;
                 handled_blocks.insert(*block);
             }
         }
 
+        // If this iteration contains no changes, then we are done.
         if !changed { break; }
     }
 
@@ -246,32 +252,27 @@ pub fn analyze_graph(
     }
 }
 
-fn expand_phi(phi_entry: Value, analysis: &GraphAnalysis) -> BTreeMap<Block, Value> {
+fn expand_phi(phi_entry: Value, target: Block, analysis: &GraphAnalysis) -> BTreeMap<Block, Value> {
+
     // The root phis form the initial set we want to walk down from
     let mut to_walk = Vec::new();
-    for (_, v) in analysis.phis[&phi_entry].1.iter() {
-        to_walk.push(*v);
-    }
+    to_walk.push(phi_entry);
 
     let mut added = BTreeSet::new();
-    let mut entries = analysis.phis[&phi_entry].1.clone();
+    let mut entries = BTreeMap::new();//analysis.phis[&phi_entry].1.clone();
 
     // While we have values to walk, get the next one.
     // Then add the mappings to the entries and walk downwards.
     while let Some(v) = to_walk.pop() {
         if added.contains(&v) { continue; }
         added.insert(v);
-        if let Some((_, new_entries)) = analysis.phis.get(&v) {
+
+        if let Some((_block, new_entries)) = analysis.phis.get(&v) {
             for (_, v) in new_entries.iter() {
                 to_walk.push(*v);
             }
             entries.extend(new_entries.iter());
         }
-        //if let Some((from_block, from_value)) = analysis.static_renames.get(&v) {
-        //    assert!(!entries.contains_key(from_block));
-        //    to_walk.push(*from_value);
-        //    entries.insert(*from_block, *from_value);
-        //}
     }
 
     entries
@@ -325,9 +326,10 @@ pub fn analyze_chain(
         if visited.contains(&read) { continue; }
         visited.insert(read);
 
+        let block;
         match fun.value_kind(read) {
             // If the value is an argument, it might be a phi
-            ValueKind::Argument(_, _) => (),
+            ValueKind::Argument(arg_block, _) => block = arg_block,
             // If the value is a primop, we need to visit its reads
             ValueKind::PrimOp(prim) => {
                 let needs_as_arg = as_arg &&
@@ -347,7 +349,7 @@ pub fn analyze_chain(
         if !analysis.is_value_relevant(target, read) { continue; }
 
         // Expand phi chains
-        let entries = expand_phi(read, analysis);
+        let entries = expand_phi(read, target, analysis);
 
         let first_value = entries.iter().next().unwrap().1;
         if entries.iter().all(|(_, v)| *v == *first_value) {
@@ -372,7 +374,7 @@ pub fn analyze_chain(
 
             // Else, this is a conditional mapping.
             // This should be mapped to an argument on the new target block.
-            cond_map.insert(read, entries);
+            cond_map.insert(read, (block, entries));
 
             if as_arg {
                 // The value needs to be added as an argument
@@ -420,12 +422,20 @@ pub fn analyze_entry_edge(
     chain_analysis: &ChainAnalysis,
     num: usize,
 ) -> EntryEdgeAnalysis {
-    let (_caller, callee) = chain_analysis.entry_edges[num];
+    let (caller, callee) = chain_analysis.entry_edges[num];
 
     // Specialize each of the phis for the current entry edge
     let map: BTreeMap<Value, Value> = chain_analysis.cond_map.iter()
-        .filter_map(|(value, phis)| {
+        .filter_map(|(value, (val_block, phis))| {
             let mut curr = callee;
+
+            if caller == Some(chain_analysis.target) {
+                if *val_block == caller.unwrap() {
+                    println!("Bail!");
+                    return None;
+                }
+            }
+
             loop {
                 if let Some(i) = phis.get(&curr) {
                     break Some((*value, *i));
@@ -444,7 +454,9 @@ pub fn analyze_entry_edge(
 
     // Produce the argument list the target block should be called with.
     let calling_args: Vec<_> = chain_analysis.args.iter()
-        .map(|v| map[v]).collect();
+        .map(|v| {
+            map.get(v).cloned().unwrap_or(*v)
+        }).collect();
 
     EntryEdgeAnalysis {
         //caller,

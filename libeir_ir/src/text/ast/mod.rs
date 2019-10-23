@@ -1,5 +1,6 @@
 use libeir_intern::Ident;
 
+use crate::{BasicType, BinaryEntrySpecifier, BinOp};
 use crate::constant::Integer;
 
 mod lower;
@@ -51,7 +52,29 @@ pub enum Op {
     Call(CallOp),
     IfBool(IfBoolOp),
     TraceCaptureRaw(TraceCaptureRawOp),
+    Match(MatchOp),
     Unreachable,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct MatchOp {
+    pub value: Value,
+    pub entries: Vec<MatchEntry>,
+}
+#[derive(Debug, PartialEq, Eq)]
+pub struct MatchEntry {
+    pub target: Value,
+    pub kind: MatchKind,
+}
+#[derive(Debug, PartialEq, Eq)]
+pub enum MatchKind {
+    Value(Value),
+    Type(BasicType),
+    Binary(BinaryEntrySpecifier, Option<Value>),
+    Tuple(usize),
+    ListCell,
+    MapItem(Value),
+    Wildcard,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -92,7 +115,9 @@ pub enum Value {
     // Composites
     ValueList(Vec<Value>),
     Tuple(Vec<Value>),
+    List(Vec<Value>, Option<Box<Value>>),
     CaptureFunction(Box<Value>, Box<Value>, Box<Value>),
+    BinOp(Box<Value>, BinOp, Box<Value>),
 }
 impl Value {
     pub fn value(&self) -> Option<Ident> {

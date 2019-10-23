@@ -138,8 +138,28 @@ impl ConstantContainer {
             ConstKind::Atomic(atomic) => {
                 write!(out, "{}", atomic).unwrap();
             }
+            ConstKind::ListCell { head, tail } => {
+                write!(out, "[").unwrap();
+                self.write(*head, out);
+                write!(out, " | ").unwrap();
+                self.write(*tail, out);
+                write!(out, "]").unwrap();
+            }
+            ConstKind::Tuple { entries } => {
+                write!(out, "{{").unwrap();
+                for (n, entry) in entries.as_slice(&self.const_pool).iter().enumerate() {
+                    if n != 0 {
+                        write!(out, ", ").unwrap();
+                    }
+                    self.write(*entry, out);
+                }
+                write!(out, "}}").unwrap();
+            }
             // TODO
-            _kind => (), //unimplemented!("{:?}", kind)
+            kind => {
+                println!("Unimplemented constant write: {:?}", kind);
+                write!(out, "?").unwrap();
+            }, //unimplemented!("{:?}", kind)
         }
     }
 

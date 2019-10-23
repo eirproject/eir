@@ -105,7 +105,7 @@ impl<'a> FunctionBuilder<'a> {
         v.into_value(self)
     }
 
-    pub fn value_map<F>(&mut self, mut value: Value, map: &F) -> Value where F: Fn(Value) -> Option<Value> {
+    pub fn value_map<F>(&mut self, mut value: Value, map: &mut F) -> Value where F: FnMut(Value) -> Option<Value> {
         if let Some(new) = map(value) {
             value = new;
         }
@@ -114,6 +114,7 @@ impl<'a> FunctionBuilder<'a> {
             ValueKind::PrimOp(prim) => {
                 let mut values = self.fun().primop_reads(prim).to_owned();
                 for val in values.iter_mut() {
+                    debug_assert!(*val != value);
                     let new_val = self.value_map(*val, map);
                     *val = new_val;
                 }
@@ -264,7 +265,7 @@ impl<'a> FunctionBuilder<'a> {
         self.value_buf = Some(value_buf);
     }
 
-    pub fn block_copy_body_map<F>(&mut self, from: Block, to: Block, map: &F) where F: Fn(Value) -> Option<Value> {
+    pub fn block_copy_body_map<F>(&mut self, from: Block, to: Block, map: &mut F) where F: FnMut(Value) -> Option<Value> {
         let op;
         let span;
         {

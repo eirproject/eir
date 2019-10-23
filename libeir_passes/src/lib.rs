@@ -58,7 +58,6 @@ impl PassManager {
 impl Default for PassManager {
     fn default() -> Self {
         let mut man = PassManager::new();
-        //man.push_function_pass(SimplifyCfgPass::new());
         man.push_function_pass(CompilePatternPass::new());
         man.push_function_pass(NaiveInlineClosuresPass::new());
         man.push_function_pass(SimplifyCfgPass::new());

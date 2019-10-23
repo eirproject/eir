@@ -90,11 +90,20 @@ fn match_suite() {
         "../otp/lib/compiler/test/match_SUITE.erl", config).unwrap();
 
     for fun in eir_mod.functions.values() {
+        println!("{}", fun.ident());
         fun.graph_validate_global();
+        fun.live_values();
     }
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
+
+    for fun in eir_mod.functions.values().rev() {
+        println!("{}", fun.ident());
+        println!("{}", fun.to_text());
+        fun.graph_validate_global();
+        fun.live_values();
+    }
 
     let mut vm = VMState::new();
     vm.add_builtin_modules();
@@ -209,6 +218,35 @@ fn foo() {
     pass_manager.run(&mut eir_mod);
 
     panic!("{:?}");
+}
+
+#[test]
+fn aa() {
+    let text = "
+-module(foo).
+
+do_map_vars_used(X, Y, Map) ->
+    case {X,Y} of
+    T ->
+    %% core_lib:is_var_used/2 would not consider T used.
+    #{T:=42,v:=Val} = Map,
+Val
+    end.
+";
+
+    let config = ParseConfig::default();
+    let mut eir_mod = lower(text, config).unwrap();
+
+    for fun in eir_mod.functions.values() {
+        fun.graph_validate_global();
+    }
+
+    let mut pass_manager = PassManager::default();
+    pass_manager.run(&mut eir_mod);
+
+    for fun in eir_mod.functions.values() {
+        fun.live_values();
+    }
 }
 
 

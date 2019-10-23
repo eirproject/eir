@@ -365,29 +365,31 @@ impl MatchBuilder {
         Self::default()
     }
 
-    pub fn push_value(&mut self, val: Value, b: &mut FunctionBuilder) -> Block {
-        let (block, block_val) = b.block_insert_get_val();
-
+    pub fn push_value_next(&mut self, next: Value, val: Value, b: &mut FunctionBuilder) {
         self.kinds.push(MatchKind::Value);
 
-        self.branches.push(block_val, &mut b.fun.pool.value);
+        self.branches.push(next, &mut b.fun.pool.value);
 
         let args = b.prim_value_list(&[val]);
         self.branch_args.push(args, &mut b.fun.pool.value);
-
+    }
+    pub fn push_value(&mut self, val: Value, b: &mut FunctionBuilder) -> Block {
+        let (block, block_val) = b.block_insert_get_val();
+        self.push_value_next(block_val, val, b);
         block
     }
 
-    pub fn push_type(&mut self, typ: BasicType, b: &mut FunctionBuilder) -> Block {
-        let (block, block_val) = b.block_insert_get_val();
-
+    pub fn push_type_next(&mut self, next: Value, typ: BasicType, b: &mut FunctionBuilder) {
         self.kinds.push(MatchKind::Type(typ));
 
-        self.branches.push(block_val, &mut b.fun.pool.value);
+        self.branches.push(next, &mut b.fun.pool.value);
 
         let args = b.prim_value_list(&[]);
         self.branch_args.push(args, &mut b.fun.pool.value);
-
+    }
+    pub fn push_type(&mut self, typ: BasicType, b: &mut FunctionBuilder) -> Block {
+        let (block, block_val) = b.block_insert_get_val();
+        self.push_type_next(block_val, typ, b);
         block
     }
 
@@ -427,45 +429,52 @@ impl MatchBuilder {
         block
     }
 
+    pub fn push_list_cell_next(&mut self, next: Value, b: &mut FunctionBuilder) {
+        self.kinds.push(MatchKind::ListCell);
+
+        self.branches.push(next, &mut b.fun.pool.value);
+
+        let args = b.prim_value_list(&[]);
+        self.branch_args.push(args, &mut b.fun.pool.value);
+    }
     pub fn push_list_cell(&mut self, b: &mut FunctionBuilder) -> Block {
         let (block, block_val) = b.block_insert_get_val();
         b.block_arg_insert(block);
         b.block_arg_insert(block);
 
-        self.kinds.push(MatchKind::ListCell);
-
-        self.branches.push(block_val, &mut b.fun.pool.value);
-
-        let args = b.prim_value_list(&[]);
-        self.branch_args.push(args, &mut b.fun.pool.value);
+        self.push_list_cell_next(block_val, b);
 
         block
     }
 
+    pub fn push_map_item_next(&mut self, next: Value, key: Value, b: &mut FunctionBuilder) {
+        self.kinds.push(MatchKind::MapItem);
+
+        self.branches.push(next, &mut b.fun.pool.value);
+
+        let args = b.prim_value_list(&[key]);
+        self.branch_args.push(args, &mut b.fun.pool.value);
+    }
     pub fn push_map_item(&mut self, key: Value, b: &mut FunctionBuilder) -> Block {
         let (block, block_val) = b.block_insert_get_val();
         b.block_arg_insert(block);
 
-        self.kinds.push(MatchKind::MapItem);
-
-        self.branches.push(block_val, &mut b.fun.pool.value);
-
-        let args = b.prim_value_list(&[key]);
-        self.branch_args.push(args, &mut b.fun.pool.value);
+        self.push_map_item_next(block_val, key, b);
 
         block
     }
 
-    pub fn push_wildcard(&mut self, b: &mut FunctionBuilder) -> Block {
-        let (block, block_val) = b.block_insert_get_val();
-
+    pub fn push_wildcard_next(&mut self, next: Value, b: &mut FunctionBuilder) {
         self.kinds.push(MatchKind::Wildcard);
 
-        self.branches.push(block_val, &mut b.fun.pool.value);
+        self.branches.push(next, &mut b.fun.pool.value);
 
         let args = b.prim_value_list(&[]);
         self.branch_args.push(args, &mut b.fun.pool.value);
-
+    }
+    pub fn push_wildcard(&mut self, b: &mut FunctionBuilder) -> Block {
+        let (block, block_val) = b.block_insert_get_val();
+        self.push_wildcard_next(block_val, b);
         block
     }
 

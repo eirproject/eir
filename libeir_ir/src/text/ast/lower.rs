@@ -250,6 +250,35 @@ impl ast::Function {
                                 let then = lower_value(errors, b, &mut scope, &trace_op.then)?;
                                 b.op_trace_capture_raw_next(block, then);
                             }
+                            ast::Op::Match(match_op) => {
+                                let mut builder = b.op_match_build();
+                                for entry in match_op.entries.iter() {
+                                    let next = lower_value(errors, b, &mut scope, &entry.target)?;
+                                    match &entry.kind {
+                                        ast::MatchKind::Value(v) => {
+                                            let v_v = lower_value(errors, b, &mut scope, v)?;
+                                            builder.push_value_next(next, v_v, b);
+                                        }
+                                        ast::MatchKind::ListCell => {
+                                            builder.push_list_cell_next(next, b);
+                                        }
+                                        ast::MatchKind::Wildcard => {
+                                            builder.push_wildcard_next(next, b);
+                                        }
+                                        ast::MatchKind::Type(typ) => {
+                                            builder.push_type_next(next, *typ, b);
+                                        }
+                                        ast::MatchKind::MapItem(k) => {
+                                            let k_v = lower_value(errors, b, &mut scope, k)?;
+                                            builder.push_map_item_next(next, k_v, b);
+                                        }
+                                        s => unimplemented!("{:?}", s),
+                                    }
+                                }
+
+                                let match_val = lower_value(errors, b, &mut scope, &match_op.value)?;
+                                builder.finish(block, match_val, b);
+                            }
                             ast::Op::Unreachable => {
                                 b.op_unreachable(block);
                             }
@@ -332,6 +361,23 @@ fn lower_value(errors: ErrCollector, b: &mut FunctionBuilder, scope: &mut HashMa
             let a_v = lower_value(errors, b, scope, &*a)?;
 
             Ok(b.prim_capture_function(m_v, f_v, a_v))
+        }
+        ast::Value::BinOp(lhs, op, rhs) => {
+            let lhs_v = lower_value(errors, b, scope, &*lhs)?;
+            let rhs_v = lower_value(errors, b, scope, &*rhs)?;
+
+            Ok(b.prim_binop(*op, lhs_v, rhs_v))
+        }
+        ast::Value::List(head, tail) => {
+            let mut acc = tail.as_ref()
+                .map(|v| lower_value(errors, b, scope, &*v))
+                .transpose()?
+                .unwrap_or(b.value(crate::constant::NilTerm));
+            for v in head.iter().rev() {
+                let new_val = lower_value(errors, b, scope, &*v)?;
+                acc = b.prim_list_cell(new_val, acc);
+            }
+            Ok(acc)
         }
     }
 }

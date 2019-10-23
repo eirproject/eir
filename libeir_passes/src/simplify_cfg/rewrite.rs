@@ -1,8 +1,35 @@
+use std::collections::BTreeSet;
+
 use libeir_ir::FunctionBuilder;
-use libeir_ir::OpKind;
+use libeir_ir::{Value, OpKind};
 
 use super::SimplifyCfgPass;
 use super::analyze;
+
+macro_rules! copy_map_fun {
+    ($chain_analysis:expr, $entry_analysis:expr) => {
+        |mut val| {
+            // If the argument is of the original target block, it will loop around.
+            // Do not map this value.
+            if $chain_analysis.args.contains(&val) {
+                return None;
+            }
+
+            loop {
+                if let Some(v) = $chain_analysis.static_map.get(&val) {
+                    val = *v;
+                    continue;
+                }
+                if let Some(v) = $entry_analysis.mappings.get(&val) {
+                    val = *v;
+                    continue;
+                }
+                break;
+            }
+            Some(val)
+        }
+    }
+}
 
 pub fn rewrite_chain_generic(
     pass: &mut SimplifyCfgPass,
@@ -10,9 +37,6 @@ pub fn rewrite_chain_generic(
     chain_analysis: &analyze::ChainAnalysis,
     b: &mut FunctionBuilder,
 ) {
-
-    println!("====");
-    println!("{:#?}", chain_analysis);
 
     for (from, to) in chain_analysis.static_map.iter() {
         pass.map.insert(*from, *to);
@@ -24,7 +48,8 @@ pub fn rewrite_chain_generic(
 
         let entry_analysis = analyze::analyze_entry_edge(
             &analysis, &chain_analysis, 0);
-        println!("EE 1: {:#?}", entry_analysis);
+        println!("1");
+        dbg!(&entry_analysis);
 
         if chain_analysis.target == entry_analysis.callee { return; }
 
@@ -37,7 +62,7 @@ pub fn rewrite_chain_generic(
         b.block_copy_body_map(
             chain_analysis.target,
             entry_analysis.callee,
-            &|val| Some(val),
+            &mut |val| Some(val),
         );
 
     } else {
@@ -54,19 +79,25 @@ pub fn rewrite_chain_generic(
         }
 
         b.block_copy_body_map(chain_analysis.target, new_target_block,
-                              &|val| Some(val));
+                              &mut |val| Some(val));
 
         for n in 0..chain_analysis.entry_edges.len() {
             let entry_analysis = analyze::analyze_entry_edge(
                 &analysis, &chain_analysis, n);
-            println!("EE 2: {:#?}", entry_analysis);
+            println!("2");
+            dbg!(&entry_analysis);
 
             if chain_analysis.target == entry_analysis.callee { continue; }
 
             b.block_clear(entry_analysis.callee);
             // TODO: Map args with entry_analysis.mappings
+            let args: Vec<_> = entry_analysis.args.iter()
+                .map(|v| {
+                    b.value_map(*v, &mut copy_map_fun!(chain_analysis, entry_analysis))
+                })
+                .collect();
             b.op_call(entry_analysis.callee, new_target_block,
-                      &entry_analysis.args);
+                      &args);
         }
 
     }
@@ -79,8 +110,6 @@ pub fn rewrite_chain_norenames(
     chain_analysis: &analyze::ChainAnalysis,
     b: &mut FunctionBuilder,
 ) {
-    println!("====");
-    println!("{:#?}", chain_analysis);
 
     for (from, to) in chain_analysis.static_map.iter() {
         pass.map.insert(*from, *to);
@@ -92,7 +121,8 @@ pub fn rewrite_chain_norenames(
 
                 let entry_analysis = analyze::analyze_entry_edge(
                     &analysis, &chain_analysis, n);
-                println!("EE 3: {:#?}", entry_analysis);
+                println!("3");
+                dbg!(&entry_analysis);
 
                 let call_target_equal_to_callee = {
                     let fun = b.fun();
@@ -123,7 +153,7 @@ pub fn rewrite_chain_norenames(
                     b.block_copy_body_map(
                         chain_analysis.target,
                         entry_analysis.callee,
-                        &|mut val| {
+                        &mut |mut val| {
                             loop {
                                 if let Some(v) = chain_analysis.static_map.get(&val) {
                                     val = *v;

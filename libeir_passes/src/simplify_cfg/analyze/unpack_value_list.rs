@@ -10,12 +10,20 @@ pub(super) fn propagate(ctx: &mut AnalysisContext, block: Block, n: usize) -> bo
 
     assert!(reads.len() == 2);
 
-    let target = reads[0];
-    let list = reads[1];
+    let target = ctx.follow(reads[0]);
+    let list = ctx.follow(reads[1]);
 
     if let Some(target_block) = ctx.fun.value_block(target) {
         let target_args = ctx.fun.block_args(target_block);
         assert!(n == target_args.len());
+
+        // Value list of length 1 can't exist, always the value itself
+        if n == 1 {
+            ctx.set_branch(target);
+            ctx.add_rename(target_block, list, target_args[0]);
+            return true;
+        }
+
         if let Some(prim) = ctx.fun.value_primop(list) {
             if let PrimOpKind::ValueList = ctx.fun.primop_kind(prim) {
                 let prim_reads = ctx.fun.primop_reads(prim);

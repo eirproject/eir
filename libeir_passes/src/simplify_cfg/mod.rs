@@ -118,6 +118,7 @@ impl SimplifyCfgPass {
             let graph = b.fun().live_block_graph();
             let chain_analysis = analyze::analyze_chain(
                 *target, &b.fun(), &graph, &live, &analysis);
+            dbg!(&chain_analysis);
 
             if chain_analysis.renames_required {
                 rewrite::rewrite_chain_generic(self, &analysis, &chain_analysis, b);

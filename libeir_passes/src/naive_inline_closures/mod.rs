@@ -101,6 +101,7 @@ impl NaiveInlineClosuresPass {
 
             break;
         }
+
     }
 
 }

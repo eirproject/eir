@@ -30,6 +30,7 @@ arg_enum!{
 arg_enum!{
     #[derive(Debug, PartialEq, Eq)]
     pub enum InputType {
+        Eir,
         Erl,
     }
 }
@@ -92,6 +93,10 @@ fn handle_erl(in_str: &str, matches: &ArgMatches) -> Option<Module> {
     }
 }
 
+fn handle_eir(in_str: &str, _matches: &ArgMatches) -> Option<Module> {
+    Some(libeir_ir::parse_module_unwrap(in_str))
+}
+
 fn main() {
 
     let matches = App::new("Eir Compiler CLI")
@@ -143,6 +148,7 @@ fn main() {
 
     let eir_ret = match value_t!(matches, "IN_FORMAT", InputType).unwrap() {
         InputType::Erl => handle_erl(&in_str, &matches),
+        InputType::Eir => handle_eir(&in_str, &matches),
     };
 
     let mut eir = if let Some(eir) = eir_ret {

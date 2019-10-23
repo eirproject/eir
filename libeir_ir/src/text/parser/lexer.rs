@@ -96,7 +96,10 @@ pub enum Token {
     ForwardSlash,
     Percent,
     Equals,
+    EqualsEquals,
     FatArrow,
+    Underscore,
+    Pipe,
 
     // Keywords
     Unreachable,
@@ -106,6 +109,11 @@ pub enum Token {
     Tuple,
     Arity,
     TraceCaptureRaw,
+    Value,
+    Match,
+    Type,
+    Case,
+    Guard,
 
 }
 
@@ -120,6 +128,10 @@ lazy_static! {
         map.insert(Symbol::intern("unpack"), Token::UnpackValueList);
         map.insert(Symbol::intern("arity"), Token::Arity);
         map.insert(Symbol::intern("trace_capture_raw"), Token::TraceCaptureRaw);
+        map.insert(Symbol::intern("value"), Token::Value);
+        map.insert(Symbol::intern("match"), Token::Match);
+        map.insert(Symbol::intern("type"), Token::Type);
+        map.insert(Symbol::intern("case"), Token::Case);
         map
     };
 }
@@ -228,7 +240,6 @@ where
             if c == '!' {
                 'inner: loop {
                     let (pos, c) = self.scanner.read();
-                    position = pos;
 
                     if c == '\n' {
                         break 'inner;
@@ -241,6 +252,7 @@ where
 
                     self.skip();
                 }
+                continue;
             }
 
             break;
@@ -316,10 +328,13 @@ where
             ':' => pop!(self, Token::Colon),
             ';' => pop!(self, Token::Semicolon),
             '/' => pop!(self, Token::ForwardSlash),
+            '|' => pop!(self, Token::Pipe),
             '=' => match self.peek() {
                 '>' => pop2!(self, Token::FatArrow),
+                '=' => pop2!(self, Token::EqualsEquals),
                 _ => pop!(self, Token::Equals),
             },
+            '_' => pop!(self, Token::Underscore),
             c if c == 'a' => {
                 match self.peek() {
                     '\'' => self.lex_atom(),
