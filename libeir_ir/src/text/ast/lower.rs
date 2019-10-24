@@ -272,6 +272,9 @@ impl ast::Function {
                                             let k_v = lower_value(errors, b, &mut scope, k)?;
                                             builder.push_map_item_next(next, k_v, b);
                                         }
+                                        ast::MatchKind::Tuple(n) => {
+                                            builder.push_tuple_next(next, *n, b);
+                                        }
                                         s => unimplemented!("{:?}", s),
                                     }
                                 }

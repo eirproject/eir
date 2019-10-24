@@ -393,18 +393,21 @@ impl MatchBuilder {
         block
     }
 
+    pub fn push_tuple_next(&mut self, next: Value, arity: usize, b: &mut FunctionBuilder) {
+        self.kinds.push(MatchKind::Tuple(arity));
+
+        self.branches.push(next, &mut b.fun.pool.value);
+
+        let args = b.prim_value_list(&[]);
+        self.branch_args.push(args, &mut b.fun.pool.value);
+    }
     pub fn push_tuple(&mut self, arity: usize, b: &mut FunctionBuilder) -> Block {
         let (block, block_val) = b.block_insert_get_val();
         for _ in 0..arity {
             b.block_arg_insert(block);
         }
 
-        self.kinds.push(MatchKind::Tuple(arity));
-
-        self.branches.push(block_val, &mut b.fun.pool.value);
-
-        let args = b.prim_value_list(&[]);
-        self.branch_args.push(args, &mut b.fun.pool.value);
+        self.push_tuple_next(block_val, arity, b);
 
         block
     }

@@ -109,16 +109,12 @@ impl SimplifyCfgPass {
 
         let analysis = analyze::analyze_graph(b.fun(), &graph);
 
-        println!("Before simplify: {}", b.fun().to_text());
-        println!("{:#?}", analysis);
-
         for (target, _blocks) in analysis.chains.iter() {
 
             // TODO remove
             let graph = b.fun().live_block_graph();
             let chain_analysis = analyze::analyze_chain(
                 *target, &b.fun(), &graph, &live, &analysis);
-            dbg!(&chain_analysis);
 
             if chain_analysis.renames_required {
                 rewrite::rewrite_chain_generic(self, &analysis, &chain_analysis, b);
@@ -137,8 +133,6 @@ impl SimplifyCfgPass {
         }
         let new_entry = self.mangler.run(b);
         b.block_set_entry(new_entry);
-
-        println!("After simplify: {}", b.fun().to_text());
     }
 
 }

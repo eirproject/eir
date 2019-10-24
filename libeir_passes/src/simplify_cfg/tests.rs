@@ -344,7 +344,7 @@ foo:perms/1 {
 }
 
 #[test]
-fn aa() {
+fn deep_primop_rename_single_branch() {
     let mut fun = parse_function_unwrap("
 foo:do_map_vars_used/1 {
     block0(%1, %2, %3):
@@ -379,4 +379,91 @@ foo:do_map_vars_used/1 {
     b.fun().validate(&mut out);
     assert!(out.len() == 0);
 
+}
+
+#[test]
+fn deep_primop_rename_after_entry_single_branch() {
+    let mut fun = parse_function_unwrap("
+foo:do_map_vars_used/1 {
+    block0(%1, %2, %3):
+        block1(%3);
+    block1(%5):
+        block2(%5);
+    block2(%7):
+        %15 = {%7};
+        block3(%15);
+    block3(%9):
+        block4(%9);
+    block4(%11):
+        %18 = <block5>;
+        %16 = <>;
+        match [] {
+            type %{} => block5;
+        };
+    block5():
+        %19 = <block6>;
+        match [] {
+            %{ %11} => block6;
+        };
+    block6(%14):
+        unreachable;
+}
+");
+    let mut b = fun.builder();
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    println!("{:?}", out);
+    assert!(out.len() == 0);
+
+    b.fun().live_values();
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    b.fun().live_values();
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    assert!(out.len() == 0);
+
+}
+
+#[test]
+fn aa() {
+    let mut fun = parse_function_unwrap("
+foo:grab_bag/0 {
+    block0(%1, %2):
+        block1(block2);
+    block1(%4):
+        block2(block3);
+    block2(%6):
+        match a'x' {
+            _ => block4;
+        };
+    block3(%8):
+        %1(a'ok');
+    block4():
+        %6(a'x');
+}
+");
+    let mut b = fun.builder();
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    println!("{:?}", out);
+    assert!(out.len() == 0);
+
+    b.fun().live_values();
+
+    println!("{}", b.fun().to_text());
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    b.fun().live_values();
+
+    let mut out = Vec::new();
+    b.fun().validate(&mut out);
+    assert!(out.len() == 0);
 }

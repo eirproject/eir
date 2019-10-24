@@ -98,7 +98,7 @@ fn match_suite() {
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
 
-    for fun in eir_mod.functions.values().rev() {
+    for fun in eir_mod.functions.values() {
         println!("{}", fun.ident());
         println!("{}", fun.to_text());
         fun.graph_validate_global();

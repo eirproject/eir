@@ -87,7 +87,7 @@ impl NaiveInlineClosuresPass {
                     assert!(source_args.len() == target_args.len());
 
                     for (from, to) in target_args.iter().zip(source_args.iter()) {
-                        self.mangler.add_rename(*from, *to);
+                        self.mangler.add_rename_nofollow(*from, *to);
                     }
                 }
 

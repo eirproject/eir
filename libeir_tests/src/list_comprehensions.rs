@@ -167,7 +167,7 @@ comb(L) -> [[A, B] || A <- L, B <- L].
 }
 
 #[test]
-fn test_perm2() {
+fn test_basic_comprehension() {
     let mut eir_mod = lower("
 -module(woo).
 

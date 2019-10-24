@@ -123,9 +123,9 @@ impl<'a> AnalysisContext<'a> {
         }
 
         let incoming_count = self.graph.incoming(callee).count();
+        let incoming = self.graph.incoming(callee).next();
         assert!(incoming_count > 0);
-        if incoming_count == 1 {
-            assert!(self.graph.incoming(callee).next() == Some(caller));
+        if incoming_count == 1 && incoming.unwrap() == caller {
             self.static_renames.insert(callee_arg, caller_read);
         }
 
@@ -428,10 +428,10 @@ pub fn analyze_entry_edge(
     let map: BTreeMap<Value, Value> = chain_analysis.cond_map.iter()
         .filter_map(|(value, (val_block, phis))| {
             let mut curr = callee;
+            assert!(!chain_analysis.static_map.contains_key(value));
 
             if caller == Some(chain_analysis.target) {
                 if *val_block == caller.unwrap() {
-                    println!("Bail!");
                     return None;
                 }
             }

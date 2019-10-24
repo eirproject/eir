@@ -18,8 +18,7 @@ pub struct Mangler {
     new_entry: Option<Block>,
 
     actually_mapped: BTreeMap<Value, Value>,
-    values_map: BTreeMap<Value, Value>,
-    //blocks_map: BTreeMap<Block, RenameDest>,
+    pub values_map: BTreeMap<Value, (Value, bool)>,
 
     value_buf: Vec<Value>,
 
@@ -104,7 +103,10 @@ impl Mangler {
     }
 
     pub fn add_rename(&mut self, old: Value, new: Value) {
-        self.values_map.insert(old, new);
+        self.values_map.insert(old, (new, true));
+    }
+    pub fn add_rename_nofollow(&mut self, old: Value, new: Value) {
+        self.values_map.insert(old, (new, false));
     }
 
     /// Runs lambda mangling on a single function container
@@ -143,11 +145,13 @@ impl Mangler {
         self.value_buf.extend(self.values_map.keys());
         for key in self.value_buf.iter() {
             let mut acc = *key;
-            while let Some(target) = self.values_map.get(&acc) {
+            let mut follow = true;
+            while let Some((target, n_follow)) = self.values_map.get(&acc) {
                 if acc == *target { break; }
                 acc = *target;
+                follow = follow && *n_follow;
             }
-            *self.values_map.get_mut(&key).unwrap() = acc;
+            *self.values_map.get_mut(&key).unwrap() = (acc, follow);
         }
 
         // Walk scope
@@ -162,7 +166,7 @@ impl Mangler {
 
                 let block_value = from.block_value(start_block);
                 let block_value_mapped = self.values_map.get(&block_value)
-                    .cloned().unwrap_or(block_value);
+                    .map(|(v, _)| *v).unwrap_or(block_value);
 
                 let block_mapped_opt = from.value_block(block_value_mapped);
                 if block_mapped_opt.is_none() { continue; }
@@ -174,6 +178,14 @@ impl Mangler {
 
                 for read in from.block_reads(block) {
                     from.value_walk_nested_values::<_, ()>(*read, &mut |val| {
+                        if let Some((mapped, follow)) = self.values_map.get(&val) {
+                            if *follow {
+                                if let Some(block) = from.value_block(*mapped) {
+                                    self.to_walk.push(block);
+                                }
+                            }
+                        }
+
                         to_map_values.insert(val);
                         Ok(())
                     }).unwrap();
@@ -184,6 +196,7 @@ impl Mangler {
                 }
             }
         }
+        println!("Scope: {:?}", scope);
 
         // Insert new blocks
         {
@@ -193,7 +206,7 @@ impl Mangler {
 
                 let new_block = recv.to().block_insert();
                 let new_block_val = recv.to().fun().block_value(new_block);
-                self.values_map.insert(block_val, new_block_val);
+                self.values_map.insert(block_val, (new_block_val, true));
 
                 self.value_buf.clear();
                 self.value_buf.extend(recv.from().block_args(block).iter().cloned());
@@ -203,7 +216,7 @@ impl Mangler {
                 for arg in self.value_buf.iter().cloned() {
                     let new_arg = to.block_arg_insert(new_block);
                     if !self.values_map.contains_key(&arg) {
-                        self.values_map.insert(arg, new_arg);
+                        self.values_map.insert(arg, (new_arg, true));
                     }
                 }
             }
@@ -214,14 +227,14 @@ impl Mangler {
         self.value_buf.extend(self.values_map.keys());
         for key in self.value_buf.iter() {
             let mut acc = *key;
-            while let Some(target) = self.values_map.get(&acc) {
+            while let Some((target, _)) = self.values_map.get(&acc) {
                 if acc == *target { break; }
                 acc = *target;
             }
-            *self.values_map.get_mut(&key).unwrap() = acc;
+            *self.values_map.get_mut(&key).unwrap() = (acc, true);
         }
 
-        to_map_values.extend(self.values_map.values());
+        to_map_values.extend(self.values_map.values().map(|(v, _)| *v));
 
         // Map values
         for val in to_map_values.iter() {
@@ -233,11 +246,11 @@ impl Mangler {
         self.value_buf.extend(self.values_map.keys());
         for key in self.value_buf.iter() {
             let mut acc = *key;
-            while let Some(target) = self.values_map.get(&acc) {
+            while let Some((target, _)) = self.values_map.get(&acc) {
                 if acc == *target { break; }
                 acc = *target;
             }
-            *self.values_map.get_mut(&key).unwrap() = acc;
+            *self.values_map.get_mut(&key).unwrap() = (acc, true);
         }
 
         let copy_body = |mang: &mut Mangler, recv: &mut R, from_block: Block, to_block: Block| {
@@ -248,7 +261,7 @@ impl Mangler {
             mang.value_buf.clear();
             mang.value_buf.extend(recv.from().block_reads(from_block).iter().cloned());
             for n in 0..mang.value_buf.len() {
-                let mapped = mang.values_map[&mang.value_buf[n]];
+                let mapped = mang.values_map[&mang.value_buf[n]].0;
                 mang.value_buf[n] = mapped;
             }
 
@@ -273,7 +286,7 @@ impl Mangler {
         // Set new bodies
         for block in scope.iter().cloned() {
             let block_val = recv.from().block_value(block);
-            let new_block_val = *self.values_map.get(&block_val).unwrap();
+            let new_block_val = self.values_map.get(&block_val).unwrap().0;
             let new_block = recv.to().fun().value_block(new_block_val).unwrap();
 
             copy_body(self, recv, block, new_block);
@@ -291,7 +304,7 @@ impl Mangler {
             return *to;
         }
         if let Some(to) = self.values_map.get(&val) {
-            val = *to;
+            val = to.0;
         }
 
         let kind = recv.from().value_kind(val);
@@ -312,7 +325,7 @@ impl Mangler {
             },
             ValueKind::Block(block) => {
                 let block_val = recv.from().block_value(block);
-                if let Some(new_block_val) = self.values_map.get(&block_val).cloned() {
+                if let Some((new_block_val, _)) = self.values_map.get(&block_val).cloned() {
                     new_block_val
                 } else {
                     // TODO
@@ -323,51 +336,12 @@ impl Mangler {
                 recv.map_free_value(val).into()
             },
         };
-        self.values_map.insert(val, dest);
+        self.values_map.insert(val, (dest, true));
         self.actually_mapped.insert(val, dest);
         dest
     }
 
 }
-
-//pub trait RenameSource {
-//    fn add(self, dest: RenameDest, mang: &mut Mangler, recursive: bool);
-//}
-//impl RenameSource for Block {
-//    fn add(self, dest: RenameDest, mang: &mut Mangler, _recursive: bool) {
-//        mang.blocks_map.insert(self, dest);
-//    }
-//}
-//impl RenameSource for Value {
-//    fn add(self, dest: RenameDest, mang: &mut Mangler, _recursive: bool) {
-//        mang.values_map.insert(self, dest);
-//    }
-//}
-
-//#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-//pub enum RenameDest {
-//    Value(Value),
-//    Block(Block),
-//    //EntryArg(EntryArg),
-//}
-//impl From<Value> for RenameDest {
-//    fn from(val: Value) -> Self {
-//        RenameDest::Value(val)
-//    }
-//}
-//impl From<Block> for RenameDest {
-//    fn from(val: Block) -> Self {
-//        RenameDest::Block(val)
-//    }
-//}
-//impl RenameDest {
-//    fn block(&self) -> Block {
-//        match self {
-//            RenameDest::Block(block) => *block,
-//            _ => panic!(),
-//        }
-//    }
-//}
 
 trait MangleReceiver<'b> {
     /// The function container that is the source of the mangle.
