@@ -223,12 +223,23 @@ impl ast::Function {
                 ast::FunctionItem::Op(op) => {
                     if let Some((_, block)) = current_block {
                         match op {
-                            ast::Op::Call(call) => {
+                            ast::Op::CallControlFlow(call) => {
                                 let target = lower_value(errors, b, &mut scope, &call.target)?;
                                 let args: Result<Vec<_>, _> = call.args.iter()
                                     .map(|v| lower_value(errors, b, &mut scope, v))
                                     .collect();
-                                b.op_call(block, target, &args?);
+                                b.op_call_flow(block, target, &args?);
+                            }
+                            ast::Op::CallFunction(call) => {
+                                let target = lower_value(errors, b, &mut scope, &call.target)?;
+
+                                let ret = lower_value(errors, b, &mut scope, &call.ret)?;
+                                let thr = lower_value(errors, b, &mut scope, &call.thr)?;
+
+                                let args: Result<Vec<_>, _> = call.args.iter()
+                                    .map(|v| lower_value(errors, b, &mut scope, v))
+                                    .collect();
+                                b.op_call_function_next(block, target, ret, thr, &args?);
                             }
                             ast::Op::UnpackValueList(list) => {
                                 let target = lower_value(errors, b, &mut scope, &list.block)?;

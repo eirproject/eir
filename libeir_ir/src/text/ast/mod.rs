@@ -49,7 +49,8 @@ pub struct Assignment {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Op {
     UnpackValueList(UnpackValueListOp),
-    Call(CallOp),
+    CallControlFlow(CallControlFlowOp),
+    CallFunction(CallFunctionOp),
     IfBool(IfBoolOp),
     TraceCaptureRaw(TraceCaptureRawOp),
     Match(MatchOp),
@@ -85,8 +86,15 @@ pub struct UnpackValueListOp {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct CallOp {
+pub struct CallControlFlowOp {
     pub target: Value,
+    pub args: Vec<Value>,
+}
+#[derive(Debug, PartialEq, Eq)]
+pub struct CallFunctionOp {
+    pub target: Value,
+    pub ret: Value,
+    pub thr: Value,
     pub args: Vec<Value>,
 }
 

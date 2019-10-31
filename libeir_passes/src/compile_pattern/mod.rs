@@ -148,7 +148,7 @@ impl CompilePatternPass {
                 &destinations);
 
             b.block_clear(block);
-            b.op_call(block, cfg_entry, &[match_val]);
+            b.op_call_flow(block, cfg_entry, &[match_val]);
 
         }
 

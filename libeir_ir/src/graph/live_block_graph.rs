@@ -6,7 +6,7 @@ use petgraph::visit::{ Dfs, DfsPostOrder };
 
 use itertools::Either;
 
-use libeir_util_datastructures::pooled_entity_set::PooledEntitySetIter;
+use libeir_util_datastructures::pooled_entity_set::EntitySetIter;
 
 use crate::Function;
 use crate::{ Block };
@@ -74,7 +74,7 @@ impl<'a> LiveBlockGraph<'a> {
 
 pub struct LiveBlockPredecessors<'a> {
     graph: &'a LiveBlockGraph<'a>,
-    iter: PooledEntitySetIter<'a, Block>,
+    iter: EntitySetIter<'a, Block>,
 }
 impl<'a> LiveBlockPredecessors<'a> {
     fn new(graph: &'a LiveBlockGraph, block: Block) -> Self {
@@ -156,9 +156,9 @@ mod tests {
 
         let b3 = b.block_insert();
 
-        b.op_call(b1, b2, &[]);
-        b.op_call(b2, b1_ret, &[]);
-        b.op_call(b3, b2, &[]);
+        b.op_call_flow(b1, b2, &[]);
+        b.op_call_flow(b2, b1_ret, &[]);
+        b.op_call_flow(b3, b2, &[]);
 
         let graph = b.fun().live_block_graph();
 

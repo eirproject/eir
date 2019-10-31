@@ -205,7 +205,7 @@ impl ClauseLowerCtx {
             b.block_arg_insert(fail_handler_block);
             b.block_arg_insert(fail_handler_block);
             let false_val = b.value(false);
-            b.op_call(fail_handler_block, ret_cont, &[false_val]);
+            b.op_call_flow(fail_handler_block, ret_cont, &[false_val]);
             ctx.exc_stack.push_handler(b.value(fail_handler_block));
         }
 
@@ -234,9 +234,6 @@ impl ClauseLowerCtx {
 
         // Aux guards
         for eq_guard in self.eq_guards.iter() {
-            let (next_block, next_block_val) = b.block_insert_get_val();
-            let res_val = b.block_arg_insert(next_block);
-
             let (lhs, rhs) = match eq_guard {
                 EqGuard::EqValue(lhs_idx, rhs) => {
                     let lhs = b.block_args(guard_lambda_block)[lhs_idx + 2];
@@ -249,17 +246,15 @@ impl ClauseLowerCtx {
                 }
             };
 
-            block = b.op_capture_function(block, erlang_atom, exact_eq_atom, two_atom);
-            let fun_val = b.block_args(block)[0];
+            let fun_val = b.prim_capture_function(
+                erlang_atom, exact_eq_atom, two_atom);
 
-            let (unreachable_err, unreachable_err_val) = b.block_insert_get_val();
-            b.block_arg_insert(unreachable_err);
-            b.block_arg_insert(unreachable_err);
-            b.block_arg_insert(unreachable_err);
-            b.op_unreachable(unreachable_err);
+            let (ok_block, err_block) = b.op_call_function(
+                block, fun_val, &[lhs, rhs]);
+            let res_val = b.block_args(ok_block)[0];
+            block = ok_block;
 
-            b.op_call(block, fun_val, &[next_block_val, unreachable_err_val, lhs, rhs]);
-            block = next_block;
+            b.op_unreachable(err_block);
 
             top_and.push(res_val);
         }
@@ -288,7 +283,7 @@ impl ClauseLowerCtx {
         }
 
         let result_bool = b.prim_logic_op(LogicOp::And, &top_and);
-        b.op_call(block, ret_cont, &[result_bool]);
+        b.op_call_flow(block, ret_cont, &[result_bool]);
 
         ctx.exc_stack.pop_handler();
         ctx.scope.pop(scope_tok);

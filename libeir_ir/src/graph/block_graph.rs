@@ -7,7 +7,7 @@ use cranelift_entity::{ EntityRef, EntitySet };
 
 use itertools::Either;
 
-use libeir_util_datastructures::pooled_entity_set::PooledEntitySetIter;
+use libeir_util_datastructures::pooled_entity_set::EntitySetIter;
 
 use crate::Function;
 use crate::{ Block };
@@ -22,7 +22,7 @@ impl Function {
 
 /// This is a newtype that contains implementations of petgraphs graph traits.
 ///
-/// The semantics of the below graph is as follows:
+/// The semantics of the below graph are as follows:
 /// - Nodes are blocks
 /// - Block capture values in blocks are edges
 /// - Back edges exist to non-live blocks
@@ -68,32 +68,17 @@ impl<'a> BlockGraph<'a> {
 pub struct BlockEdge(Block, usize);
 
 pub struct BlockSuccessors<'a> {
-    //fun: &'a Function,
-    //block: Block,
-    //pos: usize,
-    iter: PooledEntitySetIter<'a, Block>,
+    iter: EntitySetIter<'a, Block>,
 }
 impl<'a> Iterator for BlockSuccessors<'a> {
     type Item = Block;
     fn next(&mut self) -> Option<Block> {
         self.iter.next()
-        //loop {
-        //    if let Some(val) = self.fun.blocks[self.block].reads.get(
-        //        self.pos, &self.fun.pool.value)
-        //    {
-        //        self.pos += 1;
-        //        if let Some(block) = self.fun.value_block(val) {
-        //            return Some(block);
-        //        }
-        //    } else {
-        //        return None;
-        //    }
-        //}
     }
 }
 
 pub struct BlockPredecessors<'a> {
-    iter: PooledEntitySetIter<'a, Block>,
+    iter: EntitySetIter<'a, Block>,
 }
 impl<'a> BlockPredecessors<'a> {
     fn new(graph: &'a BlockGraph, block: Block) -> Self {
@@ -119,9 +104,6 @@ impl<'a> IntoNeighbors for &'a BlockGraph<'a> {
     type Neighbors = BlockSuccessors<'a>;
     fn neighbors(self, block: Block) -> Self::Neighbors {
         BlockSuccessors {
-            //fun: &self.fun,
-            //block,
-            //pos: 0,
             iter: self.fun.blocks[block].successors
                 .iter(&self.fun.pool.block_set),
         }
@@ -191,9 +173,9 @@ mod tests {
 
         let b3 = b.block_insert();
 
-        b.op_call(b1, b2, &[]);
-        b.op_call(b2, b1_ret, &[]);
-        b.op_call(b3, b2, &[]);
+        b.op_call_flow(b1, b2, &[]);
+        b.op_call_flow(b2, b1_ret, &[]);
+        b.op_call_flow(b3, b2, &[]);
 
         let graph = b.fun().block_graph();
 

@@ -25,9 +25,9 @@ impl ExceptionHandlerStack {
     {
         let (handler, has_arg) = self.stack.last().unwrap();
         if *has_arg {
-            b.op_call(block, *handler, &[typ, error, trace])
+            b.op_call_flow(block, *handler, &[typ, error, trace])
         } else {
-            b.op_call(block, *handler, &[])
+            b.op_call_flow(block, *handler, &[])
         }
     }
 

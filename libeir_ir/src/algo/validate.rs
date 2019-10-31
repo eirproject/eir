@@ -1,11 +1,11 @@
-use crate::{ Function, OpKind, MatchKind };
-use crate::{ Block, Value };
-
-use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
-use cranelift_entity::ListPool;
-
 use std::collections::{ HashMap, HashSet };
+
 use petgraph::algo::dominators::Dominators;
+
+use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, EntitySet };
+
+use crate::{ Function, OpKind, MatchKind, CallKind };
+use crate::{ Block, Value };
 
 #[derive(Debug)]
 pub enum ValidationError {
@@ -98,9 +98,17 @@ impl Function {
                 let reads = self.block_reads(block);
 
                 match kind {
-                    OpKind::Call => {
+                    OpKind::Call(CallKind::ControlFlow) => {
                         self.validate_call_to(
                             errors, block, reads[0], reads.len() - 1);
+                    },
+                    OpKind::Call(CallKind::Function) => {
+                        self.validate_call_to(
+                            errors, block, reads[0], reads.len() - 1);
+                        self.validate_call_to(
+                            errors, block, reads[1], 1);
+                        self.validate_call_to(
+                            errors, block, reads[2], 3);
                         if reads[0] == ret_val {
                             if reads.len() != 2 {
                                 errors.push(ValidationError::ValueCallArity {
@@ -216,14 +224,14 @@ impl Function {
     fn validate_ssa_visibility(&self, doms: &Dominators<Block>, errors: &mut Vec<ValidationError>) {
         let entry_block = self.block_entry();
 
-        let mut pool: EntitySetPool = ListPool::new();
+        let mut pool = EntitySetPool::new();
 
         // Live variables on block entry and exit
-        let mut live_variables: HashMap<Block, PooledEntitySet<Value>>
+        let mut live_variables: HashMap<Block, EntitySet<Value>>
             = HashMap::new();
 
         // Seed entry node
-        let entry_vals = PooledEntitySet::new();
+        let entry_vals = EntitySet::new();
         self.insert_live_for_node(entry_block, entry_vals,
                                   &mut pool,
                                   &mut live_variables);
@@ -285,9 +293,9 @@ impl Function {
 
     }
 
-    fn insert_live_for_node(&self, block: Block, base_set: PooledEntitySet<Value>,
-                            pool: &mut EntitySetPool,
-                            live: &mut HashMap<Block, PooledEntitySet<Value>>) {
+    fn insert_live_for_node(&self, block: Block, base_set: EntitySet<Value>,
+                            pool: &mut EntitySetPool<Value>,
+                            live: &mut HashMap<Block, EntitySet<Value>>) {
         let mut set = base_set.make_copy(pool);
         for arg in self.block_args(block) {
             set.insert(*arg, pool);

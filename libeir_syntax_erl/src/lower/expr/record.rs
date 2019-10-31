@@ -1,5 +1,3 @@
-
-
 use libeir_ir::{
     FunctionBuilder,
     Value as IrValue,
@@ -45,14 +43,14 @@ pub(super) fn lower_record_access_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
     match_builder.finish(block, record_val, b);
     block = unpack_ok_block;
 
-    b.op_call(unpack_fail_block, fail_block, &[]);
+    b.op_call_flow(unpack_fail_block, fail_block, &[]);
 
     let recname_test_val = b.block_args(block)[0];
     let rec_field_val = b.block_args(block)[idx + 1];
 
     let eq_cond = b.prim_binop(IrBinOp::Equal, recname_test_val, recname_val);
     let eq_fail_block = map_block!(block, b.op_if_bool_strict(block, eq_cond));
-    b.op_call(eq_fail_block, fail_block, &[]);
+    b.op_call_flow(eq_fail_block, fail_block, &[]);
 
     (block, rec_field_val)
 }
@@ -76,7 +74,7 @@ pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
     match_builder.finish(block, record_val, b);
     block = unpack_ok_block;
 
-    b.op_call(unpack_fail_block, fail_block, &[]);
+    b.op_call_flow(unpack_fail_block, fail_block, &[]);
 
     // Make a vector with all the values in the unpacked tuple
     let mut elems = Vec::with_capacity(num_fields);
@@ -88,7 +86,7 @@ pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
     let recname_test_val = b.block_args(block)[0];
     let eq_cond = b.prim_binop(IrBinOp::Equal, recname_test_val, recname_val);
     let eq_fail_block = map_block!(block, b.op_if_bool_strict(block, eq_cond));
-    b.op_call(eq_fail_block, fail_block, &[]);
+    b.op_call_flow(eq_fail_block, fail_block, &[]);
 
     // Update fields
     for update in rec.updates.iter() {

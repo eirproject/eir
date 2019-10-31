@@ -114,6 +114,7 @@ pub enum Token {
     Type,
     Case,
     Guard,
+    Except,
 
 }
 
@@ -132,6 +133,7 @@ lazy_static! {
         map.insert(Symbol::intern("match"), Token::Match);
         map.insert(Symbol::intern("type"), Token::Type);
         map.insert(Symbol::intern("case"), Token::Case);
+        map.insert(Symbol::intern("except"), Token::Except);
         map
     };
 }

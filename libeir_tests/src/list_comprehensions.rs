@@ -188,6 +188,8 @@ perms(L) -> [H || H <- L].
         fun.validate(&mut out);
         println!("{:?}", out);
         assert!(out.len() == 0);
+
+        libeir_lowerutils::analyze(fun);
     }
 
     println!("{}", eir_mod.to_text());
@@ -215,6 +217,9 @@ perms(L) -> [[H|T] || H <- L, T <- perms(L--[H])].
         let mut out = Vec::new();
         fun.validate(&mut out);
         assert!(out.len() == 0);
+
+        let analysis = libeir_lowerutils::analyze(fun);
+        dbg!(analysis);
     }
 
     println!("{}", eir_mod.to_text());

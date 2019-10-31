@@ -4,7 +4,8 @@ use std::cmp::Eq;
 
 use cranelift_entity::{ EntityRef, PrimaryMap, ListPool, EntityList, entity_impl };
 
-use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
+use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, EntitySet,
+                                                     BoundEntitySet };
 use libeir_util_datastructures::aux_hash_map::{ AuxHash, AuxEq };
 use libeir_util_datastructures::dedup_aux_primary_map::DedupAuxPrimaryMap;
 
@@ -20,7 +21,7 @@ mod pool_container;
 use pool_container::PoolContainer;
 
 mod op;
-pub use op::{ OpKind, MatchKind, BasicType, MapPutUpdate };
+pub use op::{ OpKind, MatchKind, BasicType, MapPutUpdate, CallKind };
 
 mod primop;
 pub use primop::{ PrimOpKind, BinOp, LogicOp };
@@ -64,8 +65,8 @@ pub struct BlockData {
 
     // These will contain all the connected blocks, regardless
     // of whether they are actually alive or not.
-    pub(crate) predecessors: PooledEntitySet<Block>,
-    pub(crate) successors: PooledEntitySet<Block>,
+    pub(crate) predecessors: EntitySet<Block>,
+    pub(crate) successors: EntitySet<Block>,
 }
 
 #[derive(Debug, Clone)]
@@ -156,6 +157,24 @@ impl Function {
         self.constant_values.contains(&value)
     }
 
+    pub fn value_list_get_n(&self, value: Value, n: usize) -> Option<Value> {
+        match self.value_kind(value) {
+            ValueKind::PrimOp(prim) => {
+                if let PrimOpKind::ValueList = self.primop_kind(prim) {
+                    let reads = self.primop_reads(prim);
+                    return reads.get(n).cloned();
+                }
+            }
+            _ => (),
+        }
+
+        if n == 0 {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
     /// If the value is a variable, get its definition block and argument position
     pub fn value_argument(&self, value: Value) -> Option<(Block, usize)> {
         if let ValueKind::Argument(block, arg) = self.values[value].kind {
@@ -187,6 +206,10 @@ impl Function {
         } else {
             None
         }
+    }
+
+    pub fn value_usages(&self, value: Value) -> BoundEntitySet<Block> {
+        self.values[value].usages.bind(&self.pool.block_set)
     }
 
     /// Walks all nested values contained within
@@ -265,8 +288,8 @@ impl Function {
 
             is_fun: false,
 
-            predecessors: PooledEntitySet::new(),
-            successors: PooledEntitySet::new(),
+            predecessors: EntitySet::new(),
+            successors: EntitySet::new(),
 
             span: DUMMY_SPAN,
         });
@@ -341,8 +364,7 @@ impl Function {
         match (self.block_kind(lb).unwrap(), r_fun.block_kind(rb).unwrap()) {
             (OpKind::Case { .. }, _) => unimplemented!(),
             (_, OpKind::Case { .. }) => unimplemented!(),
-            (OpKind::Call, OpKind::Call) => true,
-            (OpKind::CaptureFunction, OpKind::CaptureFunction) => true,
+            (OpKind::Call(l), OpKind::Call(r)) => l == r,
             (OpKind::IfBool, OpKind::IfBool) => true,
             (OpKind::Intrinsic(sym1), OpKind::Intrinsic(sym2)) if sym1 == sym2 => true,
             (OpKind::TraceCaptureRaw, OpKind::TraceCaptureRaw) => true,
@@ -418,24 +440,24 @@ impl<V> GeneralSet<V> for HashSet<V> where V: Hash + Eq {
         HashSet::insert(self, key)
     }
 }
-impl<V> GeneralSet<V> for PooledEntitySet<V> where V: EntityRef + SetPoolProvider {
+impl<V> GeneralSet<V> for EntitySet<V> where V: EntityRef + SetPoolProvider {
     fn contains(&self, key: &V, fun: &Function) -> bool {
-        PooledEntitySet::contains(self, *key, V::pool(fun))
+        EntitySet::contains(self, *key, V::pool(fun))
     }
     fn insert(&mut self, key: V, fun: &mut Function) -> bool {
-        PooledEntitySet::insert(self, key, V::pool_mut(fun))
+        EntitySet::insert(self, key, V::pool_mut(fun))
     }
 }
 
-pub trait SetPoolProvider {
-    fn pool(fun: &Function) -> &EntitySetPool;
-    fn pool_mut(fun: &mut Function) -> &mut EntitySetPool;
+pub trait SetPoolProvider: Sized {
+    fn pool(fun: &Function) -> &EntitySetPool<Self>;
+    fn pool_mut(fun: &mut Function) -> &mut EntitySetPool<Self>;
 }
 impl SetPoolProvider for Block {
-    fn pool(fun: &Function) -> &EntitySetPool {
+    fn pool(fun: &Function) -> &EntitySetPool<Block> {
         &fun.pool.block_set
     }
-    fn pool_mut(fun: &mut Function) -> &mut EntitySetPool {
+    fn pool_mut(fun: &mut Function) -> &mut EntitySetPool<Block> {
         &mut fun.pool.block_set
     }
 }

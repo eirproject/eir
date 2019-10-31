@@ -10,8 +10,9 @@ use crate::{BasicType, BinOp};
 use crate::constant::Integer;
 use crate::text::parser::lexer::Token;
 use crate::text::ast::{Module, ModuleItem, Function, FunctionItem, Label,
-                       Op, CallOp, Value, Assignment, UnpackValueListOp,
-                       IfBoolOp, TraceCaptureRawOp, MatchEntry, MatchKind,
+                       Op, CallControlFlowOp, CallFunctionOp, Value,
+                       Assignment, UnpackValueListOp, IfBoolOp,
+                       TraceCaptureRawOp, MatchEntry, MatchKind,
                        MatchOp};
 use super::errors::{ParserError, ParserErrors};
 
@@ -118,8 +119,16 @@ FunctionAssignItem: FunctionItem = {
 FunctionOp: Op = {
 
     // Call
+    <target:Value> "(" <args:Comma<Value>> ")" "=>" <ret:Value> "except" <thr:Value> => {
+        Op::CallFunction(CallFunctionOp {
+            target,
+            ret,
+            thr,
+            args,
+        })
+    },
     <target:Value> "(" <args:Comma<Value>> ")" => {
-        Op::Call(CallOp {
+        Op::CallControlFlow(CallControlFlowOp {
             target,
             args,
         })
@@ -296,6 +305,7 @@ extern {
         "type" => Token::Type,
         "case" => Token::Case,
         "guard" => Token::Guard,
+        "except" => Token::Except,
     }
 
 }

@@ -326,13 +326,13 @@ mod tests {
         {
             let ba = b.block_insert();
             let bb = b.block_insert();
-            b.op_call(ba, bb, &[]);
+            b.op_call_flow(ba, bb, &[]);
             b.block_clear(ba);
 
             b.fun().graph_validate_global();
 
             let bc = b.block_insert();
-            b.op_call(ba, bc, &[]);
+            b.op_call_flow(ba, bc, &[]);
 
             b.fun().graph_validate_global();
         }

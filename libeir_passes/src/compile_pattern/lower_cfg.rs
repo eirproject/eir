@@ -132,7 +132,7 @@ pub fn lower_cfg(
 
     } else if outgoing.len() == 0 {
         // Fail immediately
-        b.op_call(block, destinations.fail, &[]);
+        b.op_call_flow(block, destinations.fail, &[]);
     } else {
         unreachable!();
     }
@@ -276,50 +276,34 @@ fn lower_cfg_rec(
             match_builder.finish(block, match_val, b);
         }
         CfgNodeKind::Fail => {
-            b.op_call(block, ctx.destinations.fail, &[]);
+            b.op_call_flow(block, ctx.destinations.fail, &[]);
         }
         CfgNodeKind::Leaf(leaf_num) => {
             let clause = clauses[leaf_num];
 
-            let guard_cont = b.block_insert();
-            let guard_ret = b.block_arg_insert(guard_cont);
-
             let mut args = vec![];
+            let num_binds = b.pat().clause_binds(clause).len();
+            for bind_num in 0..num_binds {
+                let bind_node = b.pat().clause_binds(clause)[bind_num];
+                let val = ctx.node_to_value(bind_node, node, cfg);
+                args.push(val);
+            }
 
             // Call to guard lambda
-            {
-                // First argument is the continuation
-                args.push(b.value(guard_cont));
+            let (ok_block, thr_block) = b.op_call_function(
+                block, ctx.destinations.guards[leaf_num], &args);
+            let ok_ret = b.block_args(ok_block)[0];
 
-                // Second argument is throw continuation, unreachable
-                let throw_block = b.block_insert();
-                b.block_arg_insert(throw_block);
-                b.block_arg_insert(throw_block);
-                b.block_arg_insert(throw_block);
-                b.op_unreachable(throw_block);
-                args.push(b.value(throw_block));
-
-                let num_binds = b.pat().clause_binds(clause).len();
-
-                for bind_num in 0..num_binds {
-                    let bind_node = b.pat().clause_binds(clause)[bind_num];
-                    let val = ctx.node_to_value(bind_node, node, cfg);
-                    args.push(val);
-                }
-
-                b.op_call(block, ctx.destinations.guards[leaf_num], &args);
-
-                args.remove(0);
-                args.remove(0);
-            }
+            // Throw is unreachable
+            b.op_unreachable(thr_block);
 
             // Conditional on return
             let (true_block, false_block, non_block) = b.op_if_bool(
-                guard_cont, guard_ret);
+                ok_block, ok_ret);
             b.op_unreachable(non_block);
 
             // If guard succeeds, we enter the body
-            b.op_call(true_block, ctx.destinations.bodies[leaf_num], &args);
+            b.op_call_flow(true_block, ctx.destinations.bodies[leaf_num], &args);
 
             // If guard fails, continue in CFG
             {

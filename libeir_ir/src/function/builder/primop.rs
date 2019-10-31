@@ -148,6 +148,11 @@ impl<'a> FunctionBuilder<'a> {
     pub(crate) fn prim_value_list_from_entity_list(
         &mut self, values: EntityList<Value>) -> Value {
         let num = values.len(&self.fun.pool.value);
+
+        if num == 1 {
+            return values.get(0, &self.fun.pool.value).unwrap();
+        }
+
         for n in 0..num {
             let val = values.get(n, &self.fun.pool.value).unwrap();
             if let Some(prim) = self.fun.value_primop(val) {

@@ -97,15 +97,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
     let mut block = block;
     match expr {
         Expr::Apply(Apply { span, callee, args, .. }) => {
-            let (ok_block, ok_block_val) = b.block_insert_get_val();
-            let ok_res = b.block_arg_insert(ok_block);
-
-            let (fail_block, fail_block_val) = b.block_insert_get_val();
-            let fail_type = b.block_arg_insert(fail_block);
-            let fail_error = b.block_arg_insert(fail_block);
-            let fail_trace = b.block_arg_insert(fail_block);
-
-            let mut arg_vals = vec![ok_block_val, fail_block_val];
+            let mut arg_vals = vec![];
 
             let arity_val = b.value(args.len());
 
@@ -176,10 +168,16 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
             }
 
             b.block_set_span(block, *span);
-            b.op_call(block, callee_val, &arg_vals);
+            let (ok_block, fail_block) = b.op_call_function(
+                block, callee_val, &arg_vals);
+
+            let fail_type = b.block_args(fail_block)[0];
+            let fail_error = b.block_args(fail_block)[1];
+            let fail_trace = b.block_args(fail_block)[2];
             ctx.exc_stack.make_error_jump_trace(
                 b, fail_block, fail_type, fail_error, fail_trace);
 
+            let ok_res = b.block_args(ok_block)[0];
             (ok_block, ok_res)
         }
         Expr::Var(Var(_id, var)) => {
@@ -237,7 +235,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                     (body, match_val)
                 }
                 Err(lowered) => {
-                    b.op_call(block, no_match, &[]);
+                    b.op_call_flow(block, no_match, &[]);
 
                     let (_scope_token, body) = lowered.make_body(ctx, b);
 
@@ -288,7 +286,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
             // The timeout time
             let after_timeout_val = if let Some(after) = &recv.after {
                 let (after_ret_block, after_ret) = lower_block(ctx, b, after_block, &after.body);
-                b.op_call(after_ret_block, join_block, &[after_ret]);
+                b.op_call_flow(after_ret_block, join_block, &[after_ret]);
 
                 map_block!(block, lower_single(ctx, b, block, &after.timeout))
             } else {
@@ -313,7 +311,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
             if let Some(clauses) = &recv.clauses {
 
                 let no_match = b.block_insert();
-                b.op_call(no_match, recv_wait_block, &[recv_ref_val]);
+                b.op_call_flow(no_match, recv_wait_block, &[recv_ref_val]);
 
                 let mut case_b = b.op_case_build();
                 case_b.match_on = Some(body_message_arg);
@@ -361,7 +359,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                                 ctx, b, body_mapped, &clause.body);
 
                             // Call to join block
-                            b.op_call(body_ret_block, join_block, &[body_ret]);
+                            b.op_call_flow(body_ret_block, join_block, &[body_ret]);
 
                             // Pop scope pushed in lower_clause
                             ctx.scope.pop(scope_token);
@@ -374,7 +372,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 case_b.finish(body_block, b);
 
             } else {
-                b.op_call(body_block, join_block, &[body_message_arg]);
+                b.op_call_flow(body_block, join_block, &[body_message_arg]);
             }
 
             (join_block, join_arg)
@@ -386,8 +384,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                     let function = b.value(resolved.function);
                     let arity = b.value(resolved.arity);
 
-                    block = b.op_capture_function(block, module, function, arity);
-                    let fun_val = b.block_args(block)[0];
+                    let fun_val = b.prim_capture_function(module, function, arity);
 
                     (block, fun_val)
                 }
@@ -403,8 +400,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                     let function = b.value(resolved.function);
                     let arity = b.value(resolved.arity);
 
-                    block = b.op_capture_function(block, module, function, arity);
-                    let fun_val = b.block_args(block)[0];
+                    let fun_val = b.prim_capture_function(module, function, arity);
 
                     (block, fun_val)
                 }
@@ -423,9 +419,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                         Arity::Var(var) => b.value(var),
                     };
 
-                    b.block_set_span(block, unresolved.span);
-                    block = b.op_capture_function(block, module, function, arity);
-                    let fun_val = b.block_args(block)[0];
+                    let fun_val = b.prim_capture_function(module, function, arity);
 
                     (block, fun_val)
                 }

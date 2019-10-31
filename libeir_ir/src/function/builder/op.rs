@@ -4,14 +4,14 @@ use cranelift_entity::{ EntityList };
 
 use crate::{ Block, Value, PatternClause };
 use crate::{ IntoValue };
-use crate::{ OpKind, MatchKind, BasicType, MapPutUpdate };
+use crate::{ OpKind, MatchKind, BasicType, MapPutUpdate, CallKind };
 use crate::binary::BinaryEntrySpecifier;
 use super::{ FunctionBuilder };
 
 /// Operation constructors
 impl<'a> FunctionBuilder<'a> {
 
-    pub fn op_call<'b, V>(&'b mut self, block: Block,
+    pub fn op_call_flow<'b, V>(&'b mut self, block: Block,
                        target: V, args: &[Value]) where V: IntoValue {
         let target_val = self.value(target);
 
@@ -19,11 +19,55 @@ impl<'a> FunctionBuilder<'a> {
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
-        data.op = Some(OpKind::Call);
+        data.op = Some(OpKind::Call(CallKind::ControlFlow));
         data.reads.push(target_val, &mut self.fun.pool.value);
         data.reads.extend(args.iter().cloned(), &mut self.fun.pool.value);
 
         self.graph_update_block(block);
+    }
+
+    pub fn op_call_function_next<'b, V>(
+        &'b mut self,
+        block: Block,
+        target: V,
+        ret: Value,
+        thr: Value,
+        args: &[Value],
+    )
+        where V: IntoValue,
+    {
+        let target_val = self.value(target);
+
+        let data = self.fun.blocks.get_mut(block).unwrap();
+        assert!(data.op.is_none());
+        assert!(data.reads.is_empty());
+
+        data.op = Some(OpKind::Call(CallKind::Function));
+        data.reads.push(target_val, &mut self.fun.pool.value);
+        data.reads.push(ret, &mut self.fun.pool.value);
+        data.reads.push(thr, &mut self.fun.pool.value);
+        data.reads.extend(args.iter().cloned(), &mut self.fun.pool.value);
+
+        self.graph_update_block(block);
+    }
+    pub fn op_call_function<'b, V>(
+        &'b mut self,
+        block: Block,
+        target: V,
+        args: &[Value],
+    ) -> (Block, Block)
+    where V: IntoValue,
+    {
+        let (ret, ret_val) = self.block_insert_get_val();
+        self.block_arg_insert(ret);
+        let (thr, thr_val) = self.block_insert_get_val();
+        self.block_arg_insert(thr);
+        self.block_arg_insert(thr);
+        self.block_arg_insert(thr);
+
+        self.op_call_function_next(block, target, ret_val, thr_val, args);
+
+        (ret, thr)
     }
 
     pub fn op_trace_capture_raw_next(&mut self, block: Block, next: Value) {
@@ -58,35 +102,6 @@ impl<'a> FunctionBuilder<'a> {
     }
     pub fn op_intrinsic_build(&mut self, name: Symbol) -> IntrinsicBuilder {
         IntrinsicBuilder::new(name, self)
-    }
-
-    pub fn op_capture_function<M, F, A>(
-        &mut self, block: Block,
-        m: M, f: F, a: A) -> Block
-    where
-        M: IntoValue, F: IntoValue, A: IntoValue
-    {
-        let cont = self.fun.block_insert();
-        let cont_val = self.value(cont);
-        self.fun.block_arg_insert(cont);
-
-        let m_val = self.value(m);
-        let f_val = self.value(f);
-        let a_val = self.value(a);
-
-        let data = self.fun.blocks.get_mut(block).unwrap();
-        assert!(data.op.is_none());
-        assert!(data.reads.is_empty());
-
-        data.op = Some(OpKind::CaptureFunction);
-        data.reads.push(cont_val, &mut self.fun.pool.value);
-        data.reads.push(m_val, &mut self.fun.pool.value);
-        data.reads.push(f_val, &mut self.fun.pool.value);
-        data.reads.push(a_val, &mut self.fun.pool.value);
-
-        self.graph_update_block(block);
-
-        cont
     }
 
     pub fn op_map_put_build(&mut self, value: Value) -> MapPutBuilder {

@@ -4,7 +4,7 @@ use std::io::{ Write, Error as IoError };
 
 use crate::{ Module, Function, FunctionIdent };
 use crate::{ Block, Value };
-use crate::{ OpKind, PrimOpKind, BinOp, MatchKind, BasicType, BinaryEntrySpecifier, Endianness };
+use crate::{ OpKind, PrimOpKind, BinOp, MatchKind, BasicType, BinaryEntrySpecifier, Endianness, CallKind };
 use crate::ValueKind;
 use crate::pattern::{ PatternContainer, PatternNode, PatternNodeKind };
 
@@ -480,11 +480,20 @@ impl ToEirTextFun for Block {
                     write_indent(out, indent + 1)?;
                     write!(out, "}}")?;
                 }
-                OpKind::Call => {
+                OpKind::Call(CallKind::ControlFlow) => {
                     format_value(args[0], fun, out)?;
                     write!(out, "(")?;
                     format_value_list(&args[1..], fun, out)?;
                     write!(out, ")")?;
+                }
+                OpKind::Call(CallKind::Function) => {
+                    format_value(args[0], fun, out)?;
+                    write!(out, "(")?;
+                    format_value_list(&args[3..], fun, out)?;
+                    write!(out, ") => ")?;
+                    format_value(args[1], fun, out)?;
+                    write!(out, " except ")?;
+                    format_value(args[2], fun, out)?;
                 }
                 OpKind::Intrinsic(name) => {
                     write!(out, "intrinsic {}(", name)?;

@@ -8,6 +8,17 @@ use cranelift_entity::EntityList;
 use serde::{ Serialize, Deserialize };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CallKind {
+    /// Control flow includes flow within a function and calls to
+    /// escape values.
+    ControlFlow,
+    /// Call to a function, should generate a stack frame.
+    /// The first two arguments MUST be the return and throw
+    /// continuations respectively.
+    Function,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BasicType {
     Map,
 }
@@ -54,10 +65,7 @@ pub enum OpKind {
     /// This is the calling primitive,
     /// doing everything from returns to local calls,
     /// to external calls.
-    Call,
-
-    // (cont: fn(fun), m, f, a)
-    CaptureFunction,
+    Call(CallKind),
 
     /// (true: fn(), false: fn(), else: fn(), value)
     /// (true: fn(), false: fn(), value) implies else is unreachable
@@ -150,7 +158,7 @@ impl OpKind {
 
     pub fn is_call(&self) -> bool {
         match self {
-            OpKind::Call => true,
+            OpKind::Call(_) => true,
             _ => false,
         }
     }

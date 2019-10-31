@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use libeir_ir::{Block, Value, OpKind, ValueKind, PrimOpKind};
+use libeir_ir::{Block, Value, OpKind, ValueKind, CallKind};
 use libeir_ir::{Function, LiveBlockGraph, LiveValues};
 
 mod call;
@@ -68,6 +68,8 @@ pub struct EntryEdgeAnalysis {
     // The arguments that should be used when calling the target block.
     // These need to be called with `map_value` in case the value is a primop.
     pub args: Vec<Value>,
+
+    pub looping_vars: BTreeSet<Value>,
 }
 
 fn follow(renames: &BTreeMap<Value, Value>, mut val: Value) -> Value {
@@ -152,7 +154,7 @@ pub fn analyze_graph(
     let mut relevant_blocks = BTreeSet::new();
     for block in graph.dfs_iter() {
         match fun.block_kind(block).unwrap() {
-            OpKind::Call => {
+            OpKind::Call(CallKind::ControlFlow) => {
                 relevant_blocks.insert(block);
             }
             OpKind::IfBool => {
@@ -190,7 +192,7 @@ pub fn analyze_graph(
             ctx.init_block(*block);
 
             let res = match fun.block_kind(*block).unwrap() {
-                OpKind::Call =>
+                OpKind::Call(CallKind::ControlFlow) =>
                     self::call::propagate(&mut ctx, *block),
                 OpKind::IfBool =>
                     self::if_bool::propagate(&mut ctx, *block),
@@ -299,11 +301,11 @@ pub fn analyze_chain(
         }
     }
 
-    let target_live = &live.live_in[&target];
+    let target_live = live.live_in(target);
 
     // Get the live values in the body of the block.
     let mut primary_conds = BTreeSet::new();
-    primary_conds.extend(target_live.iter(&live.pool));
+    primary_conds.extend(target_live.iter());
 
     // These are value mappings for the chain that don't depend on any control
     // flow in the chain.
@@ -424,6 +426,37 @@ pub fn analyze_entry_edge(
 ) -> EntryEdgeAnalysis {
     let (caller, callee) = chain_analysis.entry_edges[num];
 
+    let o_map: BTreeMap<Value, Value> = chain_analysis.cond_map.iter()
+        .filter_map(|(value, (_val_block, phis))| {
+            let mut curr = callee;
+            assert!(!chain_analysis.static_map.contains_key(value));
+
+            loop {
+                if let Some(i) = phis.get(&curr) {
+                    break Some((*value, *i));
+                }
+
+                if let Some(next) = analysis.static_branches_blocks.get(&curr) {
+                    // Follow the chain of static branches
+                    curr = *next;
+                } else {
+                    // If we reached the end of the chain without finding the phi,
+                    // then this is only relevant for another subbranch.
+                    break None;
+                }
+            }
+        }).collect();
+
+    let looping_vars: BTreeSet<Value> = chain_analysis.cond_map.iter()
+        .filter_map(|(value, (val_block, _phis))| {
+            if caller == Some(chain_analysis.target) {
+                if *val_block == caller.unwrap() {
+                    return Some(*value);
+                }
+            }
+            None
+        }).collect();
+
     // Specialize each of the phis for the current entry edge
     let map: BTreeMap<Value, Value> = chain_analysis.cond_map.iter()
         .filter_map(|(value, (val_block, phis))| {
@@ -455,7 +488,7 @@ pub fn analyze_entry_edge(
     // Produce the argument list the target block should be called with.
     let calling_args: Vec<_> = chain_analysis.args.iter()
         .map(|v| {
-            map.get(v).cloned().unwrap_or(*v)
+            o_map.get(v).cloned().unwrap_or(*v)
         }).collect();
 
     EntryEdgeAnalysis {
@@ -463,6 +496,7 @@ pub fn analyze_entry_edge(
         callee,
 
         mappings: map,
+        looping_vars,
         args: calling_args,
     }
 }

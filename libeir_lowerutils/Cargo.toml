@@ -10,3 +10,4 @@ edition = "2018"
 libeir_ir = { path = "../libeir_ir" }
 
 cranelift-entity = "0.30.0"
+petgraph = "0.4"

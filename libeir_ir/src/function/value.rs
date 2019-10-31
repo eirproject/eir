@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::ops::{ Index, IndexMut };
 
 use cranelift_entity::{ PrimaryMap, entity_impl };
-use libeir_util_datastructures::pooled_entity_set::PooledEntitySet;
+use libeir_util_datastructures::pooled_entity_set::EntitySet;
 use super::{ Block, Const, PrimOp };
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -12,7 +12,7 @@ entity_impl!(Value, "value");
 #[derive(Debug, Clone)]
 pub struct ValueData {
     pub(crate) kind: ValueKind,
-    pub(crate) usages: PooledEntitySet<Block>,
+    pub(crate) usages: EntitySet<Block>,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -44,7 +44,7 @@ impl ValueMap {
         } else {
             let val = self.primary.push(ValueData {
                 kind,
-                usages: PooledEntitySet::new(),
+                usages: EntitySet::new(),
             });
             self.back.insert(kind, val);
             val

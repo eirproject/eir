@@ -122,12 +122,12 @@ impl CallExecutor {
         if let Some(fun) = module.functions.get(&ident) {
             // Environment
             let block = if let Some((block, env)) = state {
-                let live = &fun.live.live[&block];
+                let live = &fun.live.live_at(block);
 
-                for (v, t) in live.iter(&fun.live.pool).zip(env.iter()) {
+                for (v, t) in live.iter().zip(env.iter()) {
                     self.binds.insert(v, t.clone());
                 }
-                assert!(live.size(&fun.live.pool) == env.len());
+                assert!(live.size() == env.len());
 
                 block
             } else {
@@ -202,9 +202,9 @@ impl CallExecutor {
     fn make_term(&self, fun: &ErlangFunction, value: Value) -> Rc<Term> {
         match fun.fun.value_kind(value) {
             ValueKind::Block(block) => {
-                let live = &fun.live.live[&block];
+                let live = &fun.live.live_at(block);
                 let mut env = Vec::new();
-                for v in live.iter(&fun.live.pool) {
+                for v in live.iter() {
                     assert!(fun.fun.value_argument(v).is_some());
                     env.push(self.make_term(fun, v));
                 }
@@ -282,7 +282,7 @@ impl CallExecutor {
         let reads = fun.fun.block_reads(block);
         println!("OP: {:?}", fun.fun.block_kind(block).unwrap());
         match fun.fun.block_kind(block).unwrap() {
-            OpKind::Call => {
+            OpKind::Call(_) => {
                 TermCall {
                     fun: self.make_term(fun, reads[0]),
                     args: reads.iter().skip(1).map(|r| self.make_term(fun, *r)).collect(),
@@ -305,22 +305,6 @@ impl CallExecutor {
                             args: vec![term],
                         }
                     }
-                }
-            }
-            OpKind::CaptureFunction => {
-                let module = self.make_term(fun, reads[1]).as_atom().unwrap();
-                let name = self.make_term(fun, reads[2]).as_atom().unwrap();
-                let arity = self.make_term(fun, reads[3]).as_usize().unwrap();
-
-                let ident = FunctionIdent {
-                    module: Ident::with_empty_span(module),
-                    name: Ident::with_empty_span(name),
-                    arity,
-                };
-
-                TermCall {
-                    fun: self.make_term(fun, reads[0]),
-                    args: vec![Term::CapturedFunction { ident }.into()],
                 }
             }
             OpKind::IfBool => {

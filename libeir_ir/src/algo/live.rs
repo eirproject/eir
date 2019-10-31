@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use crate::{ Function };
 use crate::{ Block, Value };
 
-use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, PooledEntitySet };
+use libeir_util_datastructures::pooled_entity_set::{
+    EntitySetPool, EntitySet,
+    BoundEntitySet,
+};
 
 impl Function {
 
@@ -24,23 +27,41 @@ impl Function {
 /// For CFGs that are acyclic, this algorithm will complete in a single
 /// iteration. For cyclic CFGs, this should take (around) 1 extra iteration
 /// for every additional nested cycle.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LiveValues {
     /// Values that need to exist at every block.
     /// Before block arguments.
-    pub live: HashMap<Block, PooledEntitySet<Value>>,
+    live_at: HashMap<Block, EntitySet<Value>>,
     /// Values that need to exist within every block.
     /// After block arguments, before operation.
-    pub live_in: HashMap<Block, PooledEntitySet<Value>>,
+    live_in: HashMap<Block, EntitySet<Value>>,
     /// The pool where `ebb_live` and `flow_live` is allocated.
-    pub pool: EntitySetPool,
+    pool: EntitySetPool<Value>,
+}
+
+impl LiveValues {
+
+    pub fn live_at<'a>(&'a self, block: Block) -> BoundEntitySet<'a, Value> {
+        self.live_at[&block].bind(&self.pool)
+    }
+    pub fn live_in<'a>(&'a self, block: Block) -> BoundEntitySet<'a, Value> {
+        self.live_in[&block].bind(&self.pool)
+    }
+
+    pub fn is_live_at(&self, block: Block, value: Value) -> bool {
+        self.live_at[&block].contains(value, &self.pool)
+    }
+    pub fn is_live_in(&self, block: Block, value: Value) -> bool {
+        self.live_in[&block].contains(value, &self.pool)
+    }
+
 }
 
 fn dataflow_pass(
     fun: &Function,
-    pool: &mut EntitySetPool,
-    live: &mut HashMap<Block, PooledEntitySet<Value>>,
-    live_in: &mut HashMap<Block, PooledEntitySet<Value>>,
+    pool: &mut EntitySetPool<Value>,
+    live: &mut HashMap<Block, EntitySet<Value>>,
+    live_in: &mut HashMap<Block, EntitySet<Value>>,
 ) -> bool {
 
     let graph = fun.block_graph();
@@ -51,7 +72,7 @@ fn dataflow_pass(
     // For each Op node in the cfg
     while let Some(block) = visitor.next(&graph) {
 
-        let mut set: PooledEntitySet<Value> = PooledEntitySet::new();
+        let mut set: EntitySet<Value> = EntitySet::new();
 
         // For each of the outgoing branches, add its live values to the current set
         for branch in graph.outgoing(block) {
@@ -73,7 +94,7 @@ fn dataflow_pass(
 
         // Update the live_after values
         if !live_in.contains_key(&block) {
-            live_in.insert(block, PooledEntitySet::new());
+            live_in.insert(block, EntitySet::new());
         }
         live_in.get_mut(&block).unwrap().union(&set, pool);
 
@@ -102,17 +123,17 @@ fn dataflow_pass(
 }
 
 pub fn calculate_live_values(fun: &Function) -> LiveValues {
-    let mut pool: EntitySetPool = EntitySetPool::new();
+    let mut pool = EntitySetPool::new();
 
-    let mut live: HashMap<Block, PooledEntitySet<Value>> = HashMap::new();
-    let mut live_in: HashMap<Block, PooledEntitySet<Value>> = HashMap::new();
+    let mut live_at: HashMap<Block, EntitySet<Value>> = HashMap::new();
+    let mut live_in: HashMap<Block, EntitySet<Value>> = HashMap::new();
 
     // Iterate dataflow until all dependencies have been resolved
     loop {
         let res = dataflow_pass(
             fun,
             &mut pool,
-            &mut live,
+            &mut live_at,
             &mut live_in,
         );
         if res { break; }
@@ -121,12 +142,12 @@ pub fn calculate_live_values(fun: &Function) -> LiveValues {
     // Validate that the live set at entry is empty
     {
         let entry = fun.block_entry();
-        assert!(live[&entry].size(&pool) == 0, "{:?}", live[&entry].printer(&pool));
+        assert!(live_at[&entry].size(&pool) == 0, "{:?}", live_at[&entry].bind(&pool));
     }
 
     LiveValues {
         pool,
-        live,
+        live_at,
         live_in,
     }
 }
@@ -156,16 +177,16 @@ foo:bar/1 {
 
         let live = ir.live_values();
 
-        let b1_live = &live.live[&b1];
-        assert!(b1_live.size(&live.pool) == 0);
+        let b1_live = live.live_at(b1);
+        assert!(b1_live.size() == 0);
 
-        let b2_live = &live.live[&b2];
-        assert!(b2_live.size(&live.pool) == 1);
-        assert!(b2_live.contains(b1_ret, &live.pool));
+        let b2_live = live.live_at(b2);
+        assert!(b2_live.size() == 1);
+        assert!(b2_live.contains(b1_ret));
 
-        let b3_live = &live.live[&b3];
-        assert!(b3_live.size(&live.pool) == 1);
-        assert!(b3_live.contains(b1_ret, &live.pool));
+        let b3_live = live.live_at(b3);
+        assert!(b3_live.size() == 1);
+        assert!(b3_live.contains(b1_ret));
     }
 
     #[test]
@@ -198,21 +219,21 @@ foo:bar/1 {
 
         let live = ir.live_values();
 
-        let b1_live = &live.live[&b1];
-        assert!(b1_live.size(&live.pool) == 0);
+        let b1_live = live.live_at(b1);
+        assert!(b1_live.size() == 0);
 
-        let b3_live = &live.live[&b3];
-        assert!(b3_live.size(&live.pool) == 2);
-        assert!(b3_live.contains(b1_ret, &live.pool));
-        assert!(b3_live.contains(b2_c, &live.pool));
+        let b3_live = live.live_at(b3);
+        assert!(b3_live.size() == 2);
+        assert!(b3_live.contains(b1_ret));
+        assert!(b3_live.contains(b2_c));
 
-        let b5_live = &live.live[&b5];
-        assert!(b5_live.size(&live.pool) == 1);
-        assert!(b5_live.contains(b1_ret, &live.pool));
+        let b5_live = live.live_at(b5);
+        assert!(b5_live.size() == 1);
+        assert!(b5_live.contains(b1_ret));
 
-        let b6_live = &live.live[&b6];
-        assert!(b6_live.size(&live.pool) == 1);
-        assert!(b6_live.contains(b1_ret, &live.pool));
+        let b6_live = live.live_at(b6);
+        assert!(b6_live.size() == 1);
+        assert!(b6_live.contains(b1_ret));
     }
 
 }

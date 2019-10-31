@@ -112,25 +112,22 @@ impl<'a> LowerCtx<'a> {
         b.block_set_span(block, span);
         let fun_val = b.prim_capture_function(m, f, args.len());
 
-        let ok_block = b.block_insert();
-        let ok_res = b.block_arg_insert(ok_block);
-
-        let fail_block = b.block_insert();
-        let fail_type = b.block_arg_insert(fail_block);
-        let fail_error = b.block_arg_insert(fail_block);
-        let fail_trace = b.block_arg_insert(fail_block);
-
         self.val_buf.clear();
-        self.val_buf.push(b.value(ok_block));
-        self.val_buf.push(b.value(fail_block));
         for arg in args.iter() {
             self.val_buf.push(*arg);
         }
 
         b.block_set_span(block, span);
-        b.op_call(block, fun_val, &self.val_buf);
+        let (ok_block, fail_block) = b.op_call_function(
+            block, fun_val, args);
+
+        let fail_type = b.block_args(fail_block)[0];
+        let fail_error = b.block_args(fail_block)[1];
+        let fail_trace = b.block_args(fail_block)[2];
         self.exc_stack.make_error_jump_trace(
             b, fail_block, fail_type, fail_error, fail_trace);
+
+        let ok_res = b.block_args(ok_block)[0];
 
         (ok_block, ok_res)
     }
@@ -248,7 +245,7 @@ fn lower_function_base(
     // Join block after case
     let join_block = b.block_insert();
     let join_arg = b.block_arg_insert(join_block);
-    b.op_call(join_block, ok_cont, &[join_arg]);
+    b.op_call_flow(join_block, ok_cont, &[join_arg]);
 
     // Match fail block
     let match_fail_block = b.block_insert();
@@ -287,7 +284,7 @@ fn lower_function_base(
                         ctx, b, body, &clause.body);
 
                     // Call to join block
-                    b.op_call(body_ret_block, join_block, &[body_ret]);
+                    b.op_call_flow(body_ret_block, join_block, &[body_ret]);
 
                     // Pop scope pushed in lower_clause
                     ctx.scope.pop(scope_token);

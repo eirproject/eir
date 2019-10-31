@@ -339,7 +339,7 @@ kitchen_sink {
                                 Box::new(ast::Value::Atom(Ident::from_str("c"))),
                             ),
                         }),
-                        ast::FunctionItem::Op(ast::Op::Call(ast::CallOp {
+                        ast::FunctionItem::Op(ast::Op::CallControlFlow(ast::CallControlFlowOp {
                             target: ast::Value::Value(Ident::from_str("foobar")),
                             args: vec![
                                 ast::Value::Value(Ident::from_str("woo")),

@@ -69,7 +69,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                         ctx, b, body, &clause.body);
 
                     // Call to join block
-                    b.op_call(body_ret_block, join_block, &[body_ret]);
+                    b.op_call_flow(body_ret_block, join_block, &[body_ret]);
 
                     // Pop scope pushed in lower_clause
                     ctx.scope.pop(scope_token);
@@ -81,7 +81,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
 
         case_b.finish(block, b);
     } else {
-        b.op_call(block, join_block, &[body_ret]);
+        b.op_call_flow(block, join_block, &[body_ret]);
     }
 
     let catch_no_match_block = b.block_insert();
@@ -128,7 +128,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                         ctx, b, body, &clause.body);
 
                     // Call to join block
-                    b.op_call(body_ret_block, join_block, &[body_ret]);
+                    b.op_call_flow(body_ret_block, join_block, &[body_ret]);
 
                     // Pop scope pushed in lower_clause
                     ctx.scope.pop(scope_token);
@@ -141,7 +141,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
 
         case_b.finish(block, b);
     } else {
-        b.op_call(exc_block, catch_no_match_block, &[]);
+        b.op_call_flow(exc_block, catch_no_match_block, &[]);
     }
 
     // After
@@ -151,7 +151,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
         let after_lambda = b.block_insert();
         let cont = b.block_arg_insert(after_lambda);
         let (after_block_cont, _after_val) = lower_block(ctx, b, after_lambda, &*after);
-        b.op_call(after_block_cont, cont, &[]);
+        b.op_call_flow(after_block_cont, cont, &[]);
 
         let ret_block = b.block_insert();
         let ret_val = b.block_arg_insert(ret_block);
@@ -159,15 +159,15 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
         // Exception
         let ret_exc_block = b.block_insert();
         let ret_exc_block_val = b.value(ret_exc_block);
-        b.op_call(catch_no_match_block, after_lambda, &[ret_exc_block_val]);
+        b.op_call_flow(catch_no_match_block, after_lambda, &[ret_exc_block_val]);
         ctx.exc_stack.make_error_jump_trace(
             b, ret_exc_block, exc_type, exc_error, exc_trace);
 
         // Return regular
         let ret_regular_block = b.block_insert();
         let ret_regular_block_val = b.value(ret_regular_block);
-        b.op_call(join_block, after_lambda, &[ret_regular_block_val]);
-        b.op_call(ret_regular_block, ret_block, &[join_val]);
+        b.op_call_flow(join_block, after_lambda, &[ret_regular_block_val]);
+        b.op_call_flow(ret_regular_block, ret_block, &[join_val]);
 
         (ret_block, ret_val)
     } else {
@@ -222,7 +222,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
     ctx.exc_stack.push_handler(b.value(exc_block));
     let body_ret = map_block!(block, lower_single(ctx, b, block, &catch_expr.expr));
     ctx.exc_stack.pop_handler();
-    b.op_call(block, join_block, &[body_ret]);
+    b.op_call_flow(block, join_block, &[body_ret]);
 
     // no_match is unreachable
     let no_match = b.block_insert();
@@ -234,7 +234,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
     let guard_cont = b.block_arg_insert(guard);
     let _guard_throw_cont = b.block_arg_insert(guard);
     let true_val = b.value(true);
-    b.op_call(guard, guard_cont, &[true_val]);
+    b.op_call_flow(guard, guard_cont, &[true_val]);
 
     // Actual case
     case_b.match_on = Some(exc_type);
@@ -249,7 +249,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
         let inner_tup = b.prim_tuple(&[exc_error, exc_trace]);
         let ret_tup = b.prim_tuple(&[big_exit_atom, inner_tup]);
 
-        b.op_call(error_block, join_block, &[ret_tup]);
+        b.op_call_flow(error_block, join_block, &[ret_tup]);
     }
 
     // Exit branch
@@ -260,7 +260,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
 
         let ret_tup = b.prim_tuple(&[big_exit_atom, exc_error]);
 
-        b.op_call(exit_block, join_block, &[ret_tup]);
+        b.op_call_flow(exit_block, join_block, &[ret_tup]);
     }
 
     // Throw branch
@@ -269,7 +269,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
         let throw_block_val = b.value(throw_block);
         case_b.push_clause(throw_clause, guard_val, throw_block_val, b);
 
-        b.op_call(throw_block, join_block, &[exc_error]);
+        b.op_call_flow(throw_block, join_block, &[exc_error]);
     }
 
     case_b.finish(exc_block, b);

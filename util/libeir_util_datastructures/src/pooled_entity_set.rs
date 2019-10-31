@@ -7,10 +7,24 @@ use ::cranelift_entity::ListPool;
 use ::cranelift_entity::EntityList;
 use ::cranelift_entity::packed_option::ReservedValue;
 
-pub type EntitySetPool = ListPool<PooledSetValue>;
+#[derive(Debug, Clone)]
+pub struct EntitySetPool<E> {
+    typ: PhantomData<E>,
+    pool: ListPool<PooledSetValue>,
+}
+impl<E> EntitySetPool<E> {
+
+    pub fn new() -> Self {
+        EntitySetPool {
+            typ: PhantomData,
+            pool: ListPool::new(),
+        }
+    }
+
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct PooledSetValue(u64);
+struct PooledSetValue(u64);
 
 impl ReservedValue for PooledSetValue {
     fn reserved_value() -> Self {
@@ -29,7 +43,7 @@ impl EntityRef for PooledSetValue {
 }
 
 #[derive(Debug, Clone)]
-pub struct PooledEntitySet<K>
+pub struct EntitySet<K>
 where
     K: EntityRef
 {
@@ -37,7 +51,7 @@ where
     unused: PhantomData<K>,
 }
 
-impl<T: EntityRef> Default for PooledEntitySet<T> {
+impl<T: EntityRef> Default for EntitySet<T> {
     fn default() -> Self {
         Self {
             list: EntityList::new(),
@@ -46,7 +60,7 @@ impl<T: EntityRef> Default for PooledEntitySet<T> {
     }
 }
 
-impl<K> PooledEntitySet<K>
+impl<K> EntitySet<K>
 where
     K: EntityRef
 {
@@ -58,49 +72,49 @@ where
         }
     }
 
-    pub fn contains(&self, k: K, pool: &EntitySetPool) -> bool {
+    pub fn contains(&self, k: K, pool: &EntitySetPool<K>) -> bool {
         let index = k.index();
 
-        let list_len = self.list.len(pool);
+        let list_len = self.list.len(&pool.pool);
         let list_len_entries = list_len * 63;
 
         if index < list_len_entries {
-            let list_val = self.list.get(index / 63, pool).unwrap();
+            let list_val = self.list.get(index / 63, &pool.pool).unwrap();
             list_val.0 & (1 << (index % 63)) != 0
         } else {
             false
         }
     }
 
-    pub fn size(&self, pool: &EntitySetPool) -> usize {
+    pub fn size(&self, pool: &EntitySetPool<K>) -> usize {
         let mut len = 0;
-        for n in self.internal_list().as_slice(pool) {
+        for n in self.list.as_slice(&pool.pool) {
             debug_assert!(n.0 != std::u64::MAX);
             len += n.0.count_ones() as usize;
         }
         len
     }
 
-    pub fn clear(&mut self, pool: &mut EntitySetPool) {
-        self.list.clear(pool)
+    pub fn clear(&mut self, pool: &mut EntitySetPool<K>) {
+        self.list.clear(&mut pool.pool)
     }
 
     //pub fn keys(&self) -> Keys<K>
 
-    fn grow_to_pages(&mut self, pages: usize, pool: &mut EntitySetPool) {
-        let len = self.list.len(pool);
+    fn grow_to_pages(&mut self, pages: usize, pool: &mut EntitySetPool<K>) {
+        let len = self.list.len(&pool.pool);
         if len < pages {
             // TODO: grow in one go
             for _ in 0..(pages - len) {
-                self.list.push(PooledSetValue(0), pool);
+                self.list.push(PooledSetValue(0), &mut pool.pool);
             }
         }
     }
 
-    pub fn insert(&mut self, k: K, pool: &mut EntitySetPool) -> bool {
+    pub fn insert(&mut self, k: K, pool: &mut EntitySetPool<K>) -> bool {
         let index = k.index();
 
-        let list_len = self.list.len(pool);
+        let list_len = self.list.len(&pool.pool);
         let needed_list_len = (index / 63) + 1; //(index + 62) / 63;
 
         if list_len < needed_list_len {
@@ -108,21 +122,21 @@ where
         }
 
         let result = self.contains(k, pool);
-        let val = self.list.get_mut(index / 63, pool).unwrap();
+        let val = self.list.get_mut(index / 63, &mut pool.pool).unwrap();
 
         val.0 |= 1 << (index % 63);
 
         result
     }
 
-    pub fn remove(&mut self, k: K, pool: &mut EntitySetPool) -> bool {
+    pub fn remove(&mut self, k: K, pool: &mut EntitySetPool<K>) -> bool {
         let index = k.index();
 
-        let list_len = self.list.len(pool);
+        let list_len = self.list.len(&mut pool.pool);
         let list_len_entries = list_len * 63;
 
         if index < list_len_entries {
-            let list_val = self.list.get_mut(index / 63, pool).unwrap();
+            let list_val = self.list.get_mut(index / 63, &mut pool.pool).unwrap();
             let bit_idx = 1 << (index % 63);
             let ret = list_val.0 & bit_idx != 0;
             list_val.0 &= !bit_idx;
@@ -132,42 +146,38 @@ where
         }
     }
 
-    pub fn make_copy(&self, pool: &mut EntitySetPool) -> PooledEntitySet<K> {
+    pub fn make_copy(&self, pool: &mut EntitySetPool<K>) -> EntitySet<K> {
         let mut new_list = EntityList::new();
 
-        let len = self.list.len(pool);
+        let len = self.list.len(&pool.pool);
         for n in 0..len {
-            let item = self.list.get(n, pool).unwrap();
-            new_list.push(item, pool);
+            let item = self.list.get(n, &pool.pool).unwrap();
+            new_list.push(item, &mut pool.pool);
         }
 
-        PooledEntitySet {
+        EntitySet {
             list: new_list,
             unused: PhantomData,
         }
     }
 
-    pub fn internal_list<'a>(&'a self) -> &EntityList<PooledSetValue> {
-        &self.list
-    }
-
-    pub fn union(&mut self, other: &PooledEntitySet<K>,
-                 pool: &mut EntitySetPool) {
-        let other_list = other.internal_list();
-        let other_pages_len = other_list.len(pool);
+    pub fn union(&mut self, other: &EntitySet<K>,
+                 pool: &mut EntitySetPool<K>) {
+        let other_list = &other.list;
+        let other_pages_len = other_list.len(&pool.pool);
         self.grow_to_pages(other_pages_len, pool);
         for n in 0..other_pages_len {
-            let other_val = other_list.get(n, pool).unwrap();
-            let val_mut = self.list.get_mut(n, pool).unwrap();
+            let other_val = other_list.get(n, &pool.pool).unwrap();
+            let val_mut = self.list.get_mut(n, &mut pool.pool).unwrap();
             debug_assert!(val_mut.0 != std::u64::MAX);
             debug_assert!(other_val.0 != std::u64::MAX);
             val_mut.0 |= other_val.0;
         }
     }
 
-    pub fn iter<'a>(&self, pool: &'a ListPool<PooledSetValue>) -> PooledEntitySetIter<'a, K> {
-        PooledEntitySetIter {
-            pool: pool,
+    pub fn iter<'a>(&self, pool: &'a EntitySetPool<K>) -> EntitySetIter<'a, K> {
+        EntitySetIter {
+            pool: &pool.pool,
             list: self.list.clone(),
             unused: PhantomData,
             current_data: None,
@@ -176,9 +186,13 @@ where
         }
     }
 
-    pub fn eq(&self, other: &PooledEntitySet<K>, pool: &EntitySetPool) -> bool {
-        let self_list = self.internal_list().as_slice(pool);
-        let other_list = other.internal_list().as_slice(pool);
+    pub fn eq(&self, other: &EntitySet<K>, pool: &EntitySetPool<K>) -> bool {
+        self.eq_other(other, pool, pool)
+    }
+
+    pub fn eq_other(&self, other: &EntitySet<K>, pool: &EntitySetPool<K>, other_pool: &EntitySetPool<K>) -> bool {
+        let self_list = self.list.as_slice(&pool.pool);
+        let other_list = other.list.as_slice(&other_pool.pool);
 
         // Check common head
         for (a, b) in self_list.iter().zip(other_list) {
@@ -213,16 +227,55 @@ where
         true
     }
 
-    pub fn printer<'a, 'b>(&'a self, pool: &'b ListPool<PooledSetValue>) -> PooledEntitySetPrinter<'a, 'b, K> {
-        PooledEntitySetPrinter {
-            set: self,
+    pub fn bind<'a>(&self, pool: &'a EntitySetPool<K>) -> BoundEntitySet<'a, K> {
+        BoundEntitySet {
+            set: self.clone(),
             pool,
         }
     }
 
 }
 
-pub struct PooledEntitySetIter<'a, T> where T: EntityRef {
+#[derive(Clone)]
+pub struct BoundEntitySet<'a, K: EntityRef> {
+    set: EntitySet<K>,
+    pool: &'a EntitySetPool<K>,
+}
+impl<'a, K: EntityRef> BoundEntitySet<'a, K> {
+
+    pub fn contains(&self, k: K) -> bool {
+        self.set.contains(k, self.pool)
+    }
+
+    pub fn size(&self) -> usize {
+        self.set.size(self.pool)
+    }
+
+    pub fn iter(&self) -> EntitySetIter<'_, K> {
+        self.set.iter(self.pool)
+    }
+
+}
+impl<'a, K: EntityRef> IntoIterator for &'a BoundEntitySet<'a, K> {
+    type Item = K;
+    type IntoIter = EntitySetIter<'a, K>;
+    fn into_iter(self) -> EntitySetIter<'a, K> {
+        BoundEntitySet::iter(self)
+    }
+}
+impl<'a, K> Debug for BoundEntitySet<'a, K> where K: EntityRef + Debug {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.debug_set().entries(self.set.iter(self.pool)).finish()
+    }
+}
+impl<'a, K: EntityRef> PartialEq for BoundEntitySet<'a, K> {
+    fn eq(&self, rhs: &BoundEntitySet<K>) -> bool {
+        self.set.eq_other(&rhs.set, self.pool, &rhs.pool)
+    }
+}
+impl<'a, K: EntityRef> Eq for BoundEntitySet<'a, K> {}
+
+pub struct EntitySetIter<'a, T> where T: EntityRef {
     pool: &'a ListPool<PooledSetValue>,
     list: EntityList<PooledSetValue>,
     unused: PhantomData<T>,
@@ -230,7 +283,7 @@ pub struct PooledEntitySetIter<'a, T> where T: EntityRef {
     current: usize,
     finished: bool,
 }
-impl<'a, T> Iterator for PooledEntitySetIter<'a, T> where T: EntityRef {
+impl<'a, T> Iterator for EntitySetIter<'a, T> where T: EntityRef {
     type Item = T;
     fn next(&mut self) -> Option<T> {
         loop {
@@ -255,21 +308,10 @@ impl<'a, T> Iterator for PooledEntitySetIter<'a, T> where T: EntityRef {
     }
 }
 
-pub struct PooledEntitySetPrinter<'a, 'b, T> where T: EntityRef {
-    set: &'a PooledEntitySet<T>,
-    pool: &'b ListPool<PooledSetValue>,
-}
-impl<'a, 'b, T> Debug for PooledEntitySetPrinter<'a, 'b, T> where T: EntityRef + Debug {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        f.debug_set().entries(self.set.iter(self.pool)).finish()
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use super::ListPool;
-    use super::PooledSetValue;
-    use super::PooledEntitySet;
+    use super::EntitySetPool;
+    use super::EntitySet;
 
     use ::cranelift_entity::entity_impl;
 
@@ -280,9 +322,9 @@ mod test {
 
     #[test]
     fn test_pooled_set() {
-        let mut pool: ListPool<PooledSetValue> = ListPool::new();
+        let mut pool = EntitySetPool::new();
 
-        let mut set1: PooledEntitySet<TestEntity> = PooledEntitySet::new();
+        let mut set1: EntitySet<TestEntity> = EntitySet::new();
 
         assert!(!set1.contains(TestEntity(0), &mut pool));
         assert!(!set1.contains(TestEntity(1), &mut pool));
@@ -319,7 +361,7 @@ mod test {
         assert!(!set1.contains(TestEntity(2), &mut pool));
         assert!(set1.contains(TestEntity(10), &mut pool));
 
-        let mut set2: PooledEntitySet<TestEntity> = PooledEntitySet::new();
+        let mut set2: EntitySet<TestEntity> = EntitySet::new();
 
         for i in 2..200 {
             println!("{}", i);
@@ -340,9 +382,9 @@ mod test {
 
     #[test]
     fn test_pooled_set_remove() {
-        let mut pool: ListPool<PooledSetValue> = ListPool::new();
+        let mut pool = EntitySetPool::new();
 
-        let mut set1: PooledEntitySet<TestEntity> = PooledEntitySet::new();
+        let mut set1: EntitySet<TestEntity> = EntitySet::new();
 
         assert!(!set1.remove(TestEntity(2), &mut pool));
         assert!(!set1.remove(TestEntity(100), &mut pool));
@@ -358,10 +400,10 @@ mod test {
 
     #[test]
     fn test_pooled_set_eq() {
-        let mut pool: ListPool<PooledSetValue> = ListPool::new();
+        let mut pool = EntitySetPool::new();
 
-        let mut set1: PooledEntitySet<TestEntity> = PooledEntitySet::new();
-        let mut set2: PooledEntitySet<TestEntity> = PooledEntitySet::new();
+        let mut set1: EntitySet<TestEntity> = EntitySet::new();
+        let mut set2: EntitySet<TestEntity> = EntitySet::new();
 
         assert!(set1.eq(&set2, &pool));
 
@@ -386,8 +428,8 @@ mod test {
 
     #[test]
     fn test_iterator() {
-        let mut pool: ListPool<PooledSetValue> = ListPool::new();
-        let mut set1: PooledEntitySet<TestEntity> = PooledEntitySet::new();
+        let mut pool = EntitySetPool::new();
+        let mut set1: EntitySet<TestEntity> = EntitySet::new();
 
         set1.insert(TestEntity(5), &mut pool);
         set1.insert(TestEntity(62), &mut pool);

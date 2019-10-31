@@ -295,7 +295,6 @@ foo:bar/1 {
 
     let mut out = Vec::new();
     b.fun().validate(&mut out);
-    println!("{:?}", out);
     assert!(out.len() == 0);
 
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
@@ -307,6 +306,23 @@ foo:bar/1 {
     b.fun().validate(&mut out);
     assert!(out.len() == 0);
 
+    println!("{}", b.fun().to_text());
+
+    let after = parse_function_unwrap("
+foo:bar/1 {
+    block1(%3, %4, %5):
+        block8(%5, []);
+    block8(%30, %31):
+        match %30 {
+            [] => block11;
+        };
+    block11(%36, %37):
+        %54 = [%36 | %31];
+        block8(%37, %54);
+}
+");
+    println!("{}", after.to_text());
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 }
 
 #[test]
@@ -341,6 +357,23 @@ foo:perms/1 {
     let mut out = Vec::new();
     b.fun().validate(&mut out);
     assert!(out.len() == 0);
+
+    println!("{}", b.fun().to_text());
+
+    let after = parse_function_unwrap("
+foo:perms/1 {
+    block0(%1, %2, %3):
+        block1(%3, []);
+    block1(%5, %6):
+        match %5 {
+            [] => block3;
+        };
+    block3(%9, %10):
+        %14 = [%9 | %6];
+        block1(%10, %14);
+}
+");
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 }
 
 #[test]
@@ -365,7 +398,6 @@ foo:do_map_vars_used/1 {
 
     let mut out = Vec::new();
     b.fun().validate(&mut out);
-    println!("{:?}", out);
     assert!(out.len() == 0);
 
     b.fun().live_values();
@@ -378,6 +410,15 @@ foo:do_map_vars_used/1 {
     let mut out = Vec::new();
     b.fun().validate(&mut out);
     assert!(out.len() == 0);
+
+    let after = parse_function_unwrap("
+foo:do_map_vars_used/1 {
+    entry(%1, %2, %3):
+        %4 = {%3};
+        match %4 {};
+}
+");
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 
 }
 
@@ -413,7 +454,6 @@ foo:do_map_vars_used/1 {
 
     let mut out = Vec::new();
     b.fun().validate(&mut out);
-    println!("{:?}", out);
     assert!(out.len() == 0);
 
     b.fun().live_values();
@@ -427,6 +467,22 @@ foo:do_map_vars_used/1 {
     b.fun().validate(&mut out);
     assert!(out.len() == 0);
 
+    let after = parse_function_unwrap("
+foo:do_map_vars_used/1 {
+    entry(%1, %2, %3):
+        match [] {
+            type %{} => block1;
+        };
+    block1():
+        %4 = {%3};
+        match [] {
+            %{%4} => block2;
+        };
+    block2(%5):
+        unreachable;
+}
+");
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 }
 
 #[test]
@@ -451,12 +507,9 @@ foo:grab_bag/0 {
 
     let mut out = Vec::new();
     b.fun().validate(&mut out);
-    println!("{:?}", out);
     assert!(out.len() == 0);
 
     b.fun().live_values();
-
-    println!("{}", b.fun().to_text());
 
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
@@ -466,4 +519,18 @@ foo:grab_bag/0 {
     let mut out = Vec::new();
     b.fun().validate(&mut out);
     assert!(out.len() == 0);
+
+    let after = parse_function_unwrap("
+foo:grab_bag/0 {
+    block0(%1, %2):
+        match a'x' {
+            _ => block1;
+        };
+    block1():
+        block2(a'x');
+    block2(%21):
+        %1(a'ok');
+}
+");
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 }

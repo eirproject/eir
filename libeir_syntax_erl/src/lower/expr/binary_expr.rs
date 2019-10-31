@@ -29,11 +29,11 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
 
             // True branch
             let (l2_block, rhs_val) = lower_single(ctx, b, true1_block, rhs);
-            b.op_call(l2_block, ret_block, &[rhs_val]);
+            b.op_call_flow(l2_block, ret_block, &[rhs_val]);
 
             // False branch
             let false_val = b.value(false);
-            b.op_call(false1_block, ret_block, &[false_val]);
+            b.op_call_flow(false1_block, ret_block, &[false_val]);
 
             // Nonbool branch
             let typ_val = b.value(Symbol::intern("error"));
@@ -53,11 +53,11 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
 
             // True branch
             let true_val = b.value(true);
-            b.op_call(true1_block, ret_block, &[true_val]);
+            b.op_call_flow(true1_block, ret_block, &[true_val]);
 
             // False branch
             let (l2_block, rhs_val) = lower_single(ctx, b, false1_block, rhs);
-            b.op_call(l2_block, ret_block, &[rhs_val]);
+            b.op_call_flow(l2_block, ret_block, &[rhs_val]);
 
             // Nonbool branch
             {

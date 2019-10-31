@@ -107,23 +107,19 @@ impl SimplifyCfgPass {
         let graph = b.fun().live_block_graph();
         let live = b.fun().live_values();
 
+        println!("{}", b.fun().to_text());
+
         let analysis = analyze::analyze_graph(b.fun(), &graph);
+        dbg!(&analysis);
 
         for (target, _blocks) in analysis.chains.iter() {
-
-            // TODO remove
-            let graph = b.fun().live_block_graph();
-            let chain_analysis = analyze::analyze_chain(
-                *target, &b.fun(), &graph, &live, &analysis);
-
-            if chain_analysis.renames_required {
-                rewrite::rewrite_chain_generic(self, &analysis, &chain_analysis, b);
-            } else {
-                // When the renames from the chain are not used outside of
-                // the target block, we can generate better IR.
-                rewrite::rewrite_chain_norenames(self, &analysis, &chain_analysis, b);
-            }
-
+            rewrite::rewrite(
+                *target,
+                self,
+                &analysis,
+                &live,
+                b,
+            );
         }
 
         self.mangler.start(entry, b);
@@ -133,6 +129,8 @@ impl SimplifyCfgPass {
         }
         let new_entry = self.mangler.run(b);
         b.block_set_entry(new_entry);
+
+        println!("{}", b.fun().to_text());
     }
 
 }

@@ -1,5 +1,6 @@
 use libeir_ir::FunctionBuilder;
-use libeir_ir::OpKind;
+use libeir_ir::{Block, OpKind, CallKind};
+use libeir_ir::{LiveBlockGraph, LiveValues};
 
 use super::SimplifyCfgPass;
 use super::analyze;
@@ -49,7 +50,28 @@ macro_rules! copy_map_fun {
     }
 }
 
-pub fn rewrite_chain_generic(
+pub fn rewrite(
+    target: Block,
+    pass: &mut SimplifyCfgPass,
+    analysis: &analyze::GraphAnalysis,
+    live: &LiveValues,
+    b: &mut FunctionBuilder,
+) {
+    let graph = b.fun().live_block_graph();
+    let chain_analysis = analyze::analyze_chain(
+        target, &b.fun(), &graph, &live, &analysis);
+    dbg!(&chain_analysis);
+
+    if chain_analysis.renames_required {
+        rewrite_chain_generic(pass, &analysis, &chain_analysis, b);
+    } else {
+        // When the renames from the chain are not used outside of
+        // the target block, we can generate better IR.
+        rewrite_chain_norenames(pass, &analysis, &chain_analysis, b);
+    }
+}
+
+fn rewrite_chain_generic(
     pass: &mut SimplifyCfgPass,
     analysis: &analyze::GraphAnalysis,
     chain_analysis: &analyze::ChainAnalysis,
@@ -63,23 +85,34 @@ pub fn rewrite_chain_generic(
     if chain_analysis.entry_edges.len() == 0 { return; }
 
     if chain_analysis.entry_edges.len() == 1 || chain_analysis.args.len() == 0 {
+        // This code path copies the body of the target into each callee block.
+        // This is safe to do when any of the two below conditions are met:
+        // * There is only one entry edge. In this case any required renames
+        //   can become static renames.
+        // * There are no 
 
-        let entry_analysis = analyze::analyze_entry_edge(
-            &analysis, &chain_analysis, 0);
+        for edge_num in 0..chain_analysis.entry_edges.len() {
+            let entry_analysis = analyze::analyze_entry_edge(
+                &analysis, &chain_analysis, edge_num);
+            println!("Path 1");
+            dbg!(&entry_analysis);
 
-        if chain_analysis.target == entry_analysis.callee { return; }
+            // If the target is the same as the callee, then this is already optimal.
+            if chain_analysis.target == entry_analysis.callee { return; }
 
-        for (from, to) in entry_analysis.mappings.iter() {
-            pass.map.insert(*from, *to);
+            // In the case where there is only one entry edge, all mappings become static.
+            for (from, to) in entry_analysis.mappings.iter() {
+                pass.map.insert(*from, *to);
+            }
+
+            // Clear the callee block and copy the target block body.
+            b.block_clear(entry_analysis.callee);
+            b.block_copy_body_map(
+                chain_analysis.target,
+                entry_analysis.callee,
+                &mut copy_map_fun_single!(chain_analysis, entry_analysis),
+            );
         }
-
-        b.block_clear(entry_analysis.callee);
-        b.block_copy_body_map(
-            chain_analysis.target,
-            entry_analysis.callee,
-            &mut copy_map_fun_single!(chain_analysis, entry_analysis),
-        );
-
     } else {
 
         // Create the new terminal block
@@ -93,12 +126,16 @@ pub fn rewrite_chain_generic(
             pass.map.insert(*value, mapped);
         }
 
+        // Copy the body of the target to the new target block.
         b.block_copy_body_map(chain_analysis.target, new_target_block,
                               &mut |val| Some(val));
 
+        // Rewrite all entry edges
         for n in 0..chain_analysis.entry_edges.len() {
             let entry_analysis = analyze::analyze_entry_edge(
                 &analysis, &chain_analysis, n);
+            println!("Path 2");
+            dbg!(&entry_analysis);
 
             if chain_analysis.target == entry_analysis.callee { continue; }
 
@@ -109,15 +146,15 @@ pub fn rewrite_chain_generic(
                     b.value_map(*v, &mut copy_map_fun!(chain_analysis, entry_analysis))
                 })
                 .collect();
-            b.op_call(entry_analysis.callee, new_target_block,
-                      &args);
+            b.op_call_flow(entry_analysis.callee, new_target_block,
+                           &args);
         }
 
     }
 
 }
 
-pub fn rewrite_chain_norenames(
+fn rewrite_chain_norenames(
     pass: &mut SimplifyCfgPass,
     analysis: &analyze::GraphAnalysis,
     chain_analysis: &analyze::ChainAnalysis,
@@ -129,11 +166,13 @@ pub fn rewrite_chain_norenames(
     }
 
     match b.fun().block_kind(chain_analysis.target).unwrap() {
-        OpKind::Call => {
+        OpKind::Call(CallKind::ControlFlow) => {
             for n in 0..chain_analysis.entry_edges.len() {
 
                 let entry_analysis = analyze::analyze_entry_edge(
                     &analysis, &chain_analysis, n);
+                println!("Path 3");
+                dbg!(&entry_analysis);
 
                 let call_target_equal_to_callee = {
                     let fun = b.fun();

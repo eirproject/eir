@@ -46,7 +46,7 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
                 let loop_acc_arg = b.block_arg_insert(loop_block);
 
                 // Initial list cell unpack call
-                b.op_call(block, loop_block, &[list_val, acc]);
+                b.op_call_flow(block, loop_block, &[list_val, acc]);
 
                 // Return block
                 let ret_block;
@@ -77,7 +77,7 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
 
                 // When there is no match, continue iterating
                 let no_match = b.block_insert();
-                b.op_call(no_match, loop_block, &[tail_val, acc]);
+                b.op_call_flow(no_match, loop_block, &[tail_val, acc]);
 
                 block = unpack_ok_block;
 
@@ -99,7 +99,7 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
                         }
 
                         let (cont, cont_val) = lower_qual(ctx, b, inner, &quals[1..], body, loop_acc_arg);
-                        b.op_call(cont, loop_block, &[tail_val, cont_val]);
+                        b.op_call_flow(cont, loop_block, &[tail_val, cont_val]);
 
                         // Pop scope pushed in lower_clause
                         ctx.scope.pop(scope_token);
@@ -123,10 +123,10 @@ where F: Fn(&mut LowerCtx, &mut FunctionBuilder, IrBlock, IrValue) -> (IrBlock, 
                 let join_arg = b.block_arg_insert(join_block);
 
                 let (cont, cont_val) = lower_qual(ctx, b, inner, &quals[1..], true_block, acc);
-                b.op_call(cont, join_block, &[cont_val]);
+                b.op_call_flow(cont, join_block, &[cont_val]);
 
-                b.op_call(false_block, join_block, &[acc]);
-                b.op_call(else_block, join_block, &[acc]);
+                b.op_call_flow(false_block, join_block, &[acc]);
+                b.op_call_flow(else_block, join_block, &[acc]);
 
                 (join_block, join_arg)
             }

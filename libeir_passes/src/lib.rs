@@ -61,6 +61,7 @@ impl Default for PassManager {
         man.push_function_pass(CompilePatternPass::new());
         man.push_function_pass(NaiveInlineClosuresPass::new());
         man.push_function_pass(SimplifyCfgPass::new());
+        man.push_function_pass(NaiveInlineClosuresPass::new());
         man
     }
 }

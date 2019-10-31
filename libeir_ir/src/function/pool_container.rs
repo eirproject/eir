@@ -1,11 +1,11 @@
 use cranelift_entity::ListPool;
 use libeir_util_datastructures::pooled_entity_set::EntitySetPool;
 
-use super::{ Value, PatternClause };
+use super::{ Value, Block, PatternClause };
 
 #[derive(Debug, Clone)]
 pub struct PoolContainer {
     pub value: ListPool<Value>,
     pub clause: ListPool<PatternClause>,
-    pub block_set: EntitySetPool,
+    pub block_set: EntitySetPool<Block>,
 }

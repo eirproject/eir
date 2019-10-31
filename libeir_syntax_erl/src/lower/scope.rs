@@ -179,7 +179,7 @@ impl ScopeMerge {
             for var in common_vars.iter() {
                 val_buf.push(result.binds[var]);
             }
-            b.op_call(result.cont_block, join_block, &val_buf);
+            b.op_call_flow(result.cont_block, join_block, &val_buf);
         }
 
         (join_block, ret)

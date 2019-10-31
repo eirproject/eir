@@ -23,7 +23,7 @@ pub mod pattern;
 
 pub use function::{ Function, Block, Value, PrimOp };
 pub use function::{ OpKind, MatchKind, BasicType, MapPutUpdate, PrimOpKind, BinOp,
-                    LogicOp };
+                    LogicOp, CallKind };
 pub use function::{ ValueKind };
 pub use function::{ Dialect };
 pub use function::{ AttributeKey, AttributeValue };
