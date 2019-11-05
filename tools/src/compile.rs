@@ -167,7 +167,7 @@ fn main() {
 
     let selected_function = matches.value_of("FUN_IDENT")
         .map(|val| FunctionIdent::parse_with_module(
-            val, eir.name.clone()).unwrap());
+            val, eir.name().clone()).unwrap());
 
     let mut print_ctx = ToEirTextContext::new();
     //if matches.is_present("ANNOTATE_LIVE") {
@@ -180,8 +180,8 @@ fn main() {
     match out_type {
         OutputType::Eir => {
             if let Some(selected) = selected_function {
-                let fun = &eir.functions[&selected];
-                fun.to_eir_text(&mut print_ctx, 0, &mut out_data).unwrap();
+                eir[&selected].function()
+                    .to_eir_text(&mut print_ctx, 0, &mut out_data).unwrap();
             } else {
                 eir.to_eir_text(&mut print_ctx, 0, &mut out_data).unwrap();
             }
@@ -190,7 +190,8 @@ fn main() {
         OutputType::Dot => {
             let selected_function = selected_function.expect(
                 "Expected function ident with -i <FUN_IDENT>");
-            let fun = &eir.functions[&selected_function];
+            let fun_def = &eir[&selected_function];
+            let fun = fun_def.function();
 
             ::libeir_ir::text::function_to_dot(&fun, &mut out_data).unwrap();
 

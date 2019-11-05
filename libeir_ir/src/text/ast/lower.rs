@@ -108,7 +108,7 @@ impl ast::Module {
                         fun.name,
                         fun.arity.to_usize().unwrap(),
                     );
-                    let mut b = fun_ir.builder();
+                    let mut b = fun_ir.function_mut().builder();
                     fun.lower_into(errors, &mut b)?;
                 }
             }

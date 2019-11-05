@@ -65,7 +65,8 @@ fun_shadowing(A) ->
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
 
-    for (ident, fun) in eir_mod.functions.iter() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.live_values();
     }
 

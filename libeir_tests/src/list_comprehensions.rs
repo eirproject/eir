@@ -17,7 +17,8 @@ fn test_list_comprehension_single_filter() {
 woo(N) -> [1 || erlang:is_integer(N)].
 ", ParseConfig::default()).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         let mut out = Vec::new();
         fun.validate(&mut out);
         assert!(out.len() == 0);
@@ -26,7 +27,8 @@ woo(N) -> [1 || erlang:is_integer(N)].
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         let mut out = Vec::new();
         fun.validate(&mut out);
         assert!(out.len() == 0);
@@ -61,7 +63,8 @@ fn test_list_comprehension_single_list_generator() {
 woo(L) -> [X*2 || X <- L].
 ", ParseConfig::default()).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         let mut out = Vec::new();
         fun.validate(&mut out);
         assert!(out.len() == 0);
@@ -70,7 +73,8 @@ woo(L) -> [X*2 || X <- L].
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         let mut out = Vec::new();
         fun.validate(&mut out);
         assert!(out.len() == 0);
@@ -121,7 +125,8 @@ comb([]) -> [[]];
 comb(L) -> [[A, B] || A <- L, B <- L].
 ", ParseConfig::default()).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         let mut out = Vec::new();
         fun.validate(&mut out);
         assert!(out.len() == 0);
@@ -130,7 +135,8 @@ comb(L) -> [[A, B] || A <- L, B <- L].
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         let mut out = Vec::new();
         fun.validate(&mut out);
         println!("{:?}", out);
@@ -174,7 +180,8 @@ fn test_basic_comprehension() {
 perms(L) -> [H || H <- L].
 ", ParseConfig::default()).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         let mut out = Vec::new();
         fun.validate(&mut out);
         assert!(out.len() == 0);
@@ -183,7 +190,8 @@ perms(L) -> [H || H <- L].
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         let mut out = Vec::new();
         fun.validate(&mut out);
         println!("{:?}", out);
@@ -204,7 +212,8 @@ perms([]) -> [[]];
 perms(L) -> [[H|T] || H <- L, T <- perms(L--[H])].
 ", ParseConfig::default()).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         let mut out = Vec::new();
         fun.validate(&mut out);
         assert!(out.len() == 0);
@@ -213,7 +222,8 @@ perms(L) -> [[H|T] || H <- L, T <- perms(L--[H])].
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         let mut out = Vec::new();
         fun.validate(&mut out);
         assert!(out.len() == 0);

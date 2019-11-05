@@ -72,9 +72,6 @@ pub enum OpKind {
     /// Strict truth check, only 'true' is true, 'false' is false
     IfBool,
 
-    /// (..)
-    Intrinsic(Symbol),
-
     // Stack traces
     /// This captures the current stack trace.
     /// Returns an implementation specific value that can only be
@@ -152,6 +149,8 @@ pub enum OpKind {
     /// Something that should not happen. The VM could be left in an
     /// invalid state, should raise an unrecoverable runtime error.
     Unreachable,
+
+    Intrinsic(Symbol),
 }
 
 impl OpKind {

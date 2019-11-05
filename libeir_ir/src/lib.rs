@@ -1,7 +1,6 @@
 #![deny(warnings)]
 
 use std::fmt::{ Display, Formatter };
-use std::collections::BTreeMap;
 use std::cmp::Ordering;
 
 use libeir_intern::Ident;
@@ -49,6 +48,9 @@ pub use text::printer::{ ToEirText, ToEirTextContext };
 pub mod binary;
 pub use binary::{ BinaryEntrySpecifier, Endianness };
 
+mod module;
+pub use module::{Module, FunctionDefinition, FunctionIndex};
+
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd)]
 pub struct FunctionIdent {
     pub module: Ident,
@@ -65,42 +67,3 @@ impl Display for FunctionIdent {
         write!(f, "{}:{}/{}", self.module, self.name, self.arity)
     }
 }
-
-#[derive(Debug)]
-pub struct Module {
-    pub name: Ident,
-    pub functions: BTreeMap<FunctionIdent, Function>,
-}
-impl Module {
-
-    pub fn new(name: Ident) -> Self {
-        Module {
-            name,
-            functions: BTreeMap::new(),
-        }
-    }
-
-    pub fn add_function(&mut self, name: Ident, arity: usize) -> &mut Function {
-        let ident = FunctionIdent {
-            module: self.name,
-            name,
-            arity,
-        };
-        assert!(!self.functions.contains_key(&ident));
-
-        let fun = Function::new(ident);
-        self.functions.insert(ident, fun);
-
-        self.functions.get_mut(&ident).unwrap()
-    }
-
-    pub fn to_text(&self) -> String {
-        let mut ctx = ToEirTextContext::new();
-
-        let mut out = Vec::new();
-        self.to_eir_text(&mut ctx, 0, &mut out).unwrap();
-        String::from_utf8(out).unwrap()
-    }
-
-}
-

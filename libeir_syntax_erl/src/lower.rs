@@ -158,7 +158,8 @@ pub fn lower_module(module: &Module) -> (Result<IrModule, ()>, Vec<LowerError>) 
         assert!(ctx.scope.height() == 0);
         println!("Fun Name: {:?}", ident);
 
-        let mut fun = ir_module.add_function(ident.function, function.arity);
+        let fun_def = ir_module.add_function(ident.function, function.arity);
+        let mut fun = fun_def.function_mut();
         let mut builder = FunctionBuilder::new(&mut fun);
 
         // We do not want the sentinel value to be a constant,

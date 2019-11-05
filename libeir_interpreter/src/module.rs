@@ -55,15 +55,18 @@ pub struct ErlangModule {
 impl ErlangModule {
 
     pub fn from_eir(module: Module) -> Self {
-        let functions = module.functions.values().map(|fun| {
+        let functions = module.index_iter().map(|idx| {
+            let fun_def = &module[idx];
+            let fun = fun_def.function();
             let nfun = ErlangFunction {
                 live: fun.live_values(),
                 fun: fun.clone(),
             };
             (fun.ident().clone(), nfun)
         }).collect();
+
         ErlangModule {
-            name: module.name.name,
+            name: module.name().name,
             functions,
         }
     }

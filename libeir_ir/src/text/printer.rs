@@ -169,15 +169,14 @@ pub fn print_constants(_ctx: &mut ToEirTextContext, _fun: &Function, _indent: us
 
 impl ToEirText for Module {
     fn to_eir_text(&self, ctx: &mut ToEirTextContext, indent: usize, out: &mut dyn Write) -> std::io::Result<()> {
-        let funs: Vec<_> = self.functions.keys().collect();
-        // TODO sort
-        //funs.sort();
+        let funs: Vec<_> = self.index_iter().collect();
 
         write_indent(out, indent)?;
-        write!(out, "{} {{\n\n", self.name)?;
+        write!(out, "{} {{\n\n", self.name())?;
 
-        for ident in funs.iter() {
-            let fun = &self.functions[ident];
+        for idx in funs.iter() {
+            let fun_def = &self[*idx];
+            let fun = fun_def.function();
             fun.to_eir_text(ctx, indent+1, out)?;
             write!(out, "\n\n")?;
         }

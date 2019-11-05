@@ -20,7 +20,8 @@ fn compiler() {
     let mut eir_mod = lower_file(
         "../otp/lib/compiler/src/compile.erl", config).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
 
@@ -39,7 +40,8 @@ fn beam_disasm() {
     let mut eir_mod = lower_file(
         "../otp/lib/compiler/src/beam_disasm.erl", config).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
 
@@ -59,7 +61,8 @@ fn core_parse() {
     let mut eir_mod = lower_file(
         "../otp/lib/compiler/src/core_parse.erl", config).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
 
@@ -73,7 +76,8 @@ fn maps() {
     let mut eir_mod = lower_file(
         "../otp/lib/stdlib/src/maps.erl", config).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
 
@@ -89,7 +93,8 @@ fn match_suite() {
     let mut eir_mod = lower_file(
         "../otp/lib/compiler/test/match_SUITE.erl", config).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         println!("{}", fun.ident());
         fun.graph_validate_global();
         fun.live_values();
@@ -98,7 +103,8 @@ fn match_suite() {
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         println!("{}", fun.ident());
         println!("{}", fun.to_text());
         fun.graph_validate_global();
@@ -121,7 +127,8 @@ fn bs_match_suite() {
     let mut eir_mod = lower_file(
         "../otp_build/bs_match_SUITE_patched.erl", config).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
 
@@ -146,10 +153,12 @@ fn maps_suite() {
     let mut eir_mod = lower_file(
         "../otp/lib/compiler/test/map_SUITE.erl", config).unwrap();
 
-    for fun in maps_eir_mod.functions.values() {
+    for fun_def in maps_eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
 
@@ -176,7 +185,8 @@ fn xmerl_scan() {
     let mut eir_mod = lower_file(
         "../otp/lib/xmerl/src/xmerl_scan.erl", config).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
 
@@ -195,7 +205,8 @@ fn xmerl_sax_parser_utf8() {
     let mut eir_mod = lower_file(
         "../otp/lib/xmerl/src/xmerl_sax_parser_latin1.erl", config).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
 
@@ -210,7 +221,8 @@ fn foo() {
     let mut eir_mod = lower_file(
         "foo.erl", config).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
 
@@ -237,14 +249,16 @@ Val
     let config = ParseConfig::default();
     let mut eir_mod = lower(text, config).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.live_values();
     }
 }
@@ -308,14 +322,16 @@ unary_op_1(Vop@1) ->
     let config = ParseConfig::default();
     let mut eir_mod = lower(text, config).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.live_values();
     }
 
@@ -343,14 +359,16 @@ unary_op_1(Vop@1) ->
     let config = ParseConfig::default();
     let mut eir_mod = lower(text, config).unwrap();
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.graph_validate_global();
     }
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
 
-    for fun in eir_mod.functions.values() {
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
         fun.live_values();
     }
 

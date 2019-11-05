@@ -83,7 +83,10 @@ pub fn lower(input: &str, config: ParseConfig) -> Result<Module, ()> {
 
 pub fn write_dot(module: &Module, ident: Option<FunctionIdent>) {
     if let Some(ident) = ident {
-        let fun = &module.functions[&ident];
+        let idx = module.ident_index(&ident).unwrap();
+        let fun_def = &module[idx];
+        let fun = fun_def.function();
+
         let mut dot = Vec::<u8>::new();
         libeir_ir::text::dot_printer::function_to_dot(fun, &mut dot).unwrap();
         let dot_text = std::str::from_utf8(&dot).unwrap();
@@ -92,4 +95,3 @@ pub fn write_dot(module: &Module, ident: Option<FunctionIdent>) {
         unimplemented!()
     }
 }
-

@@ -36,8 +36,9 @@ impl PassManager {
     }
 
     pub fn run(&mut self, module: &mut Module) {
-        for (ident, fun) in module.functions.iter_mut() {
-            println!("============ {}", ident);
+        for fun_def in module.function_iter_mut() {
+            let fun = fun_def.function_mut();
+            println!("============ {}", fun.ident());
             let mut b = FunctionBuilder::new(fun);
             b.fun().graph_validate_global();
             for pass in self.passes.iter_mut() {
@@ -49,7 +50,6 @@ impl PassManager {
                 }
                 b.fun().graph_validate_global();
             }
-            //println!("{}", b.fun().to_text());
         }
     }
 

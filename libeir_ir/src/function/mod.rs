@@ -157,6 +157,17 @@ impl Function {
         self.constant_values.contains(&value)
     }
 
+    pub fn value_list_length(&self, value: Value) -> usize {
+        match self.value_kind(value) {
+            ValueKind::PrimOp(prim) => {
+                if let PrimOpKind::ValueList = self.primop_kind(prim) {
+                    return self.primop_reads(prim).len();
+                }
+            }
+            _ => (),
+        }
+        1
+    }
     pub fn value_list_get_n(&self, value: Value, n: usize) -> Option<Value> {
         match self.value_kind(value) {
             ValueKind::PrimOp(prim) => {
