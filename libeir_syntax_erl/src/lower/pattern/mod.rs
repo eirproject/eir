@@ -221,8 +221,6 @@ impl ClauseLowerCtx {
             }
         }
 
-        b.block_annotate_is_fun(guard_lambda_block);
-
         // Body
         let mut block = guard_lambda_block;
 

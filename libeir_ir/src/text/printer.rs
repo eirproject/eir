@@ -372,11 +372,6 @@ impl ToEirTextFun for Block {
                         // Guard
                         write!(out, " guard ")?;
                         format_value(guard, fun, out)?;
-                        write!(out, "(return")?;
-                        for bind in fun.pat().clause_binds(clause) {
-                            write!(out, ", n{}", bind.index())?;
-                        }
-                        write!(out, ")")?;
 
                         // Body
                         write!(out, " => ")?;
@@ -391,7 +386,7 @@ impl ToEirTextFun for Block {
 
                             write!(out, "n{}", bind.index())?;
                         }
-                        write!(out, ")")?;
+                        write!(out, ");")?;
 
                         write!(out, "\n")?;
                     }
@@ -399,7 +394,7 @@ impl ToEirTextFun for Block {
                     write_indent(out, indent + 2)?;
                     write!(out, "_ => ")?;
                     format_value(args[0], fun, out)?;
-                    write!(out, "()")?;
+                    write!(out, ";")?;
                     write!(out, "\n")?;
 
                     write_indent(out, indent + 1)?;
@@ -436,6 +431,9 @@ impl ToEirTextFun for Block {
                             }
                             MatchKind::Type(BasicType::Map) => {
                                 write!(out, "type %{{}}")?;
+                            }
+                            MatchKind::Type(_) => {
+                                unimplemented!()
                             }
                             MatchKind::MapItem => {
                                 write!(out, "%{{ ")?;

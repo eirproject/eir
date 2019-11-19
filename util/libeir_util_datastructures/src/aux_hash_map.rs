@@ -4,7 +4,10 @@ use std::marker::PhantomData;
 use std::borrow::Borrow;
 use std::fmt::Debug;
 
-use hashbrown::raw::{ RawTable, RawIter };
+//use cranelift_entity::{ListPool, EntityList, EntityRef};
+//use cranelift_entity::packed_option::ReservedValue;
+
+use hashbrown::raw::{RawTable, RawIter};
 
 /// Hashes a data type with access to auxiliary data
 pub trait AuxHash<C> {
@@ -15,6 +18,14 @@ impl<C, T> AuxHash<C> for T where T: Hash {
         self.hash(state)
     }
 }
+//impl<E> AuxHash<ListPool<E>> for EntityList<E>
+//where
+//    E: EntityRef + ReservedValue + Hash
+//{
+//    fn aux_hash<H: Hasher>(&self, state: &mut H, container: &ListPool<E>) {
+//        self.as_slice(container).hash(state)
+//    }
+//}
 
 /// Tests equality with access to auxiliary data
 pub trait AuxEq<C> {
@@ -31,6 +42,14 @@ impl<C, T: ?Sized> AuxEq<C> for T where T: Eq {
         self.ne(other)
     }
 }
+//impl<E> AuxEq<ListPool<E>> for EntityList<E>
+//where
+//    E: EntityRef + ReservedValue + Eq
+//{
+//    fn aux_eq(&self, other: &Self, container: &ListPool<E>) -> bool {
+//        self.as_slice(container) == other.as_slice(container)
+//    }
+//}
 
 /// Implementation of a HashMap where the hash/equality functions
 /// requires additional information.
@@ -170,37 +189,37 @@ impl<'a, K, V> Iterator for Iter<'a, K, V> {
 #[cfg(test)]
 mod tests {
 
-    use super::{ AuxHashMap, AuxHash };
-    use std::hash::{ Hash, Hasher };
+    //use super::{ AuxHashMap, AuxHash };
+    //use std::hash::{ Hash, Hasher };
 
-    #[test]
-    fn test_deduped_entity() {
+    //#[test]
+    //fn test_deduped_entity() {
 
-        #[derive(PartialEq, Eq)]
-        struct Key(usize);
-        impl AuxHash<AuxData> for Key {
-            fn aux_hash<H: Hasher>(&self, state: &mut H, container: &AuxData) {
-                assert!(container.0 == 11);
-                self.0.hash(state)
-            }
-        }
+    //    #[derive(PartialEq, Eq)]
+    //    struct Key(usize);
+    //    impl AuxHash<AuxData> for Key {
+    //        fn aux_hash<H: Hasher>(&self, state: &mut H, container: &AuxData) {
+    //            assert!(container.0 == 11);
+    //            self.0.hash(state)
+    //        }
+    //    }
 
-        struct AuxData(usize);
+    //    struct AuxData(usize);
 
-        let mut map: AuxHashMap<Key, usize, AuxData> = AuxHashMap::new();
-        let aux = AuxData(11);
+    //    let mut map: AuxHashMap<Key, usize, AuxData> = AuxHashMap::new();
+    //    let aux = AuxData(11);
 
-        map.try_insert(Key(1), 1, &aux).unwrap();
-        map.try_insert(Key(1), 1, &aux).err().unwrap();
+    //    map.try_insert(Key(1), 1, &aux).unwrap();
+    //    map.try_insert(Key(1), 1, &aux).err().unwrap();
 
-        map.try_insert(Key(2), 2, &aux).unwrap();
-        map.try_insert(Key(2), 2, &aux).err().unwrap();
+    //    map.try_insert(Key(2), 2, &aux).unwrap();
+    //    map.try_insert(Key(2), 2, &aux).err().unwrap();
 
-        map.try_insert(Key(1), 1, &aux).err().unwrap();
+    //    map.try_insert(Key(1), 1, &aux).err().unwrap();
 
-        assert!(map.get(&Key(1), &aux) == Some(&1));
-        assert!(map.get(&Key(2), &aux) == Some(&2));
+    //    assert!(map.get(&Key(1), &aux) == Some(&1));
+    //    assert!(map.get(&Key(2), &aux) == Some(&2));
 
-    }
+    //}
 
 }

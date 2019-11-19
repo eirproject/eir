@@ -100,6 +100,7 @@ pub enum Token {
     FatArrow,
     Underscore,
     Pipe,
+    At,
 
     // Keywords
     Unreachable,
@@ -134,6 +135,7 @@ lazy_static! {
         map.insert(Symbol::intern("type"), Token::Type);
         map.insert(Symbol::intern("case"), Token::Case);
         map.insert(Symbol::intern("except"), Token::Except);
+        map.insert(Symbol::intern("guard"), Token::Guard);
         map
     };
 }
@@ -337,6 +339,7 @@ where
                 _ => pop!(self, Token::Equals),
             },
             '_' => pop!(self, Token::Underscore),
+            '@' => pop!(self, Token::At),
             c if c == 'a' => {
                 match self.peek() {
                     '\'' => self.lex_atom(),

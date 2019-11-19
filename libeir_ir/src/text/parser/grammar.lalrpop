@@ -13,7 +13,7 @@ use crate::text::ast::{Module, ModuleItem, Function, FunctionItem, Label,
                        Op, CallControlFlowOp, CallFunctionOp, Value,
                        Assignment, UnpackValueListOp, IfBoolOp,
                        TraceCaptureRawOp, MatchEntry, MatchKind,
-                       MatchOp};
+                       MatchOp, CaseOp, CaseEntry, CasePattern};
 use super::errors::{ParserError, ParserErrors};
 
 grammar(errors: &mut dyn ErrorReceiver<ParserError, ParserError>);
@@ -165,8 +165,12 @@ FunctionOp: Op = {
         })
     },
 
-    "case" <value:Value> "{" <entries:CaseEntry*> "}" => {
-        unimplemented!();
+    "case" <value:Value> "{" <entries:CaseEntry*> <no_match:CaseNoMatch?> "}" => {
+        Op::Case(CaseOp {
+            value,
+            entries,
+            no_match,
+        })
     },
 
     // Unreachable
@@ -174,22 +178,55 @@ FunctionOp: Op = {
 
 };
 
-CaseEntry: () = {
-    "<" <patterns:Comma<CasePattern>> ">" <guard: ("guard" <Value>)?> "=>" <target:Value> => {
-        unimplemented!();
+CaseEntry: CaseEntry = {
+    "<" <patterns:Comma<CasePattern>> ">" "guard" <guard: Value> "=>" <target:Value> "(" <args:Comma<ident>> ")" ";" => {
+        CaseEntry {
+            patterns,
+            args,
+            guard,
+            target,
+        }
     },
-    <pattern:CasePattern> <guard: ("guard" <Value>)?> "=>" <target:Value> => {
-        unimplemented!();
+    <pattern:CasePattern> "guard" <guard:Value> "=>" <target:Value> "(" <args:Comma<ident>> ")" ";" => {
+        CaseEntry {
+            patterns: vec![pattern],
+            args,
+            guard,
+            target,
+        }
     },
 };
 
-CasePattern: () = {
-    "{" <children:Comma<CasePattern>> "}" => {
-        unimplemented!();
+CaseNoMatch: Value = {
+    "_" "=>" <Value> ";" => <>,
+};
+
+CasePattern: CasePattern = {
+    "(" <CasePattern> ")" => <>,
+    "{" <elements:Comma<CasePattern>> "}" => {
+        CasePattern::Tuple {
+            elements,
+        }
     },
-    "[" <head:Comma<CasePattern>> <tail: ("|" <CasePattern>)?> "]" => {
-        unimplemented!();
+    "[" <mut heads:Comma<CasePattern>> <tail: ("|" <CasePattern>)?> "]" => {
+        let mut acc = tail.unwrap_or(CasePattern::Value(Value::Nil));
+        for elem in heads.drain(..).rev() {
+            acc = CasePattern::ListCell {
+                head: Box::new(elem),
+                tail: Box::new(acc),
+            };
+        }
+        acc
     },
+    <name:ident> "@" <pat:CasePattern> => {
+        CasePattern::Binding {
+            name,
+            pattern: Box::new(pat),
+        }
+    },
+    "_" => {
+        CasePattern::Wildcard
+    }
 };
 
 MatchEntry: MatchEntry = {
@@ -294,6 +331,7 @@ extern {
         "=>" => Token::FatArrow,
         "_" => Token::Underscore,
         "|" => Token::Pipe,
+        "@" => Token::At,
 
         "unpack" => Token::UnpackValueList,
         "unreachable" => Token::Unreachable,

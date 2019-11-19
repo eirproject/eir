@@ -1,4 +1,4 @@
-use clap::{ Arg, App, ArgMatches, arg_enum, value_t };
+use clap::{ Arg, App, ArgMatches, arg_enum, value_t, values_t };
 
 use std::io::Read;
 use std::io::Write;
@@ -40,15 +40,16 @@ arg_enum!{
     pub enum CompileLevel {
         High,
         Normal,
+        Custom,
     }
 }
 
 arg_enum!{
     #[derive(Debug)]
     pub enum CompilePass {
-        RemoveOrphanBlocks,
-        CompilePattern,
-        SimplifyBranches,
+        CompilePatterns,
+        SimplifyCfg,
+        NaiveInlineClosures,
         Validate,
     }
 }
@@ -71,7 +72,10 @@ fn handle_erl(in_str: &str, matches: &ArgMatches) -> Option<Module> {
 
     match parser.parse_string(in_str) {
         Ok(ast) => {
-            let (res, messages) = lower_module(&ast);
+            let (res, messages) = {
+                let codemap = &*parser.config.codemap.lock().unwrap();
+                lower_module(codemap, &ast)
+            };
 
             let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
                 .set_codemap(parser.config.codemap.clone());
@@ -135,9 +139,11 @@ fn main() {
         .arg(Arg::from_usage("<CODE_PATHS> -C <CODE_PATH> 'add code path for the erlang preprocessor'")
              .required(false)
              .multiple(true))
-        //.arg(Arg::from_usage("-p,--pass <PASS> 'run the given compilation pass'")
-        //     .multiple(true)
-        //     .possible_values(&CompilePass::variants()))
+        .arg(Arg::from_usage("<PASSES> --pass <PASS> 'run the given compilation pass'")
+             .required(false)
+             .multiple(true)
+             .number_of_values(1)
+             .possible_values(&CompilePass::variants()))
         .get_matches();
 
     let in_file_name = matches.value_of("IN_FILE").unwrap();
@@ -161,6 +167,32 @@ fn main() {
         CompileLevel::High => {},
         CompileLevel::Normal => {
             let mut pass_manager = PassManager::default();
+            pass_manager.run(&mut eir);
+        },
+        CompileLevel::Custom => {
+            let mut pass_manager = PassManager::new();
+            if matches.is_present("PASSES") {
+                for pass_type in values_t!(matches.values_of("PASSES"), CompilePass).unwrap() {
+                    match pass_type {
+                        CompilePass::CompilePatterns => {
+                            pass_manager.push_function_pass(
+                                libeir_passes::CompilePatternPass::new());
+                        },
+                        CompilePass::SimplifyCfg => {
+                            pass_manager.push_function_pass(
+                                libeir_passes::SimplifyCfgPass::new());
+                        },
+                        CompilePass::NaiveInlineClosures => {
+                            pass_manager.push_function_pass(
+                                libeir_passes::NaiveInlineClosuresPass::new());
+                        },
+                        CompilePass::Validate => {
+                            pass_manager.push_function_pass(
+                                libeir_passes::ValidatePass::new());
+                        },
+                    }
+                }
+            }
             pass_manager.run(&mut eir);
         },
     }

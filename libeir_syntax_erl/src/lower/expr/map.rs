@@ -35,7 +35,8 @@ pub(super) fn lower_map_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder,
         map_builder.push_kv(key_val, value_val, action, b);
     }
 
-    b.block_set_span(block, map.span);
+    let loc = ctx.current_location(b, map.span);
+    b.block_set_location(block, loc);
     let (ok, fail) = map_builder.finish(block, b);
 
     let typ_val = b.value(Symbol::intern("error"));
@@ -69,7 +70,8 @@ pub(super) fn lower_map_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder,
         map_builder.push_kv(key_val, value_val, action, b);
     }
 
-    b.block_set_span(block, map.span);
+    let loc = ctx.current_location(b, map.span);
+    b.block_set_location(block, loc);
     let (ok, fail) = map_builder.finish(block, b);
 
     let typ_val = b.value(Symbol::intern("error"));

@@ -1,4 +1,4 @@
-use super::{ Block, Value, PrimOp, Const };
+use super::{ Block, Value, PrimOp, Const, Location };
 use super::ValueKind;
 use super::{ PrimOpData, PrimOpKind };
 use super::{ Function };
@@ -8,8 +8,6 @@ use crate::constant::{ ConstantContainer, IntoConst };
 use crate::pattern::{ PatternContainer };
 
 use cranelift_entity::EntityList;
-
-use libeir_diagnostics::ByteSpan;
 
 mod op;
 pub use op::CaseBuilder;
@@ -224,8 +222,8 @@ impl<'a> FunctionBuilder<'a> {
         self.fun.entry_block = Some(block);
     }
 
-    pub fn block_set_span(&mut self, block: Block, span: ByteSpan) {
-        self.fun.blocks[block].span = span;
+    pub fn block_set_location(&mut self, block: Block, loc: Location) {
+        self.fun.blocks[block].location = loc;
     }
 
     /// This will explicitly clear the operation contained in the
@@ -267,11 +265,11 @@ impl<'a> FunctionBuilder<'a> {
 
     pub fn block_copy_body_map<F>(&mut self, from: Block, to: Block, map: &mut F) where F: FnMut(Value) -> Option<Value> {
         let op;
-        let span;
+        let loc;
         {
             let from_data = &self.fun.blocks[from];
             op = from_data.op.clone();
-            span = from_data.span;
+            loc = from_data.location;
         }
 
         let mut reads = EntityList::new();
@@ -287,21 +285,9 @@ impl<'a> FunctionBuilder<'a> {
         let to_data = &mut self.fun.blocks[to];
         to_data.op = op;
         to_data.reads = reads;
-        to_data.span = span;
+        to_data.location = loc;
 
         self.graph_update_block(to);
-    }
-
-    /// TODO temporary until we get a proper type system implemented.
-    /// IR generators are required to annotate blocks that meet the
-    /// following requirements with this:
-    /// 1. The first two arguments of the block are return and throw
-    ///    continuations respectively.
-    /// 2. Control flow only escapes the blocks control flow scope
-    ///    by one of these two continuations.
-    pub fn block_annotate_is_fun(&mut self, block: Block) {
-        assert!(self.fun.block_args(block).len() >= 2);
-        self.fun.blocks[block].is_fun = true;
     }
 
 }

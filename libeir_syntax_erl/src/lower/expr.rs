@@ -107,10 +107,6 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                     let fun_val = map_block!(block, lower_single(ctx, b, block, function));
 
                     b.prim_capture_function(mod_val, fun_val, arity_val)
-
-                    //b.block_set_span(block, *span);
-                    //block = b.op_capture_function(block, mod_val, fun_val, arity_val);
-                    //b.block_args(block)[0]
                 }
                 Expr::Literal(Literal::Atom(_id, name)) => {
                     let local = LocalFunctionName {
@@ -132,28 +128,11 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                         }
                     };
 
-                    //let (module, function) = if let Some(resolved) =
-                    //    ctx.module.imports.get(&local)
-                    //{
-                    //    assert!(resolved.arity == args.len());
-                    //    (resolved.module, resolved.function)
-                    //} else {
-                    //    (ctx.module.name, *name)
-                    //};
-
-                    //if m_module != module {
-                    //    println!("=_____=!!!!!!===== {:?} {:?} {:?}", m_module, module, function);
-                    //}
-
 
                     let mod_val = b.value(module);
                     let fun_val = b.value(function);
 
                     b.prim_capture_function(mod_val, fun_val, arity_val)
-
-                    //b.block_set_span(block, *span);
-                    //block = b.op_capture_function(block, mod_val, fun_val, arity_val);
-                    //b.block_args(block)[0]
                 }
                 expr => {
                     map_block!(block, lower_single_same_scope(ctx, b, block, expr))
@@ -167,7 +146,9 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 arg_vals.push(arg_val);
             }
 
-            b.block_set_span(block, *span);
+            let loc = ctx.current_location(b, *span);
+            b.block_set_location(block, loc);
+
             let (ok_block, fail_block) = b.op_call_function(
                 block, callee_val, &arg_vals);
 

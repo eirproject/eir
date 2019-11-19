@@ -1,11 +1,13 @@
 use std::marker::PhantomData;
-
+use std::hash::{Hash, Hasher};
 use std::fmt::{Debug, Formatter};
 
-use ::cranelift_entity::EntityRef;
-use ::cranelift_entity::ListPool;
-use ::cranelift_entity::EntityList;
-use ::cranelift_entity::packed_option::ReservedValue;
+use cranelift_entity::EntityRef;
+use cranelift_entity::ListPool;
+use cranelift_entity::EntityList;
+use cranelift_entity::packed_option::ReservedValue;
+
+use crate::aux_hash_map::{AuxHash, AuxEq};
 
 #[derive(Debug, Clone)]
 pub struct EntitySetPool<E> {
@@ -49,6 +51,22 @@ where
 {
     list: EntityList<PooledSetValue>,
     unused: PhantomData<K>,
+}
+
+impl<K: EntityRef> AuxHash<EntitySetPool<K>> for EntitySet<K> {
+    fn aux_hash<H: Hasher>(&self, hasher: &mut H, pool: &EntitySetPool<K>) {
+        let mut n = 0;
+        for key in self.iter(pool) {
+            key.index().hash(hasher);
+            n += 1;
+        }
+        n.hash(hasher);
+    }
+}
+impl<K: EntityRef> AuxEq<EntitySetPool<K>> for EntitySet<K> {
+    fn aux_eq(&self, other: &Self, pool: &EntitySetPool<K>) -> bool {
+        self.eq(other, pool)
+    }
 }
 
 impl<T: EntityRef> Default for EntitySet<T> {

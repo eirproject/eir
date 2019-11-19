@@ -54,7 +54,40 @@ pub enum Op {
     IfBool(IfBoolOp),
     TraceCaptureRaw(TraceCaptureRawOp),
     Match(MatchOp),
+    Case(CaseOp),
     Unreachable,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CaseOp {
+    pub value: Value,
+    pub entries: Vec<CaseEntry>,
+    pub no_match: Option<Value>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CaseEntry {
+    pub patterns: Vec<CasePattern>,
+    pub args: Vec<Ident>,
+    pub guard: Value,
+    pub target: Value,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum CasePattern {
+    Value(Value),
+    Binding {
+        name: Ident,
+        pattern: Box<CasePattern>,
+    },
+    ListCell {
+        head: Box<CasePattern>,
+        tail: Box<CasePattern>,
+    },
+    Tuple {
+        elements: Vec<CasePattern>,
+    },
+    Wildcard,
 }
 
 #[derive(Debug, PartialEq, Eq)]

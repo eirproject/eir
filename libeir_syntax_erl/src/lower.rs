@@ -4,13 +4,14 @@ use libeir_ir::{
     Value as IrValue,
     Block as IrBlock,
     IntoValue,
+    Location,
 };
 
 
-use libeir_diagnostics::ByteSpan;
-use libeir_intern::{ Symbol, Ident };
+use libeir_diagnostics::{ByteSpan, CodeMap};
+use libeir_intern::{Symbol, Ident};
 
-use crate::parser::ast::{ Module, NamedFunction, Function, FunctionClause };
+use crate::parser::ast::{Module, NamedFunction, Function, FunctionClause};
 
 macro_rules! map_block {
     ($block:ident, $call:expr) => {
@@ -26,7 +27,7 @@ mod pattern;
 use pattern::lower_clause;
 
 mod expr;
-use expr::{ lower_block, lower_single };
+use expr::{lower_block, lower_single};
 
 mod errors;
 use errors::LowerError;
@@ -41,6 +42,7 @@ use scope::ScopeToken;
 mod tests;
 
 pub(crate) struct LowerCtx<'a> {
+    codemap: &'a CodeMap,
     module: &'a Module,
 
     scope: scope::ScopeTracker,
@@ -52,6 +54,11 @@ pub(crate) struct LowerCtx<'a> {
     failed: bool,
 
     val_buf: Vec<IrValue>,
+
+    fun_num: usize,
+    /// Top is current function name.
+    /// Used to generate debug info.
+    functions: Vec<String>,
 }
 
 impl<'a> LowerCtx<'a> {
@@ -104,12 +111,22 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    pub fn function_name(&self) -> String {
+        self.functions[self.functions.len() - 1].clone()
+    }
+    pub fn current_location(&self, b: &mut FunctionBuilder, span: ByteSpan) -> Location {
+        b.fun_mut().locations.from_bytespan(
+            self.codemap, span, Some((
+                self.module.name.as_str().to_string(),
+                self.function_name()
+            )))
+    }
+
     pub fn call_function<M, F>(&mut self, b: &mut FunctionBuilder, block: IrBlock, span: ByteSpan,
                                   m: M, f: F, args: &[IrValue]) -> (IrBlock, IrValue)
     where
         M: IntoValue, F: IntoValue
     {
-        b.block_set_span(block, span);
         let fun_val = b.prim_capture_function(m, f, args.len());
 
         self.val_buf.clear();
@@ -117,7 +134,9 @@ impl<'a> LowerCtx<'a> {
             self.val_buf.push(*arg);
         }
 
-        b.block_set_span(block, span);
+        let loc = self.current_location(b, span);
+        b.block_set_location(block, loc);
+
         let (ok_block, fail_block) = b.op_call_function(
             block, fun_val, args);
 
@@ -134,13 +153,18 @@ impl<'a> LowerCtx<'a> {
 
 }
 
-pub fn lower_module(module: &Module) -> (Result<IrModule, ()>, Vec<LowerError>) {
+pub fn lower_module(
+    codemap: &CodeMap,
+    module: &Module
+) -> (Result<IrModule, ()>, Vec<LowerError>)
+{
 
     // TODO sort functions for more deterministic compilation
 
     let mut ir_module = IrModule::new(module.name);
 
     let mut ctx = LowerCtx {
+        codemap,
         module,
 
         scope: scope::ScopeTracker::new(),
@@ -152,10 +176,14 @@ pub fn lower_module(module: &Module) -> (Result<IrModule, ()>, Vec<LowerError>) 
         failed: false,
 
         val_buf: Vec::new(),
+
+        fun_num: 0,
+        functions: Vec::new(),
     };
 
     for (ident, function) in module.functions.iter() {
         assert!(ctx.scope.height() == 0);
+        ctx.fun_num = 0;
         println!("Fun Name: {:?}", ident);
 
         let fun_def = ir_module.add_function(ident.function, function.arity);
@@ -177,14 +205,6 @@ pub fn lower_module(module: &Module) -> (Result<IrModule, ()>, Vec<LowerError>) 
     }
 
     ctx.exc_stack.finish();
-
-    //println!("{} {:#?}", ctx.failed, ctx.errors);
-    //let emitter = libeir_diagnostics::StandardStreamEmitter::new(libeir_diagnostics::ColorChoice::Auto)
-    //    .set_codemap(parser.config.codemap.clone());
-    //for error in ctx.errors {
-    //    use libeir_diagnostics::Emitter;
-    //    emitter.diagnostic(&error.to_diagnostic()).unwrap();
-    //}
 
     if ctx.failed {
         (
@@ -210,7 +230,14 @@ fn lower_function(
             unimplemented!()
         }
         Function::Unnamed(lambda) => {
+            ctx.fun_num += 1;
+            let base_fun = &ctx.functions[0];
+            let new_fun = format!("{}-fun-{}", base_fun, ctx.fun_num);
+            ctx.functions.push(new_fun);
+
             lower_function_base(ctx, b, entry, lambda.span, lambda.arity, &lambda.clauses);
+
+            ctx.functions.pop().unwrap();
         }
     }
 
@@ -240,8 +267,6 @@ fn lower_function_base(
         args_val.push(arg);
     }
     let args_list = b.prim_value_list(&args_val);
-
-    b.block_annotate_is_fun(block);
 
     // Join block after case
     let join_block = b.block_insert();
@@ -308,6 +333,14 @@ fn lower_top_function(ctx: &mut LowerCtx, b: &mut FunctionBuilder, function: &Na
     let entry = b.block_insert();
     b.block_set_entry(entry);
 
-    lower_function_base(ctx, b, entry, function.span, function.arity, &function.clauses);
+    let fun_name = format!("{}/{}", function.name, function.arity);
+    assert!(ctx.functions.len() == 0);
+    ctx.functions.push(fun_name);
+
+    lower_function_base(ctx, b, entry,
+                        function.span, function.arity, &function.clauses);
+
+    ctx.functions.pop().unwrap();
+    assert!(ctx.functions.len() == 0);
 }
 

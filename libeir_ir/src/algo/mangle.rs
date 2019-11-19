@@ -255,7 +255,7 @@ impl Mangler {
 
         let copy_body = |mang: &mut Mangler, recv: &mut R, from_block: Block, to_block: Block| {
             let to_op = recv.map_block_op(from_block);
-            let span = recv.from().block_span(from_block);
+            let loc = recv.from().block_location(from_block);
 
             // Get and map reads to new values
             mang.value_buf.clear();
@@ -271,7 +271,7 @@ impl Mangler {
             let data = &mut to_fun.blocks[to_block];
 
             data.op = Some(to_op);
-            data.span = span;
+            data.location = loc;
 
             for read in mang.value_buf.iter().cloned() {
                 data.reads.push(read, &mut to_fun.pool.value);

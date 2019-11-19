@@ -30,6 +30,9 @@ mod value;
 use value::ValueMap;
 pub use value::{ Value, ValueKind };
 
+mod location;
+pub use location::{Location, LocationContainer};
+
 //mod serialize;
 
 /// Block/continuation
@@ -57,9 +60,7 @@ pub struct BlockData {
     pub(crate) op: Option<OpKind>,
     pub(crate) reads: EntityList<Value>,
 
-    pub(crate) span: ByteSpan,
-
-    pub(crate) is_fun: bool,
+    pub(crate) location: Location,
 
     // Auxilary data for graph implementation
 
@@ -127,6 +128,7 @@ pub struct Function {
 
     // Auxiliary information
     pub constant_values: HashSet<Value>,
+    pub locations: LocationContainer,
 }
 
 impl Function {
@@ -297,12 +299,10 @@ impl Function {
             op: None,
             reads: EntityList::new(),
 
-            is_fun: false,
-
             predecessors: EntitySet::new(),
             successors: EntitySet::new(),
 
-            span: DUMMY_SPAN,
+            location: self.locations.location_empty(),
         });
         self.values.push(ValueKind::Block(block));
         block
@@ -323,8 +323,8 @@ impl Function {
         self.blocks[block].op.as_ref()
     }
 
-    pub fn block_span(&self, block: Block) -> ByteSpan {
-        self.blocks[block].span
+    pub fn block_location(&self, block: Block) -> Location {
+        self.blocks[block].location
     }
 
     pub fn block_entry(&self) -> Block {
@@ -365,10 +365,6 @@ impl Function {
             self.value_walk_nested_values_mut(read, visit)?;
         }
         Ok(())
-    }
-
-    pub fn block_annotated_fun(&self, block: Block) -> bool {
-        self.blocks[block].is_fun
     }
 
     pub fn block_op_eq(&self, lb: Block, r_fun: &Function, rb: Block) -> bool {
@@ -496,6 +492,8 @@ impl Function {
             constant_container: ConstantContainer::new(),
 
             constant_values: HashSet::new(),
+
+            locations: LocationContainer::new(),
         }
     }
 

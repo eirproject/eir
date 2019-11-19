@@ -18,9 +18,25 @@ pub enum CallKind {
     Function,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BasicType {
+    // Contains both ListCell and Nil
+    List,
+    ListCell,
+    Nil,
+
+    /// Arity is part of the type
+    Tuple(usize),
+
     Map,
+
+    /// Contains both Float and Integer
+    Number,
+    Float,
+    /// Contains both SmallInt and BigInt
+    Integer,
+    SmallInteger,
+    BigInteger,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]

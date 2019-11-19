@@ -10,6 +10,7 @@ mod function;
 // Auxiliary utilities
 mod algo;
 pub use algo::mangle::*;
+pub use algo::validate::ValidationError;
 
 pub mod text;
 
@@ -20,7 +21,7 @@ pub use graph::LiveBlockGraph;
 pub mod constant;
 pub mod pattern;
 
-pub use function::{ Function, Block, Value, PrimOp };
+pub use function::{ Function, Block, Value, PrimOp, Location };
 pub use function::{ OpKind, MatchKind, BasicType, MapPutUpdate, PrimOpKind, BinOp,
                     LogicOp, CallKind };
 pub use function::{ ValueKind };

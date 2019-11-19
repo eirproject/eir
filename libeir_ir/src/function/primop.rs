@@ -44,6 +44,15 @@ pub enum LogicOp {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PrimOpKind {
 
+    /// Corresponds the eir_intrinsics:type_tag.
+    /// Required to be eliminated before lowering.
+    /// TODO: Document returns
+    /// (value)
+    TypeTag,
+
+    /// (value)
+    IsType(super::op::BasicType),
+
     /// (lhs, rhs)
     BinOp(BinOp),
 

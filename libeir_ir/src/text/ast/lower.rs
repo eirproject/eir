@@ -11,6 +11,7 @@ use snafu::Snafu;
 
 use crate::{Module, FunctionIdent, Function, FunctionBuilder};
 use crate::{Block, Value};
+use crate::PatternNode;
 use crate::text::ast;
 
 type ErrCollector<'a> = &'a mut dyn ErrorReceiver<LowerError, LowerError>;
@@ -35,6 +36,10 @@ pub enum LowerError {
     },
 
     UndefinedBlock {
+        span: ByteSpan,
+    },
+
+    UndefinedBind {
         span: ByteSpan,
     },
 
@@ -222,81 +227,13 @@ impl ast::Function {
                 }
                 ast::FunctionItem::Op(op) => {
                     if let Some((_, block)) = current_block {
-                        match op {
-                            ast::Op::CallControlFlow(call) => {
-                                let target = lower_value(errors, b, &mut scope, &call.target)?;
-                                let args: Result<Vec<_>, _> = call.args.iter()
-                                    .map(|v| lower_value(errors, b, &mut scope, v))
-                                    .collect();
-                                b.op_call_flow(block, target, &args?);
-                            }
-                            ast::Op::CallFunction(call) => {
-                                let target = lower_value(errors, b, &mut scope, &call.target)?;
-
-                                let ret = lower_value(errors, b, &mut scope, &call.ret)?;
-                                let thr = lower_value(errors, b, &mut scope, &call.thr)?;
-
-                                let args: Result<Vec<_>, _> = call.args.iter()
-                                    .map(|v| lower_value(errors, b, &mut scope, v))
-                                    .collect();
-                                b.op_call_function_next(block, target, ret, thr, &args?);
-                            }
-                            ast::Op::UnpackValueList(list) => {
-                                let target = lower_value(errors, b, &mut scope, &list.block)?;
-                                let value = lower_value(errors, b, &mut scope, &list.value)?;
-                                b.op_unpack_value_list_next(block, target, value, list.arity);
-                            }
-                            ast::Op::IfBool(if_bool) => {
-                                let value = lower_value(errors, b, &mut scope, &if_bool.value)?;
-                                let tru = lower_value(errors, b, &mut scope, &if_bool.tru)?;
-                                let fal = lower_value(errors, b, &mut scope, &if_bool.fal)?;
-                                if let Some(or) = &if_bool.or {
-                                    let or = lower_value(errors, b, &mut scope, or)?;
-                                    b.op_if_bool_next(block, tru, fal, or, value);
-                                } else {
-                                    b.op_if_bool_strict_next(block, tru, fal, value);
-                                }
-                            }
-                            ast::Op::TraceCaptureRaw(trace_op) => {
-                                let then = lower_value(errors, b, &mut scope, &trace_op.then)?;
-                                b.op_trace_capture_raw_next(block, then);
-                            }
-                            ast::Op::Match(match_op) => {
-                                let mut builder = b.op_match_build();
-                                for entry in match_op.entries.iter() {
-                                    let next = lower_value(errors, b, &mut scope, &entry.target)?;
-                                    match &entry.kind {
-                                        ast::MatchKind::Value(v) => {
-                                            let v_v = lower_value(errors, b, &mut scope, v)?;
-                                            builder.push_value_next(next, v_v, b);
-                                        }
-                                        ast::MatchKind::ListCell => {
-                                            builder.push_list_cell_next(next, b);
-                                        }
-                                        ast::MatchKind::Wildcard => {
-                                            builder.push_wildcard_next(next, b);
-                                        }
-                                        ast::MatchKind::Type(typ) => {
-                                            builder.push_type_next(next, *typ, b);
-                                        }
-                                        ast::MatchKind::MapItem(k) => {
-                                            let k_v = lower_value(errors, b, &mut scope, k)?;
-                                            builder.push_map_item_next(next, k_v, b);
-                                        }
-                                        ast::MatchKind::Tuple(n) => {
-                                            builder.push_tuple_next(next, *n, b);
-                                        }
-                                        s => unimplemented!("{:?}", s),
-                                    }
-                                }
-
-                                let match_val = lower_value(errors, b, &mut scope, &match_op.value)?;
-                                builder.finish(block, match_val, b);
-                            }
-                            ast::Op::Unreachable => {
-                                b.op_unreachable(block);
-                            }
-                        }
+                        lower_operation(
+                            b,
+                            errors,
+                            &mut scope,
+                            block,
+                            op
+                        )?;
                     } else {
                         errors.error(LowerError::OpOutsideOfLabel {});
                         return Err(());
@@ -326,7 +263,177 @@ impl ast::Function {
     }
 }
 
-fn lower_value(errors: ErrCollector, b: &mut FunctionBuilder, scope: &mut HashMapStack<Name, (ByteSpan, Value)>, val: &ast::Value) -> Result<Value, ()> {
+fn lower_operation(
+    b: &mut FunctionBuilder,
+    errors: ErrCollector,
+    scope: &mut HashMapStack<Name, (ByteSpan, Value)>,
+    block: Block,
+    op: &ast::Op,
+) -> Result<(), ()>
+{
+    match op {
+        ast::Op::CallControlFlow(call) => {
+            let target = lower_value(errors, b, scope, &call.target)?;
+            let args: Result<Vec<_>, _> = call.args.iter()
+                .map(|v| lower_value(errors, b, scope, v))
+                .collect();
+            b.op_call_flow(block, target, &args?);
+        }
+        ast::Op::CallFunction(call) => {
+            let target = lower_value(errors, b, scope, &call.target)?;
+
+            let ret = lower_value(errors, b, scope, &call.ret)?;
+            let thr = lower_value(errors, b, scope, &call.thr)?;
+
+            let args: Result<Vec<_>, _> = call.args.iter()
+                .map(|v| lower_value(errors, b, scope, v))
+                .collect();
+            b.op_call_function_next(block, target, ret, thr, &args?);
+        }
+        ast::Op::UnpackValueList(list) => {
+            let target = lower_value(errors, b, scope, &list.block)?;
+            let value = lower_value(errors, b, scope, &list.value)?;
+            b.op_unpack_value_list_next(block, target, value, list.arity);
+        }
+        ast::Op::IfBool(if_bool) => {
+            let value = lower_value(errors, b, scope, &if_bool.value)?;
+            let tru = lower_value(errors, b, scope, &if_bool.tru)?;
+            let fal = lower_value(errors, b, scope, &if_bool.fal)?;
+            if let Some(or) = &if_bool.or {
+                let or = lower_value(errors, b, scope, or)?;
+                b.op_if_bool_next(block, tru, fal, or, value);
+            } else {
+                b.op_if_bool_strict_next(block, tru, fal, value);
+            }
+        }
+        ast::Op::TraceCaptureRaw(trace_op) => {
+            let then = lower_value(errors, b, scope, &trace_op.then)?;
+            b.op_trace_capture_raw_next(block, then);
+        }
+        ast::Op::Match(match_op) => {
+            let mut builder = b.op_match_build();
+            for entry in match_op.entries.iter() {
+                let next = lower_value(errors, b, scope, &entry.target)?;
+                match &entry.kind {
+                    ast::MatchKind::Value(v) => {
+                        let v_v = lower_value(errors, b, scope, v)?;
+                        builder.push_value_next(next, v_v, b);
+                    }
+                    ast::MatchKind::ListCell => {
+                        builder.push_list_cell_next(next, b);
+                    }
+                    ast::MatchKind::Wildcard => {
+                        builder.push_wildcard_next(next, b);
+                    }
+                    ast::MatchKind::Type(typ) => {
+                        builder.push_type_next(next, *typ, b);
+                    }
+                    ast::MatchKind::MapItem(k) => {
+                        let k_v = lower_value(errors, b, scope, k)?;
+                        builder.push_map_item_next(next, k_v, b);
+                    }
+                    ast::MatchKind::Tuple(n) => {
+                        builder.push_tuple_next(next, *n, b);
+                    }
+                    s => unimplemented!("{:?}", s),
+                }
+            }
+
+            let match_val = lower_value(errors, b, scope, &match_op.value)?;
+            builder.finish(block, match_val, b);
+        }
+        ast::Op::Unreachable => {
+            b.op_unreachable(block);
+        }
+        ast::Op::Case(case_op) => {
+            let value = lower_value(
+                errors, b, scope, &case_op.value)?;
+
+            let mut binds = HashMap::new();
+
+            let mut case_b = b.op_case_build();
+            for entry in case_op.entries.iter() {
+                binds.clear();
+                let clause = b.pat_mut().clause_start();
+
+                for pattern in entry.patterns.iter() {
+                    let pat = lower_case_pattern(
+                        errors, b, scope, &mut binds, pattern)?;
+                    b.pat_mut().clause_node_push(clause, pat);
+                }
+
+                for bind in entry.args.iter() {
+                    if let Some(node) = binds.get(bind) {
+                        b.pat_mut().clause_bind_push(clause, node.1);
+                    } else {
+                        errors.error(LowerError::UndefinedBind {
+                            span: bind.span,
+                        });
+                        return Err(());
+                    }
+                }
+
+                b.pat_mut().clause_finish(clause);
+
+                let guard = lower_value(
+                    errors, b, scope, &entry.guard)?;
+                let target = lower_value(
+                    errors, b, scope, &entry.target)?;
+
+                case_b.push_clause(clause, guard, target, b);
+            }
+
+            if let Some(no_match) = case_op.no_match.as_ref() {
+                let val = lower_value(
+                    errors, b, scope, no_match)?;
+                case_b.no_match = Some(val);
+            }
+
+            case_b.match_on = Some(value);
+            case_b.finish(block, b);
+        }
+    }
+
+    Ok(())
+}
+
+fn lower_case_pattern(
+    errors: ErrCollector,
+    b: &mut FunctionBuilder,
+    scope: &mut HashMapStack<Name, (ByteSpan, Value)>,
+    binds: &mut HashMap<Ident, (ByteSpan, PatternNode)>,
+    pattern: &ast::CasePattern
+) -> Result<PatternNode, ()>
+{
+    match pattern {
+        ast::CasePattern::Binding { name, pattern } => {
+            let child = lower_case_pattern(errors, b, scope, binds, pattern)?;
+            if binds.contains_key(name) {
+                errors.error(LowerError::DuplicateDefinititon {
+                    current: name.span,
+                    previous: binds[name].0,
+                });
+                return Err(());
+            }
+            binds.insert(*name, (name.span, child));
+            Ok(child)
+        },
+        ast::CasePattern::Wildcard => {
+            let node = b.pat_mut().node_empty();
+            b.pat_mut().wildcard(node);
+            Ok(node)
+        },
+        _ => unimplemented!(),
+    }
+}
+
+fn lower_value(
+    errors: ErrCollector,
+    b: &mut FunctionBuilder,
+    scope: &mut HashMapStack<Name, (ByteSpan, Value)>,
+    val: &ast::Value
+) -> Result<Value, ()>
+{
     match val {
         ast::Value::Value(i) => {
             if let Some((_, val)) = scope.get(&Name::Value(*i)) {
