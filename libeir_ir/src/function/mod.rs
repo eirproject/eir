@@ -12,7 +12,7 @@ use libeir_util_datastructures::dedup_aux_primary_map::DedupAuxPrimaryMap;
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
 
 use crate::{ FunctionIdent };
-use crate::constant::{ ConstantContainer, Const };
+use crate::constant::{ ConstantContainer, Const, ConstKind };
 use crate::pattern::{ PatternContainer, PatternClause };
 
 pub mod builder;
@@ -153,10 +153,13 @@ impl Function {
         self.constant_values.iter()
     }
 
+    pub fn const_kind(&self, constant: Const) -> &ConstKind {
+        self.constant_container.const_kind(constant)
+    }
+
     pub fn value_kind(&self, value: Value) -> ValueKind {
         self.values[value].kind
     }
-
 
     pub fn value_is_constant(&self, value: Value) -> bool {
         self.constant_values.contains(&value)
@@ -173,6 +176,7 @@ impl Function {
         }
         1
     }
+
     pub fn value_list_get_n(&self, value: Value, n: usize) -> Option<Value> {
         match self.value_kind(value) {
             ValueKind::PrimOp(prim) => {
