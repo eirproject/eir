@@ -17,7 +17,8 @@ jobs:
     steps:
       - template: azure-install-rust.yml
         parameters:
-          rust_version: ${{ parameters.rust }}
+          rust_version: ${{ parameters.rust.version }}
+          components: ${{ parameters.rust.components }}
 
 #      - template: azure-install-dependencies.yml
 

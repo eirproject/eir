@@ -9,7 +9,9 @@ jobs:
     parameters:
       name: test_eir
       displayName: Test Eir
-      rust: $(nightly)
+      rust:
+        version: $(nightly)
+        components: []
       cross: true
       crates:
         util/libeir_util_binary: []
