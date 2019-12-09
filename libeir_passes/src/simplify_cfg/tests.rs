@@ -22,10 +22,6 @@ foo:bar/1 {
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
 
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
-
     let after = parse_function_unwrap("
 foo:bar/1 {
     entry(%ret, %thr, %a):
@@ -56,10 +52,6 @@ foo:bar/1 {
 
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
-
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
 
     let after = parse_function_unwrap("
 foo:bar/1 {
@@ -100,12 +92,6 @@ foo:bar/3 {
 
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
-
-    println!("{}", b.fun().to_text());
-
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
 
     let after = parse_function_unwrap("
 foo:bar/3 {
@@ -151,12 +137,6 @@ foo:bar/5 {
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
 
-    println!("{}", b.fun().to_text());
-
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
-
     let after = parse_function_unwrap("
 foo:bar/5 {
     entry(%ret, %thr, %a, %b, %c, %B, %C):
@@ -192,10 +172,6 @@ foo:bar/0 {
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
 
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
-
     let after = parse_function_unwrap("
 foo:bar/0 {
     entry(%ret, %thr):
@@ -227,10 +203,6 @@ foo:bar/0 {
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
 
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
-
     let after = parse_function_unwrap("
 foo:bar/0 {
     entry(%ret, %thr):
@@ -256,10 +228,6 @@ foo:bar/2 {
 
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
-
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
 
     let after = parse_function_unwrap("
 foo:bar/2 {
@@ -293,20 +261,8 @@ foo:bar/1 {
 ");
     let mut b = fun.builder();
 
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
-
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
-
-    b.fun().live_values();
-
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
-
-    println!("{}", b.fun().to_text());
 
     let after = parse_function_unwrap("
 foo:bar/1 {
@@ -321,7 +277,6 @@ foo:bar/1 {
         block8(%37, %54);
 }
 ");
-    println!("{}", after.to_text());
     assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 }
 
@@ -344,21 +299,8 @@ foo:perms/1 {
 ");
     let mut b = fun.builder();
 
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    println!("{:?}", out);
-    assert!(out.len() == 0);
-
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
-
-    b.fun().live_values();
-
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
-
-    println!("{}", b.fun().to_text());
 
     let after = parse_function_unwrap("
 foo:perms/1 {
@@ -396,20 +338,8 @@ foo:do_map_vars_used/1 {
 ");
     let mut b = fun.builder();
 
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
-
-    b.fun().live_values();
-
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
-
-    b.fun().live_values();
-
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
 
     let after = parse_function_unwrap("
 foo:do_map_vars_used/1 {
@@ -452,20 +382,8 @@ foo:do_map_vars_used/1 {
 ");
     let mut b = fun.builder();
 
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
-
-    b.fun().live_values();
-
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
-
-    b.fun().live_values();
-
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
 
     let after = parse_function_unwrap("
 foo:do_map_vars_used/1 {
@@ -485,8 +403,9 @@ foo:do_map_vars_used/1 {
     assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 }
 
+#[ignore]
 #[test]
-fn aa() {
+fn messy_cfg_block_captures() {
     let mut fun = parse_function_unwrap("
 foo:grab_bag/0 {
     block0(%1, %2):
@@ -504,12 +423,6 @@ foo:grab_bag/0 {
 }
 ");
     let mut b = fun.builder();
-
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
-
-    b.fun().live_values();
 
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
@@ -533,4 +446,48 @@ foo:grab_bag/0 {
 }
 ");
     assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
+}
+
+#[test]
+fn converging_from_single() {
+
+    let mut fun = parse_function_unwrap("
+fib:fib/1 {
+    block21(%77, %78, %114):
+        %64 = a'erlang':a'<'/2;
+        %64(%114, 2) => block36 except block50;
+    block50(%144, %145, %146):
+        block36(a'false');
+    block36(%116):
+        if_bool %116 block38 block39;
+    block38():
+        unreachable;
+    block39():
+        unreachable;
+}
+");
+    let mut b = fun.builder();
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    let after = parse_function_unwrap("
+fib:fib/1 {
+    block8(%26, %27, %28):
+        %15 = a'erlang':a'<'/2;
+        %15(%28, 2) => block13 except block12;
+    block13(%38):
+        block11(%38);
+    block12(%34, %35, %36):
+        block11(a'false');
+    block11(%32):
+        if_bool %32 block9 block10;
+    block9():
+        unreachable;
+    block10():
+        unreachable;
+}
+");
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
+
 }

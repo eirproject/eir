@@ -1,5 +1,5 @@
 use libeir_ir::FunctionBuilder;
-use libeir_ir::Mangler;
+use libeir_ir::{Mangler, MangleTo};
 use libeir_ir::{Block, OpKind};
 
 use super::FunctionPass;
@@ -72,9 +72,11 @@ impl NaiveInlineClosuresPass {
         println!("{:?}", self.calls_buf);
 
         for (block, target) in self.calls_buf.iter().cloned() {
-            self.mangler.start(target, b);
-
             // Signature of new entry block has no arguments
+            let new_target = b.block_insert();
+            b.block_copy_body_map(target, new_target, |v| Some(v));
+
+            self.mangler.start(MangleTo(new_target));
 
             // Add renames to current call arguments
             {
@@ -83,7 +85,7 @@ impl NaiveInlineClosuresPass {
                 assert!(source_args.len() == target_args.len());
 
                 for (from, to) in target_args.iter().zip(source_args.iter()) {
-                    self.mangler.add_rename_nofollow(*from, *to);
+                    self.mangler.add_rename_nofollow(MangleTo(*from), MangleTo(*to));
                 }
             }
 

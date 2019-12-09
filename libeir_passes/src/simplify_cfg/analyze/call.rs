@@ -11,12 +11,12 @@ pub(super) fn propagate(ctx: &mut AnalysisContext, block: Block) -> bool {
 
     if let Some(target_block) = ctx.fun.value_block(target) {
 
-        for (read, arg) in reads[1..].iter()
+        for ((idx, read), arg) in reads.iter().skip(1).enumerate()
             .zip(ctx.fun.block_args(target_block))
         {
             ctx.add_rename(
                 target_block,
-                *read, *arg,
+                *read, idx,
             );
         }
 

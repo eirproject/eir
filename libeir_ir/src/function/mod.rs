@@ -33,6 +33,9 @@ pub use value::{ Value, ValueKind };
 mod location;
 pub use location::{Location, LocationContainer};
 
+mod format;
+pub use format::{ContainerDebug, ContainerDebugAdapter};
+
 //mod serialize;
 
 /// Block/continuation
@@ -330,7 +333,8 @@ impl Function {
     pub fn block_entry(&self) -> Block {
         self.entry_block.expect("Entry block not set on function")
     }
-    pub fn block_args(&self, block: Block) -> &[Value] {
+    pub fn block_args<B>(&self, block: B) -> &[Value] where B: Into<Block> {
+        let block: Block = block.into();
         self.blocks[block].arguments.as_slice(&self.pool.value)
     }
 
@@ -383,6 +387,11 @@ impl Function {
             (OpKind::Unreachable, OpKind::Unreachable) => true,
             _ => false,
         }
+    }
+
+    // Iterates through ALL blocks in the function container
+    pub fn block_iter(&self) -> impl Iterator<Item = Block> {
+        self.blocks.keys()
     }
 
 }

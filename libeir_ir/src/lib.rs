@@ -1,3 +1,4 @@
+#![feature(specialization)]
 #![deny(warnings)]
 
 use std::fmt::{ Display, Formatter };
@@ -27,11 +28,12 @@ pub use function::{ OpKind, MatchKind, BasicType, MapPutUpdate, PrimOpKind, BinO
 pub use function::{ ValueKind };
 pub use function::{ Dialect };
 pub use function::{ AttributeKey, AttributeValue };
+pub use function::{ ContainerDebug, ContainerDebugAdapter };
 
 pub use function::builder::{ FunctionBuilder, CaseBuilder, IntoValue };
 
 pub use algo::live::LiveValues;
-pub use algo::mangle::Mangler;
+pub use algo::mangle::{Mangler, MangleTarget, MangleTo, MangleFrom};
 
 pub use constant::{ ConstantContainer, Const, ConstKind, AtomicTerm };
 pub use constant::{ AtomTerm, BigIntTerm, IntTerm, FloatTerm, BinaryTerm, NilTerm };

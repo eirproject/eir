@@ -57,7 +57,10 @@ where
     P: AsRef<Path>
 {
     let (parsed, parser): (ErlAstModule, _) = parse_file(path, config);
-    let (res, messages) = lower_module(&parsed);
+    let (res, messages) = {
+        let codemap = &*parser.config.codemap.lock().unwrap();
+        lower_module(codemap, &parsed)
+    };
 
     let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
         .set_codemap(parser.config.codemap.clone());
@@ -70,7 +73,10 @@ where
 
 pub fn lower(input: &str, config: ParseConfig) -> Result<Module, ()> {
     let (parsed, parser): (ErlAstModule, _) = parse(input, config);
-    let (res, messages) = lower_module(&parsed);
+    let (res, messages) = {
+        let codemap = &*parser.config.codemap.lock().unwrap();
+        lower_module(codemap, &parsed)
+    };
 
     let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
         .set_codemap(parser.config.codemap.clone());

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use libeir_ir::FunctionBuilder;
 use libeir_ir::{Block, OpKind, CallKind};
 use libeir_ir::{LiveBlockGraph, LiveValues};
@@ -14,12 +16,18 @@ macro_rules! copy_map_fun_single {
                     continue;
                 }
                 if let Some(v) = $entry_analysis.mappings.get(&val) {
-                    val = *v;
-                    continue;
+                    match v {
+                        analyze::PhiSource::Scope(iv) => {
+                            val = *iv;
+                            continue;
+                        },
+                        analyze::PhiSource::EntryArg { arg, .. } => {
+                            break Some(*arg);
+                        }
+                    }
                 }
-                break;
+                break Some(val);
             }
-            Some(val)
         }
     }
 }
@@ -32,7 +40,7 @@ macro_rules! copy_map_fun {
                 // If the argument is of the original target block, it will loop around.
                 // Do not map this value.
                 if $chain_analysis.args.contains(&val) {
-                    break;
+                    break Some(val);
                 }
 
                 if let Some(v) = $chain_analysis.static_map.get(&val) {
@@ -40,12 +48,18 @@ macro_rules! copy_map_fun {
                     continue;
                 }
                 if let Some(v) = $entry_analysis.mappings.get(&val) {
-                    val = *v;
-                    continue;
+                    match v {
+                        analyze::PhiSource::Scope(iv) => {
+                            val = *iv;
+                            continue;
+                        },
+                        analyze::PhiSource::EntryArg { arg, .. } => {
+                            break Some(*arg);
+                        }
+                    }
                 }
-                break;
+                break Some(val);
             }
-            Some(val)
         }
     }
 }
@@ -77,6 +91,7 @@ fn rewrite_chain_generic(
     chain_analysis: &analyze::ChainAnalysis,
     b: &mut FunctionBuilder,
 ) {
+    println!("GENERIC");
 
     for (from, to) in chain_analysis.static_map.iter() {
         pass.map.insert(*from, *to);
@@ -84,16 +99,17 @@ fn rewrite_chain_generic(
 
     if chain_analysis.entry_edges.len() == 0 { return; }
 
-    if chain_analysis.entry_edges.len() == 1 || chain_analysis.args.len() == 0 {
+    if chain_analysis.entry_edges.len() == 1 /* || chain_analysis.args.len() == 0 */ {
         // This code path copies the body of the target into each callee block.
         // This is safe to do when any of the two below conditions are met:
         // * There is only one entry edge. In this case any required renames
         //   can become static renames.
-        // * There are no 
+        // * There are no required renames.
 
-        for edge_num in 0..chain_analysis.entry_edges.len() {
+        for edge in chain_analysis.entry_edges.clone() {
             let entry_analysis = analyze::analyze_entry_edge(
-                &analysis, &chain_analysis, edge_num);
+                &analysis, &chain_analysis, edge);
+
             println!("Path 1");
             dbg!(&entry_analysis);
 
@@ -102,7 +118,15 @@ fn rewrite_chain_generic(
 
             // In the case where there is only one entry edge, all mappings become static.
             for (from, to) in entry_analysis.mappings.iter() {
-                pass.map.insert(*from, *to);
+                match *to {
+                    analyze::PhiSource::Scope(to_value) => {
+                        pass.map.insert(*from, to_value);
+                    }
+                    analyze::PhiSource::EntryArg { called, arg, .. } => {
+                        assert!(called == entry_analysis.callee);
+                        pass.map.insert(*from, arg);
+                    }
+                }
             }
 
             // Clear the callee block and copy the target block body.
@@ -131,23 +155,42 @@ fn rewrite_chain_generic(
                               &mut |val| Some(val));
 
         // Rewrite all entry edges
-        for n in 0..chain_analysis.entry_edges.len() {
+        for edge in chain_analysis.entry_edges.clone() {
             let entry_analysis = analyze::analyze_entry_edge(
-                &analysis, &chain_analysis, n);
+                &analysis, &chain_analysis, edge);
             println!("Path 2");
             dbg!(&entry_analysis);
 
-            if chain_analysis.target == entry_analysis.callee { continue; }
+            //if chain_analysis.target == entry_analysis.callee { continue; }
 
-            b.block_clear(entry_analysis.callee);
-            // TODO: Map args with entry_analysis.mappings
+            let new_intermediate = b.block_insert();
+            let mut inter_map = BTreeMap::new();
+            for prev_arg_n in 0..b.fun().block_args(entry_analysis.callee).len() {
+                let prev_arg = b.fun().block_args(entry_analysis.callee)[prev_arg_n];
+                let new_arg = b.block_arg_insert(new_intermediate);
+                inter_map.insert(prev_arg, new_arg);
+                if !pass.map.contains_key(&prev_arg) {
+                    pass.map.insert(prev_arg, new_arg);
+                }
+            }
+            pass.map.insert(
+                b.value(entry_analysis.callee),
+                b.value(new_intermediate),
+            );
+
             let args: Vec<_> = entry_analysis.args.iter()
                 .map(|v| {
-                    b.value_map(*v, &mut copy_map_fun!(chain_analysis, entry_analysis))
+                    b.value_map(
+                        v.value(),
+                        &mut copy_map_fun!(chain_analysis, entry_analysis),
+                    )
                 })
                 .collect();
-            b.op_call_flow(entry_analysis.callee, new_target_block,
-                           &args);
+            b.op_call_flow(new_intermediate, new_target_block, &args);
+            b.block_value_map(new_intermediate, &mut |v| {
+                inter_map.get(&v).cloned().unwrap_or(v)
+            });
+
         }
 
     }
@@ -167,10 +210,10 @@ fn rewrite_chain_norenames(
 
     match b.fun().block_kind(chain_analysis.target).unwrap() {
         OpKind::Call(CallKind::ControlFlow) => {
-            for n in 0..chain_analysis.entry_edges.len() {
+            for edge in chain_analysis.entry_edges.clone() {
 
                 let entry_analysis = analyze::analyze_entry_edge(
-                    &analysis, &chain_analysis, n);
+                    &analysis, &chain_analysis, edge);
                 println!("Path 3");
                 dbg!(&entry_analysis);
 
@@ -183,9 +226,11 @@ fn rewrite_chain_norenames(
                     c.len() == t.len() && c.iter().zip(t.iter())
                         .all(|(from, to)| {
                             let mapped = chain_analysis.static_map.get(from)
-                                .or_else(|| entry_analysis.mappings.get(from))
-                                .unwrap_or(from);
-                            mapped == to
+                                .map(|v| analyze::PhiSource::Scope(*v))
+                                .or_else(|| entry_analysis.mappings.get(from).cloned())
+                                .unwrap_or(analyze::PhiSource::Scope(*from))
+                                .value();
+                            mapped == *to
                         })
                 };
 

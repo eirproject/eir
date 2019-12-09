@@ -263,7 +263,22 @@ impl<'a> FunctionBuilder<'a> {
         self.value_buf = Some(value_buf);
     }
 
-    pub fn block_copy_body_map<F>(&mut self, from: Block, to: Block, map: &mut F) where F: FnMut(Value) -> Option<Value> {
+    pub fn block_value_map<F>(&mut self, block: Block, mut map: F)
+    where F: FnMut(Value) -> Value
+    {
+        let num_reads = self.fun.block_reads(block).len();
+
+        let mut new_reads = EntityList::new();
+        for val_num in 0..num_reads {
+            let val = self.fun.block_reads(block)[val_num];
+            let new_val = self.value_map(val, &mut |v| Some(map(v)));
+            new_reads.push(new_val, &mut self.fun.pool.value);
+        }
+
+        self.fun.blocks[block].reads = new_reads;
+    }
+
+    pub fn block_copy_body_map<F>(&mut self, from: Block, to: Block, mut map: F) where F: FnMut(Value) -> Option<Value> {
         let op;
         let loc;
         {
@@ -277,7 +292,7 @@ impl<'a> FunctionBuilder<'a> {
             let len = self.fun.block_reads(from).len();
             for n in 0..len {
                 let val = self.fun.block_reads(from)[n];
-                let new = self.value_map(val, map);
+                let new = self.value_map(val, &mut map);
                 reads.push(new, &mut self.fun.pool.value);
             }
         }

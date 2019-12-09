@@ -20,7 +20,7 @@ pub(super) fn propagate(ctx: &mut AnalysisContext, block: Block, n: usize) -> bo
         // Value list of length 1 can't exist, always the value itself
         if n == 1 {
             ctx.set_branch(target);
-            ctx.add_rename(target_block, list, target_args[0]);
+            ctx.add_rename(target_block, list, 0);
             return true;
         }
 
@@ -31,10 +31,8 @@ pub(super) fn propagate(ctx: &mut AnalysisContext, block: Block, n: usize) -> bo
 
                 ctx.set_branch(target);
 
-                for (read, arg) in prim_reads.iter()
-                    .zip(target_args.iter())
-                {
-                    ctx.add_rename(target_block, *read, *arg);
+                for (idx, read) in prim_reads.iter().enumerate() {
+                    ctx.add_rename(target_block, *read, idx);
                 }
 
                 return true;
