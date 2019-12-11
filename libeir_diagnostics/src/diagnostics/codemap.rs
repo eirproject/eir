@@ -7,7 +7,7 @@ use itertools::Itertools;
 use super::filemap::{FileMap, FileName};
 use super::index::{ByteIndex, ByteOffset, RawIndex};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct CodeMap {
     files: Vec<Arc<FileMap>>,
 }

@@ -151,7 +151,7 @@ pub enum SpanError {
     OutOfBounds { given: ByteSpan, span: ByteSpan },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// Some source code
 pub struct FileMap {
     /// The name of the file that the source came from

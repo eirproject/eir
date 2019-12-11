@@ -58,6 +58,7 @@ pub use self::errors::*;
 /// The type of result returned from parsing functions
 pub type ParseResult<T> = Result<T, Vec<ParserError>>;
 
+#[derive(Clone)]
 pub struct ParseConfig {
     pub codemap: Arc<RwLock<CodeMap>>,
     pub warnings_as_errors: bool,
@@ -83,6 +84,18 @@ impl ParseConfig {
         }
     }
 }
+impl fmt::Debug for ParseConfig {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ParseConfig")
+            .field("codemap", &self.codemap.lock().unwrap())
+            .field("warnings_as_errors", &self.warnings_as_errors)
+            .field("no_warn", &self.no_warn)
+            .field("include_paths", &self.include_paths)
+            .field("code_paths", &self.code_paths)
+            .field("macros", &self.macros)
+            .finish()
+    }
+}
 impl Default for ParseConfig {
     fn default() -> Self {
         ParseConfig {
@@ -92,6 +105,39 @@ impl Default for ParseConfig {
             include_paths: VecDeque::new(),
             code_paths: VecDeque::new(),
             macros: None,
+        }
+    }
+}
+impl Eq for ParseConfig {}
+impl PartialEq for ParseConfig {
+    fn eq(&self, other: &Self) -> bool {
+        use std::hash::Hasher;
+        use std::collections::hash_map::DefaultHasher;
+
+        // We shouldn't use Eq here, because we have to lock the codemap,
+        // which may be the same codemap, behind the same lock. Instead,
+        // we calculate the hash for each, one at a time, and compare the
+        // hashes, ensuring we only ever try to lock the same codemap once
+        // in the same thread
+        let this_hash = {
+            let mut hasher = DefaultHasher::new();
+            self.codemap.lock().unwrap().hash(&mut hasher);
+            hasher.finish()
+        };
+        let that_hash = {
+            let mut hasher = DefaultHasher::new();
+            other.codemap.lock().unwrap().hash(&mut hasher);
+            hasher.finish()
+        };
+        if this_hash == that_hash &&
+           self.warnings_as_errors == other.warnings_as_errors &&
+           self.no_warn == other.no_warn &&
+           self.include_paths == other.include_paths &&
+           self.code_paths == other.code_paths &&
+           self.macros == other.macros {
+            true
+        } else {
+            false
         }
     }
 }

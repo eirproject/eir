@@ -141,5 +141,4 @@ impl LowerError {
             _ => unimplemented!()
         }
     }
-
 }

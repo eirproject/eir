@@ -11,6 +11,7 @@ use super::token_reader::{ReadFrom, TokenReader};
 use super::types::{MacroArgs, MacroName};
 use super::Result;
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum MacroIdent {
     Const(Symbol),
     Func(Symbol, usize),
@@ -63,7 +64,7 @@ impl From<&super::directives::Define> for MacroIdent {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MacroContainer {
     func_defines: HashMap<Symbol, HashMap<usize, MacroDef>>,
     const_defines: HashMap<Symbol, MacroDef>,
@@ -123,7 +124,7 @@ impl MacroContainer {
 }
 
 /// Macro Definition.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MacroDef {
     Boolean(bool),
     String(Symbol),

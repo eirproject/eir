@@ -11,7 +11,7 @@ use super::token_reader::{ReadFrom, TokenReader};
 use super::{PreprocessorError, Result};
 
 /// The list of tokens that can be used as a macro name.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MacroName {
     Atom(AtomToken),
     Variable(IdentToken),
@@ -40,11 +40,6 @@ impl MacroName {
         }
     }
 }
-impl PartialEq for MacroName {
-    fn eq(&self, other: &Self) -> bool {
-        self.value() == other.value()
-    }
-}
 impl Hash for MacroName {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         self.value().hash(hasher);
@@ -69,7 +64,7 @@ impl ReadFrom for MacroName {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub struct MacroVariables {
     pub _open_paren: SymbolToken,
     pub list: List<IdentToken>,
@@ -100,6 +95,11 @@ impl fmt::Display for MacroVariables {
         write!(f, "({})", self.list)
     }
 }
+impl PartialEq for MacroVariables {
+    fn eq(&self, other: &Self) -> bool {
+        self.list == other.list
+    }
+}
 impl ReadFrom for MacroVariables {
     fn read_from<R, S>(reader: &mut R) -> Result<Self>
     where
@@ -114,7 +114,7 @@ impl ReadFrom for MacroVariables {
 }
 
 /// Macro arguments.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub struct MacroArgs {
     pub _open_paren: SymbolToken,
     pub list: List<MacroArg>,
@@ -145,6 +145,11 @@ impl fmt::Display for MacroArgs {
         write!(f, "({})", self.list)
     }
 }
+impl PartialEq for MacroArgs {
+    fn eq(&self, other: &Self) -> bool {
+        self.list.eq(&other.list)
+    }
+}
 impl ReadFrom for MacroArgs {
     fn read_from<R, S>(reader: &mut R) -> Result<Self>
     where
@@ -159,7 +164,7 @@ impl ReadFrom for MacroArgs {
 }
 
 /// Macro argument.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MacroArg {
     /// Tokens which represent a macro argument.
     ///
@@ -293,6 +298,12 @@ impl<T: fmt::Display> fmt::Display for List<T> {
             List::Nil => Ok(()),
             List::Cons { ref head, ref tail } => write!(f, "{}{}", head, tail),
         }
+    }
+}
+impl<T: Eq> Eq for List<T> {}
+impl<T: PartialEq> PartialEq for List<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
     }
 }
 impl<U: ReadFrom> ReadFrom for List<U> {

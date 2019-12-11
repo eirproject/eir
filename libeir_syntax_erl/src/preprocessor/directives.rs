@@ -701,7 +701,7 @@ impl ReadFrom for Ifndef {
 /// See [9.2 Defining and Using Macros][define_and_use] for detailed information.
 ///
 /// [define_and_use]: http://erlang.org/doc/reference_manual/macros.html#id85572
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Define {
     pub _hyphen: SymbolToken,
     pub _define: AtomToken,

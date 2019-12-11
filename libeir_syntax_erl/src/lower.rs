@@ -28,10 +28,11 @@ mod pattern;
 use pattern::lower_clause;
 
 mod expr;
+pub use expr::BinaryTypeName;
 use expr::{lower_block, lower_single};
 
 mod errors;
-use errors::LowerError;
+pub use errors::LowerError;
 
 mod exception_handler_stack;
 use exception_handler_stack::ExceptionHandlerStack;
