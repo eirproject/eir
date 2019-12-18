@@ -6,7 +6,7 @@ use crate::lower::lower_module;
 use libeir_ir::Module as IrModule;
 use libeir_diagnostics::{ColorChoice, Emitter, StandardStreamEmitter};
 
-fn parse<T>(input: &str, config: ParseConfig) -> (T, Parser<ParseConfig>)
+fn parse<T>(input: &str, config: ParseConfig) -> (T, Parser)
 where
     T: Parse<T, Config = ParseConfig, Error = Vec<ParserError>>,
 {

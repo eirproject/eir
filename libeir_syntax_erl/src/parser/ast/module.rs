@@ -1,7 +1,6 @@
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
-use std::convert::TryInto;
 
 use libeir_diagnostics::{ByteSpan, DUMMY_SPAN, Diagnostic, Label};
 use libeir_util_number::ToPrimitive;

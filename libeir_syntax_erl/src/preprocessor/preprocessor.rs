@@ -413,7 +413,7 @@ where
         use crate::preprocessor::evaluator;
 
         let pp = self.clone_with(condition);
-        let result = <Expr as Parse<Expr>>::parse_tokens(pp);
+        let result = Expr::parse_tokens(pp);
         match result {
             Ok(expr) => match evaluator::eval(expr)? {
                 Expr::Literal(Literal::Atom(_, Ident { ref name, .. })) if *name == symbols::True => {

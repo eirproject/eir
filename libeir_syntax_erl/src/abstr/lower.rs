@@ -1,4 +1,4 @@
-use libeir_ir::{Integer, ToPrimitive};
+use libeir_ir::ToPrimitive;
 use libeir_intern::Ident;
 use libeir_diagnostics::DUMMY_SPAN;
 
@@ -21,8 +21,6 @@ pub fn lower(root: &aast::Root) -> ast::Module {
         let name = name_ident.as_str();
 
         let _line = tuple.entries[1].integer().unwrap();
-
-        let span = tuple.span;
 
         assert!(!eof);
 
@@ -682,7 +680,7 @@ fn lower_expr(
         },
         "receive" => {
             let mut clauses = Vec::new();
-            let mut after = None;
+            let after = None;
             for clause in tup.entries[2].list_iter().unwrap() {
                 let clause_tup = clause.tuple().unwrap();
                 match &*clause_tup.entries[0].atom().unwrap().as_str() {

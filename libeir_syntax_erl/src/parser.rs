@@ -42,7 +42,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use libeir_util_parse::{Scanner, Source, SourceError, ParserConfig};
-pub use libeir_util_parse::{Parser, Parse};
+use libeir_util_parse::{Parser as GParser, Parse as GParse};
+
+pub type Parser = GParser<ParseConfig>;
+pub trait Parse<T> = GParse<T, Config = ParseConfig, Error = Vec<ParserError>>;
 
 use libeir_diagnostics::CodeMap;
 
@@ -93,7 +96,7 @@ impl Default for ParseConfig {
     }
 }
 
-impl Parse for ast::Module {
+impl GParse for ast::Module {
     type Parser = grammar::ModuleParser;
     type Error = Vec<ParserError>;
     type Config = ParseConfig;
@@ -123,7 +126,7 @@ impl Parse for ast::Module {
     }
 }
 
-impl Parse for ast::Expr {
+impl GParse for ast::Expr {
     type Parser = grammar::ExprParser;
     type Error = Vec<ParserError>;
     type Config = ParseConfig;

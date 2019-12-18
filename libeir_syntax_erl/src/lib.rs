@@ -1,4 +1,5 @@
-//#![deny(warnings)]
+#![deny(warnings)]
+#![feature(trait_alias)]
 
 mod abstr;
 mod lexer;
@@ -10,3 +11,4 @@ pub use self::lexer::*;
 pub use self::parser::*;
 pub use self::preprocessor::*;
 pub use self::lower::lower_module;
+pub use self::abstr::lower as lower_abstr;

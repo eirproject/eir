@@ -1,5 +1,4 @@
 use libeir_util_number::Integer;
-use libeir_util_number::bigint::BigInt;
 
 use libeir_diagnostics::ByteSpan;
 
