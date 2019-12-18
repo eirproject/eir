@@ -2,12 +2,18 @@ use std::collections::HashMap;
 use std::ops::{ Index, IndexMut };
 
 use cranelift_entity::{ PrimaryMap, entity_impl };
+use cranelift_entity::packed_option::ReservedValue;
 use libeir_util_datastructures::pooled_entity_set::EntitySet;
 use super::{ Block, Const, PrimOp, Location };
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Value(u32);
 entity_impl!(Value, "value");
+impl Default for Value {
+    fn default() -> Self {
+        Value::reserved_value()
+    }
+}
 
 use libeir_util_dot_graph::NodeId;
 impl NodeId for Value {

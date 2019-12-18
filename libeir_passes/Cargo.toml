@@ -13,7 +13,7 @@ libeir_util_dot_graph = { path = "../util/libeir_util_dot_graph" }
 
 matches = "0.1.8"
 
-cranelift-entity = "0.30.0"
+cranelift-entity = "0.56.0"
 
 petgraph = "0.4"
 

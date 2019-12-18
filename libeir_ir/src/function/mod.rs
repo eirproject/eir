@@ -3,6 +3,7 @@ use std::hash::{ Hash, Hasher };
 use std::cmp::Eq;
 
 use cranelift_entity::{ EntityRef, PrimaryMap, ListPool, EntityList, entity_impl };
+use cranelift_entity::packed_option::ReservedValue;
 
 use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, EntitySet,
                                                      BoundEntitySet };
@@ -42,6 +43,11 @@ pub use format::{ContainerDebug, ContainerDebugAdapter};
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Block(u32);
 entity_impl!(Block, "block");
+impl Default for Block {
+    fn default() -> Self {
+        Block::reserved_value()
+    }
+}
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub struct Argument(u32);
@@ -135,6 +141,9 @@ pub struct Function {
 }
 
 impl Function {
+    pub fn span(&self) -> ByteSpan {
+        self.span
+    }
 
     pub fn pat(&self) -> &PatternContainer {
         &self.pattern_container
