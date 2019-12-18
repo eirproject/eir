@@ -4,8 +4,7 @@ use libeir_util_datastructures::hashmap_stack::HashMapStack;
 use libeir_intern::Ident;
 use libeir_diagnostics::{ByteSpan, Diagnostic, Label};
 use libeir_util_parse::{ErrorReceiver, ToDiagnostic};
-
-use num_traits::ToPrimitive;
+use libeir_util_number::ToPrimitive;
 
 use snafu::Snafu;
 

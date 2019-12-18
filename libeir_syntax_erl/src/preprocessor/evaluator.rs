@@ -1,4 +1,5 @@
-use num_bigint::BigInt;
+use libeir_util_number::Integer;
+use libeir_util_number::bigint::BigInt;
 
 use libeir_diagnostics::ByteSpan;
 
@@ -316,16 +317,9 @@ fn eval_unary_op(span: ByteSpan, op: UnaryOp, rhs: Expr) -> Result<Expr, Preproc
     let expr = match op {
         UnaryOp::Plus => match rhs {
             Expr::Literal(Literal::Integer(id, span, i)) if i < 0 => {
-                Expr::Literal(Literal::Integer(id, span, i * -1))
+                Expr::Literal(Literal::Integer(id, span, -i))
             }
             Expr::Literal(Literal::Integer(_, _, _)) => rhs,
-            Expr::Literal(Literal::BigInteger(id, span, i)) => {
-                if i < 0 {
-                    Expr::Literal(Literal::BigInteger(id, span, i * -1))
-                } else {
-                    Expr::Literal(Literal::BigInteger(id, span, i))
-                }
-            }
             Expr::Literal(Literal::Float(id, span, i)) if i < 0.0 => {
                 Expr::Literal(Literal::Float(id, span, i * -1.0))
             }
@@ -334,16 +328,9 @@ fn eval_unary_op(span: ByteSpan, op: UnaryOp, rhs: Expr) -> Result<Expr, Preproc
         },
         UnaryOp::Minus => match rhs {
             Expr::Literal(Literal::Integer(id, span, i)) if i > 0 => {
-                Expr::Literal(Literal::Integer(id, span, i * -1))
+                Expr::Literal(Literal::Integer(id, span, -i))
             }
             Expr::Literal(Literal::Integer(_, _, _)) => rhs,
-            Expr::Literal(Literal::BigInteger(id, span, i)) => {
-                if i > 0 {
-                    Expr::Literal(Literal::BigInteger(id, span, i * -1))
-                } else {
-                    Expr::Literal(Literal::BigInteger(id, span, i))
-                }
-            }
             Expr::Literal(Literal::Float(id, span, i)) if i > 0.0 => {
                 Expr::Literal(Literal::Float(id, span, i * -1.0))
             }
@@ -351,10 +338,7 @@ fn eval_unary_op(span: ByteSpan, op: UnaryOp, rhs: Expr) -> Result<Expr, Preproc
             _ => return Err(PreprocessorError::InvalidConstExpression { span }),
         },
         UnaryOp::Bnot => match rhs {
-            Expr::Literal(Literal::Integer(id, span, i)) => Expr::Literal(Literal::Integer(id, span, !i)),
-            Expr::Literal(Literal::BigInteger(id, span, i)) => {
-                Expr::Literal(Literal::BigInteger(id, span, !i))
-            }
+            Expr::Literal(Literal::Integer(id, span, Integer::Small(i))) => Expr::Literal(Literal::Integer(id, span, (!i).into())),
             _ => return Err(PreprocessorError::InvalidConstExpression { span }),
         },
         UnaryOp::Not => match rhs {
@@ -541,27 +525,6 @@ fn eval_numeric_equality(
                 _ => unreachable!(),
             }
         }
-        (Expr::Literal(Literal::BigInteger(_, _, x)), Expr::Literal(Literal::BigInteger(_, _, y))) => {
-            match op {
-                BinaryOp::Equal if x == y => Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::True,
-                    span,
-                })),
-                BinaryOp::NotEqual if x != y => Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::True,
-                    span,
-                })),
-                BinaryOp::Equal => Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::False,
-                    span,
-                })),
-                BinaryOp::NotEqual => Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::False,
-                    span,
-                })),
-                _ => unreachable!(),
-            }
-        }
         (Expr::Literal(Literal::Float(_, _, x)), Expr::Literal(Literal::Float(_, _, y))) => match op {
             BinaryOp::Equal if x == y => Expr::Literal(Literal::Atom(id, Ident {
                 name: symbols::True,
@@ -581,18 +544,6 @@ fn eval_numeric_equality(
             })),
             _ => unreachable!(),
         },
-        (
-            Expr::Literal(Literal::Integer(xspan, xid, x)),
-            rhs @ Expr::Literal(Literal::BigInteger(_, _, _)),
-        ) => {
-            return eval_numeric_equality(
-                span,
-                id,
-                Expr::Literal(Literal::BigInteger(xspan, xid, x.into())),
-                op,
-                rhs,
-            );
-        }
 
         (
             Expr::Literal(Literal::Integer(xspan, xid, x)),
@@ -601,22 +552,9 @@ fn eval_numeric_equality(
             return eval_numeric_equality(
                 span,
                 id,
-                Expr::Literal(Literal::Float(xspan, xid, x as f64)),
+                Expr::Literal(Literal::Float(xspan, xid, x.to_float())),
                 op,
                 rhs,
-            );
-        }
-
-        (
-            lhs @ Expr::Literal(Literal::BigInteger(_, _, _)),
-            Expr::Literal(Literal::Integer(yspan, yid, y)),
-        ) => {
-            return eval_numeric_equality(
-                span,
-                id,
-                lhs,
-                op,
-                Expr::Literal(Literal::BigInteger(yspan, yid, y.into())),
             );
         }
 
@@ -629,7 +567,7 @@ fn eval_numeric_equality(
                 id,
                 lhs,
                 op,
-                Expr::Literal(Literal::Float(yspan, yid, y as f64)),
+                Expr::Literal(Literal::Float(yspan, yid, y.to_float())),
             );
         }
 
@@ -692,30 +630,18 @@ fn eval_arith(
         let result = match (lhs, rhs) {
             // Types match
             (Expr::Literal(Literal::Integer(_, _, x)), Expr::Literal(Literal::Integer(_, _, y))) => {
-                eval_op_int(span, id, x, op, y)?
+                eval_op_int(span, id, x, op, &y)?
             }
-            (
-                Expr::Literal(Literal::BigInteger(_, _, x)),
-                Expr::Literal(Literal::BigInteger(_, _, y)),
-            ) => eval_op_bigint(span, id, x, op, y)?,
             (Expr::Literal(Literal::Float(_, _, x)), Expr::Literal(Literal::Float(_, _, y))) => {
                 eval_op_float(span, id, x, op, y)?
             }
 
-            // Coerce to BigInt
-            (Expr::Literal(Literal::Integer(_, _, x)), Expr::Literal(Literal::BigInteger(_, _, y))) => {
-                eval_op_bigint(span, id, x.into(), op, y)?
-            }
-            (Expr::Literal(Literal::BigInteger(_, _, x)), Expr::Literal(Literal::Integer(_, _, y))) => {
-                eval_op_bigint(span, id, x, op, y.into())?
-            }
-
             // Coerce to float
             (Expr::Literal(Literal::Integer(_, _, x)), Expr::Literal(Literal::Float(_, _, y))) => {
-                eval_op_float(span, id, x as f64, op, y)?
+                eval_op_float(span, id, x.to_float(), op, y)?
             }
             (Expr::Literal(Literal::Float(_, _, x)), Expr::Literal(Literal::Integer(_, _, y))) => {
-                eval_op_float(span, id, x, op, y as f64)?
+                eval_op_float(span, id, x, op, y.to_float())?
             }
 
             _ => return Err(PreprocessorError::InvalidConstExpression { span }),
@@ -729,40 +655,19 @@ fn eval_arith(
 fn eval_op_int(
     span: ByteSpan,
     id: NodeId,
-    x: i64,
+    x: Integer,
     op: BinaryOp,
-    y: i64
+    y: &Integer
 ) -> Result<Expr, PreprocessorError> {
     let result = match op {
         BinaryOp::Add => Expr::Literal(Literal::Integer(span, id, x + y)),
         BinaryOp::Sub => Expr::Literal(Literal::Integer(span, id, x - y)),
         BinaryOp::Multiply => Expr::Literal(Literal::Integer(span, id, x * y)),
-        BinaryOp::Divide if y == 0 => return Err(PreprocessorError::InvalidConstExpression{ span }),
-        BinaryOp::Divide => Expr::Literal(Literal::Float(span, id, (x as f64) / (y as f64))),
-        BinaryOp::Div if y == 0 => return Err(PreprocessorError::InvalidConstExpression { span }),
+        BinaryOp::Divide if *y == 0 => return Err(PreprocessorError::InvalidConstExpression{ span }),
+        BinaryOp::Divide => Expr::Literal(Literal::Float(span, id, x.to_float() / y.to_float())),
+        BinaryOp::Div if *y == 0 => return Err(PreprocessorError::InvalidConstExpression { span }),
         BinaryOp::Div => Expr::Literal(Literal::Integer(span, id, x / y)),
         BinaryOp::Rem => Expr::Literal(Literal::Integer(span, id, x % y)),
-        _ => unreachable!(),
-    };
-    Ok(result)
-}
-
-fn eval_op_bigint(
-    span: ByteSpan,
-    id: NodeId,
-    x: BigInt,
-    op: BinaryOp,
-    y: BigInt,
-) -> Result<Expr, PreprocessorError> {
-    let zero: BigInt = 0.into();
-    let result = match op {
-        BinaryOp::Add => Expr::Literal(Literal::BigInteger(span, id, x + y)),
-        BinaryOp::Sub => Expr::Literal(Literal::BigInteger(span, id, x - y)),
-        BinaryOp::Multiply => Expr::Literal(Literal::BigInteger(span, id, x * y)),
-        BinaryOp::Divide => return Err(PreprocessorError::InvalidConstExpression { span }),
-        BinaryOp::Div if y == zero => return Err(PreprocessorError::InvalidConstExpression { span }),
-        BinaryOp::Div => Expr::Literal(Literal::BigInteger(span, id, x / y)),
-        BinaryOp::Rem => Expr::Literal(Literal::BigInteger(span, id, x % y)),
         _ => unreachable!(),
     };
     Ok(result)
@@ -798,15 +703,20 @@ fn eval_shift(
 ) -> Result<Expr, PreprocessorError> {
     match (lhs, rhs) {
         (Expr::Literal(Literal::Integer(_, _, x)), Expr::Literal(Literal::Integer(_, _, y))) => {
-            let result = match op {
-                BinaryOp::Bor => Expr::Literal(Literal::Integer(span, id, x | y)),
-                BinaryOp::Bxor => Expr::Literal(Literal::Integer(span, id, x ^ y)),
-                BinaryOp::Band => Expr::Literal(Literal::Integer(span, id, x & y)),
-                BinaryOp::Bsl => Expr::Literal(Literal::Integer(span, id, x << y)),
-                BinaryOp::Bsr => Expr::Literal(Literal::Integer(span, id, x >> y)),
-                _ => unreachable!(),
-            };
-            Ok(result)
+            match (x, y) {
+                (Integer::Small(x), Integer::Small(y)) => {
+                    let result = match op {
+                        BinaryOp::Bor => x | y,
+                        BinaryOp::Bxor => x ^ y,
+                        BinaryOp::Band => x & y,
+                        BinaryOp::Bsl => x << y,
+                        BinaryOp::Bsr => x >> y,
+                        _ => unreachable!(),
+                    };
+                    Ok(Expr::Literal(Literal::Integer(span, id, result.into())))
+                },
+                _ => return Err(PreprocessorError::InvalidConstExpression { span }),
+            }
         }
         _ => return Err(PreprocessorError::InvalidConstExpression { span }),
     }
@@ -815,7 +725,6 @@ fn eval_shift(
 fn is_number(e: &Expr) -> bool {
     match *e {
         Expr::Literal(Literal::Integer(_, _, _)) => true,
-        Expr::Literal(Literal::BigInteger(_, _, _)) => true,
         Expr::Literal(Literal::Float(_, _, _)) => true,
         _ => false,
     }

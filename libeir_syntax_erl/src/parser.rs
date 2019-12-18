@@ -37,13 +37,14 @@ mod errors;
 /// Contains the visitor trait needed to traverse the AST and helper walk functions.
 pub mod visitor;
 
-use std::borrow::Cow;
 use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use libeir_util_parse::{Scanner, FileMapSource, Source};
-use libeir_diagnostics::{CodeMap, FileName};
+use libeir_util_parse::{Scanner, Source, SourceError, ParserConfig};
+pub use libeir_util_parse::{Parser, Parse};
+
+use libeir_diagnostics::CodeMap;
 
 use crate::lexer::Lexer;
 use crate::preprocessor::{MacroContainer, Preprocessed, Preprocessor};
@@ -54,40 +55,6 @@ pub use self::errors::*;
 /// The type of result returned from parsing functions
 pub type ParseResult<T> = Result<T, Vec<ParserError>>;
 
-pub struct Parser {
-    pub config: ParseConfig,
-}
-impl Parser {
-    pub fn new(config: ParseConfig) -> Parser {
-        Parser { config }
-    }
-
-    pub fn parse_string<S, T>(&self, source: S) -> ParseResult<T>
-    where
-        S: AsRef<str>,
-        T: Parse,
-    {
-        let filemap = {
-            self.config.codemap.lock().unwrap().add_filemap(
-                FileName::Virtual(Cow::Borrowed("nofile")),
-                source.as_ref().to_owned(),
-            )
-        };
-        <T as Parse<T>>::parse(&self.config, FileMapSource::new(filemap))
-    }
-
-    pub fn parse_file<P, T>(&self, path: P) -> ParseResult<T>
-    where
-        P: AsRef<Path>,
-        T: Parse,
-    {
-        match FileMapSource::from_path(self.config.codemap.clone(), path) {
-            Err(err) => return Err(vec![err.into()]),
-            Ok(source) => <T as Parse<T>>::parse(&self.config, source),
-        }
-    }
-}
-
 pub struct ParseConfig {
     pub codemap: Arc<Mutex<CodeMap>>,
     pub warnings_as_errors: bool,
@@ -95,6 +62,11 @@ pub struct ParseConfig {
     pub include_paths: VecDeque<PathBuf>,
     pub code_paths: VecDeque<PathBuf>,
     pub macros: Option<MacroContainer>,
+}
+impl ParserConfig for ParseConfig {
+    fn codemap(&self) -> &Arc<Mutex<CodeMap>> {
+        &self.codemap
+    }
 }
 impl ParseConfig {
     pub fn new(codemap: Arc<Mutex<CodeMap>>) -> Self {
@@ -121,32 +93,31 @@ impl Default for ParseConfig {
     }
 }
 
-pub trait Parse<T = Self> {
-    type Parser;
+impl Parse for ast::Module {
+    type Parser = grammar::ModuleParser;
+    type Error = Vec<ParserError>;
+    type Config = ParseConfig;
+    type Token = Preprocessed;
 
-    /// Initializes a token stream for the underlying parser and invokes parse_tokens/1
-    fn parse<S>(config: &ParseConfig, source: S) -> ParseResult<T>
+    fn file_map_error(err: SourceError) -> Self::Error {
+        vec![err.into()]
+    }
+
+    fn parse<S>(config: &ParseConfig, source: S) -> ParseResult<Self>
     where
         S: Source,
     {
         let scanner = Scanner::new(source);
         let lexer = Lexer::new(scanner);
         let tokens = Preprocessor::new(config, lexer);
-        let mut nid = NodeIdGenerator::new();
-        Self::parse_tokens(&mut nid, tokens)
+        Self::parse_tokens(tokens)
     }
 
-    /// Implemented by each parser, which should parse the token stream and produce a T
-    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(nid: &mut NodeIdGenerator, tokens: S) -> ParseResult<T>;
-}
-
-impl Parse for ast::Module {
-    type Parser = grammar::ModuleParser;
-
-    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(nid: &mut NodeIdGenerator, tokens: S) -> ParseResult<ast::Module> {
+    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(tokens: S) -> ParseResult<ast::Module> {
+        let mut nid = NodeIdGenerator::new();
         let mut errs = Vec::new();
         let result = Self::Parser::new()
-            .parse(&mut errs, nid, tokens)
+            .parse(&mut errs, &mut nid, tokens)
             .map_err(|e| e.map_error(|ei| ei.into()));
         to_parse_result(errs, result)
     }
@@ -154,11 +125,29 @@ impl Parse for ast::Module {
 
 impl Parse for ast::Expr {
     type Parser = grammar::ExprParser;
+    type Error = Vec<ParserError>;
+    type Config = ParseConfig;
+    type Token = Preprocessed;
 
-    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(nid: &mut NodeIdGenerator, tokens: S) -> ParseResult<ast::Expr> {
+    fn file_map_error(err: SourceError) -> Self::Error {
+        vec![err.into()]
+    }
+
+    fn parse<S>(config: &ParseConfig, source: S) -> ParseResult<Self>
+    where
+        S: Source,
+    {
+        let scanner = Scanner::new(source);
+        let lexer = Lexer::new(scanner);
+        let tokens = Preprocessor::new(config, lexer);
+        Self::parse_tokens(tokens)
+    }
+
+    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(tokens: S) -> ParseResult<ast::Expr> {
+        let mut nid = NodeIdGenerator::new();
         let mut errs = Vec::new();
         let result = Self::Parser::new()
-            .parse(&mut errs, nid, tokens)
+            .parse(&mut errs, &mut nid, tokens)
             .map_err(|e| e.map_error(|ei| ei.into()));
         to_parse_result(errs, result)
     }
@@ -194,7 +183,7 @@ mod test {
 
     fn parse<'a, T>(input: &'a str) -> T
     where
-        T: Parse<T>,
+        T: Parse<T, Config = ParseConfig, Error = Vec<ParserError>>,
     {
         let config = ParseConfig::default();
         let parser = Parser::new(config);
@@ -212,7 +201,7 @@ mod test {
 
     fn parse_fail<T>(input: &'static str) -> Vec<ParserError>
     where
-        T: Parse<T>,
+        T: Parse<T, Config = ParseConfig, Error = Vec<ParserError>>,
     {
         let config = ParseConfig::default();
         let parser = Parser::new(config);
@@ -344,7 +333,7 @@ unless(Value) ->
                                     id: nid.next(),
                                     lhs: Box::new(var!(nid, Value)),
                                     op: BinaryOp::Equal,
-                                    rhs: Box::new(int!(nid, 0)),
+                                    rhs: Box::new(int!(nid, 0.into())),
                                 })],
                             },
                         ],
@@ -607,7 +596,7 @@ system_version() ->
             name: ident_opt!(system_version),
             params: vec![],
             guard: None,
-            body: vec![int!(nid, 21)],
+            body: vec![int!(nid, 21.into())],
         });
         let system_version_fun = NamedFunction {
             span: ByteSpan::default(),

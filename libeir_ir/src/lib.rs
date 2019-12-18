@@ -37,6 +37,7 @@ pub use algo::mangle::{Mangler, MangleTarget, MangleTo, MangleFrom};
 
 pub use constant::{ ConstantContainer, Const, ConstKind, AtomicTerm };
 pub use constant::{ AtomTerm, BigIntTerm, IntTerm, FloatTerm, BinaryTerm, NilTerm };
+pub use constant::{ Integer, ToPrimitive, FromPrimitive };
 pub use constant::{ EmptyMap };
 
 pub use pattern::{ PatternNode, PatternValue, PatternClause, PatternContainer };

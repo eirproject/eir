@@ -3,8 +3,7 @@
 use libeir_diagnostics::{ByteIndex, ByteSpan, Diagnostic, Label as DiagLabel};
 use libeir_intern::{Ident, Symbol};
 use libeir_util_parse::ErrorReceiver;
-
-use num_traits::ToPrimitive;
+use libeir_util_number::ToPrimitive;
 
 use crate::{BasicType, BinOp};
 use crate::constant::Integer;

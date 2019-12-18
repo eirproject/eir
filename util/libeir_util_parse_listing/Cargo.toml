@@ -1,0 +1,17 @@
+[package]
+name = "libeir_util_parse_listing"
+version = "0.1.0"
+authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
+edition = "2018"
+build = "build.rs"
+
+[dependencies]
+libeir_util_parse = { path = "../libeir_util_parse" }
+libeir_ir = { path = "../../libeir_ir" }
+libeir_diagnostics = { path = "../../libeir_diagnostics" }
+libeir_intern = { path = "../../libeir_intern" }
+
+lalrpop-util = "0.17"
+
+[build-dependencies]
+lalrpop = "0.17"

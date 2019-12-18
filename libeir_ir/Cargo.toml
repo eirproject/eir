@@ -5,30 +5,31 @@ authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
 edition = "2018"
 build = "build.rs"
 
+[features]
+binary_serialization = ["bincode"]
+
 [dependencies]
 libeir_intern = { path = "../libeir_intern" }
 libeir_diagnostics = { path = "../libeir_diagnostics" }
 libeir_util_datastructures = { path = "../util/libeir_util_datastructures" }
 libeir_util_parse = { path = "../util/libeir_util_parse" }
+libeir_util_number = { path = "../util/libeir_util_number" }
 
 string-intern = { version = "0.1.7", default-features = false }
 pretty = "0.3.3"
 lazy_static = "1.2.0"
 itertools = "0.8.0"
 
-num-traits = "0.2"
-
 cranelift-entity = "0.30.0"
+bumpalo = "2.6.0"
 
 petgraph = "0.4"
 
 matches = "0.1.8"
 regex = "1"
 
-num-bigint = { git = "https://github.com/hansihe/num-bigint.git" }
-
 serde = { version = "1.0", features = ["derive"] }
-bincode = "1.1"
+bincode = { version = "1.1", optional = true }
 
 lalrpop-util = "0.17"
 

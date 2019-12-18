@@ -14,3 +14,7 @@ matches = "0.1.8"
 cranelift-entity = "0.30.0"
 
 petgraph = "0.4"
+
+bumpalo = { git = "https://github.com/hansihe/bumpalo.git", features = [ "collections_hash" ] }
+
+fnv = "1.0.3"

@@ -14,7 +14,7 @@ use libeir_util_parse::Source;
 use crate::lexer::{symbols, IdentToken, Lexed, LexicalToken, Symbol, Token,
                    DelayedSubstitution};
 use crate::lexer::Lexer;
-use crate::parser::{ ParseConfig, NodeIdGenerator };
+use crate::parser::ParseConfig;
 
 use super::macros::Stringify;
 use super::token_reader::{TokenBufferReader, TokenReader, TokenStreamReader};
@@ -189,7 +189,7 @@ where
                         .unwrap()
                 };
                 let line = line.to_usize() as i64;
-                LexicalToken(current, Token::Integer(line), span.end())
+                LexicalToken(current, Token::Integer(line.into()), span.end())
             }
             "MACHINE" => {
                 let span = call.span();
@@ -412,10 +412,8 @@ where
         use crate::parser::Parse;
         use crate::preprocessor::evaluator;
 
-        let mut nid = NodeIdGenerator::new();
-
         let pp = self.clone_with(condition);
-        let result = <Expr as Parse<Expr>>::parse_tokens(&mut nid, pp);
+        let result = <Expr as Parse<Expr>>::parse_tokens(pp);
         match result {
             Ok(expr) => match evaluator::eval(expr)? {
                 Expr::Literal(Literal::Atom(_, Ident { ref name, .. })) if *name == symbols::True => {

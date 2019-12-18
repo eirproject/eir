@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use bumpalo::Bump;
+
 use libeir_ir::FunctionBuilder;
 use libeir_ir::{Block, OpKind, CallKind};
 use libeir_ir::{LiveBlockGraph, LiveValues};
@@ -39,7 +41,7 @@ macro_rules! copy_map_fun {
             loop {
                 // If the argument is of the original target block, it will loop around.
                 // Do not map this value.
-                if $chain_analysis.args.contains(&val) {
+                if $chain_analysis.args.contains_key(&val) {
                     break Some(val);
                 }
 
@@ -65,6 +67,7 @@ macro_rules! copy_map_fun {
 }
 
 pub fn rewrite(
+    bump: &Bump,
     target: Block,
     pass: &mut SimplifyCfgPass,
     analysis: &analyze::GraphAnalysis,
@@ -73,19 +76,20 @@ pub fn rewrite(
 ) {
     let graph = b.fun().live_block_graph();
     let chain_analysis = analyze::analyze_chain(
-        target, &b.fun(), &graph, &live, &analysis);
+        bump, target, &b.fun(), &graph, &live, &analysis);
     dbg!(&chain_analysis);
 
     if chain_analysis.renames_required {
-        rewrite_chain_generic(pass, &analysis, &chain_analysis, b);
+        rewrite_chain_generic(bump, pass, &analysis, &chain_analysis, b);
     } else {
         // When the renames from the chain are not used outside of
         // the target block, we can generate better IR.
-        rewrite_chain_norenames(pass, &analysis, &chain_analysis, b);
+        rewrite_chain_norenames(bump, pass, &analysis, &chain_analysis, b);
     }
 }
 
 fn rewrite_chain_generic(
+    bump: &Bump,
     pass: &mut SimplifyCfgPass,
     analysis: &analyze::GraphAnalysis,
     chain_analysis: &analyze::ChainAnalysis,
@@ -106,9 +110,9 @@ fn rewrite_chain_generic(
         //   can become static renames.
         // * There are no required renames.
 
-        for edge in chain_analysis.entry_edges.clone() {
+        for edge in chain_analysis.entry_edges.clone().keys() {
             let entry_analysis = analyze::analyze_entry_edge(
-                &analysis, &chain_analysis, edge);
+                bump, &analysis, &chain_analysis, *edge);
 
             println!("Path 1");
             dbg!(&entry_analysis);
@@ -144,7 +148,7 @@ fn rewrite_chain_generic(
 
         // Insert the arguments and insert the mappings for them
         let mut new_target_args = Vec::new();
-        for value in chain_analysis.args.iter() {
+        for value in chain_analysis.args.keys() {
             let mapped = b.block_arg_insert(new_target_block);
             new_target_args.push(mapped);
             pass.map.insert(*value, mapped);
@@ -155,9 +159,9 @@ fn rewrite_chain_generic(
                               &mut |val| Some(val));
 
         // Rewrite all entry edges
-        for edge in chain_analysis.entry_edges.clone() {
+        for edge in chain_analysis.entry_edges.clone().keys() {
             let entry_analysis = analyze::analyze_entry_edge(
-                &analysis, &chain_analysis, edge);
+                bump, &analysis, &chain_analysis, *edge);
             println!("Path 2");
             dbg!(&entry_analysis);
 
@@ -198,6 +202,7 @@ fn rewrite_chain_generic(
 }
 
 fn rewrite_chain_norenames(
+    bump: &Bump,
     pass: &mut SimplifyCfgPass,
     analysis: &analyze::GraphAnalysis,
     chain_analysis: &analyze::ChainAnalysis,
@@ -210,10 +215,10 @@ fn rewrite_chain_norenames(
 
     match b.fun().block_kind(chain_analysis.target).unwrap() {
         OpKind::Call(CallKind::ControlFlow) => {
-            for edge in chain_analysis.entry_edges.clone() {
+            for edge in chain_analysis.entry_edges.clone().keys() {
 
                 let entry_analysis = analyze::analyze_entry_edge(
-                    &analysis, &chain_analysis, edge);
+                    bump, &analysis, &chain_analysis, *edge);
                 println!("Path 3");
                 dbg!(&entry_analysis);
 
@@ -254,6 +259,6 @@ fn rewrite_chain_norenames(
 
             }
         }
-        _ => rewrite_chain_generic(pass, analysis, chain_analysis, b),
+        _ => rewrite_chain_generic(bump, pass, analysis, chain_analysis, b),
     }
 }

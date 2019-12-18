@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use libeir_ir::{ Module, FunctionIdent };
-use libeir_syntax_erl::{ Parse, Parser, ParseConfig };
+use libeir_syntax_erl::{ Parse, Parser, ParseConfig, ParserError };
 use libeir_syntax_erl::ast::{ Module as ErlAstModule };
 use libeir_syntax_erl::lower_module;
 use libeir_diagnostics::{ Emitter, StandardStreamEmitter, ColorChoice };
@@ -17,9 +17,9 @@ mod errors;
 mod otp;
 mod ct_runner;
 
-fn parse<T>(input: &str, config: ParseConfig) -> (T, Parser)
+fn parse<T>(input: &str, config: ParseConfig) -> (T, Parser<ParseConfig>)
 where
-    T: Parse<T>,
+    T: Parse<T, Config = ParseConfig, Error = Vec<ParserError>>,
 {
     let parser = Parser::new(config);
     let errs = match parser.parse_string::<&str, T>(input) {
@@ -34,9 +34,9 @@ where
     panic!("parse failed");
 }
 
-fn parse_file<T, P>(path: P, config: ParseConfig) -> (T, Parser)
+fn parse_file<T, P>(path: P, config: ParseConfig) -> (T, Parser<ParseConfig>)
 where
-    T: Parse<T>,
+    T: Parse<T, Config = ParseConfig, Error = Vec<ParserError>>,
     P: AsRef<Path>,
 {
     let parser = Parser::new(config);

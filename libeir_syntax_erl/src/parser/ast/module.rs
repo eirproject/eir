@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 
 use libeir_diagnostics::{ByteSpan, DUMMY_SPAN, Diagnostic, Label};
+use libeir_util_number::ToPrimitive;
 
 use super::NodeIdGenerator;
 use super::{Apply, Cons, Var, Nil, Remote, Tuple};
@@ -909,7 +910,7 @@ impl Module {
                         tuple!(
                             nid,
                             atom_from_sym!(nid, cbname.function.name.clone()),
-                            int!(nid, cbname.arity as i64)
+                            int!(nid, (cbname.arity as i64).into())
                         ),
                         acc
                     )
@@ -922,7 +923,7 @@ impl Module {
                         tuple!(
                             nid,
                             atom_from_sym!(nid, cbname.function.name.clone()),
-                            int!(nid, cbname.arity as i64)
+                            int!(nid, (cbname.arity as i64).into())
                         ),
                         acc
                     )
@@ -1199,7 +1200,7 @@ impl CompileOptions {
                                 span: tup.span,
                                 id: tup.id,
                                 function: *name,
-                                arity: (*arity).try_into().unwrap(),
+                                arity: (*arity).to_usize().unwrap(),
                             };
                             self.no_auto_imports
                                 .insert(local.resolve(*module));
@@ -1267,7 +1268,7 @@ impl CompileOptions {
                                 span: tup.span,
                                 id: tup.id,
                                 function: *name,
-                                arity: (*arity).try_into().unwrap(),
+                                arity: (*arity).to_usize().unwrap(),
                             };
                             self.inline_functions
                                 .insert(local.resolve(*module));

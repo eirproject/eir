@@ -1,8 +1,7 @@
 use std::cmp::Ordering;
 
 use libeir_diagnostics::ByteSpan;
-use libeir_util_num::bigint_to_double;
-use num_bigint::BigInt;
+use libeir_util_number::Integer;
 
 use super::{NodeId};
 use super::{BinaryOp, Ident, UnaryOp};
@@ -263,8 +262,7 @@ pub enum Literal {
     Atom(NodeId, Ident),
     String(NodeId, Ident),
     Char(ByteSpan, NodeId, char),
-    Integer(ByteSpan, NodeId, i64),
-    BigInteger(ByteSpan, NodeId, BigInt),
+    Integer(ByteSpan, NodeId, Integer),
     Float(ByteSpan, NodeId, f64),
 }
 impl Literal {
@@ -274,7 +272,6 @@ impl Literal {
             &Literal::String(_, Ident { ref span, .. }) => span.clone(),
             &Literal::Char(span, _, _) => span.clone(),
             &Literal::Integer(span, _, _) => span.clone(),
-            &Literal::BigInteger(span, _, _) => span.clone(),
             &Literal::Float(span, _, _) => span.clone(),
         }
     }
@@ -284,7 +281,6 @@ impl Literal {
             Literal::String(id, _) => *id,
             Literal::Char(_, id, _) => *id,
             Literal::Integer(_, id, _) => *id,
-            Literal::BigInteger(_, id, _) => *id,
             Literal::Float(_, id, _) => *id,
         }
     }
@@ -305,35 +301,22 @@ impl PartialEq for Literal {
 impl PartialOrd for Literal {
     // number < atom < reference < fun < port < pid < tuple < map < nil < list < bit string
     fn partial_cmp(&self, other: &Literal) -> Option<Ordering> {
-        // TODO: Implement equality between primitives and bigint
-        // in num_bigint. Allocating here is horrible.
         match (self, other) {
-            (&Literal::String(_, ref lhs), &Literal::String(_, ref rhs)) => lhs.partial_cmp(rhs),
-            (&Literal::String(_, _), _) => Some(Ordering::Greater),
-            (_, &Literal::String(_, _)) => Some(Ordering::Less),
-            (&Literal::Atom(_, ref lhs), &Literal::Atom(_, ref rhs)) => lhs.partial_cmp(rhs),
-            (&Literal::Atom(_, _), _) => Some(Ordering::Greater),
-            (_, &Literal::Atom(_, _)) => Some(Ordering::Less),
-            (&Literal::Integer(_, _, x), &Literal::Integer(_, _, y)) => x.partial_cmp(&y),
-            (&Literal::Integer(_, _, x), &Literal::BigInteger(_, _, ref y)) => {
-                x.partial_cmp(y)
-            },
-            (&Literal::Integer(_, _, x), &Literal::Float(_, _, y)) => (x as f64).partial_cmp(&y),
-            (&Literal::Integer(_, _, x), &Literal::Char(_, _, y)) => x.partial_cmp(&(y as i64)),
-            (&Literal::BigInteger(_, _, ref x), &Literal::BigInteger(_, _, ref y)) => x.partial_cmp(y),
-            (&Literal::BigInteger(_, _, ref x), &Literal::Integer(_, _, y)) => x.partial_cmp(&y),
-            (&Literal::BigInteger(_, _, ref x), &Literal::Float(_, _, y)) =>
-                bigint_to_double(x).partial_cmp(&y),
-            (&Literal::BigInteger(_, _, ref x), &Literal::Char(_, _, y)) => x.partial_cmp(&(y as i64)),
-            (&Literal::Float(_, _, x), &Literal::Float(_, _, y)) => x.partial_cmp(&y),
-            (&Literal::Float(_, _, x), &Literal::Integer(_, _, y)) => x.partial_cmp(&(y as f64)),
-            (&Literal::Float(_, _, x), &Literal::BigInteger(_, _, ref y)) =>
-                x.partial_cmp(&bigint_to_double(&y)),
-            (&Literal::Float(_, _, x), &Literal::Char(_, _, y)) => x.partial_cmp(&((y as i64) as f64)),
-            (&Literal::Char(_, _, x), &Literal::Char(_, _, y)) => x.partial_cmp(&y),
-            (&Literal::Char(_, _, x), &Literal::Integer(_, _, y)) => (x as i64).partial_cmp(&y),
-            (&Literal::Char(_, _, x), &Literal::BigInteger(_, _, ref y)) => (x as i64).partial_cmp(y),
-            (&Literal::Char(_, _, x), &Literal::Float(_, _, y)) => ((x as i64) as f64).partial_cmp(&y),
+            (Literal::String(_, ref lhs), Literal::String(_, ref rhs)) => lhs.partial_cmp(rhs),
+            (Literal::String(_, _), _) => Some(Ordering::Greater),
+            (_, Literal::String(_, _)) => Some(Ordering::Less),
+            (Literal::Atom(_, ref lhs), Literal::Atom(_, ref rhs)) => lhs.partial_cmp(rhs),
+            (Literal::Atom(_, _), _) => Some(Ordering::Greater),
+            (_, Literal::Atom(_, _)) => Some(Ordering::Less),
+            (Literal::Integer(_, _, x), Literal::Integer(_, _, y)) => x.partial_cmp(y),
+            (Literal::Integer(_, _, x), Literal::Float(_, _, y)) => x.partial_cmp(y),
+            (Literal::Integer(_, _, x), Literal::Char(_, _, y)) => x.partial_cmp(y),
+            (Literal::Float(_, _, x), Literal::Float(_, _, y)) => x.partial_cmp(y),
+            (Literal::Float(_, _, x), Literal::Integer(_, _, y)) => x.partial_cmp(y),
+            (Literal::Float(_, _, x), Literal::Char(_, _, y)) => x.partial_cmp(&((*y as i64) as f64)),
+            (Literal::Char(_, _, x), Literal::Char(_, _, y)) => x.partial_cmp(y),
+            (Literal::Char(_, _, x), Literal::Integer(_, _, y)) => x.partial_cmp(y),
+            (Literal::Char(_, _, x), Literal::Float(_, _, y)) => ((*x as i64) as f64).partial_cmp(y),
         }
     }
 }

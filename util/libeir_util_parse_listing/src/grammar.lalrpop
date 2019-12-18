@@ -1,0 +1,80 @@
+//-*- mode: rust -*-
+use libeir_ir::Integer;
+use libeir_intern::{Symbol, Ident};
+use libeir_diagnostics::{ByteIndex, ByteSpan};
+
+use super::super::token::{Token, Float as FloatToken};
+use super::super::ast::*;
+
+grammar();
+
+// Comma-delimited with zero or more elements
+CommaOpt<T>: Vec<T> = {
+    <vals:(<T> ",")*> <last: T?> => {
+        let mut vals = vals;
+        vals.extend(last);
+        vals
+    },
+};
+
+pub Item: Item = {
+    <l:@L> "{" <entries: CommaOpt<Item>> "}" <r:@R> => {
+        Item::Tuple(Tuple {
+            entries,
+            span: ByteSpan::new(l, r),
+        })
+    },
+    <l:@L> "[" <heads: CommaOpt<Item>> <tail: ("|" <Item>)?> "]" <r:@R> => {
+        Item::List(List {
+            heads,
+            tail: tail.map(Box::new),
+            span: ByteSpan::new(l, r),
+        })
+    },
+
+    <l:@L> <v: atom> <r:@R> => {
+        Item::Atom(Ident::new(v, ByteSpan::new(l, r)))
+    },
+    <l:@L> <v: integer> <r:@R> => {
+        Item::Int(Int {
+            integer: v,
+            span: ByteSpan::new(l, r),
+        })
+    },
+    <l:@L> <v: string> <r:@R> => {
+        Item::String(Ident::new(v, ByteSpan::new(l, r)))
+    },
+    <l:@L> <f: float> <r:@R> => {
+        Item::Float(Float {
+            float: f.0,
+            span: ByteSpan::new(l, r),
+        })
+    },
+};
+
+pub Root: Root = {
+    <(<Item> ".")*> => {
+        Root {
+            items: <>,
+        }
+    },
+};
+
+extern {
+    type Location = ByteIndex;
+    type Error = ();
+
+    enum Token {
+        atom => Token::Atom(<Symbol>),
+        integer => Token::Integer(<Integer>),
+        string => Token::String(<Symbol>),
+        float => Token::Float(<FloatToken>),
+        "," => Token::Comma,
+        "." => Token::Dot,
+        "|" => Token::Pipe,
+        "[" => Token::SquareOpen,
+        "]" => Token::SquareClose,
+        "{" => Token::CurlyOpen,
+        "}" => Token::CurlyClose,
+    }
+}

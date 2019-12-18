@@ -14,8 +14,9 @@ libeir_diagnostics = { path = "../libeir_diagnostics" }
 libeir_ir = { path = "../libeir_ir" }
 libeir_intern = { path = "../libeir_intern" }
 libeir_util_datastructures = { path = "../util/libeir_util_datastructures" }
-libeir_util_num = { path = "../util/libeir_util_num" }
+libeir_util_number = { path = "../util/libeir_util_number" }
 libeir_util_parse = { path = "../util/libeir_util_parse" }
+libeir_util_parse_listing = { path = "../util/libeir_util_parse_listing" }
 
 cranelift-entity = "0.30.0"
 
@@ -28,7 +29,7 @@ itertools = "0.8"
 lazy_static = "1.2"
 either = "1.5"
 
-num-bigint = { git = "https://github.com/hansihe/num-bigint.git" }
+bumpalo = { git = "https://github.com/hansihe/bumpalo.git", features = [ "collections_hash" ] }
 
 # [dependencies.rug]
 # version = "1.2"

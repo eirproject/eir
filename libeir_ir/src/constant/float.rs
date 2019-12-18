@@ -1,4 +1,4 @@
-use num_traits::Float;
+use libeir_util_number::traits::Float;
 
 // Copied from https://github.com/reem/rust-ordered-float
 

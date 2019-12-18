@@ -1,12 +1,21 @@
 use std::fmt::{ Display, Formatter, Result as FmtResult };
 use std::hash::{ Hash, Hasher };
 
-use num_bigint::BigInt;
-use num_traits::{ NumCast, cast };
+use libeir_util_number::{BigInt, NumCast, cast};
 
 use libeir_intern::Symbol;
 
 use super::float::raw_double_bits;
+use super::Integer;
+
+impl From<Integer> for AtomicTerm {
+    fn from(int: Integer) -> AtomicTerm {
+        match int {
+            Integer::Big(n) => AtomicTerm::BigInt(BigIntTerm(n)),
+            Integer::Small(n) => AtomicTerm::Int(IntTerm(n)),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BigIntTerm(pub BigInt);

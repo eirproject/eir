@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use lazy_static::lazy_static;
 
 use libeir_diagnostics::ByteSpan;
+use libeir_util_number::Integer;
 
 use super::{BinaryOp, UnaryOp};
 use super::{Ident, Name, Symbol};
@@ -103,7 +104,7 @@ pub enum Type {
     Tuple(ByteSpan, Vec<Type>),
     Record(ByteSpan, Ident, Vec<Type>),
     Binary(ByteSpan, Box<Type>, Box<Type>),
-    Integer(ByteSpan, i64),
+    Integer(ByteSpan, Integer),
     Char(ByteSpan, char),
     AnyFun(ByteSpan),
     Fun {
@@ -167,45 +168,45 @@ impl PartialEq for Type {
 
         match (self, other) {
             (
-                &Type::Annotated {
+                Type::Annotated {
                     name: ref x1,
                     ty: ref x2,
                     ..
                 },
-                &Type::Annotated {
+                Type::Annotated {
                     name: ref y1,
                     ty: ref y2,
                     ..
                 },
             ) => (x1 == y1) && (x2 == y2),
             (
-                &Type::Union {
+                Type::Union {
                     types: ref types1, ..
                 },
-                &Type::Union {
+                Type::Union {
                     types: ref types2, ..
                 },
             ) => types1 == types2,
             (
-                &Type::Range {
+                Type::Range {
                     start: ref x1,
                     end: ref x2,
                     ..
                 },
-                &Type::Range {
+                Type::Range {
                     start: ref y1,
                     end: ref y2,
                     ..
                 },
             ) => (x1 == y1) && (x2 == y2),
             (
-                &Type::BinaryOp {
+                Type::BinaryOp {
                     lhs: ref x1,
                     op: ref x2,
                     rhs: ref x3,
                     ..
                 },
-                &Type::BinaryOp {
+                Type::BinaryOp {
                     lhs: ref y1,
                     op: ref y2,
                     rhs: ref y3,
@@ -213,71 +214,71 @@ impl PartialEq for Type {
                 },
             ) => (x1 == y1) && (x2 == y2) && (x3 == y3),
             (
-                &Type::UnaryOp {
+                Type::UnaryOp {
                     op: ref x1,
                     rhs: ref x2,
                     ..
                 },
-                &Type::UnaryOp {
+                Type::UnaryOp {
                     op: ref y1,
                     rhs: ref y2,
                     ..
                 },
             ) => (x1 == y1) && (x2 == y2),
             (
-                &Type::Generic {
+                Type::Generic {
                     fun: ref x1,
                     params: ref x2,
                     ..
                 },
-                &Type::Generic {
+                Type::Generic {
                     fun: ref y1,
                     params: ref y2,
                     ..
                 },
             ) => (x1 == y1) && (x2 == y2),
             (
-                &Type::Remote {
+                Type::Remote {
                     module: ref x1,
                     fun: ref x2,
                     args: ref x3,
                     ..
                 },
-                &Type::Remote {
+                Type::Remote {
                     module: ref y1,
                     fun: ref y2,
                     args: ref y3,
                     ..
                 },
             ) => (x1 == y1) && (x2 == y2) && (x3 == y3),
-            (&Type::Nil(_), &Type::Nil(_)) => true,
-            (&Type::List(_, ref x), &Type::List(_, ref y)) => x == y,
-            (&Type::NonEmptyList(_, ref x), &Type::List(_, ref y)) => x == y,
-            (&Type::Map(_, ref x), &Type::Map(_, ref y)) => x == y,
-            (&Type::Tuple(_, ref x), &Type::Tuple(_, ref y)) => x == y,
-            (&Type::Record(_, ref x1, ref x2), &Type::Record(_, ref y1, ref y2)) => {
+            (Type::Nil(_), Type::Nil(_)) => true,
+            (Type::List(_, ref x), Type::List(_, ref y)) => x == y,
+            (Type::NonEmptyList(_, ref x), Type::List(_, ref y)) => x == y,
+            (Type::Map(_, ref x), Type::Map(_, ref y)) => x == y,
+            (Type::Tuple(_, ref x), Type::Tuple(_, ref y)) => x == y,
+            (Type::Record(_, ref x1, ref x2), Type::Record(_, ref y1, ref y2)) => {
                 (x1 == y1) && (x2 == y2)
             }
-            (&Type::Binary(_, ref m1, ref n1), &Type::Binary(_, ref m2, ref n2)) => (m1 == m2) && (n1 == n2),
-            (&Type::Integer(_, x), &Type::Integer(_, y)) => x == y,
-            (&Type::Char(_, x), &Type::Char(_, y)) => x == y,
-            (&Type::AnyFun(_), &Type::AnyFun(_)) => true,
+            (Type::Binary(_, ref m1, ref n1), Type::Binary(_, ref m2, ref n2)) => (m1 == m2) && (n1 == n2),
+            (Type::Integer(_, x), Type::Integer(_, y)) => x == y,
+            (Type::Char(_, x), Type::Char(_, y)) => x == y,
+            (Type::AnyFun(_), Type::AnyFun(_)) => true,
             (
-                &Type::Fun {
+                Type::Fun {
                     params: ref x1,
                     ret: ref x2,
                     ..
                 },
-                &Type::Fun {
+                Type::Fun {
                     params: ref y1,
                     ret: ref y2,
                     ..
                 },
             ) => (x1 == y1) && (x2 == y2),
-            (&Type::KeyValuePair(_, ref x1, ref x2), &Type::KeyValuePair(_, ref y1, ref y2)) => {
+            (Type::KeyValuePair(_, ref x1, ref x2), Type::KeyValuePair(_, ref y1, ref y2)) => {
                 (x1 == y1) && (x2 == y2)
             }
-            (&Type::Field(_, ref x1, ref x2), &Type::Field(_, ref y1, ref y2)) => {
+            (Type::Field(_, ref x1, ref x2), Type::Field(_, ref y1, ref y2)) => {
                 (x1 == y1) && (x2 == y2)
             }
             _ => false,

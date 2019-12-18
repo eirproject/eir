@@ -9,8 +9,7 @@ use cranelift_entity::{ PrimaryMap, ListPool, EntityList, entity_impl };
 mod atomic;
 pub use atomic::*;
 mod float;
-mod integer;
-pub use integer::*;
+pub use libeir_util_number::{Integer, ToPrimitive, FromPrimitive};
 
 /// These entities has the property that if they are equal, they
 /// represent the same value.

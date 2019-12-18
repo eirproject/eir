@@ -1,8 +1,7 @@
 //-*- mode: rust -*-
 use libeir_diagnostics::{ByteSpan, ByteIndex, Diagnostic, Label, DUMMY_SPAN};
 
-use num_bigint::BigInt;
-//use num_bigint::BigInt as Integer;
+use libeir_util_number::{Integer, ToPrimitive};
 
 use crate::lexer::{Token, DelayedSubstitution, Symbol, Ident};
 use crate::preprocessor::PreprocessorError;
@@ -419,9 +418,9 @@ TypeName: Name = {
 
 BinaryType: Type = {
     <l:@L> "<<" ">>" <r:@R>
-        => Type::Binary(span!(l, r), Box::new(Type::Integer(DUMMY_SPAN, 0)), Box::new(Type::Integer(DUMMY_SPAN, 0))),
+        => Type::Binary(span!(l, r), Box::new(Type::Integer(DUMMY_SPAN, 0.into())), Box::new(Type::Integer(DUMMY_SPAN, 0.into()))),
     <l:@L> "<<" ident ":" <m:TopType> ">>" <r:@R>
-        => Type::Binary(span!(l, r), Box::new(m), Box::new(Type::Integer(DUMMY_SPAN, 0))),
+        => Type::Binary(span!(l, r), Box::new(m), Box::new(Type::Integer(DUMMY_SPAN, 0.into()))),
     <l:@L> "<<" ident ":" <m:TopType> "," ident ":" <n:TopType> ">>" <r:@R>
         => Type::Binary(span!(l, r), Box::new(m), Box::new(n)),
 };
@@ -716,7 +715,7 @@ TryClause: TryClause = {
 
 Clause: Clause = {
     <l:@L> <pattern:Pattern> <guard:Guards?> "->" <body:Comma<Expr>> <r:@R>
-        => Clause { span: span!(l, r), id: nid.next(), pattern, guard, body }
+        => Clause { span: span!(l, r), id: nid.next(), pattern, guard, body } 
 };
 
 Apply: Expr = {
@@ -772,7 +771,7 @@ BitTypeList: Vec<BitType> = {
 
 BitType: BitType = {
     <l:@L> <ty:atom> ":" <i:int> <r:@R>
-        => BitType::Sized(span!(l, r), nid.next(), ty, i),
+        => BitType::Sized(span!(l, r), nid.next(), ty, i.to_i64().unwrap()),
     <l:@L> <ty:atom> <r:@R>
         => BitType::Name(span!(l, r), nid.next(), ty)
 };
@@ -940,18 +939,16 @@ Ident: Ident = <l:@L> <i:ident> <r:@R>
 Integer: Literal = {
     <l:@L> <i:int> <r:@R>
         => Literal::Integer(span!(l, r), nid.next(), i),
-    <l:@L> <i:bigint> <r:@R>
-        => Literal::BigInteger(span!(l, r), nid.next(), i)
 };
 
 #[inline]
 arity_or_var: Arity = {
-    <i:int> => Arity::Int(i as usize),
+    <i:int> => Arity::Int(i.to_usize().unwrap()),
     <i:Ident> => Arity::Var(i),
 };
 
 #[inline]
-arity: usize = <i:int> => i as usize;
+arity: usize = <i:int> => i.to_usize().unwrap();
 
 #[inline]
 ident_or_integer: Expr = {
@@ -1024,13 +1021,9 @@ CompOp: BinaryOp = {
     "=/=" => BinaryOp::StrictNotEqual
 };
 
-BaseInt: i64 = {
+BaseInt: Integer = {
     "-" <i:int> => -i,
     <i:int> => i,
-};
-BaseBigInt: BigInt = {
-    "-" <i:bigint> => -i,
-    <i:bigint> => i,
 };
 Float: f64 = {
     "-" <i:float> => -i,
@@ -1046,8 +1039,7 @@ extern {
         "COMMENT" => Token::Comment,
         // Literals
         char => Token::Char(<char>),
-        int => Token::Integer(<i64>),
-        bigint => Token::BigInteger(<BigInt>),
+        int => Token::Integer(<Integer>),
         float => Token::Float(<f64>),
         "atom" => Token::Atom(<Symbol>),
         string => Token::String(<Symbol>),

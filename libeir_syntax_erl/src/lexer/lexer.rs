@@ -1,11 +1,10 @@
 use std::error::Error;
 use std::str::FromStr;
 
-use num_bigint::BigInt;
-
 use libeir_diagnostics::{ByteIndex, ByteOffset, ByteSpan};
 
 use libeir_util_parse::{Source, Scanner};
+use libeir_util_number::{Integer, ToPrimitive};
 
 use super::errors::LexicalError;
 use super::token::*;
@@ -259,17 +258,13 @@ where
                 if self.read() == '\\' {
                     return match self.lex_escape_sequence() {
                         Ok(Token::Char(c)) => Token::Char(c),
-                        Ok(Token::Integer(i)) => match std::char::from_u32(i as u32) {
+                        Ok(Token::Integer(i)) => match std::char::from_u32(i.to_u32().unwrap()) {
                             Some(c) => Token::Char(c),
                             None => Token::Error(LexicalError::InvalidEscape {
                                 span: self.span(),
                                 reason: format!("the integer value '{}' is not a valid char", i),
                             }),
                         },
-                        Ok(Token::BigInteger(i)) => Token::Error(LexicalError::InvalidEscape {
-                            span: self.span(),
-                            reason: format!("the integer value '{}' is not a valid char", i),
-                        }),
                         Ok(_) => panic!("internal error: unhandled escape sequence in lexer"),
                         Err(e) => Token::Error(e),
                     };
@@ -766,11 +761,8 @@ where
 // This function panics if the literal is unparseable due to being invalid for the given radix,
 // or containing non-ASCII digits.
 fn to_integer_literal(literal: &str, radix: u32) -> Token {
-    if let Ok(i) = i64::from_str_radix(literal, radix) {
-        return Token::Integer(i);
-    }
-    let bi = BigInt::parse_bytes(literal.as_bytes(), radix).unwrap();
-    Token::BigInteger(bi)
+    let int = Integer::from_string_radix(literal, radix).unwrap();
+    Token::Integer(int)
 }
 
 #[cfg(test)]
@@ -879,31 +871,31 @@ mod test {
     #[test]
     fn lex_integer_literal() {
         // Decimal
-        assert_lex!("1", vec![Ok((1, Token::Integer(1), 2))]);
-        assert_lex!("9624", vec![Ok((1, Token::Integer(9624), 5))]);
-        assert_lex!("-1", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(1), 3))]);
-        assert_lex!("-9624", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(9624), 6))]);
+        assert_lex!("1", vec![Ok((1, Token::Integer(1.into()), 2))]);
+        assert_lex!("9624", vec![Ok((1, Token::Integer(9624.into()), 5))]);
+        assert_lex!("-1", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(1.into()), 3))]);
+        assert_lex!("-9624", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(9624.into()), 6))]);
 
         // Hexadecimal
-        assert_lex!(r#"\x00"#, vec![Ok((1, Token::Integer(0x0), 5))]);
-        assert_lex!(r#"\x{1234FF}"#, vec![Ok((1, Token::Integer(0x1234FF), 11))]);
-        assert_lex!("-16#0", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(0x0), 6))]);
-        assert_lex!("-16#1234FF", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(0x1234FF), 11))]);
+        assert_lex!(r#"\x00"#, vec![Ok((1, Token::Integer(0x0.into()), 5))]);
+        assert_lex!(r#"\x{1234FF}"#, vec![Ok((1, Token::Integer(0x1234FF.into()), 11))]);
+        assert_lex!("-16#0", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(0x0.into()), 6))]);
+        assert_lex!("-16#1234FF", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(0x1234FF.into()), 11))]);
 
         // Octal
-        assert_lex!(r#"\00"#, vec![Ok((1, Token::Integer(0), 4))]);
-        assert_lex!(r#"\0624"#, vec![Ok((1, Token::Integer(0o624), 6))]);
+        assert_lex!(r#"\00"#, vec![Ok((1, Token::Integer(0.into()), 4))]);
+        assert_lex!(r#"\0624"#, vec![Ok((1, Token::Integer(0o624.into()), 6))]);
 
         // Octal integer literal followed by non-octal digits.
         assert_lex!(
             r#"\008"#,
-            vec![Ok((1, Token::Integer(0), 4)), Ok((4, Token::Integer(8), 5))]
+            vec![Ok((1, Token::Integer(0.into()), 4)), Ok((4, Token::Integer(8.into()), 5))]
         );
         assert_lex!(
             r#"\01238"#,
             vec![
-                Ok((1, Token::Integer(0o123), 6)),
-                Ok((6, Token::Integer(8), 7))
+                Ok((1, Token::Integer(0o123.into()), 6)),
+                Ok((6, Token::Integer(8.into()), 7))
             ]
         );
     }

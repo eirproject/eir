@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeSet, VecDeque};
+
+use bumpalo::{Bump, collections::Vec as BVec};
+use super::BFnvHashMap;
 
 use libeir_ir::{Block, Value, OpKind, ValueKind, CallKind};
 use libeir_ir::{Function, LiveBlockGraph, LiveValues};
@@ -10,33 +13,33 @@ mod unpack_value_list;
 type BlockEdge = (Block, Block);
 
 #[derive(Debug)]
-pub struct GraphAnalysis {
+pub struct GraphAnalysis<'bump> {
     pub entry: Block,
 
-    pub static_branches: BTreeMap<Block, Value>,
-    pub static_branches_blocks: BTreeMap<Block, Block>,
+    pub static_branches: BFnvHashMap<'bump, Block, Value>,
+    pub static_branches_blocks: BFnvHashMap<'bump, Block, Block>,
 
-    pub chains: BTreeMap<Block, Chain>,
+    pub chains: BFnvHashMap<'bump, Block, Chain<'bump>>,
 
-    pub phis: BTreeMap<Value, CondValue>,
-    pub static_renames: BTreeMap<Value, Value>,
+    pub phis: BFnvHashMap<'bump, Value, CondValue<'bump>>,
+    pub static_renames: BFnvHashMap<'bump, Value, Value>,
 }
 
 #[derive(Debug)]
-pub struct Chain {
-    pub entry_edges: BTreeSet<Block>,
-    pub edges: BTreeSet<BlockEdge>,
-    pub blocks: BTreeSet<Block>,
+pub struct Chain<'bump> {
+    pub entry_edges: BFnvHashMap<'bump, Block, ()>,
+    pub edges: BFnvHashMap<'bump, BlockEdge, ()>,
+    pub blocks: BFnvHashMap<'bump, Block, ()>,
 }
 
-impl GraphAnalysis {
+impl<'bump> GraphAnalysis<'bump> {
 
     fn is_value_relevant(&self, chain_target: Block, value: Value) -> bool {
         if let Some(cond) = self.phis.get(&value) {
             let chain = &self.chains[&chain_target];
 
             // Check if it's instead relevant to another chain
-            if !chain.blocks.contains(&cond.block) && cond.block != chain_target {
+            if !chain.blocks.contains_key(&cond.block) && cond.block != chain_target {
                 false
             } else {
                 true
@@ -49,28 +52,28 @@ impl GraphAnalysis {
 }
 
 #[derive(Debug)]
-pub struct ChainAnalysis {
+pub struct ChainAnalysis<'bump> {
     pub target: Block,
 
-    pub blocks: BTreeSet<Block>,
-    pub edges: BTreeSet<BlockEdge>,
-    pub entry_edges: BTreeSet<Block>,
+    pub blocks: BFnvHashMap<'bump, Block, ()>,
+    pub edges: BFnvHashMap<'bump, BlockEdge, ()>,
+    pub entry_edges: BFnvHashMap<'bump, Block, ()>,
 
     //pub orig_args: BTreeSet<Value>,
-    pub args: BTreeSet<Value>,
+    pub args: BFnvHashMap<'bump, Value, ()>,
 
-    pub cond_map: BTreeMap<Value, CondValue>,
-    pub static_map: BTreeMap<Value, Value>,
+    pub cond_map: BFnvHashMap<'bump, Value, CondValue<'bump>>,
+    pub static_map: BFnvHashMap<'bump, Value, Value>,
 
     pub renames_required: bool,
 }
 
 #[derive(Debug)]
-pub struct CondValue {
+pub struct CondValue<'bump> {
     pub value: Value,
     pub value_num: Option<usize>,
     pub block: Block,
-    pub sources: BTreeMap<Block, PhiSource>,
+    pub sources: BFnvHashMap<'bump, Block, PhiSource>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -111,33 +114,35 @@ impl PhiSource {
 }
 
 #[derive(Debug)]
-pub struct EntryEdgeAnalysis {
+pub struct EntryEdgeAnalysis<'bump> {
     //pub caller: Block,
     pub callee: Block,
 
     // The mappings that are specific for this entry edge.
     // Should not be inserted into the global map, the args should be
     // `map_value`d through this map.
-    pub mappings: BTreeMap<Value, PhiSource>,
+    pub mappings: BFnvHashMap<'bump, Value, PhiSource>,
 
     // The arguments that should be used when calling the target block.
     // These need to be called with `map_value` in case the value is a primop.
-    pub args: Vec<PhiSource>,
+    pub args: BVec<'bump, PhiSource>,
 
     //pub looping_vars: BTreeSet<Value>,
 }
 
-struct AnalysisContext<'a> {
+struct AnalysisContext<'bump, 'a> {
+    bump: &'bump Bump,
+
     pub fun: &'a Function,
     pub graph: &'a LiveBlockGraph<'a>,
 
     current: Option<Block>,
 
-    static_renames: &'a mut BTreeMap<Value, Value>,
-    static_branches: &'a mut BTreeMap<Block, Value>,
-    phis: &'a mut BTreeMap<Value, CondValue>,
+    static_renames: &'a mut BFnvHashMap<'bump, Value, Value>,
+    static_branches: &'a mut BFnvHashMap<'bump, Block, Value>,
+    phis: &'a mut BFnvHashMap<'bump, Value, CondValue<'bump>>,
 }
-impl<'a> AnalysisContext<'a> {
+impl<'bump, 'a> AnalysisContext<'bump, 'a> {
 
     fn init_block(&mut self, block: Block) {
         self.current = Some(block);
@@ -185,7 +190,7 @@ impl<'a> AnalysisContext<'a> {
                 block: callee,
                 value: callee_arg,
                 value_num: Some(callee_arg_num),
-                sources: BTreeMap::new(),
+                sources: BFnvHashMap::with_hasher_in(self.bump, Default::default()),
             };
             self.phis.insert(callee_arg, cond);
         }
@@ -196,16 +201,17 @@ impl<'a> AnalysisContext<'a> {
 
 }
 
-pub fn analyze_graph(
-    fun: &Function,
-    graph: &LiveBlockGraph,
-) -> GraphAnalysis
+pub fn analyze_graph<'bump, 'fun>(
+    bump: &'bump Bump,
+    fun: &'fun Function,
+    graph: &'fun LiveBlockGraph,
+) -> GraphAnalysis<'bump>
 {
     let entry = fun.block_entry();
 
-    let mut static_branches = BTreeMap::new();
-    let mut phis = BTreeMap::new();
-    let mut static_renames = BTreeMap::new();
+    let mut static_branches = BFnvHashMap::with_hasher_in(bump, Default::default());
+    let mut phis = BFnvHashMap::with_hasher_in(bump, Default::default());
+    let mut static_renames = BFnvHashMap::with_hasher_in(bump, Default::default());
 
     // Find all blocks we care about, these are the ones we iterate over
     let mut relevant_blocks = BTreeSet::new();
@@ -225,6 +231,8 @@ pub fn analyze_graph(
     }
 
     let mut ctx = AnalysisContext {
+        bump,
+
         fun,
         graph,
 
@@ -283,7 +291,8 @@ pub fn analyze_graph(
     }
 
     // Generate `static_branches_blocks`
-    let mut static_branches_blocks = BTreeMap::new();
+    let mut static_branches_blocks = BFnvHashMap::with_hasher_in(
+        bump, Default::default());
     for (from, to) in static_branches.iter() {
         if let Some(to_block) = fun.value_block(*to) {
             static_branches_blocks.insert(*from, to_block);
@@ -292,7 +301,8 @@ pub fn analyze_graph(
 
     // Group chains
     // TODO: Handle cycles
-    let mut chains = BTreeMap::new();
+    let mut chains = BFnvHashMap::with_hasher_in(
+        bump, Default::default());
     for (from, to) in static_branches.iter() {
         let mut next_target_value = *to;
         let mut target_block = *from;
@@ -322,19 +332,19 @@ pub fn analyze_graph(
             // If the chains map doesn't contain the target, seed it
             if !chains.contains_key(&target_block) {
                 let mut chain = Chain {
-                    edges: BTreeSet::new(),
-                    blocks: BTreeSet::new(),
-                    entry_edges: BTreeSet::new(),
+                    edges: BFnvHashMap::with_hasher_in(bump, Default::default()),
+                    blocks: BFnvHashMap::with_hasher_in(bump, Default::default()),
+                    entry_edges: BFnvHashMap::with_hasher_in(bump, Default::default()),
                 };
-                chain.blocks.insert(target_block);
+                chain.blocks.insert(target_block, ());
                 chains.insert(target_block, chain);
             }
 
             // Update the current chain with this edge
             let chain = chains.get_mut(&target_block).unwrap();
-            chain.blocks.insert(*from);
+            chain.blocks.insert(*from, ());
             if let Some(to_block) = to_has_block {
-                chain.edges.insert((*from, to_block));
+                chain.edges.insert((*from, to_block), ());
             }
 
             break;
@@ -343,16 +353,16 @@ pub fn analyze_graph(
 
     // Find incoming edges into the chain
     for chain in chains.values_mut() {
-        for block in chain.blocks.iter() {
+        for block in chain.blocks.keys() {
             if *block == entry {
-                chain.entry_edges.insert(*block);
+                chain.entry_edges.insert(*block, ());
             }
             for incoming in graph.incoming(*block) {
                 let edge = (incoming, *block);
-                if chain.edges.contains(&edge) {
+                if chain.edges.contains_key(&edge) {
                     continue;
                 }
-                chain.entry_edges.insert(*block);
+                chain.entry_edges.insert(*block, ());
             }
         }
     }
@@ -367,20 +377,28 @@ pub fn analyze_graph(
     }
 }
 
-fn expand_phi(phi_entry: Value, target: Block, graph: &LiveBlockGraph, analysis: &GraphAnalysis) -> BTreeMap<Block, PhiSource> {
+fn expand_phi<'bump>(
+    bump: &'bump Bump,
+    phi_entry: Value,
+    target: Block,
+    graph: &LiveBlockGraph,
+    analysis: &GraphAnalysis
+) -> BFnvHashMap<'bump, Block, PhiSource>
+{
 
     // The root phis form the initial set we want to walk down from
     let mut to_walk = Vec::new();
     to_walk.push(phi_entry);
 
-    let mut added = BTreeSet::new();
-    let mut entries: BTreeMap<Block, PhiSource> = BTreeMap::new();
+    let mut added = BFnvHashMap::with_hasher_in(bump, Default::default());
+    let mut entries: BFnvHashMap<Block, PhiSource> =
+        BFnvHashMap::with_hasher_in(bump, Default::default());
 
     // While we have values to walk, get the next one.
     // Then add the mappings to the entries and walk downwards.
     while let Some(v) = to_walk.pop() {
-        if added.contains(&v) { continue; }
-        added.insert(v);
+        if added.contains_key(&v) { continue; }
+        added.insert(v, ());
 
         if let Some(cond_value) = analysis.phis.get(&v) {
             for (_, v) in cond_value.sources.iter() {
@@ -398,13 +416,14 @@ fn expand_phi(phi_entry: Value, target: Block, graph: &LiveBlockGraph, analysis:
     entries
 }
 
-pub fn analyze_chain(
+pub fn analyze_chain<'bump>(
+    bump: &'bump Bump,
     target: Block,
     fun: &Function,
     graph: &LiveBlockGraph,
     live: &LiveValues,
-    analysis: &GraphAnalysis,
-) -> ChainAnalysis {
+    analysis: &'bump GraphAnalysis,
+) -> ChainAnalysis<'bump> {
     let chain = &analysis.chains[&target];
 
     // Get the live values in the body of the block.
@@ -414,14 +433,15 @@ pub fn analyze_chain(
 
     // These are value mappings for the chain that don't depend on any control
     // flow in the chain.
-    let mut static_map: BTreeMap<Value, Value> = BTreeMap::new();
+    let mut static_map: BFnvHashMap<Value, Value> =
+        BFnvHashMap::with_hasher_in(bump, Default::default());
 
     // These are value mappings that do depend on control flow in the chain.
     // The values in here refer to a phi node in `self.phis`.
-    let mut cond_map = BTreeMap::new();
+    let mut cond_map = BFnvHashMap::with_hasher_in(bump, Default::default());
 
     // The arguments that need to placed to the new target block.
-    let mut args = BTreeSet::new();
+    let mut args = BFnvHashMap::with_hasher_in(bump, Default::default());
 
     // Using the live values in the target block as a seed, walk through
     // and combine phis. All values referenced in the target that have
@@ -467,7 +487,7 @@ pub fn analyze_chain(
         if !analysis.is_value_relevant(target, read) { continue; }
 
         // Expand phi chains
-        let entries = expand_phi(read, target, graph, analysis);
+        let entries = expand_phi(bump, read, target, graph, analysis);
 
         let first_value = entries.iter().next().unwrap().1;
         if entries.iter().all(|(_, v)| *v == *first_value) && first_value.is_scope() {
@@ -505,7 +525,7 @@ pub fn analyze_chain(
 
             if as_arg {
                 // The value needs to be added as an argument
-                args.insert(read);
+                args.insert(read, ());
             }
         }
 
@@ -554,60 +574,72 @@ pub fn analyze_chain(
     }
 }
 
-pub fn analyze_entry_edge(
+pub fn analyze_entry_edge<'bump>(
+    bump: &'bump Bump,
     analysis: &GraphAnalysis,
     chain_analysis: &ChainAnalysis,
     callee: Block,
-) -> EntryEdgeAnalysis {
+) -> EntryEdgeAnalysis<'bump> {
 
-    let o_map: BTreeMap<Value, PhiSource> = chain_analysis.cond_map.values()
-        .filter_map(|cond_value| {
-            let mut curr = callee;
-            assert!(!chain_analysis.static_map.contains_key(&cond_value.value));
+    let mut o_map: BFnvHashMap<Value, PhiSource> =
+        BFnvHashMap::with_hasher_in(bump, Default::default());
+    o_map.extend(
+        chain_analysis.cond_map.values()
+            .filter_map(|cond_value| {
+                let mut curr = callee;
+                assert!(!chain_analysis.static_map.contains_key(&cond_value.value));
 
-            loop {
-                if let Some(source) = cond_value.sources.get(&curr) {
-                    break Some((cond_value.value, *source));
+                loop {
+                    if let Some(source) = cond_value.sources.get(&curr) {
+                        break Some((cond_value.value, *source));
+                    }
+
+                    if let Some(next) = analysis.static_branches_blocks.get(&curr) {
+                        // Follow the chain of static branches
+                        curr = *next;
+                    } else {
+                        // If we reached the end of the chain without finding the phi,
+                        // then this is only relevant for another subbranch.
+                        break None;
+                    }
                 }
-
-                if let Some(next) = analysis.static_branches_blocks.get(&curr) {
-                    // Follow the chain of static branches
-                    curr = *next;
-                } else {
-                    // If we reached the end of the chain without finding the phi,
-                    // then this is only relevant for another subbranch.
-                    break None;
-                }
-            }
-        }).collect();
+            })
+    );
 
     // Specialize each of the phis for the current entry edge
-    let map: BTreeMap<Value, PhiSource> = chain_analysis.cond_map.values()
-        .filter_map(|cond_value| {
-            let mut curr = callee;
-            assert!(!chain_analysis.static_map.contains_key(&cond_value.value));
+    let mut map: BFnvHashMap<Value, PhiSource> =
+        BFnvHashMap::with_hasher_in(bump, Default::default());
+    map.extend(
+        chain_analysis.cond_map.values()
+            .filter_map(|cond_value| {
+                let mut curr = callee;
+                assert!(!chain_analysis.static_map.contains_key(&cond_value.value));
 
-            loop {
-                if let Some(source) = cond_value.sources.get(&curr) {
-                    break Some((cond_value.value, *source));
-                }
+                loop {
+                    if let Some(source) = cond_value.sources.get(&curr) {
+                        break Some((cond_value.value, *source));
+                    }
 
-                if let Some(next) = analysis.static_branches_blocks.get(&curr) {
-                    // Follow the chain of static branches
-                    curr = *next;
-                } else {
-                    // If we reached the end of the chain without finding the phi,
-                    // then this is only relevant for another subbranch.
-                    break None;
+                    if let Some(next) = analysis.static_branches_blocks.get(&curr) {
+                        // Follow the chain of static branches
+                        curr = *next;
+                    } else {
+                        // If we reached the end of the chain without finding the phi,
+                        // then this is only relevant for another subbranch.
+                        break None;
+                    }
                 }
-            }
-        }).collect();
+            })
+    );
 
     // Produce the argument list the target block should be called with.
-    let calling_args: Vec<_> = chain_analysis.args.iter()
-        .map(|v| {
-            o_map.get(v).cloned().unwrap_or(PhiSource::Scope(*v))
-        }).collect();
+    let mut calling_args = BVec::new_in(bump);
+    calling_args.extend(
+        chain_analysis.args.keys()
+            .map(|v| {
+                o_map.get(v).cloned().unwrap_or(PhiSource::Scope(*v))
+            })
+    );
 
     EntryEdgeAnalysis {
         callee,

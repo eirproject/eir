@@ -14,7 +14,7 @@ use libeir_ir::{
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
 
-use num_bigint::BigInt;
+use libeir_util_number::bigint::BigInt;
 
 use crate::lower::{ lower_single, LowerCtx, LowerError };
 use crate::parser::ast::{ Expr, Var, Literal, BinaryExpr, BinaryOp, Binary,
@@ -83,8 +83,7 @@ fn eval_const_expr(
     match expr {
         Expr::Literal(lit) => {
             match lit {
-                Literal::Integer(_span, _id, int) =>
-                    AtomicTerm::Int(IntTerm(*int)),
+                Literal::Integer(_span, _id, int) => int.clone().into(),
                 val => unimplemented!("{:?}", val),
             }
         }
@@ -151,9 +150,7 @@ fn pattern_to_tree_node(
                 Literal::Char(_span, _id, c) =>
                     b.cons_mut().from(*c).into(),
                 Literal::Integer(_span, _id, num) =>
-                    b.cons_mut().from(*num).into(),
-                Literal::BigInteger(_span, _id, int) =>
-                    b.cons_mut().from(int.clone()).into(),
+                    b.cons_mut().from(num.clone()).into(),
                 Literal::Float(_span, _id, num) =>
                     b.cons_mut().from(*num).into(),
                 Literal::String(_id, ident) => {

@@ -1,28 +1,31 @@
 use std::collections::HashMap;
 
+use bumpalo::{ Bump, collections::Vec as BVec };
+
 use libeir_ir::FunctionBuilder;
 use libeir_ir::{ Block, Value, BasicType };
 use libeir_ir::pattern::{ PatternClause, PatternNode };
 
 use libeir_util_pattern_compiler::{ PatternCfg, CfgNodeKind, EdgeRef, NodeIndex };
 
+use super::BFnvHashMap;
 use super::erlang_pattern_provider::{
     ErlangPatternProvider, NodeKind, Var, ValueOrConst,
 };
 
-pub struct DecisionTreeDestinations {
+pub struct DecisionTreeDestinations<'bump> {
     pub fail: Value,
-    pub guards: Vec<Value>,
-    pub bodies: Vec<Value>,
+    pub guards: BVec<'bump, Value>,
+    pub bodies: BVec<'bump, Value>,
 }
 
-struct LowerCtx<'a, 'b> {
+struct LowerCtx<'a, 'b, 'bump> {
     provider: &'a ErlangPatternProvider<'b>,
-    destinations: &'a DecisionTreeDestinations,
-    mapping: HashMap<Var, Value>,
+    destinations: &'a DecisionTreeDestinations<'bump>,
+    mapping: BFnvHashMap<'bump, Var, Value>,
 }
 
-impl<'a, 'b> LowerCtx<'a, 'b> {
+impl<'a, 'b, 'bump> LowerCtx<'a, 'b, 'bump> {
 
     fn node_to_value(&self, node: PatternNode, idx: NodeIndex,
                      cfg: &PatternCfg<ErlangPatternProvider>) -> Value
@@ -57,6 +60,7 @@ impl<'a, 'b> LowerCtx<'a, 'b> {
 }
 
 pub fn lower_cfg(
+    bump: &Bump,
     b: &mut FunctionBuilder,
     provider: &ErlangPatternProvider,
     cfg: &PatternCfg<ErlangPatternProvider>,
@@ -70,7 +74,7 @@ pub fn lower_cfg(
 
     let mut ctx = LowerCtx {
         provider,
-        mapping: HashMap::new(),
+        mapping: BFnvHashMap::with_hasher_in(&bump, Default::default()),
         destinations,
     };
 
@@ -122,6 +126,7 @@ pub fn lower_cfg(
         }
 
         lower_cfg_rec(
+            bump,
             b,
             &mut ctx,
             cfg,
@@ -141,6 +146,7 @@ pub fn lower_cfg(
 }
 
 fn lower_cfg_rec(
+    bump: &Bump,
     b: &mut FunctionBuilder,
     ctx: &mut LowerCtx,
     cfg: &PatternCfg<ErlangPatternProvider>,
@@ -179,7 +185,7 @@ fn lower_cfg_rec(
                         ctx.bind(weight.variable_binds[1], args[1]);
 
                         lower_cfg_rec(
-                            b, ctx, cfg, clauses,
+                            bump, b, ctx, cfg, clauses,
                             ok, outgoing.target(),
                         );
                     }
@@ -201,7 +207,7 @@ fn lower_cfg_rec(
 
                         // Ok
                         lower_cfg_rec(
-                            b, ctx, cfg, clauses,
+                            bump, b, ctx, cfg, clauses,
                             ok, outgoing.target(),
                         );
                     }
@@ -220,7 +226,7 @@ fn lower_cfg_rec(
 
                         // Ok
                         lower_cfg_rec(
-                            b, ctx, cfg, clauses,
+                            bump, b, ctx, cfg, clauses,
                             ok, outgoing.target(),
                         );
                     }
@@ -232,7 +238,7 @@ fn lower_cfg_rec(
                         }
 
                         lower_cfg_rec(
-                            b, ctx, cfg, clauses,
+                            bump, b, ctx, cfg, clauses,
                             ok, outgoing.target(),
                         );
                     }
@@ -247,7 +253,7 @@ fn lower_cfg_rec(
                         ctx.bind(weight.variable_binds[0], ok_arg);
 
                         lower_cfg_rec(
-                            b, ctx, cfg, clauses,
+                            bump, b, ctx, cfg, clauses,
                             ok, outgoing.target(),
                         );
                     }
@@ -256,7 +262,7 @@ fn lower_cfg_rec(
                             val_or_const, node, b, cfg);
                         let ok = match_builder.push_value(val, b);
                         lower_cfg_rec(
-                            b, ctx, cfg, clauses,
+                            bump, b, ctx, cfg, clauses,
                             ok, outgoing.target(),
                         );
 
@@ -269,7 +275,7 @@ fn lower_cfg_rec(
             assert!(wildcard_edge.weight().variable_binds.len() == 0);
             let wildcard_block = match_builder.push_wildcard(b);
             lower_cfg_rec(
-                b, ctx, cfg, clauses,
+                bump, b, ctx, cfg, clauses,
                 wildcard_block, wildcard_edge.target(),
             );
 
@@ -312,7 +318,7 @@ fn lower_cfg_rec(
                 assert!(edges.next().is_none());
 
                 lower_cfg_rec(
-                    b, ctx, cfg, clauses,
+                    bump, b, ctx, cfg, clauses,
                     false_block, edge.target(),
                 );
             }

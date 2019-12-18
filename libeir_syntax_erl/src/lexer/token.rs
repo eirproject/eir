@@ -3,9 +3,8 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::mem;
 
-use num_bigint::BigInt;
-
 use libeir_diagnostics::{ByteIndex, ByteSpan};
+use libeir_util_number::{Integer, ToPrimitive};
 
 use super::{LexicalError, Symbol, TokenConvertError, TokenConvertResult};
 
@@ -200,8 +199,7 @@ impl IntegerToken {
     }
     pub fn small_integer(&self) -> Option<i64> {
         match self.token() {
-            Token::Integer(a) => Some(a),
-            Token::BigInteger(_) => None,
+            Token::Integer(a) => a.to_i64(),
             _ => unreachable!(),
         }
     }
@@ -211,9 +209,6 @@ impl TryFrom<LexicalToken> for IntegerToken {
 
     fn try_from(t: LexicalToken) -> TokenConvertResult<Self> {
         if let LexicalToken(start, tok @ Token::Integer(_), end) = t {
-            return Ok(IntegerToken(start, tok, end));
-        }
-        if let LexicalToken(start, tok @ Token::BigInteger(_), end) = t {
             return Ok(IntegerToken(start, tok, end));
         }
         Err(TokenConvertError {
@@ -291,8 +286,7 @@ pub enum Token {
     Edoc,
     // Literals
     Char(char),
-    Integer(i64),
-    BigInteger(BigInt),
+    Integer(Integer),
     Float(f64),
     Atom(Symbol),
     String(Symbol),
@@ -401,20 +395,20 @@ pub enum Token {
 }
 impl PartialEq for Token {
     fn eq(&self, other: &Token) -> bool {
-        match *self {
+        match self {
             Token::Char(c) => {
                 if let Token::Char(c2) = other {
-                    return c == *c2;
+                    return *c == *c2;
                 }
             }
             Token::Integer(i) => {
                 if let Token::Integer(i2) = other {
-                    return i == *i2;
+                    return *i == *i2;
                 }
             }
             Token::Float(n) => {
                 if let Token::Float(n2) = other {
-                    return n == *n2;
+                    return *n == *n2;
                 }
             }
             Token::Error(_) => {
@@ -515,7 +509,6 @@ impl fmt::Display for Token {
             // Literals
             Token::Char(ref c) => write!(f, "{}", c),
             Token::Integer(ref i) => write!(f, "{}", i),
-            Token::BigInteger(ref i) => write!(f, "{}", i),
             Token::Float(ref n) => write!(f, "{}", n),
             Token::Atom(ref s) => write!(f, "'{}'", s),
             Token::String(ref s) => write!(f, "\"{}\"", s),

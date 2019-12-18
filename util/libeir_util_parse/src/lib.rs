@@ -13,6 +13,9 @@ pub use result::*;
 mod errors;
 pub use errors::*;
 
+mod parser;
+pub use parser::*;
+
 #[cfg(test)]
 mod tests {
     #[test]
