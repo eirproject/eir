@@ -7,7 +7,7 @@ use std::fmt::Debug;
 //use cranelift_entity::{ListPool, EntityList, EntityRef};
 //use cranelift_entity::packed_option::ReservedValue;
 
-use hashbrown::raw::{RawTable, RawIter};
+use hashbrown::raw::{RawTable, RawIter, Global, Alloc};
 
 /// Hashes a data type with access to auxiliary data
 pub trait AuxHash<C> {
@@ -54,9 +54,9 @@ impl<C, T: ?Sized> AuxEq<C> for T where T: Eq {
 /// Implementation of a HashMap where the hash/equality functions
 /// requires additional information.
 #[derive(Clone)]
-pub struct AuxHashMap<K, V, C, S = RandomState> {
+pub struct AuxHashMap<K, V, C, S = RandomState, A = Global> where A: Clone + Alloc {
     hash_builder: S,
-    table: RawTable<(K, V)>,
+    table: RawTable<(K, V), A>,
     aux: PhantomData<C>,
 }
 
@@ -75,7 +75,7 @@ impl<K, V, C, S> AuxHashMap<K, V, C, S> {
     pub fn with_hasher(hash_builder: S) -> Self {
         Self {
             hash_builder,
-            table: RawTable::new(),
+            table: RawTable::new(Global),
             aux: PhantomData,
         }
     }

@@ -3,9 +3,9 @@ authors = ["HansiHE <hansihe@hansihe.com>"]
 name = "libeir_util_pattern_compiler"
 version = "0.1.0"
 edition = "2018"
+license = "MIT OR Apache-2.0"
 
 description = "Utilities for compiling pattern matches into optimal decision trees"
-license = "MIT/Apache-2.0"
 repository = "https://github.com/hansihe/core_erlang/tree/master/pattern-compiler"
 
 [features]

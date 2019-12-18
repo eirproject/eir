@@ -5,7 +5,7 @@ authors = ["Paul Schoenfelder <paulschoenfelder@gmail.com>", "Luke Imhoff <Kroni
 readme = "README.md"
 publish = false
 edition = "2018"
-license = "../LICENSE.md"
+license = "MIT OR Apache-2.0"
 
 build = "build.rs"
 

@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
 edition = "2018"
 build = "build.rs"
+license = "MIT OR Apache-2.0"
 
 [features]
 binary_serialization = ["bincode"]

@@ -3,6 +3,7 @@ name = "libeir_util_number"
 version = "0.1.0"
 authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 num-traits = "0.2.8"
