@@ -19,7 +19,7 @@ pub use self::emitter::{Emitter, NullEmitter, StandardStreamEmitter};
 /// * Warning
 /// * Note
 /// * Help
-#[derive(Copy, Clone, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Severity {
     /// An unexpected bug.
     Bug,

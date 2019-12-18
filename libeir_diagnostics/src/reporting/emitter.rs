@@ -2,7 +2,7 @@ use std::fmt::{self, Display};
 use std::io;
 use std::sync::{Arc, RwLock};
 
-use failure::Error;
+use anyhow::Chain;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use unicode_width::UnicodeWidthStr;
 
@@ -24,7 +24,7 @@ pub trait Emitter {
     fn emit(&self, color: Option<ColorSpec>, message: &str) -> io::Result<()>;
     fn debug(&self, color: Option<ColorSpec>, message: &str) -> io::Result<()>;
     fn warn(&self, color: Option<ColorSpec>, message: &str) -> io::Result<()>;
-    fn error(&self, err: Error) -> io::Result<()>;
+    fn error(&self, err: &(dyn std::error::Error + 'static)) -> io::Result<()>;
     fn diagnostic(&self, diagnostic: &Diagnostic) -> io::Result<()>;
 }
 
@@ -48,7 +48,7 @@ impl Emitter for NullEmitter {
         Ok(())
     }
 
-    fn error(&self, _err: Error) -> io::Result<()> {
+    fn error(&self, _err: &(dyn std::error::Error + 'static)) -> io::Result<()> {
         Ok(())
     }
 
@@ -100,7 +100,7 @@ impl Emitter for StandardStreamEmitter {
         write_color(&mut handle, color, message)
     }
 
-    fn error(&self, err: Error) -> io::Result<()> {
+    fn error(&self, err: &(dyn std::error::Error + 'static)) -> io::Result<()> {
         let mut handle = self.stderr.lock();
         write_error(&mut handle, err)
     }
@@ -118,6 +118,49 @@ impl Emitter for StandardStreamEmitter {
     }
 }
 
+fn write_error<W: WriteColor>(f: &mut W, err: &(dyn std::error::Error + 'static)) -> io::Result<()> {
+    let severity = Severity::Error;
+
+    let highlight_color = ColorSpec::new().set_bold(true).set_intense(true).clone();
+
+    f.set_color(&highlight_color.clone().set_fg(Some(severity.color())))?;
+    write!(f, "{}", severity)?;
+
+    f.set_color(&highlight_color)?;
+    writeln!(f, ": {}", err.description())?;
+    f.reset()?;
+
+    if cfg!(debug_assertions) {
+        if let Some(source) = err.source() {
+            write!(f, "\n\nCaused by:")?;
+            let multiple = source.source().is_some();
+            for (n, error) in Chain::new(source).enumerate() {
+                write!(f, "\n    ")?;
+                if multiple {
+                    write!(f, "{}: ", n)?;
+                }
+                write!(f, "{}", error)?;
+            }
+        }
+    }
+    #[cfg(backtrace)]
+    {
+        use std::backtrace::{Backtrace, BacktraceStatus};
+        let backtrace = err.backtrace();
+        if let BacktraceStatus::Captured = backtrace.status() {
+            let mut backtrace = backtrace.to_string();
+            if backtrace.starts_with("stack backtrace:") {
+                // Capitalize to match "Caused by:"
+                backtrace.replace_range(0..1, "S");
+            }
+            backtrace.truncate(backtrace.trim_end().len());
+            write!(f, "\n\n{}", backtrace)?;
+        }
+    }
+
+    Ok(())
+}
+
 fn write_color<W, M>(mut writer: W, color: Option<ColorSpec>, message: M) -> io::Result<()>
 where
     W: WriteColor,
@@ -129,45 +172,6 @@ where
     write!(writer, "{}", message)?;
 
     writer.reset()?;
-
-    Ok(())
-}
-
-fn write_error<W>(mut writer: W, err: Error) -> io::Result<()>
-where
-    W: WriteColor,
-{
-    let severity = Severity::Error;
-    let failure = err.as_fail();
-
-    let highlight_color = ColorSpec::new().set_bold(true).set_intense(true).clone();
-
-    writer.set_color(&highlight_color.clone().set_fg(Some(severity.color())))?;
-    write!(writer, "{}", severity)?;
-
-    writer.set_color(&highlight_color)?;
-    writeln!(writer, ": {}", failure)?;
-    writer.reset()?;
-
-    // Print root cause
-    let cause = failure.find_root_cause();
-    // It is possible that the failure has no root, which returns self,
-    // so don't print errors twice in that case
-    if std::ptr::eq(cause, failure) {
-        write!(writer, "\n")?;
-        writer.set_color(&highlight_color.clone().set_fg(Some(severity.color())))?;
-        write!(writer, "CAUSE")?;
-
-        writer.set_color(&highlight_color)?;
-        writeln!(writer, ": {}", cause)?;
-    }
-
-    // Show backtrace only in debug mode
-    if cfg!(debug_assertions) {
-        if let Some(ref trace) = failure.backtrace() {
-            write!(writer, "\n\n{:?}", trace)?;
-        }
-    }
 
     Ok(())
 }

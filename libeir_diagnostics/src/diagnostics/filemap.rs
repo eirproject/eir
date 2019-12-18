@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::{fmt, io};
 
-use failure::Fail;
+use thiserror::Error;
 
 use super::index::{
     ByteIndex, ByteOffset, ColumnIndex, LineIndex, LineOffset, RawIndex, RawOffset,
@@ -114,40 +114,34 @@ impl fmt::Display for FileName {
     }
 }
 
-#[derive(Debug, Fail, PartialEq)]
+#[derive(Error, Debug, PartialEq)]
 pub enum LineIndexError {
-    #[fail(display = "Line out of bounds - given: {:?}, max: {:?}", given, max)]
+    #[error("Line out of bounds - given: {given:?}, max: {max:?}")]
     OutOfBounds { given: LineIndex, max: LineIndex },
 }
 
-#[derive(Debug, Fail, PartialEq)]
+#[derive(Error, Debug, PartialEq)]
 pub enum ByteIndexError {
-    #[fail(
-        display = "Byte index out of bounds - given: {}, span: {}",
-        given, span
-    )]
+    #[error("Byte index out of bounds - given: {given:?}, span: {span:?}")]
     OutOfBounds { given: ByteIndex, span: ByteSpan },
-    #[fail(
-        display = "Byte index points within a character boundary - given: {}",
-        given
-    )]
+    #[error("Byte index points within a character boundary - given: {given:?}")]
     InvalidCharBoundary { given: ByteIndex },
 }
 
-#[derive(Debug, Fail, PartialEq)]
+#[derive(Error, Debug, PartialEq)]
 pub enum LocationError {
-    #[fail(display = "Line out of bounds - given: {:?}, max: {:?}", given, max)]
+    #[error("Line out of bounds - given: {given:?}, max: {max:?}")]
     LineOutOfBounds { given: LineIndex, max: LineIndex },
-    #[fail(display = "Column out of bounds - given: {:?}, max: {:?}", given, max)]
+    #[error("Column out of bounds - given: {given:?}, max: {max:?}")]
     ColumnOutOfBounds {
         given: ColumnIndex,
         max: ColumnIndex,
     },
 }
 
-#[derive(Debug, Fail, PartialEq)]
+#[derive(Error, Debug, PartialEq)]
 pub enum SpanError {
-    #[fail(display = "Span out of bounds - given: {}, span: {}", given, span)]
+    #[error("Span out of bounds - given: {given:?}, span: {span:?}")]
     OutOfBounds { given: ByteSpan, span: ByteSpan },
 }
 

@@ -6,7 +6,7 @@ use crate::diagnostics::ByteSpan;
 use super::Severity;
 
 /// A style for the label
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum LabelStyle {
     /// The main focus of the diagnostic
     Primary,
@@ -15,7 +15,7 @@ pub enum LabelStyle {
 }
 
 /// A label describing an underlined region of code associated with a diagnostic
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Label {
     /// The span we are going to include in the final snippet.
     pub span: ByteSpan,
@@ -48,7 +48,7 @@ impl Label {
 }
 
 /// Represents a diagnostic message and associated child messages.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Diagnostic {
     /// The overall severity of the diagnostic
     pub severity: Severity,
