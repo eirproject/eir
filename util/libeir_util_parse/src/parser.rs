@@ -1,4 +1,4 @@
-use std::sync::{Mutex, Arc};
+use std::sync::{RwLock, Arc};
 use std::borrow::Cow;
 use std::path::Path;
 
@@ -29,7 +29,7 @@ impl<C> Parser<C> where C: ParserConfig {
     {
         let codemap = self.config.codemap();
         let filemap = {
-            codemap.lock().unwrap().add_filemap(
+            codemap.write().unwrap().add_filemap(
                 FileName::Virtual(Cow::Borrowed("nofile")),
                 source.as_ref().to_owned(),
             )
@@ -51,7 +51,7 @@ impl<C> Parser<C> where C: ParserConfig {
 }
 
 pub trait ParserConfig {
-    fn codemap(&self) -> &Arc<Mutex<CodeMap>>;
+    fn codemap(&self) -> &Arc<RwLock<CodeMap>>;
 }
 
 pub trait Parse<T = Self> {

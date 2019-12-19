@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use libeir_util_parse::{Scanner, Parse, ParserConfig, Source, SourceError};
 use libeir_diagnostics::{CodeMap, ByteIndex};
@@ -9,6 +9,7 @@ use super::token::{Lexer, Token};
 #[cfg_attr(rustfmt, rustfmt_skip)]
 #[allow(unknown_lints)]
 #[allow(clippy)]
+#[allow(unused)]
 pub(crate) mod grammar {
     // During the build step, `build.rs` will output the generated parser to `OUT_DIR` to avoid
     // adding it to the source directory, so we just directly include the generated parser here.
@@ -33,17 +34,17 @@ impl From<lalrpop_util::ParseError<ByteIndex, Token, ()>> for ParseError {
 }
 
 pub struct ParseConfig {
-    pub codemap: Arc<Mutex<CodeMap>>,
+    pub codemap: Arc<RwLock<CodeMap>>,
 }
 impl ParserConfig for ParseConfig {
-    fn codemap(&self) -> &Arc<Mutex<CodeMap>> {
+    fn codemap(&self) -> &Arc<RwLock<CodeMap>> {
         &self.codemap
     }
 }
 impl Default for ParseConfig {
     fn default() -> Self {
         ParseConfig {
-            codemap: Arc::new(Mutex::new(CodeMap::new())),
+            codemap: Arc::new(RwLock::new(CodeMap::new())),
         }
     }
 }
@@ -54,11 +55,11 @@ impl Parse for ast::Root {
     type Config = ParseConfig;
     type Token = Result<(ByteIndex, Token, ByteIndex), ()>;
 
-    fn file_map_error(err: SourceError) -> Self::Error {
+    fn file_map_error(_err: SourceError) -> Self::Error {
         unimplemented!()
     }
 
-    fn parse<S>(config: &ParseConfig, source: S) -> Result<Self, Self::Error>
+    fn parse<S>(_config: &ParseConfig, source: S) -> Result<Self, Self::Error>
     where
         S: Source,
     {

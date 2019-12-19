@@ -1,3 +1,5 @@
+use std::sync::RwLock;
+
 use libeir_ir::{
     Module as IrModule,
     FunctionBuilder,
@@ -6,7 +8,6 @@ use libeir_ir::{
     IntoValue,
     Location,
 };
-
 
 use libeir_diagnostics::{ByteSpan, CodeMap};
 use libeir_intern::{Symbol, Ident};
@@ -42,7 +43,7 @@ use scope::ScopeToken;
 mod tests;
 
 pub(crate) struct LowerCtx<'a> {
-    codemap: &'a CodeMap,
+    codemap: &'a RwLock<CodeMap>,
     module: &'a Module,
 
     scope: scope::ScopeTracker,
@@ -115,8 +116,9 @@ impl<'a> LowerCtx<'a> {
         self.functions[self.functions.len() - 1].clone()
     }
     pub fn current_location(&self, b: &mut FunctionBuilder, span: ByteSpan) -> Location {
+        let read_lock = self.codemap.read().unwrap();
         b.fun_mut().locations.from_bytespan(
-            self.codemap, span, Some((
+            &*read_lock, span, Some((
                 self.module.name.as_str().to_string(),
                 self.function_name()
             )))
@@ -154,7 +156,7 @@ impl<'a> LowerCtx<'a> {
 }
 
 pub fn lower_module(
-    codemap: &CodeMap,
+    codemap: &RwLock<CodeMap>,
     module: &Module
 ) -> (Result<IrModule, ()>, Vec<LowerError>)
 {

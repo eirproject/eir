@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use bumpalo::{ Bump, collections::Vec as BVec };
 
 use libeir_ir::FunctionBuilder;

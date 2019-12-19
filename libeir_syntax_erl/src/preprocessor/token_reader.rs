@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use snafu::ResultExt;
 
@@ -20,7 +20,7 @@ use super::errors;
 pub trait TokenReader: Sized {
     type Source;
 
-    fn new(codemap: Arc<Mutex<CodeMap>>, tokens: Self::Source) -> Self;
+    fn new(codemap: Arc<RwLock<CodeMap>>, tokens: Self::Source) -> Self;
 
     fn inject_include<P>(&mut self, path: P) -> Result<()>
     where
@@ -108,14 +108,14 @@ pub trait TokenReader: Sized {
 
 /// Reads tokens from an in-memory buffer (VecDeque)
 pub struct TokenBufferReader {
-    codemap: Arc<Mutex<CodeMap>>,
+    codemap: Arc<RwLock<CodeMap>>,
     tokens: VecDeque<Lexed>,
     unread: VecDeque<LexicalToken>,
 }
 impl TokenReader for TokenBufferReader {
     type Source = VecDeque<Lexed>;
 
-    fn new(codemap: Arc<Mutex<CodeMap>>, tokens: Self::Source) -> Self {
+    fn new(codemap: Arc<RwLock<CodeMap>>, tokens: Self::Source) -> Self {
         TokenBufferReader {
             codemap: codemap.clone(),
             tokens,
@@ -162,7 +162,7 @@ impl TokenReader for TokenBufferReader {
 
 /// Reads tokens from a TokenStream (backed by a Lexer)
 pub struct TokenStreamReader<S> {
-    codemap: Arc<Mutex<CodeMap>>,
+    codemap: Arc<RwLock<CodeMap>>,
     tokens: TokenStream<S>,
     unread: VecDeque<LexicalToken>,
 }
@@ -172,7 +172,7 @@ where
 {
     type Source = Lexer<S>;
 
-    fn new(codemap: Arc<Mutex<CodeMap>>, tokens: Self::Source) -> Self {
+    fn new(codemap: Arc<RwLock<CodeMap>>, tokens: Self::Source) -> Self {
         TokenStreamReader {
             codemap: codemap.clone(),
             tokens: TokenStream::new(tokens),

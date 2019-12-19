@@ -380,8 +380,8 @@ pub fn analyze_graph<'bump, 'fun>(
 fn expand_phi<'bump>(
     bump: &'bump Bump,
     phi_entry: Value,
-    target: Block,
-    graph: &LiveBlockGraph,
+    _target: Block,
+    _graph: &LiveBlockGraph,
     analysis: &GraphAnalysis
 ) -> BFnvHashMap<'bump, Block, PhiSource>
 {
@@ -460,7 +460,13 @@ pub fn analyze_chain<'bump>(
         visited.insert(read);
 
         let block;
+
+        // NOTE: This reports an unused assignment warning,
+        // but it clearly is used in both cases.
+        // Compiler bug?
+        #[allow(unused_assignments)]
         let mut arg_num = None;
+
         match fun.value_kind(read) {
             // If the value is an argument, it might be a phi
             ValueKind::Argument(arg_block, arg_num_n) => {

@@ -1,16 +1,16 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use libeir_diagnostics::{Diagnostic, Emitter, StandardStreamEmitter, ColorChoice, CodeMap};
 
 pub struct ParserErrors<E> {
-    codemap: Arc<Mutex<CodeMap>>,
+    codemap: Arc<RwLock<CodeMap>>,
     errors: Vec<E>,
     failed: bool,
 }
 
 impl<E> ParserErrors<E> {
 
-    pub fn new(codemap: Arc<Mutex<CodeMap>>) -> Self {
+    pub fn new(codemap: Arc<RwLock<CodeMap>>) -> Self {
         ParserErrors {
             codemap: codemap,
             errors: Vec::new(),

@@ -27,7 +27,7 @@ fn lower(input: &str, config: ParseConfig) -> Result<IrModule, ()> {
     let (parsed, parser): (Module, _) = parse(input, config);
 
     let (res, messages) = {
-        let codemap = &*parser.config.codemap.lock().unwrap();
+        let codemap = &*parser.config.codemap;
         lower_module(codemap, &parsed)
     };
 

@@ -874,7 +874,7 @@ mod test {
 
         let module = super::lower(&ast);
 
-        let (res, _errors) = crate::lower_module(&*codemap.lock().unwrap(), &module);
+        let (res, _errors) = crate::lower_module(&*codemap, &module);
         res.unwrap();
     }
 

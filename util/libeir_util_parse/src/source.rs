@@ -1,6 +1,6 @@
 use std::char;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use snafu::{Snafu, ResultExt};
 
@@ -9,7 +9,7 @@ use libeir_diagnostics::{ByteIndex, ByteOffset, ByteSpan, CodeMap, Diagnostic, F
 pub type SourceResult<T> = std::result::Result<T, SourceError>;
 
 pub trait Source: Sized {
-    fn from_path<P: AsRef<Path>>(codemap: Arc<Mutex<CodeMap>>, path: P) -> SourceResult<Self>;
+    fn from_path<P: AsRef<Path>>(codemap: Arc<RwLock<CodeMap>>, path: P) -> SourceResult<Self>;
 
     fn read(&mut self) -> Option<(ByteIndex, char)>;
 
@@ -190,12 +190,12 @@ impl FileMapSource {
     const CONT_MASK: u8 = 0b0011_1111;
 }
 impl Source for FileMapSource {
-    fn from_path<P: AsRef<Path>>(codemap: Arc<Mutex<CodeMap>>, path: P) -> SourceResult<Self> {
+    fn from_path<P: AsRef<Path>>(codemap: Arc<RwLock<CodeMap>>, path: P) -> SourceResult<Self> {
         let path = crate::util::substitute_path_variables(path)
             .context(PathVariableSubstitute)?;
         let filemap = {
             codemap
-                .lock()
+                .write()
                 .unwrap()
                 .add_filemap_from_disk(FileName::real(path))
                 .context(IO)?

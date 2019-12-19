@@ -73,7 +73,7 @@ fn handle_erl(in_str: &str, matches: &ArgMatches) -> Option<Module> {
     match parser.parse_string(in_str) {
         Ok(ast) => {
             let (res, messages) = {
-                let codemap = &*parser.config.codemap.lock().unwrap();
+                let codemap = &*parser.config.codemap;
                 lower_module(codemap, &ast)
             };
 

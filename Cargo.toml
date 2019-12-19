@@ -16,5 +16,4 @@ members = [
     "util/libeir_util_number",
     "util/libeir_util_parse",
     "util/libeir_util_parse_listing",
-    "util/libeir_util_prof",
 ]

@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use libeir_ir::{Block, PrimOpKind};
 
 use super::AnalysisContext;

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::convert::TryFrom;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use termcolor::ColorChoice;
 
@@ -23,7 +23,7 @@ use super::{Preprocessed, PreprocessorError, Result};
 use super::errors;
 
 pub struct Preprocessor<Reader: TokenReader> {
-    codemap: Arc<Mutex<CodeMap>>,
+    codemap: Arc<RwLock<CodeMap>>,
     reader: Reader,
     can_directive_start: bool,
     directives: BTreeMap<ByteIndex, Directive>,
@@ -163,7 +163,7 @@ where
                 let current = span.start();
                 let filename = {
                     self.codemap
-                        .lock()
+                        .read()
                         .unwrap()
                         .find_file(current)
                         .unwrap()
@@ -181,7 +181,7 @@ where
                 let current = span.start();
                 let line = {
                     self.codemap
-                        .lock()
+                        .read()
                         .unwrap()
                         .find_file(current)
                         .unwrap()

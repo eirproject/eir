@@ -17,7 +17,7 @@ mod errors;
 mod otp;
 mod ct_runner;
 
-fn parse<T>(input: &str, config: ParseConfig) -> (T, Parser<ParseConfig>)
+fn parse<T>(input: &str, config: ParseConfig) -> (T, Parser)
 where
     T: Parse<T, Config = ParseConfig, Error = Vec<ParserError>>,
 {
@@ -34,7 +34,7 @@ where
     panic!("parse failed");
 }
 
-fn parse_file<T, P>(path: P, config: ParseConfig) -> (T, Parser<ParseConfig>)
+fn parse_file<T, P>(path: P, config: ParseConfig) -> (T, Parser)
 where
     T: Parse<T, Config = ParseConfig, Error = Vec<ParserError>>,
     P: AsRef<Path>,
@@ -58,7 +58,7 @@ where
 {
     let (parsed, parser): (ErlAstModule, _) = parse_file(path, config);
     let (res, messages) = {
-        let codemap = &*parser.config.codemap.lock().unwrap();
+        let codemap = &*parser.config.codemap;
         lower_module(codemap, &parsed)
     };
 
@@ -74,7 +74,7 @@ where
 pub fn lower(input: &str, config: ParseConfig) -> Result<Module, ()> {
     let (parsed, parser): (ErlAstModule, _) = parse(input, config);
     let (res, messages) = {
-        let codemap = &*parser.config.codemap.lock().unwrap();
+        let codemap = &*parser.config.codemap;
         lower_module(codemap, &parsed)
     };
 

@@ -4,7 +4,7 @@ use bumpalo::Bump;
 
 use libeir_ir::FunctionBuilder;
 use libeir_ir::{Block, OpKind, CallKind};
-use libeir_ir::{LiveBlockGraph, LiveValues};
+use libeir_ir::LiveValues;
 
 use super::SimplifyCfgPass;
 use super::analyze;

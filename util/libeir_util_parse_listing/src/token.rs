@@ -1,8 +1,7 @@
 use std::str::FromStr;
-use std::cmp::Ordering;
 
 use libeir_ir::Integer;
-use libeir_intern::{Symbol, Ident};
+use libeir_intern::Symbol;
 use libeir_diagnostics::{ByteSpan, ByteIndex, ByteOffset};
 use libeir_util_parse::{Source, Scanner};
 
@@ -11,32 +10,6 @@ macro_rules! pop {
         $lex.skip();
     }};
     ($lex:ident, $code:expr) => {{
-        $lex.skip();
-        $code
-    }};
-}
-
-macro_rules! pop2 {
-    ($lex:ident) => {{
-        $lex.skip();
-        $lex.skip();
-    }};
-    ($lex:ident, $code:expr) => {{
-        $lex.skip();
-        $lex.skip();
-        $code
-    }};
-}
-
-macro_rules! pop3 {
-    ($lex:ident) => {{
-        $lex.skip();
-        $lex.skip();
-        $lex.skip()
-    }};
-    ($lex:ident, $code:expr) => {{
-        $lex.skip();
-        $lex.skip();
         $lex.skip();
         $code
     }};
@@ -146,9 +119,9 @@ where
     fn peek(&mut self) -> char {
         self.scanner.peek().1
     }
-    fn peek_next(&mut self) -> char {
-        self.scanner.peek_next().1
-    }
+    //fn peek_next(&mut self) -> char {
+    //    self.scanner.peek_next().1
+    //}
     fn read(&mut self) -> char {
         self.scanner.read().1
     }
@@ -161,15 +134,14 @@ where
     fn slice(&self) -> &str {
         self.scanner.slice(self.span())
     }
-    fn slice_span(&self, span: ByteSpan) -> &str {
-        self.scanner.slice(span)
-    }
-    fn ident(&self) -> Ident {
-        let symbol = Symbol::intern(self.slice());
-        Ident::new(symbol, self.span())
-    }
+    //fn slice_span(&self, span: ByteSpan) -> &str {
+    //    self.scanner.slice(span)
+    //}
+    //fn ident(&self) -> Ident {
+    //    let symbol = Symbol::intern(self.slice());
+    //    Ident::new(symbol, self.span())
+    //}
     fn skip_whitespace(&mut self) {
-        let mut c: char;
         while self.read().is_whitespace() {
             self.skip();
         }
@@ -245,7 +217,7 @@ where
     fn lex_number(&mut self) -> Token {
         let c = self.pop();
         debug_assert!(c == '-' || c == '+' || c.is_digit(10));
-        let negative = c == '-';
+        //let negative = c == '-';
 
         while self.read().is_digit(10) {
             self.skip();
@@ -280,7 +252,7 @@ where
 
         match f64::from_str(self.slice()) {
             Ok(f) => Token::Float(Float(f)),
-            Err(e) => unimplemented!(),
+            Err(_e) => unimplemented!(),
         }
     }
 

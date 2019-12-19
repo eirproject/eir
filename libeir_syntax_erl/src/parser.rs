@@ -39,7 +39,7 @@ pub mod visitor;
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use libeir_util_parse::{Scanner, Source, SourceError, ParserConfig};
 use libeir_util_parse::{Parser as GParser, Parse as GParse};
@@ -59,7 +59,7 @@ pub use self::errors::*;
 pub type ParseResult<T> = Result<T, Vec<ParserError>>;
 
 pub struct ParseConfig {
-    pub codemap: Arc<Mutex<CodeMap>>,
+    pub codemap: Arc<RwLock<CodeMap>>,
     pub warnings_as_errors: bool,
     pub no_warn: bool,
     pub include_paths: VecDeque<PathBuf>,
@@ -67,12 +67,12 @@ pub struct ParseConfig {
     pub macros: Option<MacroContainer>,
 }
 impl ParserConfig for ParseConfig {
-    fn codemap(&self) -> &Arc<Mutex<CodeMap>> {
+    fn codemap(&self) -> &Arc<RwLock<CodeMap>> {
         &self.codemap
     }
 }
 impl ParseConfig {
-    pub fn new(codemap: Arc<Mutex<CodeMap>>) -> Self {
+    pub fn new(codemap: Arc<RwLock<CodeMap>>) -> Self {
         ParseConfig {
             codemap,
             warnings_as_errors: false,
@@ -86,7 +86,7 @@ impl ParseConfig {
 impl Default for ParseConfig {
     fn default() -> Self {
         ParseConfig {
-            codemap: Arc::new(Mutex::new(CodeMap::new())),
+            codemap: Arc::new(RwLock::new(CodeMap::new())),
             warnings_as_errors: false,
             no_warn: false,
             include_paths: VecDeque::new(),

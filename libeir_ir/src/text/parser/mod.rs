@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use std::path::Path;
 
 use libeir_diagnostics::{CodeMap, FileName, ByteIndex};
@@ -109,14 +109,14 @@ pub(crate) mod grammar {
 }
 
 pub struct Parser {
-    pub codemap: Arc<Mutex<CodeMap>>,
+    pub codemap: Arc<RwLock<CodeMap>>,
 }
 
 impl Parser {
 
     pub fn new() -> Self {
         Parser {
-            codemap: Arc::new(Mutex::new(CodeMap::new())),
+            codemap: Arc::new(RwLock::new(CodeMap::new())),
         }
     }
 
@@ -130,7 +130,7 @@ impl Parser {
         T: Parse,
     {
         let filemap =
-            self.codemap.lock().unwrap().add_filemap(
+            self.codemap.write().unwrap().add_filemap(
                 FileName::Virtual(Cow::Borrowed("nofile")),
                 source.as_ref().to_owned(),
             );

@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use failure::Error;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -62,7 +62,7 @@ pub struct StandardStreamEmitter {
     severity: Severity,
     stdout: StandardStream,
     stderr: StandardStream,
-    codemap: Option<Arc<Mutex<CodeMap>>>,
+    codemap: Option<Arc<RwLock<CodeMap>>>,
 }
 impl StandardStreamEmitter {
     pub fn new(color: ColorChoice) -> Self {
@@ -79,7 +79,7 @@ impl StandardStreamEmitter {
         self
     }
 
-    pub fn set_codemap(mut self, codemap: Arc<Mutex<CodeMap>>) -> Self {
+    pub fn set_codemap(mut self, codemap: Arc<RwLock<CodeMap>>) -> Self {
         self.codemap = Some(codemap);
         self
     }
@@ -198,7 +198,7 @@ where
 
 fn write_labeled_diagnostic<W>(
     mut writer: W,
-    codemap: &Arc<Mutex<CodeMap>>,
+    codemap: &Arc<RwLock<CodeMap>>,
     diagnostic: &Diagnostic,
 ) -> io::Result<()>
 where
@@ -235,7 +235,7 @@ where
     writer.reset()?;
 
     for label in &diagnostic.labels {
-        match codemap.lock().unwrap().find_file(label.span.start()) {
+        match codemap.read().unwrap().find_file(label.span.start()) {
             None => {
                 if let Some(ref message) = label.message {
                     writeln!(writer, "- {}", message)?

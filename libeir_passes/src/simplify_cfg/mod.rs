@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
-use bumpalo::{Bump, collections::Vec as BVec, collections::HashMap as BHashMap};
+use bumpalo::{Bump, collections::HashMap as BHashMap};
 use fnv::FnvBuildHasher;
 type BFnvHashMap<'bump, K, V> = BHashMap<K, V, &'bump Bump, FnvBuildHasher>;
 
 use libeir_ir::{FunctionBuilder, Mangler, MangleTo};
-use libeir_ir::{Value, OpKind};
+use libeir_ir::Value;
 
 use super::FunctionPass;
 
