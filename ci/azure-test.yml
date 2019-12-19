@@ -23,6 +23,11 @@ jobs:
 
       - template: azure-clone-patch-otp.yml
 
+      - script: cargo build --tests
+        env:
+          CI: 'True'
+        displayName: cargo build --tests
+
       - ${{ each crate in parameters.crates }}:
           - script: cargo test
             env:
