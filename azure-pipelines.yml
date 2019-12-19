@@ -1,5 +1,5 @@
 variables:
-  nightly: nightly-2019-08-08
+  nightly: nightly-2019-12-08
   RUSTFLAGS:
 
 jobs:
