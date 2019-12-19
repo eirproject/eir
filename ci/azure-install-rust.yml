@@ -28,7 +28,8 @@ steps:
   # Add components
   - ${{ each component in parameters.components }}:
     - script: rustup component add ${{ component }}
-      displayName: Add rust component: ${{ component }}
+      displayName: "Add rust component: ${{ component }}"
+
   # Print versions
   - script: |
         rustup toolchain list
