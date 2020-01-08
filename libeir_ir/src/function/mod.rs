@@ -157,6 +157,10 @@ impl Function {
         self.constant_container.const_kind(constant)
     }
 
+    pub fn const_entries<'f>(&'f self, entries: &'f EntityList<Const>) -> &'f [Const] {
+        entries.as_slice(&self.constant_container.const_pool)
+    }
+
     pub fn value_kind(&self, value: Value) -> ValueKind {
         self.values[value].kind
     }
