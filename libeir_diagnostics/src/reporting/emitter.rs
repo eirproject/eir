@@ -127,7 +127,7 @@ fn write_error<W: WriteColor>(f: &mut W, err: &(dyn std::error::Error + 'static)
     write!(f, "{}", severity)?;
 
     f.set_color(&highlight_color)?;
-    writeln!(f, ": {}", err.description())?;
+    writeln!(f, ": {}", err.to_string())?;
     f.reset()?;
 
     if cfg!(debug_assertions) {
