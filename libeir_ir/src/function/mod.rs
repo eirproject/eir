@@ -161,6 +161,12 @@ impl Function {
         self.values[value].kind
     }
 
+    pub fn value_locations(&self, value: Value) -> Option<Vec<ByteSpan>> {
+        self.values[value].location
+            .as_ref()
+            .map(|loc| self.locations.lookup(loc))
+    }
+
     pub fn value_is_constant(&self, value: Value) -> bool {
         self.constant_values.contains(&value)
     }
@@ -332,6 +338,11 @@ impl Function {
 
     pub fn block_location(&self, block: Block) -> Location {
         self.blocks[block].location
+    }
+
+    pub fn block_locations(&self, block: Block) -> Vec<ByteSpan> {
+        let loc = self.blocks[block].location;
+        self.locations.lookup(&loc)
     }
 
     pub fn block_entry(&self) -> Block {

@@ -72,6 +72,17 @@ impl LocationContainer {
         }
     }
 
+    pub fn lookup(&self, location: &Location) -> Vec<ByteSpan> {
+        let terminals = self.locations[*location].terminals
+            .as_slice(&self.terminal_pool);
+        let mut locs = Vec::with_capacity(terminals.len());
+        for terminal in terminals.iter().cloned() {
+            let terminal_data = &self.terminals[terminal];
+            locs.push(terminal_data.span.clone());
+        }
+        locs
+    }
+
     pub fn location_empty(&mut self) -> Location {
         self.locations.push(LocationData {
             terminals: EntityList::new(),
