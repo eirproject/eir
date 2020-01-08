@@ -40,6 +40,7 @@ pub mod visitor;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
+use std::fmt;
 
 use libeir_util_parse::{Scanner, Source, SourceError, ParserConfig};
 use libeir_util_parse::{Parser as GParser, Parse as GParse};
@@ -87,7 +88,7 @@ impl ParseConfig {
 impl fmt::Debug for ParseConfig {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("ParseConfig")
-            .field("codemap", &self.codemap.lock().unwrap())
+            .field("codemap", &self.codemap.read().unwrap())
             .field("warnings_as_errors", &self.warnings_as_errors)
             .field("no_warn", &self.no_warn)
             .field("include_paths", &self.include_paths)
@@ -111,6 +112,7 @@ impl Default for ParseConfig {
 impl Eq for ParseConfig {}
 impl PartialEq for ParseConfig {
     fn eq(&self, other: &Self) -> bool {
+        use std::hash::Hash;
         use std::hash::Hasher;
         use std::collections::hash_map::DefaultHasher;
 
@@ -121,12 +123,12 @@ impl PartialEq for ParseConfig {
         // in the same thread
         let this_hash = {
             let mut hasher = DefaultHasher::new();
-            self.codemap.lock().unwrap().hash(&mut hasher);
+            self.codemap.read().unwrap().hash(&mut hasher);
             hasher.finish()
         };
         let that_hash = {
             let mut hasher = DefaultHasher::new();
-            other.codemap.lock().unwrap().hash(&mut hasher);
+            other.codemap.read().unwrap().hash(&mut hasher);
             hasher.finish()
         };
         if this_hash == that_hash &&
