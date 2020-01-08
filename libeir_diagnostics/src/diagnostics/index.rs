@@ -35,7 +35,13 @@ impl fmt::Debug for LineIndex {
 }
 
 /// A 1-indexed line number. Useful for pretty printing source locations.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct LineNumber(RawIndex);
+impl LineNumber {
+    pub fn to_usize(self) -> usize {
+        self.0 as usize
+    }
+}
 impl fmt::Debug for LineNumber {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "LineNumber({})", self.0)
@@ -96,6 +102,11 @@ impl fmt::Debug for ColumnIndex {
 /// A 1-indexed column number. Useful for pretty printing source locations.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ColumnNumber(RawIndex);
+impl ColumnNumber {
+    pub fn to_usize(self) -> usize {
+        self.0 as usize
+    }
+}
 impl fmt::Debug for ColumnNumber {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "ColumnNumber({})", self.0)
