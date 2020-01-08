@@ -189,7 +189,6 @@ pub fn lower_module<'a>(
     for (ident, function) in module.functions.iter() {
         assert!(ctx.scope.height() == 0);
         ctx.fun_num = 0;
-        println!("Fun Name: {:?}", ident);
 
         let fun_def = ir_module.add_function(ident.function, function.arity);
         let mut fun = fun_def.function_mut();
@@ -206,7 +205,6 @@ pub fn lower_module<'a>(
         ctx.sentinel_value = Some(sentinel_value);
 
         lower_top_function(&mut ctx, &mut builder, function);
-        println!("FAIL: {:?}", ctx.failed());
     }
 
     ctx.exc_stack.finish();

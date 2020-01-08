@@ -118,8 +118,6 @@ impl SimplifyCfgPass {
         let graph = b.fun().live_block_graph();
         let live = b.fun().live_values();
 
-        trace!("{}", b.fun().to_text_standard());
-
         {
             let analysis = analyze::analyze_graph(&bump, b.fun(), &graph);
             //dbg!(&analysis);
@@ -165,8 +163,6 @@ impl SimplifyCfgPass {
 
             let new_entry = self.mangler.run(b);
             b.block_set_entry(new_entry);
-
-            trace!("{}", b.fun().to_text_standard());
         }
 
         self.map.clear();

@@ -72,8 +72,6 @@ impl NaiveInlineClosuresPass {
             }
         }
 
-        trace!("call_sites: {:?}", self.calls_buf);
-
         for (block, target) in self.calls_buf.iter().cloned() {
             // Signature of new entry block has no arguments
             let new_target = b.block_insert();
@@ -100,5 +98,4 @@ impl NaiveInlineClosuresPass {
             b.op_call_flow(block, new_block, &[]);
         }
     }
-
 }

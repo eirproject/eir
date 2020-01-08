@@ -90,7 +90,6 @@ pub fn analyze(fun: &Function) -> LowerData {
             }).unwrap();
         }
     }
-    dbg!(&captured_blocks);
 
     // Find all escape continuations for all captures
     let mut escapes = BTreeMap::new();

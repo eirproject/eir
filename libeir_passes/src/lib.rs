@@ -44,11 +44,7 @@ impl PassManager {
     pub fn run(&mut self, module: &mut Module) {
         for fun_def in module.function_iter_mut() {
             let fun = fun_def.function_mut();
-
             let ident = *fun.ident();
-
-            debug!("============ {}", ident);
-            trace!("{}", fun.to_text(&mut StandardFormatConfig::default()));
 
             let mut b = FunctionBuilder::new(fun);
             b.fun().graph_validate_global();
