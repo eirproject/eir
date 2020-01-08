@@ -77,7 +77,6 @@ pub fn rewrite(
     let graph = b.fun().live_block_graph();
     let chain_analysis = analyze::analyze_chain(
         bump, target, &b.fun(), &graph, &live, &analysis);
-    dbg!(&chain_analysis);
 
     if chain_analysis.renames_required {
         rewrite_chain_generic(bump, pass, &analysis, &chain_analysis, b);
@@ -95,8 +94,6 @@ fn rewrite_chain_generic(
     chain_analysis: &analyze::ChainAnalysis,
     b: &mut FunctionBuilder,
 ) {
-    println!("GENERIC");
-
     for (from, to) in chain_analysis.static_map.iter() {
         pass.map.insert(*from, *to);
     }
@@ -113,9 +110,6 @@ fn rewrite_chain_generic(
         for edge in chain_analysis.entry_edges.clone().keys() {
             let entry_analysis = analyze::analyze_entry_edge(
                 bump, &analysis, &chain_analysis, *edge);
-
-            println!("Path 1");
-            dbg!(&entry_analysis);
 
             // If the target is the same as the callee, then this is already optimal.
             if chain_analysis.target == entry_analysis.callee { return; }
@@ -162,8 +156,6 @@ fn rewrite_chain_generic(
         for edge in chain_analysis.entry_edges.clone().keys() {
             let entry_analysis = analyze::analyze_entry_edge(
                 bump, &analysis, &chain_analysis, *edge);
-            println!("Path 2");
-            dbg!(&entry_analysis);
 
             //if chain_analysis.target == entry_analysis.callee { continue; }
 
@@ -219,8 +211,6 @@ fn rewrite_chain_norenames(
 
                 let entry_analysis = analyze::analyze_entry_edge(
                     bump, &analysis, &chain_analysis, *edge);
-                println!("Path 3");
-                dbg!(&entry_analysis);
 
                 let call_target_equal_to_callee = {
                     let fun = b.fun();

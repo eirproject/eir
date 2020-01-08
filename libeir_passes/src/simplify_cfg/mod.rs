@@ -112,8 +112,6 @@ impl SimplifyCfgPass {
         let graph = b.fun().live_block_graph();
         let live = b.fun().live_values();
 
-        println!("{}", b.fun().to_text());
-
         {
             let analysis = analyze::analyze_graph(&bump, b.fun(), &graph);
             //dbg!(&analysis);
@@ -164,10 +162,6 @@ impl SimplifyCfgPass {
                 block.to_eir_text_fun(&mut print_ctx, b.fun(), 0, &mut out_str).unwrap();
                 out_str.push('\n' as u8);
             }
-            println!("{}", std::str::from_utf8(&out_str).unwrap());
-
-            println!("{:#?}", self.mangler.value_map());
-
             let new_entry = self.mangler.run(b);
             b.block_set_entry(new_entry);
 
@@ -178,9 +172,6 @@ impl SimplifyCfgPass {
                 block.to_eir_text_fun(&mut print_ctx, b.fun(), 0, &mut out_str).unwrap();
                 out_str.push('\n' as u8);
             }
-            println!("{}", std::str::from_utf8(&out_str).unwrap());
-
-            println!("{}", b.fun().to_text());
         }
 
         self.map.clear();

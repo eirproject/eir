@@ -26,8 +26,6 @@ impl NaiveInlineClosuresPass {
 
 impl FunctionPass for NaiveInlineClosuresPass {
     fn run_function_pass(&mut self, b: &mut FunctionBuilder) {
-        println!("{}", b.fun().to_text());
-        println!("Inline Closures");
         self.inline_closures(b);
     }
 }
@@ -69,8 +67,6 @@ impl NaiveInlineClosuresPass {
             }
         }
 
-        println!("{:?}", self.calls_buf);
-
         for (block, target) in self.calls_buf.iter().cloned() {
             // Signature of new entry block has no arguments
             let new_target = b.block_insert();
@@ -96,8 +92,5 @@ impl NaiveInlineClosuresPass {
             b.block_clear(block);
             b.op_call_flow(block, new_block, &[]);
         }
-
-        println!("{}", b.fun().to_text());
     }
-
 }
