@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::str::FromStr;
 
 use libeir_diagnostics::{ByteIndex, ByteOffset, ByteSpan};
@@ -650,7 +649,7 @@ where
                 Err(e) => {
                     return Token::Error(LexicalError::InvalidRadix {
                         span: self.span(),
-                        reason: e.description().to_string(),
+                        reason: e.to_string(),
                     });
                 }
             };
@@ -730,7 +729,7 @@ where
             Ok(f) => Token::Float(f),
             Err(e) => Token::Error(LexicalError::InvalidFloat {
                 span: self.span(),
-                reason: e.description().to_string(),
+                reason: e.to_string(),
             }),
         }
     }

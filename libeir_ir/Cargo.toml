@@ -21,7 +21,7 @@ pretty = "0.3.3"
 lazy_static = "1.2.0"
 itertools = "0.8.0"
 
-cranelift-entity = "0.51.0"
+cranelift-entity = "0.56.0"
 bumpalo = "2.6.0"
 
 petgraph = "0.4"

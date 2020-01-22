@@ -10,5 +10,5 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 libeir_ir = { path = "../libeir_ir" }
 
-cranelift-entity = "0.51.0"
+cranelift-entity = "0.56.0"
 petgraph = "0.4"
