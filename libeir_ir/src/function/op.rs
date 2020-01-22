@@ -166,6 +166,78 @@ pub enum OpKind {
     /// invalid state, should raise an unrecoverable runtime error.
     Unreachable,
 
+    /// # Receive construct
+    /// A receive statement is represented as several intrinsics that
+    /// interact to represent the receive operation semantics of erlang.
+    ///
+    /// It consists of 3 operations, `receive_start`, `receive_wait`
+    /// and `receive_done`. They are always called in this pattern:
+    ///
+    /// ```
+    ///          v
+    ///     receive_start
+    ///          |
+    ///          v
+    ///     receive_wait <------------
+    ///     |          |             |
+    ///  timeout    check_msg   no match on
+    ///     |          |          message
+    ///     v          v             |
+    ///          control flow to  ----
+    ///          match on message
+    ///                |
+    ///          message matches
+    ///                |
+    ///                v
+    ///            receive_done
+    ///                |
+    /// ```
+    ///
+    /// ## `receive_start`
+    /// (cont: fn(recv_ref), timeout)
+    ///
+    /// `recv_ref` is an opaque value that represents the current
+    /// receive operation. It is up to the runtime implementor
+    /// to decide what this stores, if anything at all.
+    /// Since receive constructs can never be nested, storing receive
+    /// state globally is also a valid strategy.
+    /// This value can only ever be passed to `receive_wait` or
+    /// `receive_done`.
+    ///
+    /// `timeout` is either an atom, `infinity`, or a number.
+    ///
+    /// ## `receive_wait`
+    /// (timeout: fn(), check_message: fn(msg))
+    ///
+    /// This increments the mailbox pointer, fetches it, and calls
+    /// `check_message` with that message. The value passed to
+    /// `check_message` can not escape the current receive construct
+    /// without being mapped through `receive_done`, so it is safe for
+    /// this to be an off-heap value as long as it's guaranteed to be
+    /// alive until the receive construct is exited by `receive_done`.
+    ///
+    /// If there are no more messages, this should yield until there is.
+    ///
+    /// If there is a timeout, `timeout` should be called. When `timeout`
+    /// is called, the receive construct should be considered finished,
+    /// that is, `receive_done` should not be called.
+    ///
+    /// ## `receive_done`
+    /// (next: fn(...), ...)
+    ///
+    /// Called when the message under the mailbox pointer is successfully
+    /// matched, and should be removed from the mailbox.
+    ///
+    /// Called with an arbitrary amount of arguments, these are the values
+    /// that have been extracted from that message. If these are off-heap
+    /// references, this operation would presumably copy them to the current
+    /// process heap, and ensure that they are under juristiction of the
+    /// process GC. The potentially copied values are then passed on as
+    /// arguments to `next`.
+    ///
+    /// After this operation is completed, there will be no live references
+    /// to the value originally passed to `check_message`, they will have
+    /// all been mapped through `receive_done`.
     Intrinsic(Symbol),
 }
 
