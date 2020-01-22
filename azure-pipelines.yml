@@ -1,5 +1,5 @@
 variables:
-  nightly: nightly-2019-08-08
+  nightly: nightly-2019-12-08
   RUSTFLAGS:
 
 jobs:
@@ -12,11 +12,17 @@ jobs:
       rust: $(nightly)
       cross: true
       crates:
-        pattern-compiler: []
+        util/libeir_util_binary: []
+        util/libeir_util_datastructures: []
+        util/libeir_util_number: []
+        util/libeir_util_parse: []
+        util/libeir_util_parse_listing: []
+        util/libeir_util_pattern_compiler: []
         libeir_intern: []
         libeir_diagnostics: []
-        libeir_util: []
+        libeir_interpreter: []
         libeir_ir: []
         libeir_passes: []
+        libeir_lowerutils: []
         libeir_syntax_erl: []
         libeir_tests: []
