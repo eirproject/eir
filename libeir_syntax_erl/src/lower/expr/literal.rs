@@ -3,7 +3,7 @@ use libeir_ir::{
     Value as IrValue,
     Block as IrBlock,
 };
-use libeir_ir::constant::{ ConstantContainer, AtomTerm, NilTerm, Const };
+use libeir_ir::constant::{ ConstantContainer, BinaryTerm, AtomTerm, NilTerm, Const };
 
 use libeir_intern::Ident;
 use libeir_diagnostics::{ ByteSpan, ByteIndex, DUMMY_SPAN };
@@ -19,6 +19,17 @@ pub(super) fn lower_literal(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: 
         Literal::Atom(_id, ident) => b.value(AtomTerm(ident.name)),
         Literal::Integer(_id, _span, int) => b.value(int.clone()),
         Literal::Float(_id, _span, flt) => b.value(*flt),
+        Literal::Binary(_id, ident) => {
+            match intern_binary_const(*ident, b.cons_mut()) {
+                Ok(bin) => b.value(bin),
+                Err(err) => {
+                    ctx.failed = true;
+                    ctx.errors.push(err);
+                    b.value(BinaryTerm(vec![]))
+                }
+            }
+
+        },
         Literal::String(_id, ident) => {
             match intern_string_const(*ident, b.cons_mut()) {
                 Ok(cons) => b.value(cons),
@@ -222,6 +233,14 @@ pub fn tokenize_string(ident: Ident) -> Result<Vec<u64>, LowerError> {
     post_process(&mut state, &mut chars, string, string.len(), None)?;
 
     Ok(chars)
+}
+
+pub fn intern_binary_const(ident: Ident, c: &mut ConstantContainer) -> Result<Const, LowerError> {
+    let chars = tokenize_string(ident)?;
+
+    let bytes = chars.iter().copied().map(|i| i as u8).collect::<Vec<_>>();
+    let bin = BinaryTerm(bytes);
+    Ok(c.from(bin))
 }
 
 pub fn intern_string_const(ident: Ident, c: &mut ConstantContainer) -> Result<Const, LowerError> {

@@ -750,7 +750,7 @@ Binary: Expr = {
     <l:@L> "<<" ">>" <r:@R>
         => Expr::Binary(Binary { span: span!(l, r), id: nid.next(), elements: Vec::new() }),
     <l:@L> "<<" <elements:Comma<BinaryElement>> ">>" <r:@R>
-        => Expr::Binary(Binary { span: span!(l, r), id: nid.next(), elements }),
+        => Expr::from_binary(Binary { span: span!(l, r), id: nid.next(), elements }),
 };
 
 BinaryElement: BinaryElement = {
@@ -915,9 +915,12 @@ Atomic: Expr = {
         => Expr::Literal(Literal::Float(span!(l, r), nid.next(), f)),
     <atom>
         => Expr::Literal(Literal::Atom(nid.next(), <>)),
-    <l:@L> <s:string> <r:@R>
-        => Expr::Literal(Literal::String(nid.next(), Ident::new(s, span!(l, r)))),
+    <s:StringLiteral>
+        => Expr::Literal(Literal::String(nid.next(), s)),
 };
+
+StringLiteral: Ident = <l:@L> <s:string> <r:@R>
+    => Ident::new(s, span!(l, r));
 
 DelayedSubstitution: Expr = {
     <l:@L> <subs: delayed_substitution> <r:@R> =>
