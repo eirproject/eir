@@ -121,6 +121,20 @@ impl Expr {
             Expr::Fun(fun) => fun.id(),
         }
     }
+
+    pub fn from_binary(bin: Binary) -> Self {
+        if bin.elements.len() != 1 {
+            return Expr::Binary(bin);
+        }
+
+        let element = &bin.elements[0];
+        if let Expr::Literal(Literal::String(n, i)) = element.bit_expr {
+            // This is a constant binary
+            return Expr::Literal(Literal::Binary(n, i));
+        }
+
+        Expr::Binary(bin)
+    }
 }
 impl PartialOrd for Expr {
     // number < atom < reference < fun < port < pid < tuple < map < nil < list < bit string
@@ -261,6 +275,7 @@ impl PartialEq for MapProjection {
 pub enum Literal {
     Atom(NodeId, Ident),
     String(NodeId, Ident),
+    Binary(NodeId, Ident),
     Char(ByteSpan, NodeId, char),
     Integer(ByteSpan, NodeId, Integer),
     Float(ByteSpan, NodeId, f64),
@@ -270,6 +285,7 @@ impl Literal {
         match self {
             &Literal::Atom(_, Ident { ref span, .. }) => span.clone(),
             &Literal::String(_, Ident { ref span, .. }) => span.clone(),
+            &Literal::Binary(_, Ident { ref span, .. }) => span.clone(),
             &Literal::Char(span, _, _) => span.clone(),
             &Literal::Integer(span, _, _) => span.clone(),
             &Literal::Float(span, _, _) => span.clone(),
@@ -279,6 +295,7 @@ impl Literal {
         match self {
             Literal::Atom(id, _) => *id,
             Literal::String(id, _) => *id,
+            Literal::Binary(id, _) => *id,
             Literal::Char(_, id, _) => *id,
             Literal::Integer(_, id, _) => *id,
             Literal::Float(_, id, _) => *id,
@@ -294,6 +311,9 @@ impl PartialEq for Literal {
             (&Literal::String(_, ref lhs), &Literal::String(_, ref rhs)) => lhs == rhs,
             (&Literal::String(_, _), _) => false,
             (_, &Literal::String(_, _)) => false,
+            (&Literal::Binary(_, ref lhs), &Literal::Binary(_, ref rhs)) => lhs == rhs,
+            (&Literal::Binary(_, _), _) => false,
+            (_, &Literal::Binary(_, _)) => false,
             (x, y) => x.partial_cmp(y) == Some(Ordering::Equal),
         }
     }
@@ -305,6 +325,9 @@ impl PartialOrd for Literal {
             (Literal::String(_, ref lhs), Literal::String(_, ref rhs)) => lhs.partial_cmp(rhs),
             (Literal::String(_, _), _) => Some(Ordering::Greater),
             (_, Literal::String(_, _)) => Some(Ordering::Less),
+            (Literal::Binary(_, ref lhs), Literal::Binary(_, ref rhs)) => lhs.partial_cmp(rhs),
+            (Literal::Binary(_, _), _) => Some(Ordering::Greater),
+            (_, Literal::Binary(_, _)) => Some(Ordering::Less),
             (Literal::Atom(_, ref lhs), Literal::Atom(_, ref rhs)) => lhs.partial_cmp(rhs),
             (Literal::Atom(_, _), _) => Some(Ordering::Greater),
             (_, Literal::Atom(_, _)) => Some(Ordering::Less),

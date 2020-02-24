@@ -10,6 +10,7 @@ use libeir_ir::{
     AtomicTerm,
     IntTerm,
     BigIntTerm,
+    BinaryTerm,
 };
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
@@ -153,6 +154,22 @@ fn pattern_to_tree_node(
                     b.cons_mut().from(num.clone()).into(),
                 Literal::Float(_span, _id, num) =>
                     b.cons_mut().from(*num).into(),
+                Literal::Binary(_id, ident) => {
+                    match crate::lower::expr::literal::tokenize_string(*ident) {
+                        Ok(chars) => {
+                            let cons = b.cons_mut();
+                            let bytes = chars.iter().copied().map(|i| i as u8).collect::<Vec<_>>();
+                            let bin = BinaryTerm(bytes);
+                            let bin_const = cons.from(bin);
+                            let node = t.nodes.push(TreeNodeKind::Atomic(ident.span, bin_const));
+                            return node;
+                        }
+                        Err(err) => {
+                            ctx.error(err);
+                            return t.nodes.push(TreeNodeKind::Wildcard);
+                        },
+                    }
+                }
                 Literal::String(_id, ident) => {
                     match crate::lower::expr::literal::tokenize_string(
                         *ident)
