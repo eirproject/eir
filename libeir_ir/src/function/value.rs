@@ -9,6 +9,14 @@ use super::{ Block, Const, PrimOp, Location };
 pub struct Value(u32);
 entity_impl!(Value, "value");
 
+use libeir_util_dot_graph::NodeId;
+impl NodeId for Value {
+    fn make_id(&self, out: &mut String) {
+        use std::fmt::Write;
+        write!(out, "{}", self).unwrap();
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ValueData {
     pub(crate) kind: ValueKind,

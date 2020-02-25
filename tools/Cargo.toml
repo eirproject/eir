@@ -14,5 +14,9 @@ libeir_diagnostics = { path = "../libeir_diagnostics" }
 libeir_syntax_erl = { path = "../libeir_syntax_erl" }
 libeir_passes = { path = "../libeir_passes" }
 libeir_ir = { path = "../libeir_ir" }
+libeir_util_parse = { path = "../util/libeir_util_parse" }
+libeir_util_parse_listing = { path = "../util/libeir_util_parse_listing" }
 
 clap = "2.33.0"
+log = "0.4"
+fern = "0.5"
