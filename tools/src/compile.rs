@@ -6,11 +6,6 @@ use std::path::PathBuf;
 
 use libeir_ir::{ Module, FunctionIdent, ToEirTextContext, ToEirText };
 
-use libeir_syntax_erl::{
-    lower_module,
-    ParseConfig,
-    Parser,
-};
 use libeir_diagnostics::{
     ColorChoice, Emitter, StandardStreamEmitter
 };
@@ -31,6 +26,7 @@ arg_enum!{
     #[derive(Debug, PartialEq, Eq)]
     pub enum InputType {
         Eir,
+        Abstr,
         Erl,
     }
 }
@@ -54,7 +50,35 @@ arg_enum!{
     }
 }
 
+arg_enum!{
+    #[derive(Debug, Copy, Clone)]
+    pub enum LogLevel {
+        Error,
+        Warn,
+        Info,
+        Debug,
+        Trace,
+    }
+}
+impl LogLevel {
+    pub fn to_filter(self) -> log::LevelFilter {
+        match self {
+            LogLevel::Error => log::LevelFilter::Error,
+            LogLevel::Warn => log::LevelFilter::Warn,
+            LogLevel::Info => log::LevelFilter::Info,
+            LogLevel::Debug => log::LevelFilter::Debug,
+            LogLevel::Trace => log::LevelFilter::Trace,
+        }
+    }
+}
+
 fn handle_erl(in_str: &str, matches: &ArgMatches) -> Option<Module> {
+    use libeir_syntax_erl::{
+        lower_module,
+        ParseConfig,
+        Parser,
+    };
+
     let mut config = ParseConfig::default();
 
     if let Some(includes) = matches.values_of("INCLUDE_PATHS") {
@@ -97,8 +121,53 @@ fn handle_erl(in_str: &str, matches: &ArgMatches) -> Option<Module> {
     }
 }
 
+fn handle_abstr(in_str: &str, matches: &ArgMatches) -> Option<Module> {
+    use libeir_util_parse::{Parser, Parse};
+    use libeir_util_parse_listing::parser::{ParseConfig, ParseError};
+    use libeir_util_parse_listing::ast::Root;
+
+    use libeir_syntax_erl::lower_module;
+    use libeir_syntax_erl::lower_abstr;
+
+    let mut config = ParseConfig::default();
+    let parser = Parser::new(config);
+
+    let ast =  parser.parse_string::<_, Root>(in_str).unwrap();
+
+    let module_ast = lower_abstr(&ast);
+
+    let (res, messages) = {
+        let codemap = &*parser.config.codemap;
+        lower_module(codemap, &module_ast)
+    };
+
+    let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
+        .set_codemap(parser.config.codemap.clone());
+    for msg in messages.iter() {
+        emitter.diagnostic(&msg.to_diagnostic()).unwrap();
+    }
+
+    res.ok()
+}
+
 fn handle_eir(in_str: &str, _matches: &ArgMatches) -> Option<Module> {
     Some(libeir_ir::parse_module_unwrap(in_str))
+}
+
+fn setup_logger(level: log::LevelFilter) {
+    fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{}][{}] {}",
+                record.target(),
+                record.level(),
+                message
+            ))
+        })
+        .level(level)
+        .chain(std::io::stdout())
+        .apply()
+        .unwrap();
 }
 
 fn main() {
@@ -144,7 +213,14 @@ fn main() {
              .multiple(true)
              .number_of_values(1)
              .possible_values(&CompilePass::variants()))
+        .arg(Arg::from_usage("<LOG_LEVEL> -L,--log-level <LOG_LEVEL> 'log level'")
+             .default_value("info")
+             .required(false)
+             .case_insensitive(true)
+             .possible_values(&LogLevel::variants()))
         .get_matches();
+
+    setup_logger(value_t!(matches, "LOG_LEVEL", LogLevel).unwrap().to_filter());
 
     let in_file_name = matches.value_of("IN_FILE").unwrap();
 
@@ -154,6 +230,7 @@ fn main() {
 
     let eir_ret = match value_t!(matches, "IN_FORMAT", InputType).unwrap() {
         InputType::Erl => handle_erl(&in_str, &matches),
+        InputType::Abstr => handle_abstr(&in_str, &matches),
         InputType::Eir => handle_eir(&in_str, &matches),
     };
 
@@ -225,7 +302,8 @@ fn main() {
             let fun_def = &eir[&selected_function];
             let fun = fun_def.function();
 
-            ::libeir_ir::text::function_to_dot(&fun, &mut out_data).unwrap();
+            let dot = ::libeir_ir::text::function_to_dot(&fun);
+            out_data.extend(dot.bytes());
 
             out_ext = "dot";
         }
