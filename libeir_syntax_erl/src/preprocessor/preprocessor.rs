@@ -9,7 +9,7 @@ use snafu::ResultExt;
 
 use libeir_diagnostics::{ByteIndex, ByteSpan, CodeMap, Diagnostic, Label};
 use libeir_diagnostics::{Emitter, StandardStreamEmitter};
-use libeir_util_parse::Source;
+use libeir_util_parse::{Source, ErrorReceiver, ErrorReceiverTee};
 
 use crate::lexer::{symbols, IdentToken, Lexed, LexicalToken, Symbol, Token,
                    DelayedSubstitution};
@@ -19,10 +19,25 @@ use crate::parser::ParseConfig;
 use super::macros::Stringify;
 use super::token_reader::{TokenBufferReader, TokenReader, TokenStreamReader};
 use super::{Directive, MacroContainer, MacroIdent, MacroCall, MacroDef};
-use super::{Preprocessed, PreprocessorError, Result};
+use super::{Preprocessed, PreprocessorError, Result as PResult};
 use super::errors;
 
-pub struct Preprocessor<Reader: TokenReader> {
+type Errors<'a> = ErrorReceiverTee<'a, PreprocessorError, PreprocessorError>;
+
+macro_rules! error_into {
+	($errors:expr, $result:expr) => {
+		match $result {
+            Ok(inner) => Ok(inner),
+            Err(error) => {
+                $errors.error(error.into());
+                Err(())
+            },
+        }
+	};
+}
+
+pub struct Preprocessor<'a, Reader: TokenReader> {
+    errors: Errors<'a>,
     codemap: Arc<RwLock<CodeMap>>,
     reader: Reader,
     can_directive_start: bool,
@@ -36,12 +51,11 @@ pub struct Preprocessor<Reader: TokenReader> {
     warnings_as_errors: bool,
     no_warn: bool,
 }
-impl<S> Preprocessor<TokenStreamReader<S>>
+impl<'a, S> Preprocessor<'a, TokenStreamReader<S>>
 where
     S: Source,
 {
-    pub fn new(config: &ParseConfig, tokens: Lexer<S>) -> Self {
-        let codemap = config.codemap.clone();
+    pub fn new(config: &ParseConfig, codemap: Arc<RwLock<CodeMap>>, tokens: Lexer<S>, errors: Errors<'a>) -> Self {
         let reader = TokenStreamReader::new(codemap.clone(), tokens);
         let code_paths = config.code_paths.clone();
         let include_paths = config.include_paths.clone();
@@ -60,6 +74,7 @@ where
         );
 
         Preprocessor {
+            errors,
             codemap,
             reader,
             can_directive_start: true,
@@ -75,7 +90,7 @@ where
         }
     }
 }
-impl<R, S> Preprocessor<R>
+impl<'a, R, S> Preprocessor<'a, R>
 where
     R: TokenReader<Source = S>,
 {
@@ -83,6 +98,7 @@ where
         let codemap = self.codemap.clone();
         let reader = TokenBufferReader::new(codemap.clone(), tokens);
         Preprocessor {
+            errors: self.errors.clone(),
             codemap,
             reader,
             can_directive_start: false,
@@ -102,7 +118,7 @@ where
         self.branches.iter().any(|b| !b.entered)
     }
 
-    fn next_token(&mut self) -> Result<Option<LexicalToken>> {
+    fn next_token(&mut self) -> Result<Option<LexicalToken>, ()> {
         loop {
             if let Some(token) = self.expanded_tokens.pop_front() {
                 return Ok(Some(token));
@@ -125,13 +141,13 @@ where
                 }
             }
             if !self.ignore() {
-                if let Some(m) = self.reader.try_read_macro_call(&self.macros)? {
+                if let Some(m) = error_into!(self.errors, self.reader.try_read_macro_call(&self.macros))? {
                     self.macro_calls.insert(m.span().start(), m.clone());
-                    self.expanded_tokens = self.expand_macro(m)?;
+                    self.expanded_tokens = error_into!(self.errors, self.expand_macro(m))?;
                     continue;
                 }
             }
-            if let Some(token) = self.reader.try_read_token()? {
+            if let Some(token) = error_into!(self.errors, self.reader.try_read_token())? {
                 if self.ignore() {
                     continue;
                 }
@@ -148,7 +164,7 @@ where
         Ok(None)
     }
 
-    fn expand_macro(&self, call: MacroCall) -> Result<VecDeque<LexicalToken>> {
+    fn expand_macro(&self, call: MacroCall) -> PResult<VecDeque<LexicalToken>> {
         if let Some(expanded) = self.try_expand_predefined_macro(&call)? {
             Ok(vec![expanded].into())
         } else {
@@ -156,7 +172,7 @@ where
         }
     }
 
-    fn try_expand_predefined_macro(&self, call: &MacroCall) -> Result<Option<LexicalToken>> {
+    fn try_expand_predefined_macro(&self, call: &MacroCall) -> PResult<Option<LexicalToken>> {
         let expanded = match call.name().as_str().get() {
             "FILE" => {
                 let span = call.span();
@@ -201,7 +217,7 @@ where
         Ok(Some(expanded))
     }
 
-    fn expand_userdefined_macro(&self, call: MacroCall) -> Result<VecDeque<LexicalToken>> {
+    fn expand_userdefined_macro(&self, call: MacroCall) -> PResult<VecDeque<LexicalToken>> {
         let definition = match self.macros.get(&call) {
             None => return Err(PreprocessorError::UndefinedMacro { call }),
             Some(def) => def,
@@ -263,7 +279,7 @@ where
         &self,
         bindings: HashMap<Symbol, &[LexicalToken]>,
         replacement: &[LexicalToken],
-    ) -> Result<VecDeque<LexicalToken>> {
+    ) -> PResult<VecDeque<LexicalToken>> {
         let mut expanded = VecDeque::new();
         let replacement_tokens: VecDeque<_> = replacement.iter().map(|t| Ok(t.clone())).collect();
         let mut reader = TokenBufferReader::new(self.codemap.clone(), replacement_tokens);
@@ -305,8 +321,8 @@ where
         Ok(expanded)
     }
 
-    fn try_read_directive(&mut self) -> Result<Option<Directive>> {
-        let directive: Directive = if let Some(directive) = self.reader.try_read()? {
+    fn try_read_directive(&mut self) -> Result<Option<Directive>, ()> {
+        let directive: Directive = if let Some(directive) = error_into!(self.errors, self.reader.try_read())? {
             directive
         } else {
             return Ok(None);
@@ -323,15 +339,14 @@ where
                             MacroDef::String(d.name.symbol()));
             }
             Directive::Include(ref d) if !ignore => {
-                let path = d.include(&self.include_paths)
-                    .context(errors::BadDirective)?;
-                self.reader.inject_include(path)?;
+                let path = error_into!(self.errors, d.include(&self.include_paths)
+                    .context(errors::BadDirective))?;
+                error_into!(self.errors, self.reader.inject_include(path))?;
             }
             Directive::IncludeLib(ref d) if !ignore => {
-                let path = d.include_lib(&self.code_paths)
-                    .context(errors::BadDirective)?;
-                println!("{:?}", path);
-                self.reader.inject_include(path)?;
+                let path = error_into!(self.errors, d.include_lib(&self.code_paths)
+                    .context(errors::BadDirective))?;
+                error_into!(self.errors, self.reader.inject_include(path))?;
             }
             Directive::Define(ref d) if !ignore => {
                 self.macros
@@ -353,10 +368,10 @@ where
                 self.branches.push(Branch::new(entered));
             }
             Directive::Else(_) => match self.branches.last_mut() {
-                None => return Err(PreprocessorError::OrphanedElse { directive }),
+                None => return error_into!(self.errors, Err(PreprocessorError::OrphanedElse { directive })),
                 Some(branch) => {
                     match branch.switch_to_else_branch() {
-                        Err(_) => return Err(PreprocessorError::OrphanedElse { directive }),
+                        Err(_) => return error_into!(self.errors, Err(PreprocessorError::OrphanedElse { directive })),
                         Ok(_) => (),
                     };
                 }
@@ -364,7 +379,7 @@ where
             Directive::Elif(ref d) => {
                 // Treat this like -endif followed by -if(Cond)
                 match self.branches.pop() {
-                    None => return Err(PreprocessorError::OrphanedElse { directive }),
+                    None => return error_into!(self.errors, Err(PreprocessorError::OrphanedElse { directive })),
                     Some(_) => {
                         let entered = self.eval_conditional(d.span(), d.condition.clone())?;
                         self.branches.push(Branch::new(entered));
@@ -372,13 +387,13 @@ where
                 }
             }
             Directive::Endif(_) => match self.branches.pop() {
-                None => return Err(PreprocessorError::OrphanedEnd { directive }),
+                None => return error_into!(self.errors, Err(PreprocessorError::OrphanedEnd { directive })),
                 Some(_) => (),
             },
             Directive::Error(ref d) if !ignore => {
                 let span = d.span();
                 let err = d.message.symbol().as_str().get().to_string();
-                return Err(PreprocessorError::CompilerError { span: Some(span), reason: err });
+                return error_into!(self.errors, Err(PreprocessorError::CompilerError { span: Some(span), reason: err }));
             }
             Directive::Warning(ref d) if !ignore => {
                 if self.no_warn {
@@ -387,7 +402,7 @@ where
                 if self.warnings_as_errors {
                     let span = d.span();
                     let err = d.message.symbol().as_str().get().to_string();
-                    return Err(PreprocessorError::CompilerError { span: Some(span), reason: err });
+                    return error_into!(self.errors, Err(PreprocessorError::CompilerError { span: Some(span), reason: err }));
                 }
                 let span = d.span();
                 let warn = d.message.symbol().as_str().get();
@@ -406,30 +421,55 @@ where
         Ok(Some(directive))
     }
 
-    fn eval_conditional(&self, span: ByteSpan, condition: VecDeque<Lexed>) -> Result<bool> {
+    fn eval_conditional(
+        &mut self,
+        span: ByteSpan,
+        condition: VecDeque<Lexed>
+    ) -> Result<bool, ()>
+    {
         use crate::lexer::Ident;
         use crate::parser::ast::{Expr, Literal};
         use crate::parser::Parse;
         use crate::preprocessor::evaluator;
 
-        let pp = self.clone_with(condition);
-        let result = Expr::parse_tokens(pp);
-        match result {
-            Ok(expr) => match evaluator::eval(expr)? {
-                Expr::Literal(Literal::Atom(_, Ident { ref name, .. })) if *name == symbols::True => {
-                    Ok(true)
-                }
-                Expr::Literal(Literal::Atom(_, Ident { ref name, .. })) if *name == symbols::False => {
-                    Ok(false)
-                }
-                _other => return Err(PreprocessorError::InvalidConditional { span }),
+        let result = {
+            let mut adapter = self.errors.make_adapter(
+                move |v| PreprocessorError::ParseError {
+                    span,
+                    inner: Box::new(v),
+                },
+                move |v| PreprocessorError::ParseError {
+                    span,
+                    inner: Box::new(v),
+                },
+            );
+            let pp = self.clone_with(condition);
+            // TODO add adapter which adds PreprocessorError between
+            //let adapter = ErrorReceiverAdapter::new(
+            //    &mut self.errors,
+            //);
+            Expr::parse_tokens(&mut adapter, pp)
+        };
+        match evaluator::eval(result?) {
+            Ok(Expr::Literal(Literal::Atom(_, Ident { ref name, .. }))) if *name == symbols::True => {
+                Ok(true)
+            }
+            Ok(Expr::Literal(Literal::Atom(_, Ident { ref name, .. }))) if *name == symbols::False => {
+                Ok(false)
+            }
+            Err(err) => {
+                self.errors.error(err.into());
+                return Err(());
+            }
+            _other => {
+                self.errors.error(PreprocessorError::InvalidConditional { span }.into());
+                return Err(());
             },
-            Err(errors) => return Err(PreprocessorError::ParseError { span, errors }),
         }
     }
 }
 
-impl<R, S> Iterator for Preprocessor<R>
+impl<'a, R, S> Iterator for Preprocessor<'a, R>
 where
     R: TokenReader<Source = S>,
 {
@@ -437,7 +477,7 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.next_token() {
-            Err(e) => Some(Err(e)),
+            Err(()) => Some(Err(())),
             Ok(None) => None,
             Ok(Some(token)) => Some(Ok(token.into())),
         }
@@ -456,7 +496,7 @@ impl Branch {
             entered,
         }
     }
-    pub fn switch_to_else_branch(&mut self) -> Result<()> {
+    pub fn switch_to_else_branch(&mut self) -> PResult<()> {
         if !self.then_branch {
             return Err(PreprocessorError::OrphanedBranchElse);
         }

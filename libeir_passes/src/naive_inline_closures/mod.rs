@@ -4,6 +4,8 @@ use libeir_ir::{Block, OpKind};
 
 use super::FunctionPass;
 
+use log::trace;
+
 #[cfg(test)]
 mod tests;
 
@@ -25,9 +27,10 @@ impl NaiveInlineClosuresPass {
 }
 
 impl FunctionPass for NaiveInlineClosuresPass {
+    fn name(&self) -> &str {
+        "naive_inline_closures"
+    }
     fn run_function_pass(&mut self, b: &mut FunctionBuilder) {
-        println!("{}", b.fun().to_text());
-        println!("Inline Closures");
         self.inline_closures(b);
     }
 }
@@ -69,7 +72,7 @@ impl NaiveInlineClosuresPass {
             }
         }
 
-        println!("{:?}", self.calls_buf);
+        trace!("call_sites: {:?}", self.calls_buf);
 
         for (block, target) in self.calls_buf.iter().cloned() {
             // Signature of new entry block has no arguments
@@ -96,8 +99,6 @@ impl NaiveInlineClosuresPass {
             b.block_clear(block);
             b.op_call_flow(block, new_block, &[]);
         }
-
-        println!("{}", b.fun().to_text());
     }
 
 }

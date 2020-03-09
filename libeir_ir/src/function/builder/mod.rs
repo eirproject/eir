@@ -43,7 +43,9 @@ impl IntoValue for PrimOp {
 impl<T> IntoValue for T where T: IntoConst {
     fn into_value<'a>(self, b: &mut FunctionBuilder<'a>) -> Value {
         let constant = b.fun.constant_container.from(self);
-        b.fun.values.push(ValueKind::Const(constant))
+        let value = b.fun.values.push(ValueKind::Const(constant));
+        b.fun.constant_values.insert(value);
+        value
     }
 }
 

@@ -4,7 +4,7 @@ use libeir_ir::parse_function_unwrap;
 fn simple_function() {
 
     let fun = parse_function_unwrap("
-foo:bar/1 {
+a'foo':a'bar'/1 {
     entry(%ret, %thr, %a):
         if_bool %a one two;
     one():
@@ -21,7 +21,7 @@ foo:bar/1 {
 #[test]
 fn nested_functions() {
     let fun = parse_function_unwrap("
-foo:bar/1 {
+a'foo':a'bar'/1 {
     entry(%ret, %thr, %a):
         %ret(inner);
     inner(%iret, %ithr):

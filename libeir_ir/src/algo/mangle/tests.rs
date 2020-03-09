@@ -1,4 +1,4 @@
-use crate::NilTerm;
+use crate::{NilTerm, StandardFormatConfig};
 
 use super::Mangler;
 use super::ToT;
@@ -7,7 +7,7 @@ use super::ToT;
 fn simple_mangle() {
 
     let (mut ir, map) = crate::parse_function_map_unwrap("
-foo:bar/1 {
+a'foo':a'bar'/1 {
     entry(%ret, %thr, %a):
         b1();
     b1():
@@ -35,7 +35,7 @@ foo:bar/1 {
     b.block_set_entry(new_b1);
 
     let after = crate::parse_function_unwrap("
-foo:bar/1 {
+a'foo':a'bar'/1 {
     entry(%ret):
         b1();
     b1():
@@ -51,7 +51,7 @@ foo:bar/1 {
 fn mangle_primop() {
 
     let (mut ir, map) = crate::parse_function_map_unwrap("
-foo:bar/1 {
+a'foo':a'bar'/1 {
     entry(%ret, %thr, %a):
         %ret({%a});
 }
@@ -70,7 +70,7 @@ foo:bar/1 {
     let new_b1 = mangler.run(&mut b);
 
     let after = crate::parse_function_unwrap("
-foo:bar/1 {
+a'foo':a'bar'/1 {
     entry(%ret, %thr, %a):
         %ret({[]});
 }
@@ -84,7 +84,7 @@ foo:bar/1 {
 fn mangle_recursive() {
 
     let (mut ir, map) = crate::parse_function_map_unwrap("
-foo:bar/2 {
+a'foo':a'bar'/2 {
     entry(%ret, %thr, %a, %b):
         b2(%a);
     b1(%m):
@@ -99,7 +99,7 @@ foo:bar/2 {
 ");
 
     let mut b = ir.builder();
-    println!("{}", b.fun().to_text());
+    println!("{}", b.fun().to_text(&mut StandardFormatConfig::default()));
 
     let mut mangler = Mangler::new();
 
@@ -117,10 +117,10 @@ foo:bar/2 {
     let new_entry = mangler.run(&mut b);
 
     b.block_set_entry(new_entry);
-    println!("{}", b.fun().to_text());
+    println!("{}", b.fun().to_text(&mut StandardFormatConfig::default()));
 
     let after = crate::parse_function_unwrap("
-foo:bar/2 {
+a'foo':a'bar'/2 {
     entry(%ret, %thr, %a, %b):
         b1(%a);
     b1(%m):
@@ -135,7 +135,7 @@ foo:bar/2 {
 #[test]
 fn mangle_entry() {
     let (mut ir, map) = crate::parse_function_map_unwrap("
-foo:bar/0 {
+a'foo':a'bar'/0 {
     block0(%1, %2):
         unreachable;
     block1(%4, %5):
@@ -159,14 +159,14 @@ foo:bar/0 {
     let new_entry = mangler.run(&mut b);
 
     b.block_set_entry(new_entry);
-    println!("{}", b.fun().to_text());
+    println!("{}", b.fun().to_text(&mut StandardFormatConfig::default()));
 
     let mut errors = Vec::new();
     b.fun().validate(&mut errors);
     assert_eq!(errors.len(), 0, "{:#?}", errors);
 
     let after = crate::parse_function_unwrap("
-foo:bar/0 {
+a'foo':a'bar'/0 {
     block3(%9, %10):
         block4(%10);
     block4(%12):

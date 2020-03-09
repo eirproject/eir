@@ -1,7 +1,8 @@
 use cranelift_entity::{ PrimaryMap, EntityList, ListPool, entity_impl };
 use libeir_util_pattern_compiler::{ PatternProvider, ExpandedClauseNodes };
 
-use std::collections::{ HashMap, BTreeMap };
+use hashbrown::HashMap;
+use std::collections::BTreeMap;
 
 use libeir_ir::{ Function, FunctionBuilder, Value, ValueKind, PrimOp };
 use libeir_ir::BinaryEntrySpecifier;

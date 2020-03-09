@@ -1,5 +1,5 @@
 #![feature(specialization)]
-#![deny(warnings)]
+//#![deny(warnings)]
 
 use std::fmt::{ Display, Formatter };
 use std::cmp::Ordering;
@@ -47,7 +47,7 @@ pub use text::{
     parse_function_map, parse_function_map_unwrap,
     parse_module, parse_module_unwrap
 };
-pub use text::printer::{ ToEirText, ToEirTextContext };
+pub use text::printer::{ FormatConfig, StandardFormatConfig };
 
 pub mod binary;
 pub use binary::{ BinaryEntrySpecifier, Endianness };

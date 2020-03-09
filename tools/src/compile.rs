@@ -1,18 +1,22 @@
-use clap::{ Arg, App, ArgMatches, arg_enum, value_t, values_t };
+use clap::{Arg, App, ArgMatches, arg_enum, value_t, values_t};
 
-use std::io::Read;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use libeir_ir::{ Module, FunctionIdent, ToEirTextContext, ToEirText };
+use libeir_ir::FunctionIdent;
 
 use libeir_diagnostics::{
     ColorChoice, Emitter, StandardStreamEmitter
 };
 use libeir_passes::PassManager;
 
-//use eir::FunctionIdent;
-//use eir::text::{ ToEirText, ToEirTextContext, EirLiveValuesAnnotator };
+use libeir_frontend::{
+    AnyFrontend, DynFrontend,
+    erlang::ErlangFrontend,
+    abstr_erlang::AbstrErlangFrontend,
+    eir::EirFrontend,
+};
+use libeir_util_parse::ArcCodemap;
 
 arg_enum!{
     #[derive(Debug, PartialEq, Eq)]
@@ -72,12 +76,8 @@ impl LogLevel {
     }
 }
 
-fn handle_erl(in_str: &str, matches: &ArgMatches) -> Option<Module> {
-    use libeir_syntax_erl::{
-        lower_module,
-        ParseConfig,
-        Parser,
-    };
+fn make_erlang_frontend(matches: &ArgMatches) -> ErlangFrontend {
+    use libeir_syntax_erl::ParseConfig;
 
     let mut config = ParseConfig::default();
 
@@ -92,66 +92,15 @@ fn handle_erl(in_str: &str, matches: &ArgMatches) -> Option<Module> {
         }
     }
 
-    let parser = Parser::new(config);
-
-    match parser.parse_string(in_str) {
-        Ok(ast) => {
-            let (res, messages) = {
-                let codemap = &*parser.config.codemap;
-                lower_module(codemap, &ast)
-            };
-
-            let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
-                .set_codemap(parser.config.codemap.clone());
-            for msg in messages.iter() {
-                emitter.diagnostic(&msg.to_diagnostic()).unwrap();
-            }
-
-            res.ok()
-        }
-        Err(err) => {
-            let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
-                .set_codemap(parser.config.codemap.clone());
-            for msg in err.iter() {
-                emitter.diagnostic(&msg.to_diagnostic()).unwrap();
-            }
-
-            None
-        }
-    }
+    ErlangFrontend::new(config)
 }
 
-fn handle_abstr(in_str: &str, matches: &ArgMatches) -> Option<Module> {
-    use libeir_util_parse::{Parser, Parse};
-    use libeir_util_parse_listing::parser::{ParseConfig, ParseError};
-    use libeir_util_parse_listing::ast::Root;
-
-    use libeir_syntax_erl::lower_module;
-    use libeir_syntax_erl::lower_abstr;
-
-    let mut config = ParseConfig::default();
-    let parser = Parser::new(config);
-
-    let ast =  parser.parse_string::<_, Root>(in_str).unwrap();
-
-    let module_ast = lower_abstr(&ast);
-
-    let (res, messages) = {
-        let codemap = &*parser.config.codemap;
-        lower_module(codemap, &module_ast)
-    };
-
-    let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
-        .set_codemap(parser.config.codemap.clone());
-    for msg in messages.iter() {
-        emitter.diagnostic(&msg.to_diagnostic()).unwrap();
+fn make_frontend(matches: &ArgMatches) -> AnyFrontend {
+    match value_t!(matches, "IN_FORMAT", InputType).unwrap() {
+        InputType::Erl => make_erlang_frontend(matches).into(),
+        InputType::Abstr => AbstrErlangFrontend::new().into(),
+        InputType::Eir => EirFrontend::new().into(),
     }
-
-    res.ok()
-}
-
-fn handle_eir(in_str: &str, _matches: &ArgMatches) -> Option<Module> {
-    Some(libeir_ir::parse_module_unwrap(in_str))
 }
 
 fn setup_logger(level: log::LevelFilter) {
@@ -222,23 +171,24 @@ fn main() {
 
     setup_logger(value_t!(matches, "LOG_LEVEL", LogLevel).unwrap().to_filter());
 
+    let frontend = make_frontend(&matches);
+
     let in_file_name = matches.value_of("IN_FILE").unwrap();
+    let in_file_path = Path::new(in_file_name);
 
-    let mut in_str = String::new();
-    std::fs::File::open(&in_file_name).unwrap()
-        .read_to_string(&mut in_str).unwrap();
+    let codemap = ArcCodemap::default();
+    let (eir_res, diagnostics) = frontend.parse_file_dyn(codemap.clone(), &in_file_path);
 
-    let eir_ret = match value_t!(matches, "IN_FORMAT", InputType).unwrap() {
-        InputType::Erl => handle_erl(&in_str, &matches),
-        InputType::Abstr => handle_abstr(&in_str, &matches),
-        InputType::Eir => handle_eir(&in_str, &matches),
-    };
+    let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
+        .set_codemap(codemap.clone());
+    for diag in diagnostics.iter() {
+        emitter.diagnostic(diag).unwrap();
+    }
 
-    let mut eir = if let Some(eir) = eir_ret {
-        eir
-    } else {
+    if eir_res.is_err() {
         return;
-    };
+    }
+    let mut eir = eir_res.unwrap();
 
     match value_t!(matches, "COMPILE_LEVEL", CompileLevel).unwrap() {
         CompileLevel::High => {},
@@ -278,21 +228,19 @@ fn main() {
         .map(|val| FunctionIdent::parse_with_module(
             val, eir.name().clone()).unwrap());
 
-    let mut print_ctx = ToEirTextContext::new();
     //if matches.is_present("ANNOTATE_LIVE") {
     //    print_ctx.add_annotator(EirLiveValuesAnnotator::new());
     //}
 
-    let mut out_data = Vec::new();
+    let out_data;
     let out_ext;
     let out_type = value_t!(matches, "OUT_FORMAT", OutputType).unwrap();
     match out_type {
         OutputType::Eir => {
             if let Some(selected) = selected_function {
-                eir[&selected].function()
-                    .to_eir_text(&mut print_ctx, 0, &mut out_data).unwrap();
+                out_data = eir[&selected].function().to_text_standard();
             } else {
-                eir.to_eir_text(&mut print_ctx, 0, &mut out_data).unwrap();
+                out_data = eir.to_text_standard();
             }
             out_ext = "eir";
         },
@@ -302,8 +250,7 @@ fn main() {
             let fun_def = &eir[&selected_function];
             let fun = fun_def.function();
 
-            let dot = ::libeir_ir::text::function_to_dot(&fun);
-            out_data.extend(dot.bytes());
+            out_data = ::libeir_ir::text::function_to_dot(&fun);
 
             out_ext = "dot";
         }
@@ -317,7 +264,7 @@ fn main() {
 
     println!("Writing to {}", out_file_name);
     let mut out = ::std::fs::File::create(&out_file_name).unwrap();
-    out.write(&out_data).unwrap();
+    out.write(out_data.as_bytes()).unwrap();
 
     if let Some(dot_format) = matches.value_of("DOT_FORMAT") {
         assert!(out_type == OutputType::Dot);

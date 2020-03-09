@@ -19,6 +19,11 @@ pub mod simple_pattern;
 
 pub use ::petgraph::graph::NodeIndex;
 
+#[cfg(feature = "debug_table_print")]
+use log::trace;
+#[cfg(feature = "debug_table_print")]
+const TARGET: &'static str = "pattern_compiler";
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct LeafId(usize);
 
@@ -72,10 +77,12 @@ fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
 
     #[cfg(feature = "debug_table_print")]
     {
+        let mut buf = String::new();
         for _ in 0..level {
-            print!(" ==");
+            write!(buf, " ==");
         }
-        println!(" MATRIX AT LEVEL {}", level);
+        write!(buf, " MATRIX AT LEVEL {}", level);
+        trace!(target: TARGET, "{}", buf);
     }
 
     let edge = cfg::CfgEdge {

@@ -4,7 +4,7 @@ use libeir_diagnostics::{ByteSpan, Diagnostic, Label};
 use itertools::Itertools;
 use snafu::Snafu;
 
-use libeir_util_parse::{PathVariableSubstituteError, SourceError};
+use libeir_util_parse::{PathVariableSubstituteError, SourceError, ToDiagnostic};
 use crate::lexer::{LexicalError, LexicalToken, TokenConvertError};
 
 use crate::parser::ParserError;
@@ -29,7 +29,7 @@ pub enum PreprocessorError {
     #[snafu(display("unable to parse constant expression"))]
     ParseError {
         span: ByteSpan,
-        errors: Vec<ParserError>,
+        inner: Box<ParserError>,
     },
 
     #[snafu(display("{}", reason))]
@@ -143,15 +143,14 @@ impl PreprocessorError {
             PreprocessorError::ShowDiagnostic { diagnostic } => diagnostic.clone(),
             PreprocessorError::Lexical { source } => source.to_diagnostic(),
             PreprocessorError::Source { source } => source.to_diagnostic(),
-            PreprocessorError::ParseError { errors, .. } => {
+            PreprocessorError::ParseError { inner, .. } => {
                 let mut d = Diagnostic::new_error(msg)
                     .with_label(Label::new_primary(span.unwrap())
                         .with_message("invalid constant expression"));
-                for err in errors.iter() {
-                    let err = err.to_diagnostic();
-                    for label in err.labels {
-                        d = d.with_label(label);
-                    }
+
+                let err = inner.to_diagnostic();
+                for label in err.labels {
+                    d = d.with_label(label);
                 }
                 d
             }

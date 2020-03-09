@@ -1,5 +1,5 @@
 mod block_graph;
-pub use block_graph::BlockGraph;
+pub use block_graph::{BlockGraph, EntityVisitMap};
 
 mod live_block_graph;
 pub use live_block_graph::LiveBlockGraph;

@@ -1,3 +1,4 @@
+use libeir_util_parse::ToDiagnostic;
 use libeir_diagnostics::{ ByteSpan, Diagnostic, Label };
 
 use super::expr::BinaryTypeName;
@@ -60,9 +61,9 @@ pub enum LowerError {
 
 }
 
-impl LowerError {
+impl ToDiagnostic for LowerError {
 
-    pub fn to_diagnostic(&self) -> Diagnostic {
+    fn to_diagnostic(&self) -> Diagnostic {
         let msg = self.to_string();
         match self {
             LowerError::NotAllowedInPattern { span } => {

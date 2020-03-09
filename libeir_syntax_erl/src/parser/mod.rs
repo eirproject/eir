@@ -13,9 +13,12 @@ macro_rules! to_lalrpop_err (
     ($error:expr) => (lalrpop_util::ParseError::User { error: $error })
 );
 
+type ParserErrorReceiver<'a> = dyn ErrorReceiver<E = ParserError, W = ParserError> + 'a;
+
 #[cfg_attr(rustfmt, rustfmt_skip)]
 #[allow(unknown_lints)]
 #[allow(clippy)]
+#[allow(unused_parens)]
 pub(crate) mod grammar {
     // During the build step, `build.rs` will output the generated parser to `OUT_DIR` to avoid
     // adding it to the source directory, so we just directly include the generated parser here.
@@ -39,15 +42,12 @@ pub mod visitor;
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
 
-use libeir_util_parse::{Scanner, Source, SourceError, ParserConfig};
+use libeir_util_parse::{Scanner, Source, SourceError, ErrorReceiver, ArcCodemap, error_tee};
 use libeir_util_parse::{Parser as GParser, Parse as GParse};
 
 pub type Parser = GParser<ParseConfig>;
-pub trait Parse<T> = GParse<T, Config = ParseConfig, Error = Vec<ParserError>>;
-
-use libeir_diagnostics::CodeMap;
+pub trait Parse<T> = GParse<T, Config = ParseConfig, Error = ParserError>;
 
 use crate::lexer::Lexer;
 use crate::preprocessor::{MacroContainer, Preprocessed, Preprocessor};
@@ -59,34 +59,20 @@ pub use self::errors::*;
 pub type ParseResult<T> = Result<T, Vec<ParserError>>;
 
 pub struct ParseConfig {
-    pub codemap: Arc<RwLock<CodeMap>>,
     pub warnings_as_errors: bool,
     pub no_warn: bool,
     pub include_paths: VecDeque<PathBuf>,
     pub code_paths: VecDeque<PathBuf>,
     pub macros: Option<MacroContainer>,
 }
-impl ParserConfig for ParseConfig {
-    fn codemap(&self) -> &Arc<RwLock<CodeMap>> {
-        &self.codemap
-    }
-}
 impl ParseConfig {
-    pub fn new(codemap: Arc<RwLock<CodeMap>>) -> Self {
-        ParseConfig {
-            codemap,
-            warnings_as_errors: false,
-            no_warn: false,
-            include_paths: VecDeque::new(),
-            code_paths: VecDeque::new(),
-            macros: None,
-        }
+    pub fn new() -> Self {
+        ParseConfig::default()
     }
 }
 impl Default for ParseConfig {
     fn default() -> Self {
         ParseConfig {
-            codemap: Arc::new(RwLock::new(CodeMap::new())),
             warnings_as_errors: false,
             no_warn: false,
             include_paths: VecDeque::new(),
@@ -98,75 +84,98 @@ impl Default for ParseConfig {
 
 impl GParse for ast::Module {
     type Parser = grammar::ModuleParser;
-    type Error = Vec<ParserError>;
+    type Error = ParserError;
     type Config = ParseConfig;
     type Token = Preprocessed;
 
     fn file_map_error(err: SourceError) -> Self::Error {
-        vec![err.into()]
+        err.into()
     }
 
-    fn parse<S>(config: &ParseConfig, source: S) -> ParseResult<Self>
+    fn parse<'a, S>(
+        config: &ParseConfig,
+        codemap: &ArcCodemap,
+        err: &'a mut ParserErrorReceiver<'a>,
+        source: S,
+    ) -> Result<Self, ()>
     where
         S: Source,
     {
-        let scanner = Scanner::new(source);
-        let lexer = Lexer::new(scanner);
-        let tokens = Preprocessor::new(config, lexer);
-        Self::parse_tokens(tokens)
+        error_tee(err, |mut errors| {
+            let scanner = Scanner::new(source);
+            let lexer = Lexer::new(scanner);
+            error_tee(&mut errors.clone().make_into_adapter(), |preproc_errors| {
+                let tokens = Preprocessor::new(config, codemap.clone(), lexer, preproc_errors);
+                Self::parse_tokens(&mut errors, tokens)
+            })
+        })
     }
 
-    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(tokens: S) -> ParseResult<ast::Module> {
+    fn parse_tokens<'a, S: IntoIterator<Item = Preprocessed>>(
+        err: &'a mut ParserErrorReceiver<'a>,
+        tokens: S,
+    ) -> Result<Self, ()>
+    {
         let mut nid = NodeIdGenerator::new();
-        let mut errs = Vec::new();
         let result = Self::Parser::new()
-            .parse(&mut errs, &mut nid, tokens)
-            .map_err(|e| e.map_error(|ei| ei.into()));
-        to_parse_result(errs, result)
+            .parse(err, &mut nid, tokens);
+        to_parse_result(err, result)
     }
 }
 
 impl GParse for ast::Expr {
     type Parser = grammar::ExprParser;
-    type Error = Vec<ParserError>;
+    type Error = ParserError;
     type Config = ParseConfig;
     type Token = Preprocessed;
 
     fn file_map_error(err: SourceError) -> Self::Error {
-        vec![err.into()]
+        err.into()
     }
 
-    fn parse<S>(config: &ParseConfig, source: S) -> ParseResult<Self>
+    fn parse<S>(
+        config: &ParseConfig,
+        codemap: &ArcCodemap,
+        err: &mut ParserErrorReceiver,
+        source: S,
+    ) -> Result<Self, ()>
     where
         S: Source,
     {
-        let scanner = Scanner::new(source);
-        let lexer = Lexer::new(scanner);
-        let tokens = Preprocessor::new(config, lexer);
-        Self::parse_tokens(tokens)
+        error_tee(err, |mut errors| {
+            let scanner = Scanner::new(source);
+            let lexer = Lexer::new(scanner);
+            error_tee(&mut errors.clone().make_into_adapter(), |preproc_errors| {
+                let tokens = Preprocessor::new(config, codemap.clone(), lexer, preproc_errors);
+                Self::parse_tokens(&mut errors, tokens)
+            })
+        })
     }
 
-    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(tokens: S) -> ParseResult<ast::Expr> {
+    fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(
+        err: &mut ParserErrorReceiver,
+        tokens: S,
+    ) -> Result<Self, ()>
+    {
         let mut nid = NodeIdGenerator::new();
-        let mut errs = Vec::new();
         let result = Self::Parser::new()
-            .parse(&mut errs, &mut nid, tokens)
-            .map_err(|e| e.map_error(|ei| ei.into()));
-        to_parse_result(errs, result)
+            .parse(err, &mut nid, tokens);
+        to_parse_result(err, result)
     }
 }
 
-fn to_parse_result<T>(mut errs: Vec<ParseError>, result: Result<T, ParseError>) -> ParseResult<T> {
+fn to_parse_result<T>(errs: &mut ParserErrorReceiver, result: Result<T, ParseError>) -> Result<T, ()> {
     match result {
         Ok(ast) => {
-            if errs.len() > 0 {
-                return Err(errs.drain(0..).map(ParserError::from).collect());
+            if (*errs).is_failed() {
+                return Err(());
             }
             Ok(ast)
         }
+        Err(lalrpop_util::ParseError::User { .. }) => Err(()),
         Err(err) => {
-            errs.push(err);
-            Err(errs.drain(0..).map(ParserError::from).collect())
+            errs.error(err.into());
+            Err(())
         }
     }
 }
@@ -179,51 +188,44 @@ mod test {
     use super::*;
 
     use libeir_diagnostics::ByteSpan;
-    use libeir_diagnostics::{ColorChoice, Emitter, StandardStreamEmitter};
+    use libeir_util_parse::{Errors, ErrorOrWarning, ArcCodemap};
 
     use crate::lexer::{Ident, Symbol};
     use crate::preprocessor::PreprocessorError;
 
-    fn parse<'a, T>(input: &'a str) -> T
+    fn parse<'a, T>(config: ParseConfig, codemap: &ArcCodemap, input: &'a str) -> T
     where
-        T: Parse<T, Config = ParseConfig, Error = Vec<ParserError>>,
+        T: Parse<T, Config = ParseConfig, Error = ParserError>,
     {
-        let config = ParseConfig::default();
+        let mut errors = Errors::new();
         let parser = Parser::new(config);
-        let errs = match parser.parse_string::<&'a str, T>(input) {
+        match parser.parse_string::<&'a str, T>(&mut errors, codemap, input) {
             Ok(ast) => return ast,
             Err(errs) => errs,
         };
-        let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
-            .set_codemap(parser.config.codemap.clone());
-        for err in errs.iter() {
-            emitter.diagnostic(&err.to_diagnostic()).unwrap();
-        }
+
+        errors.print(codemap);
         panic!("parse failed");
     }
 
-    fn parse_fail<T>(input: &'static str) -> Vec<ParserError>
+    fn parse_fail<T>(config: ParseConfig, codemap: &ArcCodemap, input: &'static str) -> Errors<ParserError, ParserError>
     where
-        T: Parse<T, Config = ParseConfig, Error = Vec<ParserError>>,
+        T: Parse<T, Config = ParseConfig, Error = ParserError>,
     {
-        let config = ParseConfig::default();
+        let mut errors = Errors::new();
         let parser = Parser::new(config);
-        match parser.parse_string::<&'static str, T>(input) {
-            Err(errs) => errs,
+        match parser.parse_string::<&'static str, T>(&mut errors, codemap, input) {
+            Err(()) => errors,
             _ => panic!("expected parse to fail, but it succeeded!"),
         }
     }
 
     macro_rules! module {
-        ($nid:expr, $name:expr, $body:expr) => {{
-            let mut errs = Vec::new();
+        ($codemap:expr, $nid:expr, $name:expr, $body:expr) => {{
+            let mut errs = Errors::new();
             let module = Module::new(&mut errs, ByteSpan::default(), $nid, $name, $body);
-            if errs.len() > 0 {
-                let emitter = StandardStreamEmitter::new(ColorChoice::Auto);
-                for err in errs.drain(..) {
-                    let err = ParserError::from(err);
-                    emitter.diagnostic(&err.to_diagnostic()).unwrap();
-                }
+            if errs.is_failed() {
+                errs.print($codemap);
                 panic!("failed to create expected module!");
             }
             module
@@ -232,15 +234,20 @@ mod test {
 
     #[test]
     fn parse_empty_module() {
-        let result: Module = parse("-module(foo).");
+        let codemap = ArcCodemap::default();
+        let config = ParseConfig::default();
+        let result: Module = parse(config, &codemap, "-module(foo).");
         let mut nid = NodeIdGenerator::new();
-        let expected = module!(&mut nid, ident!("foo"), vec![]);
+        let expected = module!(&codemap, &mut nid, ident!("foo"), vec![]);
         assert_eq!(result, expected);
     }
 
     #[test]
     fn parse_module_with_multi_clause_function() {
+        let codemap = ArcCodemap::default();
+        let config = ParseConfig::default();
         let result: Module = parse(
+            config, &codemap,
             "-module(foo).
 
 foo([], Acc) -> Acc;
@@ -275,13 +282,16 @@ foo([H|T], Acc) -> foo(T, [H|Acc]).
             clauses,
             spec: None,
         }));
-        let expected = module!(nid, ident!(foo), body);
+        let expected = module!(&codemap, nid, ident!(foo), body);
         assert_eq!(result, expected);
     }
 
     #[test]
     fn parse_if_expressions() {
+        let codemap = ArcCodemap::default();
+        let config = ParseConfig::default();
         let result: Module = parse(
+            config, &codemap,
             "-module(foo).
 
 unless(false) ->
@@ -376,13 +386,16 @@ unless(Value) ->
             clauses,
             spec: None,
         }));
-        let expected = module!(nid, ident!(foo), body);
+        let expected = module!(&codemap, nid, ident!(foo), body);
         assert_eq!(result, expected);
     }
 
     #[test]
     fn parse_case_expressions() {
+        let codemap = ArcCodemap::default();
+        let config = ParseConfig::default();
         let result: Module = parse(
+            config, &codemap,
             "-module(foo).
 
 typeof(Value) ->
@@ -453,13 +466,16 @@ typeof(Value) ->
             clauses,
             spec: None,
         }));
-        let expected = module!(nid, ident!(foo), body);
+        let expected = module!(&codemap, nid, ident!(foo), body);
         assert_eq!(result, expected);
     }
 
     #[test]
     fn parse_receive_expressions() {
+        let codemap = ArcCodemap::default();
+        let config = ParseConfig::default();
         let result: Module = parse(
+            config, &codemap,
             "-module(foo).
 
 loop(State, Timeout) ->
@@ -539,13 +555,16 @@ loop(State, Timeout) ->
             clauses,
             spec: None,
         }));
-        let expected = module!(nid, ident!(foo), body);
+        let expected = module!(&codemap, nid, ident!(foo), body);
         assert_eq!(result, expected);
     }
 
     #[test]
     fn parse_preprocessor_if() {
+        let codemap = ArcCodemap::default();
+        let config = ParseConfig::default();
         let result: Module = parse(
+            config, &codemap,
             "-module(foo).
 -define(TEST, true).
 -define(OTP_VERSION, 21).
@@ -610,7 +629,7 @@ system_version() ->
             spec: None,
         };
         body.push(TopLevel::Function(system_version_fun));
-        let expected = module!(nid, ident!(foo), body);
+        let expected = module!(&codemap, nid, ident!(foo), body);
         assert_eq!(result, expected);
     }
 
@@ -621,16 +640,19 @@ system_version() ->
         // a writer everywhere. You can change this for testing by
         // going to the Preprocessor and finding the line where we handle
         // the warning directive and toggle the config flag
+        let codemap = ArcCodemap::default();
+        let config = ParseConfig::default();
         let mut errs = parse_fail::<Module>(
+            config, &codemap,
             "-module(foo).
 -warning(\"this is a compiler warning\").
 -error(\"this is a compiler error\").
 ",
         );
-        match errs.pop() {
-            Some(ParserError::Preprocessor {
+        match errs.errors.pop() {
+            Some(ErrorOrWarning::Error(ParserError::Preprocessor {
                 source: PreprocessorError::CompilerError { .. },
-            }) => (),
+            })) => (),
             Some(err) => panic!(
                 "expected compiler error, but got a different error instead: {:?}",
                 err
@@ -641,7 +663,10 @@ system_version() ->
 
     #[test]
     fn parse_try() {
+        let codemap = ArcCodemap::default();
+        let config = ParseConfig::default();
         let result: Module = parse(
+            config, &codemap,
             "-module(foo).
 
 example(File) ->
@@ -715,13 +740,16 @@ example(File) ->
             clauses,
             spec: None,
         }));
-        let expected = module!(nid, ident!(foo), body);
+        let expected = module!(&codemap, nid, ident!(foo), body);
         assert_eq!(result, expected);
     }
 
     #[test]
     fn parse_try2() {
+        let codemap = ArcCodemap::default();
+        let config = ParseConfig::default();
         let _result: Module = parse(
+            config, &codemap,
             "-module(foo).
 
 example(File < 2) ->
@@ -749,6 +777,7 @@ exw(File) ->
     #[test]
     fn parse_numbers() {
         let _result: Module = parse(
+            ParseConfig::default(), &ArcCodemap::default(),
             "-module(foo).
 
 foo(F) -> F-1+1/1*1.
@@ -761,6 +790,7 @@ bar() -> - 2.
     #[test]
     fn parse_spec() {
         let _result: Module = parse(
+            ParseConfig::default(), &ArcCodemap::default(),
             "-module(foo).
 
 -spec bar() -> number.
@@ -772,6 +802,7 @@ bar() -> 2.
     #[test]
     fn parse_binary_spec_constant() {
         let _result: Module = parse(
+            ParseConfig::default(), &ArcCodemap::default(),
             "-module(foo).
 
 -type txs_hash() :: <<_:(32 * 8)>>.
@@ -788,7 +819,7 @@ bar() -> 2.
         let mut string = String::new();
         file.unwrap().read_to_string(&mut string).unwrap();
 
-        let _result: Module = parse(&string);
+        let _result: Module = parse(ParseConfig::default(), &ArcCodemap::default(), &string);
     }
 
 }

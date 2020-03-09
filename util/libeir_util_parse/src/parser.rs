@@ -5,6 +5,9 @@ use std::path::Path;
 use libeir_diagnostics::{CodeMap, FileName};
 
 use crate::{Source, SourceError, FileMapSource};
+use crate::ErrorReceiver;
+
+pub type ArcCodemap = Arc<RwLock<CodeMap>>;
 
 pub struct Parser<C> {
     pub config: C,
@@ -20,38 +23,46 @@ impl<C> Parser<C> {
 
 }
 
-impl<C> Parser<C> where C: ParserConfig {
+impl<C> Parser<C> {
 
-    pub fn parse_string<S, T>(&self, source: S) -> Result<T, <T as Parse>::Error>
+    pub fn parse_string<'a, S, T>(
+        &self,
+        errors: &'a mut (dyn ErrorReceiver<E = <T as Parse>::Error, W = <T as Parse>::Error> + 'a),
+        codemap: &ArcCodemap,
+        source: S,
+    ) -> Result<T, ()>
     where
         S: AsRef<str>,
         T: Parse<Config = C>,
     {
-        let codemap = self.config.codemap();
         let filemap = {
             codemap.write().unwrap().add_filemap(
                 FileName::Virtual(Cow::Borrowed("nofile")),
                 source.as_ref().to_owned(),
             )
         };
-        <T as Parse<T>>::parse(&self.config, FileMapSource::new(filemap))
+        <T as Parse<T>>::parse(&self.config, codemap, errors, FileMapSource::new(filemap))
     }
 
-    pub fn parse_file<P, T>(&self, path: P) -> Result<T, <T as Parse>::Error>
+    pub fn parse_file<'a, P, T>(
+        &self,
+        errors: &'a mut (dyn ErrorReceiver<E = <T as Parse>::Error, W = <T as Parse>::Error> + 'a),
+        codemap: &ArcCodemap,
+        path: P,
+    ) -> Result<T, ()>
     where
         P: AsRef<Path>,
         T: Parse<Config = C>,
     {
-        match FileMapSource::from_path(self.config.codemap().clone(), path) {
-            Err(err) => return Err(<T as Parse<T>>::file_map_error(err)),
-            Ok(source) => <T as Parse<T>>::parse(&self.config, source),
+        match FileMapSource::from_path(codemap.clone(), path) {
+            Err(err) => {
+                errors.error(<T as Parse<T>>::file_map_error(err));
+                Err(())
+            },
+            Ok(source) => <T as Parse<T>>::parse(&self.config, codemap, errors, source),
         }
     }
 
-}
-
-pub trait ParserConfig {
-    fn codemap(&self) -> &Arc<RwLock<CodeMap>>;
 }
 
 pub trait Parse<T = Self> {
@@ -63,12 +74,20 @@ pub trait Parse<T = Self> {
     fn file_map_error(err: SourceError) -> Self::Error;
 
     /// Initializes a token stream for the underlying parser and invokes parse_tokens
-    fn parse<S>(config: &Self::Config, source: S) -> Result<T, Self::Error>
+    fn parse<'a, S>(
+        config: &Self::Config,
+        codemap: &ArcCodemap,
+        errors: &'a mut (dyn ErrorReceiver<E = Self::Error, W = Self::Error> + 'a),
+        source: S,
+    ) -> Result<T, ()>
     where
         S: Source;
 
     /// Implemented by each parser, which should parse the token stream and produce a T
-    fn parse_tokens<S>(tokens: S) -> Result<T, Self::Error>
+    fn parse_tokens<'a, S>(
+        errors: &'a mut (dyn ErrorReceiver<E = Self::Error, W = Self::Error> + 'a),
+        tokens: S,
+    ) -> Result<T, ()>
     where
         S: IntoIterator<Item = Self::Token>;
 }

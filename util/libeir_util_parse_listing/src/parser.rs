@@ -1,7 +1,5 @@
-use std::sync::{Arc, RwLock};
-
-use libeir_util_parse::{Scanner, Parse, ParserConfig, Source, SourceError};
-use libeir_diagnostics::{CodeMap, ByteIndex};
+use libeir_util_parse::{Scanner, Parse, Source, SourceError, ErrorReceiver, ToDiagnostic, ArcCodemap};
+use libeir_diagnostics::{Diagnostic, ByteIndex};
 
 use super::ast;
 use super::token::{Lexer, Token};
@@ -33,69 +31,75 @@ impl From<lalrpop_util::ParseError<ByteIndex, Token, ()>> for ParseError {
     }
 }
 
-pub struct ParseConfig {
-    pub codemap: Arc<RwLock<CodeMap>>,
-}
-impl ParserConfig for ParseConfig {
-    fn codemap(&self) -> &Arc<RwLock<CodeMap>> {
-        &self.codemap
-    }
-}
-impl Default for ParseConfig {
-    fn default() -> Self {
-        ParseConfig {
-            codemap: Arc::new(RwLock::new(CodeMap::new())),
-        }
+impl ToDiagnostic for ParseError {
+    fn to_diagnostic(&self) -> Diagnostic {
+        unimplemented!()
     }
 }
 
 impl Parse for ast::Root {
     type Parser = grammar::RootParser;
     type Error = ParseError;
-    type Config = ParseConfig;
+    type Config = ();
     type Token = Result<(ByteIndex, Token, ByteIndex), ()>;
 
     fn file_map_error(_err: SourceError) -> Self::Error {
         unimplemented!()
     }
 
-    fn parse<S>(_config: &ParseConfig, source: S) -> Result<Self, Self::Error>
+    fn parse<S>(
+        _config: &(),
+        _codemap: &ArcCodemap,
+        errors: &mut dyn ErrorReceiver<E = ParseError, W = ParseError>,
+        source: S,
+    ) -> Result<Self, ()>
     where
         S: Source,
     {
         let scanner = Scanner::new(source);
         let lexer = Lexer::new(scanner);
-        Self::parse_tokens(lexer)
+        Self::parse_tokens(errors, lexer)
     }
 
-    fn parse_tokens<S>(tokens: S) -> Result<Self, Self::Error>
+    fn parse_tokens<S>(
+        errors: &mut dyn ErrorReceiver<E = ParseError, W = ParseError>,
+        tokens: S,
+    ) -> Result<Self, ()>
     where
         S: IntoIterator<Item = Self::Token>,
     {
-        Self::Parser::new()
-            .parse(tokens)
-            .map_err(|e| e.into())
+        match Self::Parser::new().parse(tokens) {
+            Ok(inner) => Ok(inner),
+            Err(err) => {
+                errors.error(err.into());
+                Err(())
+            },
+        }
     }
 
 }
 
 #[cfg(test)]
 mod test {
-    use libeir_util_parse::{Parser, Parse};
-    use super::{ParseConfig, ParseError};
+    use libeir_util_parse::{Parser, Parse, Errors, ArcCodemap};
+    use super::ParseError;
     use super::ast::Root;
 
     fn parse<'a, T>(input: &'a str) -> T
     where
-        T: Parse<T, Config = ParseConfig, Error = ParseError>
+        T: Parse<T, Config = (), Error = ParseError>
     {
-        let config = ParseConfig::default();
-        let parser = Parser::new(config);
-        let err = match parser.parse_string::<&'a str, T>(input) {
+        let codemap = ArcCodemap::default();
+
+        let parser = Parser::new(());
+        let mut errors = Errors::new();
+        match parser.parse_string::<&'a str, T>(&mut errors, &codemap, input) {
             Ok(ast) => return ast,
-            Err(err) => err,
+            Err(()) => {
+                errors.print(&codemap);
+                panic!();
+            },
         };
-        panic!("{:?}", err);
     }
 
     #[test]

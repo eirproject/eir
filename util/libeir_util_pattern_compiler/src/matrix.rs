@@ -3,6 +3,12 @@ use std::collections::{ HashMap, HashSet };
 #[cfg(feature = "debug_table_print")]
 use prettytable::Table;
 
+
+#[cfg(feature = "debug_table_print")]
+use log::trace;
+#[cfg(feature = "debug_table_print")]
+use super::TARGET;
+
 use super::LeafId;
 use super::pattern::PatternProvider;
 
@@ -148,9 +154,9 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
     {
         #[cfg(feature = "debug_table_print")]
         {
-            println!("Specialize variable #{} on {:?}", variable, on);
-            println!("{}", self.to_table(&ctx.pattern));
-            println!("binds: {:#?}", self.leaf_bindings);
+            trace!(target: TARGET, "Specialize variable #{} on {:?}", variable, on);
+            trace!(target: TARGET, "{}", self.to_table(&ctx.pattern));
+            trace!(target: TARGET, "binds: {:#?}", self.leaf_bindings);
         }
 
         // 1. Determine how we want to handle the different clauses

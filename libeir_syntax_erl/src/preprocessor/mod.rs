@@ -19,6 +19,6 @@ use libeir_diagnostics::ByteIndex;
 use crate::lexer::Token;
 
 /// The result produced by the preprocessor
-pub type Preprocessed = std::result::Result<(ByteIndex, Token, ByteIndex), PreprocessorError>;
+pub type Preprocessed = std::result::Result<(ByteIndex, Token, ByteIndex), ()>;
 
 type Result<T> = std::result::Result<T, PreprocessorError>;

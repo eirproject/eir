@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn basic_equality() {
         let ir1 = parse_function_unwrap("
-foo:bar/1 {
+a'foo':a'bar'/1 {
     entry(%ret, %thr, %arg1):
         block2(%arg1);
     block2(%b):
@@ -179,7 +179,7 @@ foo:bar/1 {
 ");
 
         let ir2 = parse_function_unwrap("
-a:b/1 {
+a'a':a'b'/1 {
     entry(%ret, %thr, %arg1):
         block2(%arg1);
     block3(%a):
@@ -195,14 +195,14 @@ a:b/1 {
     #[test]
     fn args_length_inequality() {
         let ir1 = parse_function_unwrap("
-foo:bar/2 {
+a'foo':a'bar'/2 {
     entry(%ret, %thr, %arg1, %arg2):
         %ret(%arg1);
 }
 ");
 
         let ir2 = parse_function_unwrap("
-foo:bar/1 {
+a'foo':a'bar'/1 {
     entry(%ret, %thr, %arg1):
         %ret(%arg1);
 }
@@ -214,14 +214,14 @@ foo:bar/1 {
     #[test]
     fn args_read_inequality() {
         let ir1 = parse_function_unwrap("
-foo:bar/2 {
+a'foo':a'bar'/2 {
     entry(%ret, %thr, %arg1, %arg2):
         %ret(%arg1);
 }
 ");
 
         let ir2 = parse_function_unwrap("
-foo:bar/2 {
+a'foo':a'bar'/2 {
     entry(%ret, %thr, %arg1, %arg2):
         %ret(%arg2);
 }
@@ -233,14 +233,14 @@ foo:bar/2 {
     #[test]
     fn args_read_const_equality() {
         let ir1 = parse_function_unwrap("
-foo:bar/2 {
+a'foo':a'bar'/2 {
     entry(%ret, %thr, %arg1, %arg2):
         %ret(a'a');
 }
 ");
 
         let ir2 = parse_function_unwrap("
-foo:bar/2 {
+a'foo':a'bar'/2 {
     entry(%ret, %thr, %arg1, %arg2):
         %ret(a'a');
 }
@@ -252,14 +252,14 @@ foo:bar/2 {
     #[test]
     fn args_read_const_inequality() {
         let ir1 = parse_function_unwrap("
-foo:bar/2 {
+a'foo':a'bar'/2 {
     entry(%ret, %thr, %arg1, %arg2):
         %ret(a'a');
 }
 ");
 
         let ir2 = parse_function_unwrap("
-foo:bar/2 {
+a'foo':a'bar'/2 {
     entry(%ret, %thr, %arg1, %arg2):
         %ret(a'b');
 }
@@ -271,7 +271,7 @@ foo:bar/2 {
     #[test]
     fn args_prim_inequality() {
         let ir1 = parse_function_unwrap("
-foo:bar/1 {
+a'foo':a'bar'/1 {
     entry(%ret, %thr, %arg1):
         %fun = a'a':a'a'/1;
         %fun(%ret, %thr, %arg1);
@@ -279,7 +279,7 @@ foo:bar/1 {
 ");
 
         let ir2 = parse_function_unwrap("
-foo:bar/1 {
+a'foo':a'bar'/1 {
     entry(%ret, %thr, %arg1):
         %fun = a'a':a'b'/1;
         %fun(%ret, %thr, %arg1);

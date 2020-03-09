@@ -1,41 +1,34 @@
 use crate::ast::*;
 use crate::*;
 
+use crate::parser::ParseConfig;
 use crate::lower::lower_module;
 
-use libeir_ir::Module as IrModule;
-use libeir_diagnostics::{ColorChoice, Emitter, StandardStreamEmitter};
+use libeir_ir::{Module as IrModule, StandardFormatConfig};
+use libeir_util_parse::{Errors, ArcCodemap};
 
-fn parse<T>(input: &str, config: ParseConfig) -> (T, Parser)
+fn parse<T>(input: &str, config: ParseConfig, codemap: &ArcCodemap) -> T
 where
-    T: Parse<T, Config = ParseConfig, Error = Vec<ParserError>>,
+    T: Parse<T, Config = ParseConfig, Error = ParserError>,
 {
     let parser = Parser::new(config);
-    let errs = match parser.parse_string::<&str, T>(input) {
-        Ok(ast) => return (ast, parser),
-        Err(errs) => errs,
+    let mut errors = Errors::new();
+    match parser.parse_string::<&str, T>(&mut errors, codemap, input) {
+        Ok(ast) => return ast,
+        Err(()) => (),
     };
-    let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
-        .set_codemap(parser.config.codemap.clone());
-    for err in errs.iter() {
-        emitter.diagnostic(&err.to_diagnostic()).unwrap();
-    }
+    errors.print(codemap);
     panic!("parse failed");
 }
 
 fn lower(input: &str, config: ParseConfig) -> Result<IrModule, ()> {
-    let (parsed, parser): (Module, _) = parse(input, config);
+    let codemap = ArcCodemap::default();
+   // let mut errors = MultiErrors::new(config.codemap.clone());
+    let parsed: Module = parse(input, config, &codemap);
 
-    let (res, messages) = {
-        let codemap = &*parser.config.codemap;
-        lower_module(codemap, &parsed)
-    };
-
-    let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
-        .set_codemap(parser.config.codemap.clone());
-    for err in messages.iter() {
-        emitter.diagnostic(&err.to_diagnostic()).unwrap();
-    }
+    let mut errors = Errors::new();
+    let res = lower_module(&mut errors, &codemap, &parsed);
+    errors.print(&codemap);
 
     res
 }
@@ -63,7 +56,7 @@ pat(A, A) -> 1.
         ParseConfig::default()
     ).unwrap();
 
-    print!("{}", fun.to_text());
+    println!("{}", fun.to_text(&mut StandardFormatConfig::default()));
 }
 
 //#[test]

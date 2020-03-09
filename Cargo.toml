@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "libeir_frontend",
     "libeir_diagnostics",
     "libeir_intern",
     "libeir_syntax_erl",
@@ -16,4 +17,6 @@ members = [
     "util/libeir_util_number",
     "util/libeir_util_parse",
     "util/libeir_util_parse_listing",
+    "util/libeir_util_dot_graph",
+    "util/scoped_cell",
 ]

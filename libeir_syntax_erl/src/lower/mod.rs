@@ -11,6 +11,7 @@ use libeir_ir::{
 
 use libeir_diagnostics::{ByteSpan, CodeMap};
 use libeir_intern::{Symbol, Ident};
+use libeir_util_parse::ErrorReceiver;
 
 use crate::parser::ast::{Module, NamedFunction, Function, FunctionClause};
 
@@ -31,7 +32,7 @@ mod expr;
 use expr::{lower_block, lower_single};
 
 mod errors;
-use errors::LowerError;
+pub use errors::LowerError;
 
 mod exception_handler_stack;
 use exception_handler_stack::ExceptionHandlerStack;
@@ -51,8 +52,7 @@ pub(crate) struct LowerCtx<'a> {
 
     sentinel_value: Option<IrValue>,
 
-    errors: Vec<LowerError>,
-    failed: bool,
+    errors: &'a mut (dyn ErrorReceiver<E = LowerError, W = LowerError> + 'a),
 
     val_buf: Vec<IrValue>,
 
@@ -70,18 +70,22 @@ impl<'a> LowerCtx<'a> {
     /// In a case where, say, we have an unresolved variable, we need
     /// a dummy value that we can use.
     /// If this value is used in the resulting IR, it is REQUIRED that
-    /// `failed` be set to true.
+    /// `error` be called at least once, which sets the error receiver
+    /// to the failed state.
     pub fn sentinel(&self) -> IrValue {
         self.sentinel_value.unwrap()
     }
 
     pub fn error(&mut self, err: LowerError) {
-        self.failed = true;
-        self.errors.push(err);
+        self.errors.error(err);
     }
 
     pub fn warn(&mut self, err: LowerError) {
-        self.errors.push(err);
+        self.errors.warning(err);
+    }
+
+    pub fn failed(&self) -> bool {
+        self.errors.is_failed()
     }
 
     pub fn resolve(&mut self, ident: Ident) -> IrValue {
@@ -155,11 +159,11 @@ impl<'a> LowerCtx<'a> {
 
 }
 
-pub fn lower_module(
+pub fn lower_module<'a>(
+    errors: &'a mut (dyn ErrorReceiver<E = LowerError, W = LowerError> + 'a),
     codemap: &RwLock<CodeMap>,
-    module: &Module
-) -> (Result<IrModule, ()>, Vec<LowerError>)
-{
+    module: &Module,
+) -> Result<IrModule, ()> {
 
     // TODO sort functions for more deterministic compilation
 
@@ -174,8 +178,7 @@ pub fn lower_module(
 
         sentinel_value: None,
 
-        errors: Vec::new(),
-        failed: false,
+        errors,
 
         val_buf: Vec::new(),
 
@@ -203,21 +206,15 @@ pub fn lower_module(
         ctx.sentinel_value = Some(sentinel_value);
 
         lower_top_function(&mut ctx, &mut builder, function);
-        println!("FAIL: {:?}", ctx.failed);
+        println!("FAIL: {:?}", ctx.failed());
     }
 
     ctx.exc_stack.finish();
 
-    if ctx.failed {
-        (
-            Err(()),
-            ctx.errors,
-        )
+    if ctx.failed() {
+        Err(())
     } else {
-        (
-            Ok(ir_module),
-            ctx.errors,
-        )
+        Ok(ir_module)
     }
 }
 

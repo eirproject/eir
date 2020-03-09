@@ -1,0 +1,19 @@
+[package]
+name = "libeir_frontend"
+version = "0.1.0"
+authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
+edition = "2018"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+libeir_ir = { path = "../libeir_ir" }
+libeir_syntax_erl = { path = "../libeir_syntax_erl" }
+libeir_util_parse = { path = "../util/libeir_util_parse" }
+libeir_diagnostics = { path = "../libeir_diagnostics" }
+libeir_util_parse_listing = { path = "../util/libeir_util_parse_listing" }
+
+[features]
+default = ["frontend_erlang", "frontend_abstr_erlang", "frontend_eir"]
+frontend_erlang = []
+frontend_abstr_erlang = []
+frontend_eir = []

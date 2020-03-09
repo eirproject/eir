@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use cranelift_entity::{PrimaryMap, entity_impl};
 
 use libeir_intern::{Ident, Symbol};
-use crate::{Function, FunctionIdent, ToEirText, ToEirTextContext};
+use crate::{Function, FunctionIdent};
 
 #[derive(Debug)]
 pub struct FunctionDefinition {
@@ -71,14 +71,6 @@ impl Module {
         let def_mut = self.functions.get_mut(index).unwrap();
         def_mut.index = index;
         def_mut
-    }
-
-    pub fn to_text(&self) -> String {
-        let mut ctx = ToEirTextContext::new();
-
-        let mut out = Vec::new();
-        self.to_eir_text(&mut ctx, 0, &mut out).unwrap();
-        String::from_utf8(out).unwrap()
     }
 
     pub fn ident_index(&self, ident: &FunctionIdent) -> Option<FunctionIndex> {

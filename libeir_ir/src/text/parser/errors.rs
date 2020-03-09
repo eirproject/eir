@@ -8,9 +8,10 @@ use crate::text::ast::LowerError;
 
 pub type ParseError = lalrpop_util::ParseError<ByteIndex, Token, ParserError>;
 
-pub type ParserErrors = libeir_util_parse::ParserErrors<ParserError>;
+pub type Errors = libeir_util_parse::Errors<ParserError, ParserError>;
 
 #[derive(Debug, Snafu)]
+#[snafu(visibility = "pub(super)")]
 pub enum ParserError {
 
     #[snafu(display("{}", source))]

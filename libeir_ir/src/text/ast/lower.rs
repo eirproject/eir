@@ -13,7 +13,7 @@ use crate::{Block, Value};
 use crate::PatternNode;
 use crate::text::ast;
 
-type ErrCollector<'a> = &'a mut dyn ErrorReceiver<LowerError, LowerError>;
+type ErrCollector<'a> = &'a mut dyn ErrorReceiver<E = LowerError, W = LowerError>;
 
 #[derive(Debug, Snafu)]
 pub enum LowerError {

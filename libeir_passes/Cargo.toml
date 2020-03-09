@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 libeir_ir = { path = "../libeir_ir" }
 libeir_intern = { path = "../libeir_intern" }
 libeir_util_pattern_compiler = { path = "../util/libeir_util_pattern_compiler" }
+libeir_util_dot_graph = { path = "../util/libeir_util_dot_graph" }
 
 matches = "0.1.8"
 
@@ -16,6 +17,13 @@ cranelift-entity = "0.30.0"
 
 petgraph = "0.4"
 
-bumpalo = { git = "https://github.com/hansihe/bumpalo.git", features = [ "collections_hash" ] }
+bumpalo = { git = "https://github.com/hansihe/bumpalo", branch = "nightly_alloc", features = ["nightly", "collections"] }
 
 fnv = "1.0.3"
+
+log = "0.4"
+
+hashbrown = { path = "../../hashbrown", features = ["raw", "nightly"] }
+
+[dev-dependencies]
+simple_logger = "1.0"

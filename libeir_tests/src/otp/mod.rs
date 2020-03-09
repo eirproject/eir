@@ -106,7 +106,7 @@ fn match_suite() {
     for fun_def in eir_mod.function_iter() {
         let fun = fun_def.function();
         println!("{}", fun.ident());
-        println!("{}", fun.to_text());
+        println!("{}", fun.to_text_standard());
         fun.graph_validate_global();
         fun.live_values();
     }

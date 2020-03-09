@@ -1,11 +1,25 @@
 use libeir_ir::ToPrimitive;
 use libeir_intern::Ident;
-use libeir_diagnostics::DUMMY_SPAN;
+use libeir_diagnostics::{ByteSpan, DUMMY_SPAN};
+use libeir_util_parse::MessageIgnore;
 
 use std::convert::TryInto;
 
 use crate::parser::ast;
 use libeir_util_parse_listing::ast as aast;
+
+fn to_list_expr(id_gen: &mut ast::NodeIdGenerator, span: ByteSpan, mut list: Vec<ast::Expr>) -> ast::Expr {
+    let mut acc = ast::Expr::Nil(ast::Nil(span, id_gen.next()));
+    for elem in list.drain(..).rev() {
+        acc = ast::Expr::Cons(ast::Cons {
+            id: id_gen.next(),
+            span: span,
+            head: Box::new(elem),
+            tail: Box::new(acc),
+        });
+    }
+    acc
+}
 
 pub fn lower(root: &aast::Root) -> ast::Module {
     let mut toplevel: Vec<ast::TopLevel> = Vec::new();
@@ -51,6 +65,23 @@ pub fn lower(root: &aast::Root) -> ast::Module {
                         toplevel.push(ast::TopLevel::Attribute(
                             ast::Attribute::Export(tuple.span, exports)));
                     },
+                    "compile" => {
+                        let opts = tuple
+                            .entries[3]
+                            .list_iter()
+                            .unwrap()
+                            .map(|item| {
+                                match item {
+                                    aast::Item::Atom(ident) =>
+                                        ast::Expr::Literal(ast::Literal::Atom(id_gen.next(), *ident)),
+                                    _ => unimplemented!("{:?}", item),
+                                }
+                            })
+                            .collect();
+                        toplevel.push(ast::TopLevel::Attribute(
+                            ast::Attribute::Compile(tuple.span, to_list_expr(&mut id_gen, tuple.span, opts))
+                        ))
+                    }
                     "spec" => {
                         continue;
                     },
@@ -91,7 +122,12 @@ pub fn lower(root: &aast::Root) -> ast::Module {
                         };
                         toplevel.push(ast::TopLevel::Record(record));
                     },
-                    n => unimplemented!("attribute {}", n),
+                    "behaviour" => {
+                        toplevel.push(ast::TopLevel::Attribute(
+                            ast::Attribute::Behaviour(tuple.span, tuple.entries[3].atom().unwrap())
+                        ))
+                    },
+                    n => unimplemented!("attribute {} {:?}", n, tuple),
                 }
             },
             "function" => {
@@ -119,15 +155,15 @@ pub fn lower(root: &aast::Root) -> ast::Module {
         }
     }
 
-    let mut errs = vec![];
+    let mut errors = MessageIgnore::new();
     let module = ast::Module::new(
-        &mut errs,
+        &mut errors,
         DUMMY_SPAN,
         &mut id_gen,
         module_name.unwrap(),
         toplevel,
     );
-    assert!(errs.len() == 0);
+    assert!(!errors.failed());
     module
 }
 
@@ -798,34 +834,70 @@ fn integer(item: &aast::Item) -> &aast::Int {
 
 #[cfg(test)]
 mod test {
-    use libeir_util_parse::{Parser, Parse};
-    use libeir_util_parse_listing::parser::{ParseConfig, ParseError};
+    use libeir_util_parse::{Parser, Parse, Errors, ArcCodemap, ToDiagnostic, error_tee};
+    use libeir_util_parse_listing::parser::ParseError;
     use libeir_util_parse_listing::ast::Root;
+    use libeir_diagnostics::Diagnostic;
+
+    use crate::LowerError;
+
+    enum ParseOrLowerError {
+        Parse(ParseError),
+        Lower(LowerError),
+    }
+    impl ToDiagnostic for ParseOrLowerError {
+        fn to_diagnostic(&self) -> Diagnostic {
+            match self {
+                ParseOrLowerError::Parse(err) => err.to_diagnostic(),
+                ParseOrLowerError::Lower(err) => err.to_diagnostic(),
+            }
+        }
+    }
+    impl From<ParseError> for ParseOrLowerError {
+        fn from(e: ParseError) -> Self {
+            Self::Parse(e)
+        }
+    }
+    impl From<LowerError> for ParseOrLowerError {
+        fn from(e: LowerError) -> Self {
+            Self::Lower(e)
+        }
+    }
 
     fn parse<'a, T>(input: &'a str) -> T
     where
-        T: Parse<T, Config = ParseConfig, Error = ParseError>
+        T: Parse<T, Config = (), Error = ParseError>
     {
-        let config = ParseConfig::default();
-        let parser = Parser::new(config);
-        let err = match parser.parse_string::<&'a str, T>(input) {
+        let codemap = ArcCodemap::default();
+        let parser = Parser::new(());
+
+        let mut errors = Errors::new();
+
+        match parser.parse_string::<&'a str, T>(&mut errors, &codemap, input) {
             Ok(ast) => return ast,
-            Err(err) => err,
+            Err(()) => {
+                errors.print(&codemap);
+                panic!()
+            },
         };
-        panic!("{:?}", err);
     }
 
     fn parse_file<'a, T>(input: &'a str) -> T
     where
-        T: Parse<T, Config = ParseConfig, Error = ParseError>
+        T: Parse<T, Config = (), Error = ParseError>
     {
-        let config = ParseConfig::default();
-        let parser = Parser::new(config);
-        let err = match parser.parse_file::<&'a str, T>(input) {
+        let codemap = ArcCodemap::default();
+        let parser = Parser::new(());
+
+        let mut errors = Errors::new();
+
+        match parser.parse_file::<&'a str, T>(&mut errors, &codemap, input) {
             Ok(ast) => return ast,
-            Err(err) => err,
+            Err(()) => {
+                errors.print(&codemap);
+                panic!()
+            },
         };
-        panic!("{:?}", err);
     }
 
     #[test]
@@ -863,19 +935,29 @@ mod test {
 
     #[test]
     fn match_suite() {
-        let config = ParseConfig::default();
-        let codemap = config.codemap.clone();
+        let codemap = ArcCodemap::default();
 
-        let parser = Parser::new(config);
-        let ast = match parser.parse_file::<_, Root>("../test_data/match_SUITE.abstr") {
-            Ok(ast) => ast,
-            Err(err) => panic!("{:?}", err),
-        };
+        let parser = Parser::new(());
 
-        let module = super::lower(&ast);
+        let mut errors: Errors<ParseOrLowerError, ParseOrLowerError> = Errors::new();
+        let res = error_tee(&mut errors, |mut errors| {
+            match parser.parse_file::<_, Root>(&mut errors.make_into_adapter(), &codemap, "../test_data/match_SUITE.abstr") {
+                Ok(ast) => {
+                    let module = super::lower(&ast);
+                    crate::lower_module(&mut errors.make_into_adapter(), &codemap, &module)
+                },
+                Err(()) => Err(()),
+            }
+        });
 
-        let (res, _errors) = crate::lower_module(&*codemap, &module);
-        res.unwrap();
+        match res {
+            Ok(_res) => (),
+            Err(()) => {
+                errors.print(&codemap);
+                panic!();
+            },
+        }
+
     }
 
 }

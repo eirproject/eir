@@ -6,10 +6,10 @@ use libeir_util_number::{Integer, ToPrimitive};
 use crate::lexer::{Token, DelayedSubstitution, Symbol, Ident};
 use crate::preprocessor::PreprocessorError;
 
-use super::ParseError;
+use super::{ParserError, ParserErrorReceiver};
 use super::ast::*;
-grammar(
-    errs: &mut Vec<ParseError>,
+grammar<'a>(
+    errs: &'a mut ParserErrorReceiver<'a>,
     nid: &mut NodeIdGenerator,
 );
 
@@ -83,7 +83,10 @@ TopLevel: TopLevel = {
 
 FunctionDefinition: NamedFunction = {
     <l:@L> <clauses:Semi<FunctionHead>> "." <r:@R>
-        =>? NamedFunction::new(errs, span!(l, r), nid, clauses),
+        =>? match NamedFunction::new(errs, span!(l, r), nid, clauses) {
+                Ok(inner) => Ok(inner),
+                Err(()) => Err(to_lalrpop_err!(())),
+            },
 };
 
 FunctionHead: FunctionClause = {
@@ -208,11 +211,12 @@ DeprecatedAttribute: Attribute = {
                 ]))
             }
             other => {
-                Err(to_lalrpop_err!(PreprocessorError::ShowDiagnostic {
+                errs.error(PreprocessorError::ShowDiagnostic {
                     diagnostic: Diagnostic::new_warning("invalid deprecated attribute")
                         .with_label(Label::new_primary(span!(l, r))
                             .with_message("expected 'module', '{module, Flag}', 'Function/Arity', or '{Function/Arity, Flag}'"))
-                }))
+                }.into());
+                Err(to_lalrpop_err!(()))
             }
         }
     },
@@ -246,11 +250,11 @@ DeprecatedFlag: DeprecatedFlag = {
             "next_version" => DeprecatedFlag::NextVersion,
             "next_major_release" => DeprecatedFlag::NextMajorRelease,
             other => {
-                errs.push(to_lalrpop_err!(ParserError::ShowDiagnostic {
+                errs.warning(ParserError::ShowDiagnostic {
                     diagnostic: Diagnostic::new_warning("invalid deprecation flag")
                         .with_label(Label::new_primary(span!(l, r))
                             .with_message(format!("expected one of 'eventually', 'next_version', or 'next_major_release', got '{}'", other))),
-                }));
+                });
                 DeprecatedFlag::Eventually
             }
         }
@@ -305,13 +309,12 @@ TypeGuard: TypeGuard = {
             "is_subtype" =>
                 Ok(TypeGuard { span: span!(l, r), var, ty }),
             name => {
-                Err(lalrpop_util::ParseError::User {
-                    error: PreprocessorError::ShowDiagnostic {
-                        diagnostic: Diagnostic::new_error("invalid type constraint")
-                            .with_label(Label::new_primary(span!(l, r))
-                                .with_message(format!("expected constraint in the form `Name :: Type`"))),
-                    }
-                })
+                errs.error(PreprocessorError::ShowDiagnostic {
+                    diagnostic: Diagnostic::new_error("invalid type constraint")
+                        .with_label(Label::new_primary(span!(l, r))
+                            .with_message(format!("expected constraint in the form `Name :: Type`"))),
+                }.into());
+                Err(to_lalrpop_err!(()))
             }
         }
     },
@@ -657,7 +660,7 @@ Fun: Expr = {
     <l:@L> "fun" <clauses:Semi<FunctionClause>> "end" <r:@R> =>? {
         match Function::new(errs, span!(l, r), nid, clauses) {
             Ok(fun) => Ok(Expr::Fun(fun)),
-            Err(err) => Err(err)
+            Err(()) => Err(to_lalrpop_err!(())),
         }
     },
 };
@@ -1032,7 +1035,7 @@ Float: f64 = {
 
 extern {
     type Location = ByteIndex;
-    type Error = PreprocessorError;
+    type Error = ();
 
     enum Token {
         // Docs

@@ -159,7 +159,7 @@ mod tests {
     fn test_simple() {
 
         let (ir, map) = crate::parse_function_map_unwrap("
-foo:bar/1 {
+a'foo':a'bar'/1 {
     b1(%ret, %thr):
         b2();
     b2():
@@ -193,7 +193,7 @@ foo:bar/1 {
     fn test_cycle() {
 
         let (ir, map) = crate::parse_function_map_unwrap("
-foo:bar/1 {
+a'foo':a'bar'/1 {
     b1(%ret, %thr, %a):
         b2(%a, []);
     b2(%b, %c):

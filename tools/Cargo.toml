@@ -17,6 +17,8 @@ libeir_ir = { path = "../libeir_ir" }
 libeir_util_parse = { path = "../util/libeir_util_parse" }
 libeir_util_parse_listing = { path = "../util/libeir_util_parse_listing" }
 
+libeir_frontend = { path = "../libeir_frontend" }
+
 clap = "2.33.0"
 log = "0.4"
 fern = "0.5"

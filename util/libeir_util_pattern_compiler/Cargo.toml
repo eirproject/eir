@@ -18,3 +18,5 @@ petgraph = "0.4"
 derivative = "1.0"
 prettytable-rs = { version = "0.8", optional = true }
 itertools = "0.8.0"
+
+log = "0.4"

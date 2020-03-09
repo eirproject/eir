@@ -15,6 +15,9 @@ impl ValidatePass {
 }
 
 impl FunctionPass for ValidatePass {
+    fn name(&self) -> &str {
+        "validate"
+    }
     fn run_function_pass(&mut self, b: &mut FunctionBuilder) {
         self.err_buf.clear();
         b.fun().validate(&mut self.err_buf);

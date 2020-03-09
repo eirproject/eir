@@ -13,9 +13,10 @@ use crate::text::ast::{Module, ModuleItem, Function, FunctionItem, Label,
                        Assignment, UnpackValueListOp, IfBoolOp,
                        TraceCaptureRawOp, MatchEntry, MatchKind,
                        MatchOp, CaseOp, CaseEntry, CasePattern};
-use super::errors::{ParserError, ParserErrors};
+use super::ParserErrorReceiver;
+use super::errors::{ParserError, Errors};
 
-grammar(errors: &mut dyn ErrorReceiver<ParserError, ParserError>);
+grammar<'a>(errors: &'a mut ParserErrorReceiver<'a>);
 
 #[inline]
 Comma<T>: Vec<T> = {
@@ -29,7 +30,7 @@ Comma<T>: Vec<T> = {
 };
 
 pub Module: Module = {
-    <name:ident> "{" <items:ModuleItem*> "}" => {
+    <name:atom> "{" <items:ModuleItem*> "}" => {
         Module {
             name: name,
             items,
@@ -42,7 +43,7 @@ ModuleItem: ModuleItem = {
 };
 
 pub StandaloneFunction: (Ident, Function) = {
-    <module:ident> ":" <name:ident> "/" <arity:integer> "{" <items:FunctionItem*> "}" => {
+    <module:atom> ":" <name:atom> "/" <arity:integer> "{" <items:FunctionItem*> "}" => {
         (
             module,
             Function {
@@ -55,7 +56,7 @@ pub StandaloneFunction: (Ident, Function) = {
 };
 
 Function: Function = {
-    <name:ident> "/" <arity:integer> "{" <items:FunctionItem*> "}" => {
+    <name:atom> "/" <arity:integer> "{" <items:FunctionItem*> "}" => {
         Function {
             name: name,
             arity: arity,

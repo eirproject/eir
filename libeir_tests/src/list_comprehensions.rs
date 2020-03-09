@@ -40,7 +40,7 @@ woo(N) -> [1 || erlang:is_integer(N)].
         arity: 1,
     };
 
-    println!("{}", eir_mod.to_text());
+    println!("{}", eir_mod.to_text_standard());
 
     let mut vm = VMState::new();
     vm.add_builtin_modules();
@@ -86,7 +86,7 @@ woo(L) -> [X*2 || X <- L].
         arity: 1,
     };
 
-    println!("{}", eir_mod.to_text());
+    println!("{}", eir_mod.to_text_standard());
 
     let mut vm = VMState::new();
     vm.add_builtin_modules();
@@ -200,7 +200,7 @@ perms(L) -> [H || H <- L].
         libeir_lowerutils::analyze(fun);
     }
 
-    println!("{}", eir_mod.to_text());
+    println!("{}", eir_mod.to_text_standard());
 }
 
 #[test]
@@ -232,7 +232,7 @@ perms(L) -> [[H|T] || H <- L, T <- perms(L--[H])].
         dbg!(analysis);
     }
 
-    println!("{}", eir_mod.to_text());
+    println!("{}", eir_mod.to_text_standard());
 
     let fun = FunctionIdent {
         module: Ident::from_str("woo"),

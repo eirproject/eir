@@ -1,4 +1,4 @@
-use libeir_ir::parse_function_unwrap;
+use libeir_ir::{parse_function_unwrap, StandardFormatConfig};
 
 use crate::FunctionPass;
 
@@ -6,7 +6,7 @@ use crate::FunctionPass;
 fn inline_basic_function() {
 
     let mut fun = parse_function_unwrap("
-foo:fun_shadowing/1 {
+a'foo':a'fun_shadowing'/1 {
     entry(%ret, %thr, %A):
         b1();
     b1():
@@ -27,7 +27,7 @@ foo:fun_shadowing/1 {
     pass.run_function_pass(&mut b);
 
     let after = parse_function_unwrap("
-foo:fun_shadowing/1 {
+a'foo':a'fun_shadowing'/1 {
     entry(%ret, %thr, %A):
         b1();
     b1():
@@ -47,7 +47,7 @@ foo:fun_shadowing/1 {
 fn inline_nested_functions() {
 
     let mut fun = parse_function_unwrap("
-foo:fun_shadowing/1 {
+a'foo':a'fun_shadowing'/1 {
     entry(%ret, %thr, %A):
         b1();
     b1():
@@ -79,10 +79,10 @@ foo:fun_shadowing/1 {
     let mut pass = super::NaiveInlineClosuresPass::new();
     pass.run_function_pass(&mut b);
 
-    println!("{}", b.fun().to_text());
+    println!("{}", b.fun().to_text(&mut StandardFormatConfig::default()));
 
     let after = parse_function_unwrap("
-foo:fun_shadowing/1 {
+a'foo':a'fun_shadowing'/1 {
     entry(%ret, %thr, %A):
         b1();
     b1():

@@ -72,7 +72,7 @@ pub fn lower_cfg(
 
     let mut ctx = LowerCtx {
         provider,
-        mapping: BFnvHashMap::with_hasher_in(&bump, Default::default()),
+        mapping: BFnvHashMap::with_hasher_in(Default::default(), &bump),
         destinations,
     };
 

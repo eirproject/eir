@@ -514,15 +514,4 @@ impl Function {
         self.block_args(self.block_entry()).len()
     }
 
-    pub fn to_text(&self) -> String {
-        use crate::text::{ ToEirText, ToEirTextContext };
-
-        let mut ctx = ToEirTextContext::new();
-
-        let mut out = Vec::new();
-        self.to_eir_text(&mut ctx, 0, &mut out).unwrap();
-        String::from_utf8(out).unwrap()
-    }
-
 }
-

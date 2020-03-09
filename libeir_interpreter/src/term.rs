@@ -560,121 +560,122 @@ impl Term {
         }
     }
 
-    pub fn to_doc(term: Rc<Term>) -> ::pretty::Doc<'static, ::pretty::BoxDoc<'static>> {
-        use ::pretty::{ Doc };
-        match &*term {
-            Term::Nil => Doc::text("[]"),
-            Term::Integer(int) => Doc::text(int.to_string()),
-            Term::Float(num) => Doc::text(num.0.to_string()),
-            Term::Atom(atom) => Doc::text(atom.to_string()),
-            Term::Tuple(items) => {
-                let docs: Vec<_> = items.iter().map(|i| Term::to_doc(i.clone())).collect();
-                Doc::text("{")
-                    .append(Doc::intersperse(docs, Doc::text(",")))
-                    .append(Doc::text("}"))
-            },
-            Term::ListCell(_, _) => {
-                let (head, tail) = Term::as_inproper_list(&term);
-                let head_docs: Vec<_> = head.iter().map(|i| Term::to_doc(i.clone())).collect();
-                let tail_doc = Term::to_doc(tail);
-                Doc::text("[")
-                    .append(Doc::intersperse(head_docs, Doc::text(",")))
-                    .append(Doc::text("|"))
-                    .append(tail_doc)
-                    .append(Doc::text("]"))
-            },
-            //Term::ListCell(head, tail) if head.len() == 0 => tail.to_doc(),
-            //Term::ListCell(head, tail) => {
-            //    let head_docs: Vec<_> = head.iter().map(|i| i.to_doc()).collect();
-            //    let tail_doc = tail.to_doc();
-            //    Doc::text("[")
-            //        .append(Doc::intersperse(head_docs, Doc::text(",")))
-            //        .append(Doc::text("|"))
-            //        .append(tail_doc)
-            //        .append(Doc::text("]"))
-            //},
-            Term::Map(map) => {
-                let entries_doc: Vec<_> = map.sorted.iter()
-                    .map(|(k, v)| {
-                        Doc::group(
-                            Term::to_doc(k.clone())
-                                .append(Doc::text("=>"))
-                                .append(Term::to_doc(v.clone()))
-                        )
-                    }).collect();
-                Doc::text("%{")
-                    .append(Doc::intersperse(entries_doc, Doc::text(",")))
-                    .append(Doc::text("}"))
-            },
-            Term::Pid(pid) => Doc::text(format!("Pid<{}>", pid.0)),
-            Term::Reference(refe) => Doc::text(format!("Reference<{}>", refe.0)),
-            Term::Binary(bin) => {
-                if let Some(slice) = bin.try_as_byte_aligned_slice() {
-                    if let Ok(utf) = std::str::from_utf8(slice) {
-                        return Doc::text("\"")
-                            .append(Doc::text(utf.to_string()))
-                            .append(Doc::text("\""));
-                    }
-                }
+    pub fn to_doc(term: Rc<Term>) -> pretty::Doc<'static, pretty::BoxDoc<'static>> {
+        unimplemented!()
+        //use pretty::{ Doc };
+        //match &*term {
+        //    Term::Nil => Doc::text("[]"),
+        //    Term::Integer(int) => Doc::text(int.to_string()),
+        //    Term::Float(num) => Doc::text(num.0.to_string()),
+        //    Term::Atom(atom) => Doc::text(atom.to_string()),
+        //    Term::Tuple(items) => {
+        //        let docs: Vec<_> = items.iter().map(|i| Term::to_doc(i.clone())).collect();
+        //        Doc::text("{")
+        //            .append(Doc::intersperse(docs, Doc::text(",")))
+        //            .append(Doc::text("}"))
+        //    },
+        //    Term::ListCell(_, _) => {
+        //        let (head, tail) = Term::as_inproper_list(&term);
+        //        let head_docs: Vec<_> = head.iter().map(|i| Term::to_doc(i.clone())).collect();
+        //        let tail_doc = Term::to_doc(tail);
+        //        Doc::text("[")
+        //            .append(Doc::intersperse(head_docs, Doc::text(",")))
+        //            .append(Doc::text("|"))
+        //            .append(tail_doc)
+        //            .append(Doc::text("]"))
+        //    },
+        //    //Term::ListCell(head, tail) if head.len() == 0 => tail.to_doc(),
+        //    //Term::ListCell(head, tail) => {
+        //    //    let head_docs: Vec<_> = head.iter().map(|i| i.to_doc()).collect();
+        //    //    let tail_doc = tail.to_doc();
+        //    //    Doc::text("[")
+        //    //        .append(Doc::intersperse(head_docs, Doc::text(",")))
+        //    //        .append(Doc::text("|"))
+        //    //        .append(tail_doc)
+        //    //        .append(Doc::text("]"))
+        //    //},
+        //    Term::Map(map) => {
+        //        let entries_doc: Vec<_> = map.sorted.iter()
+        //            .map(|(k, v)| {
+        //                Doc::group(
+        //                    Term::to_doc(k.clone())
+        //                        .append(Doc::text("=>"))
+        //                        .append(Term::to_doc(v.clone()))
+        //                )
+        //            }).collect();
+        //        Doc::text("%{")
+        //            .append(Doc::intersperse(entries_doc, Doc::text(",")))
+        //            .append(Doc::text("}"))
+        //    },
+        //    Term::Pid(pid) => Doc::text(format!("Pid<{}>", pid.0)),
+        //    Term::Reference(refe) => Doc::text(format!("Reference<{}>", refe.0)),
+        //    Term::Binary(bin) => {
+        //        if let Some(slice) = bin.try_as_byte_aligned_slice() {
+        //            if let Ok(utf) = std::str::from_utf8(slice) {
+        //                return Doc::text("\"")
+        //                    .append(Doc::text(utf.to_string()))
+        //                    .append(Doc::text("\""));
+        //            }
+        //        }
 
-                // TODO bit length
-                let items: Vec<_> = bin.iter_bytes()
-                    .map(|v| Doc::text(v.to_string()))
-                    .collect();
-                Doc::text("<")
-                    .append(Doc::intersperse(items, Doc::text(",")))
-                    .append(Doc::text(">"))
-            },
-            Term::BinarySlice { buf, bit_offset, bit_length } => {
-                if bit_length % 8 == 0 {
-                    let from = BitSlice::with_offset_length(
-                        &**buf, *bit_offset, *bit_length);
+        //        // TODO bit length
+        //        let items: Vec<_> = bin.iter_bytes()
+        //            .map(|v| Doc::text(v.to_string()))
+        //            .collect();
+        //        Doc::text("<")
+        //            .append(Doc::intersperse(items, Doc::text(",")))
+        //            .append(Doc::text(">"))
+        //    },
+        //    Term::BinarySlice { buf, bit_offset, bit_length } => {
+        //        if bit_length % 8 == 0 {
+        //            let from = BitSlice::with_offset_length(
+        //                &**buf, *bit_offset, *bit_length);
 
-                    let byte_len = bit_length / 8;
-                    let mut bin = vec![0; byte_len];
-                    bit_copy(&from, &mut bin as &mut [u8]);
+        //            let byte_len = bit_length / 8;
+        //            let mut bin = vec![0; byte_len];
+        //            bit_copy(&from, &mut bin as &mut [u8]);
 
-                    if let Ok(utf) = std::str::from_utf8(&bin) {
-                        return Doc::text("\"")
-                            .append(Doc::text(utf.to_string()))
-                            .append(Doc::text("\""));
-                    } else {
-                        let items: Vec<_> = bin.iter()
-                            .map(|v| Doc::text(v.to_string()))
-                            .collect();
-                        Doc::text("<")
-                            .append(Doc::intersperse(items, Doc::text(",")))
-                            .append(Doc::text(">"))
-                    }
-                } else {
-                    let items: Vec<_> = buf.iter_words()
-                        .map(|v| Doc::text(v.to_string()))
-                        .collect();
-                    Doc::text("<")
-                        .append(Doc::intersperse(items, Doc::text(",")))
-                        .append(Doc::text(">"))
-                }
-            },
-            Term::BoundLambda { ident, block, .. } => {
-                Doc::text(format!("Bound<{}:{}/{}@{}>", ident.module.name, ident.name.name,
-                                  ident.arity, block))
-            },
-            Term::CapturedFunction { ident } => {
-                Doc::text(format!("Captured<{}:{}/{}>", ident.module.name, ident.name.name, ident.arity))
-            },
-            Term::ValueList(items) => {
-                let docs: Vec<_> = items.iter().map(|i| Term::to_doc(i.clone())).collect();
-                Doc::text("<")
-                    .append(Doc::intersperse(docs, Doc::text(",")))
-                    .append(Doc::text(">"))
-            }
-            Term::ReturnOk => {
-                Doc::text(format!("ReturnOk"))
-            }
-            Term::ReturnThrow => {
-                Doc::text(format!("ReturnThrow"))
-            }
-        }
+        //            if let Ok(utf) = std::str::from_utf8(&bin) {
+        //                return Doc::text("\"")
+        //                    .append(Doc::text(utf.to_string()))
+        //                    .append(Doc::text("\""));
+        //            } else {
+        //                let items: Vec<_> = bin.iter()
+        //                    .map(|v| Doc::text(v.to_string()))
+        //                    .collect();
+        //                Doc::text("<")
+        //                    .append(Doc::intersperse(items, Doc::text(",")))
+        //                    .append(Doc::text(">"))
+        //            }
+        //        } else {
+        //            let items: Vec<_> = buf.iter_words()
+        //                .map(|v| Doc::text(v.to_string()))
+        //                .collect();
+        //            Doc::text("<")
+        //                .append(Doc::intersperse(items, Doc::text(",")))
+        //                .append(Doc::text(">"))
+        //        }
+        //    },
+        //    Term::BoundLambda { ident, block, .. } => {
+        //        Doc::text(format!("Bound<{}:{}/{}@{}>", ident.module.name, ident.name.name,
+        //                          ident.arity, block))
+        //    },
+        //    Term::CapturedFunction { ident } => {
+        //        Doc::text(format!("Captured<{}:{}/{}>", ident.module.name, ident.name.name, ident.arity))
+        //    },
+        //    Term::ValueList(items) => {
+        //        let docs: Vec<_> = items.iter().map(|i| Term::to_doc(i.clone())).collect();
+        //        Doc::text("<")
+        //            .append(Doc::intersperse(docs, Doc::text(",")))
+        //            .append(Doc::text(">"))
+        //    }
+        //    Term::ReturnOk => {
+        //        Doc::text(format!("ReturnOk"))
+        //    }
+        //    Term::ReturnThrow => {
+        //        Doc::text(format!("ReturnThrow"))
+        //    }
+        //}
     }
 
 }

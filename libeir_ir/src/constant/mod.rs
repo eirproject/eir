@@ -112,16 +112,16 @@ impl ConstantContainer {
         val.into_const(self)
     }
 
-    pub fn print<T>(&self, val: Const, fmt: &mut T)
-    where T: crate::text::TextFormatter
-    {
-        match &self.const_values[val] {
-            ConstKind::Atomic(atomic) => {
-                fmt.write(&format!("{}", atomic));
-            }
-            _ => unimplemented!()
-        }
-    }
+    //pub fn print<T>(&self, val: Const, fmt: &mut T)
+    //where T: crate::text::TextFormatter
+    //{
+    //    match &self.const_values[val] {
+    //        ConstKind::Atomic(atomic) => {
+    //            fmt.write(&format!("{}", atomic));
+    //        }
+    //        _ => unimplemented!()
+    //    }
+    //}
 
     pub fn as_bool(&self, val: Const) -> Option<bool> {
         let kind = &self.const_values[val];
@@ -154,11 +154,21 @@ impl ConstantContainer {
                 }
                 write!(out, "}}").unwrap();
             }
-            // TODO
-            kind => {
-                println!("Unimplemented constant write: {:?}", kind);
-                write!(out, "?").unwrap();
-            }, //unimplemented!("{:?}", kind)
+            ConstKind::Map { keys, values } => {
+                write!(out, "%{{").unwrap();
+                for (n, (key, val)) in keys.as_slice(&self.const_pool).iter()
+                    .zip(values.as_slice(&self.const_pool))
+                    .enumerate()
+                {
+                    if n != 0 {
+                        write!(out, ", ").unwrap();
+                    }
+                    self.write(*key, out);
+                    write!(out, ": ").unwrap();
+                    self.write(*val, out);
+                }
+                write!(out, "}}").unwrap();
+            }
         }
     }
 

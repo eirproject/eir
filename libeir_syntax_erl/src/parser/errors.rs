@@ -1,13 +1,13 @@
 use std::convert::From;
 
-use libeir_util_parse::SourceError;
+use libeir_util_parse::{SourceError, ToDiagnostic};
 use libeir_diagnostics::{ByteIndex, ByteSpan, Diagnostic, Label};
 use snafu::Snafu;
 
 use crate::lexer::{Token};
 use crate::preprocessor::PreprocessorError;
 
-pub type ParseError = lalrpop_util::ParseError<ByteIndex, Token, ParserError>;
+pub type ParseError = lalrpop_util::ParseError<ByteIndex, Token, ()>;
 
 #[derive(Debug, Snafu)]
 pub enum ParserError {
@@ -75,7 +75,7 @@ impl From<ParseError> for ParserError {
             } => ParserError::ExtraToken {
                 span: ByteSpan::new(start, end),
             },
-            lalrpop_util::ParseError::User { error: err } => err.into(),
+            lalrpop_util::ParseError::User { .. } => panic!(),
         }
     }
 }
@@ -89,8 +89,10 @@ impl ParserError {
             _ => None,
         }
     }
+}
 
-    pub fn to_diagnostic(&self) -> Diagnostic {
+impl ToDiagnostic for ParserError {
+    fn to_diagnostic(&self) -> Diagnostic {
         let span = self.span();
         let msg = self.to_string();
         match self {

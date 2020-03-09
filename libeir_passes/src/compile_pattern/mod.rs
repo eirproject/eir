@@ -1,10 +1,10 @@
 use matches::{ matches };
 
-use std::collections::HashMap;
+use bumpalo::{Bump, collections::Vec as BVec};
+use hashbrown::HashMap;
 
-use bumpalo::{Bump, collections::Vec as BVec, collections::HashMap as BHashMap};
 use fnv::FnvBuildHasher;
-type BFnvHashMap<'bump, K, V> = BHashMap<K, V, &'bump Bump, FnvBuildHasher>;
+type BFnvHashMap<'bump, K, V> = HashMap<K, V, FnvBuildHasher, &'bump Bump>;
 
 use libeir_ir::OpKind;
 use libeir_ir::{ Value };
@@ -40,6 +40,9 @@ impl CompilePatternPass {
 }
 
 impl FunctionPass for CompilePatternPass {
+    fn name(&self) -> &str {
+        "compile_pattern"
+    }
     fn run_function_pass(&mut self, b: &mut FunctionBuilder) {
         self.compile_pattern(b);
     }

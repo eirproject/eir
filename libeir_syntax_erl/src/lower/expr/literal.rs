@@ -23,8 +23,7 @@ pub(super) fn lower_literal(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: 
             match intern_string_const(*ident, b.cons_mut()) {
                 Ok(cons) => b.value(cons),
                 Err(err) => {
-                    ctx.failed = true;
-                    ctx.errors.push(err);
+                    ctx.error(err);
                     b.value(NilTerm)
                 },
             }

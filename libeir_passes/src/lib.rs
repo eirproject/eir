@@ -1,6 +1,8 @@
 #![deny(warnings)]
 
-use libeir_ir::{ Module, FunctionBuilder };
+use log::{debug, trace};
+
+use libeir_ir::{ Module, FunctionBuilder, StandardFormatConfig };
 
 mod compile_pattern;
 pub use self::compile_pattern::CompilePatternPass;
@@ -15,6 +17,7 @@ mod validate;
 pub use self::validate::ValidatePass;
 
 pub trait FunctionPass {
+    fn name(&self) -> &str;
     fn run_function_pass(&mut self, b: &mut FunctionBuilder);
 }
 
@@ -41,14 +44,18 @@ impl PassManager {
     pub fn run(&mut self, module: &mut Module) {
         for fun_def in module.function_iter_mut() {
             let fun = fun_def.function_mut();
-            println!("============ {}", fun.ident());
-            println!("{}", fun.to_text());
+
+            let ident = *fun.ident();
+
+            debug!("============ {}", ident);
+            trace!("{}", fun.to_text(&mut StandardFormatConfig::default()));
+
             let mut b = FunctionBuilder::new(fun);
             b.fun().graph_validate_global();
             for pass in self.passes.iter_mut() {
-                //println!("{}", b.fun().to_text());
                 match pass {
                     PassType::Function(fun_pass) => {
+                        debug!("======== {} FUNCTION_PASS: {}", ident, fun_pass.name());
                         fun_pass.run_function_pass(&mut b);
                     }
                 }
@@ -63,10 +70,15 @@ impl Default for PassManager {
     fn default() -> Self {
         let mut man = PassManager::new();
         //man.push_function_pass(SimplifyCfgPass::new());
+        man.push_function_pass(ValidatePass::new());
         man.push_function_pass(CompilePatternPass::new());
+        man.push_function_pass(ValidatePass::new());
         man.push_function_pass(NaiveInlineClosuresPass::new());
+        man.push_function_pass(ValidatePass::new());
         man.push_function_pass(SimplifyCfgPass::new());
+        man.push_function_pass(ValidatePass::new());
         man.push_function_pass(NaiveInlineClosuresPass::new());
+        man.push_function_pass(ValidatePass::new());
         man
     }
 }

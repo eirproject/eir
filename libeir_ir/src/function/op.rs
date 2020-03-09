@@ -173,7 +173,7 @@ pub enum OpKind {
     /// It consists of 3 operations, `receive_start`, `receive_wait`
     /// and `receive_done`. They are always called in this pattern:
     ///
-    /// ```
+    /// ```ignore
     ///          v
     ///     receive_start
     ///          |
