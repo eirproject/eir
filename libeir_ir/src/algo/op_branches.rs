@@ -66,7 +66,14 @@ impl Function {
             OpKind::MapPut { .. } => 2,
             OpKind::BinaryPush { .. } => 2,
             OpKind::Case { clauses } => 1 + clauses.len(&self.pool.clause),
-            OpKind::Intrinsic(_) => unimplemented!(),
+            OpKind::Intrinsic(name) => {
+                match name.as_str().get() {
+                    "receive_start" => 1,
+                    "receive_wait" => 2,
+                    "receive_done" => 1,
+                    _ => unimplemented!(),
+                }
+            }
         };
 
         Some(res)
@@ -107,8 +114,18 @@ impl Function {
             (OpKind::Match { .. }, _, n) =>
                 self.value_list_get_n(reads[0], n).unwrap(),
 
+            (OpKind::Intrinsic(name), _, n) => {
+                match name.as_str().get() {
+                    // receive_start only has a single branch target
+                    "receive_start" if n == 0 => reads[0],
+                    // receive_wait only has two branch targets
+                    "receive_wait" if n < 2 => reads[n],
+                    // receive_done only has a single branch target
+                    "receive_done" if n == 0 => reads[0],
+                    _ => unimplemented!(),
+                }
+            }
             _ => panic!(),
         }
     }
-
 }
