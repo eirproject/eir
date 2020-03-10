@@ -1,8 +1,11 @@
 use std::collections::BTreeMap;
 
-use bumpalo::{Bump, collections::HashMap as BHashMap};
+use log::trace;
+
+use bumpalo::Bump;
+use hashbrown::HashMap;
 use fnv::FnvBuildHasher;
-type BFnvHashMap<'bump, K, V> = BHashMap<K, V, &'bump Bump, FnvBuildHasher>;
+type BFnvHashMap<'bump, K, V> = HashMap<K, V, FnvBuildHasher, &'bump Bump>;
 
 use libeir_ir::{FunctionBuilder, Mangler, MangleTo};
 use libeir_ir::Value;
@@ -98,6 +101,9 @@ impl SimplifyCfgPass {
 }
 
 impl FunctionPass for SimplifyCfgPass {
+    fn name(&self) -> &str {
+        "simplify_cfg"
+    }
     fn run_function_pass(&mut self, b: &mut FunctionBuilder) {
         self.simplify_cfg(b);
     }
@@ -112,7 +118,7 @@ impl SimplifyCfgPass {
         let graph = b.fun().live_block_graph();
         let live = b.fun().live_values();
 
-        println!("{}", b.fun().to_text());
+        trace!("{}", b.fun().to_text_standard());
 
         {
             let analysis = analyze::analyze_graph(&bump, b.fun(), &graph);
@@ -157,30 +163,10 @@ impl SimplifyCfgPass {
                 self.mangler.add_rename(MangleTo(*from), MangleTo(*to));
             }
 
-            let mut print_ctx = libeir_ir::text::printer::ToEirTextContext::new();
-            let mut out_str = Vec::new();
-            for block in b.fun().block_iter() {
-                use libeir_ir::text::printer::ToEirTextFun;
-                block.to_eir_text_fun(&mut print_ctx, b.fun(), 0, &mut out_str).unwrap();
-                out_str.push('\n' as u8);
-            }
-            println!("{}", std::str::from_utf8(&out_str).unwrap());
-
-            println!("{:#?}", self.mangler.value_map());
-
             let new_entry = self.mangler.run(b);
             b.block_set_entry(new_entry);
 
-            let mut print_ctx = libeir_ir::text::printer::ToEirTextContext::new();
-            let mut out_str = Vec::new();
-            for block in b.fun().block_iter() {
-                use libeir_ir::text::printer::ToEirTextFun;
-                block.to_eir_text_fun(&mut print_ctx, b.fun(), 0, &mut out_str).unwrap();
-                out_str.push('\n' as u8);
-            }
-            println!("{}", std::str::from_utf8(&out_str).unwrap());
-
-            println!("{}", b.fun().to_text());
+            trace!("{}", b.fun().to_text_standard());
         }
 
         self.map.clear();

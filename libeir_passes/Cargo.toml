@@ -23,7 +23,7 @@ fnv = "1.0.3"
 
 log = "0.4"
 
-hashbrown = { path = "../../hashbrown", features = ["raw", "nightly"] }
+hashbrown = { git = "https://github.com/hansihe/hashbrown.git", features = ["raw", "nightly"] }
 
 [dev-dependencies]
 simple_logger = "1.0"

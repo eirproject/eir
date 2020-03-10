@@ -190,7 +190,7 @@ impl<'bump, 'a> AnalysisContext<'bump, 'a> {
                 block: callee,
                 value: callee_arg,
                 value_num: Some(callee_arg_num),
-                sources: BFnvHashMap::with_hasher_in(self.bump, Default::default()),
+                sources: BFnvHashMap::with_hasher_in(Default::default(), self.bump),
             };
             self.phis.insert(callee_arg, cond);
         }
@@ -209,9 +209,9 @@ pub fn analyze_graph<'bump, 'fun>(
 {
     let entry = fun.block_entry();
 
-    let mut static_branches = BFnvHashMap::with_hasher_in(bump, Default::default());
-    let mut phis = BFnvHashMap::with_hasher_in(bump, Default::default());
-    let mut static_renames = BFnvHashMap::with_hasher_in(bump, Default::default());
+    let mut static_branches = BFnvHashMap::with_hasher_in(Default::default(), bump);
+    let mut phis = BFnvHashMap::with_hasher_in(Default::default(), bump);
+    let mut static_renames = BFnvHashMap::with_hasher_in(Default::default(), bump);
 
     // Find all blocks we care about, these are the ones we iterate over
     let mut relevant_blocks = BTreeSet::new();
@@ -292,7 +292,7 @@ pub fn analyze_graph<'bump, 'fun>(
 
     // Generate `static_branches_blocks`
     let mut static_branches_blocks = BFnvHashMap::with_hasher_in(
-        bump, Default::default());
+        Default::default(), bump);
     for (from, to) in static_branches.iter() {
         if let Some(to_block) = fun.value_block(*to) {
             static_branches_blocks.insert(*from, to_block);
@@ -302,7 +302,7 @@ pub fn analyze_graph<'bump, 'fun>(
     // Group chains
     // TODO: Handle cycles
     let mut chains = BFnvHashMap::with_hasher_in(
-        bump, Default::default());
+        Default::default(), bump);
     for (from, to) in static_branches.iter() {
         let mut next_target_value = *to;
         let mut target_block = *from;
@@ -332,9 +332,9 @@ pub fn analyze_graph<'bump, 'fun>(
             // If the chains map doesn't contain the target, seed it
             if !chains.contains_key(&target_block) {
                 let mut chain = Chain {
-                    edges: BFnvHashMap::with_hasher_in(bump, Default::default()),
-                    blocks: BFnvHashMap::with_hasher_in(bump, Default::default()),
-                    entry_edges: BFnvHashMap::with_hasher_in(bump, Default::default()),
+                    edges: BFnvHashMap::with_hasher_in(Default::default(), bump),
+                    blocks: BFnvHashMap::with_hasher_in(Default::default(), bump),
+                    entry_edges: BFnvHashMap::with_hasher_in(Default::default(), bump),
                 };
                 chain.blocks.insert(target_block, ());
                 chains.insert(target_block, chain);
@@ -390,9 +390,9 @@ fn expand_phi<'bump>(
     let mut to_walk = Vec::new();
     to_walk.push(phi_entry);
 
-    let mut added = BFnvHashMap::with_hasher_in(bump, Default::default());
+    let mut added = BFnvHashMap::with_hasher_in(Default::default(), bump);
     let mut entries: BFnvHashMap<Block, PhiSource> =
-        BFnvHashMap::with_hasher_in(bump, Default::default());
+        BFnvHashMap::with_hasher_in(Default::default(), bump);
 
     // While we have values to walk, get the next one.
     // Then add the mappings to the entries and walk downwards.
@@ -434,14 +434,14 @@ pub fn analyze_chain<'bump>(
     // These are value mappings for the chain that don't depend on any control
     // flow in the chain.
     let mut static_map: BFnvHashMap<Value, Value> =
-        BFnvHashMap::with_hasher_in(bump, Default::default());
+        BFnvHashMap::with_hasher_in(Default::default(), bump);
 
     // These are value mappings that do depend on control flow in the chain.
     // The values in here refer to a phi node in `self.phis`.
-    let mut cond_map = BFnvHashMap::with_hasher_in(bump, Default::default());
+    let mut cond_map = BFnvHashMap::with_hasher_in(Default::default(), bump);
 
     // The arguments that need to placed to the new target block.
-    let mut args = BFnvHashMap::with_hasher_in(bump, Default::default());
+    let mut args = BFnvHashMap::with_hasher_in(Default::default(), bump);
 
     // Using the live values in the target block as a seed, walk through
     // and combine phis. All values referenced in the target that have
@@ -588,7 +588,7 @@ pub fn analyze_entry_edge<'bump>(
 ) -> EntryEdgeAnalysis<'bump> {
 
     let mut o_map: BFnvHashMap<Value, PhiSource> =
-        BFnvHashMap::with_hasher_in(bump, Default::default());
+        BFnvHashMap::with_hasher_in(Default::default(), bump);
     o_map.extend(
         chain_analysis.cond_map.values()
             .filter_map(|cond_value| {
@@ -614,7 +614,7 @@ pub fn analyze_entry_edge<'bump>(
 
     // Specialize each of the phis for the current entry edge
     let mut map: BFnvHashMap<Value, PhiSource> =
-        BFnvHashMap::with_hasher_in(bump, Default::default());
+        BFnvHashMap::with_hasher_in(Default::default(), bump);
     map.extend(
         chain_analysis.cond_map.values()
             .filter_map(|cond_value| {
