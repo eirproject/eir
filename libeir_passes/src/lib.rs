@@ -1,8 +1,8 @@
 #![deny(warnings)]
 
-use log::{debug, trace};
+use log::debug;
 
-use libeir_ir::{ Module, FunctionBuilder, StandardFormatConfig };
+use libeir_ir::{ Module, FunctionBuilder };
 
 mod compile_pattern;
 pub use self::compile_pattern::CompilePatternPass;
