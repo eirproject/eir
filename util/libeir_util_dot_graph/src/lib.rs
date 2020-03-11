@@ -1,7 +1,6 @@
 #![feature(allocator_api)]
 
 use std::fmt::Display;
-use std::fs::File;
 use std::fmt::{Write, Error};
 use std::path::Path;
 
@@ -84,9 +83,9 @@ impl Content for &str {
 pub struct StructuredNode {
 }
 impl StructuredNode {
-    pub fn text<F: ContentFormatting>(&mut self, content: F) {}
-    pub fn vertical(&mut self, cells: &[()]) {}
-    pub fn horizontal(&mut self, cells: &[()]) {}
+    pub fn text<F: ContentFormatting>(&mut self, _content: F) {}
+    pub fn vertical(&mut self, _cells: &[()]) {}
+    pub fn horizontal(&mut self, _cells: &[()]) {}
 }
 
 pub struct GraphPrinter<O: Write> {
@@ -101,7 +100,7 @@ impl GraphPrinter<String> {
         Self::with_out(String::new())
     }
 
-    pub fn finish_run_dot(mut self, out: &Path) {
+    pub fn finish_run_dot(self, out: &Path) {
         let dot_res = self.finish().unwrap();
 
         let dir = std::env::temp_dir();

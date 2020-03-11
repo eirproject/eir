@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate::Function;
 use pretty::Arena;
 use super::printer as pr;
-use super::printer::{FunctionFormatData, BlockFormatSink, FormatConfig, FormatState};
+use super::printer::{FunctionFormatData, FormatState};
 
 use libeir_util_dot_graph::GraphPrinter;
 
