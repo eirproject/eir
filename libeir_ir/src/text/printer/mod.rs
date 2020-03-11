@@ -352,12 +352,7 @@ where
                 match prim_kind {
                     PrimOpKind::CaptureFunction => {
                         assert!(reads.len() == 3);
-                        arena.nil()
-                             .append(self.value_use_to_doc(config, state, reads[0]))
-                             .append(arena.text(":"))
-                             .append(self.value_use_to_doc(config, state, reads[1]))
-                             .append(arena.text("/"))
-                             .append(self.value_use_to_doc(config, state, reads[2]))
+                        arena.nil().append(self.format_callee(config, state, reads))
                     },
                     PrimOpKind::Tuple => {
                         arena
@@ -438,7 +433,51 @@ where
         self.arena.as_string(&self.buf).into_doc()
     }
 
+    fn format_callee(
+        &mut self, 
+        config: &FormatConfig<B, V, L>,
+        state: &mut FormatState,
+        reads: &[Value],
+    ) -> RefDoc<'a, ()> {
+        let arena = self.arena;
 
+        // Resolve arity first, since we should always know arity
+        let ac = state.function.value_const(reads[2]).unwrap();
+        let arity = self.constant_to_doc(config, state, ac);
+
+        let m = reads[0];
+        let f = reads[1];
+        let mk = state.function.value_kind(m);
+        if let ValueKind::Const(mc) = mk {
+            let doc = self.constant_to_doc(config, state, mc);
+            let fk = state.function.value_kind(f);
+            if let ValueKind::Const(fc) = fk {
+                arena.nil()
+                    .append(doc)
+                    .append(arena.text(":"))
+                    .append(self.constant_to_doc(config, state, fc))
+                    .append(arena.text("/"))
+                    .append(arity)
+                    .into_doc()
+            } else {
+                arena.nil()
+                   .append(doc)
+                   .append(arena.text(":"))
+                   .append(self.value_use_to_doc(config, state, f))
+                   .append(arena.text("/"))
+                   .append(arity)
+                   .into_doc()
+            }
+        } else {
+            arena.nil()
+                .append(self.value_use_to_doc(config, state, m))
+                .append(arena.text(":"))
+                .append(self.value_use_to_doc(config, state, f))
+                .append(arena.text("/"))
+                .append(arity)
+                .into_doc()
+        }
+    }
 }
 
 fn format_function_body_state<B, V, L, S>(
@@ -520,7 +559,8 @@ where
 {
     sink.write_str(&format!("{} {{\n", module.name().name.as_str().get()));
 
-    for fun in module.function_iter() {
+    let num_functions = module.function_iter().count();
+    for (i, fun) in module.function_iter().enumerate() {
         let function = fun.function();
         let ident = function.ident();
         sink.write_str(&format!("  {}/{} {{\n", &ident.name, ident.arity));
@@ -529,10 +569,14 @@ where
             nesting: 2,
         };
         format_function_body_state(config, &mut state, sink)?;
-        sink.write_str("\n  }\n\n");
+        if i + 1 < num_functions {
+            sink.write_str("  }\n\n");
+        } else {
+            sink.write_str("  }\n");
+        }
     }
 
-    sink.write_str("\n}\n");
+    sink.write_str("}\n");
 
     Ok(())
 }
