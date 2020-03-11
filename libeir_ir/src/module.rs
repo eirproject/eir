@@ -90,7 +90,27 @@ impl Module {
     pub fn index_iter(&self) -> impl Iterator<Item = FunctionIndex> {
         self.functions.keys()
     }
-
+}
+impl Clone for Module {
+    fn clone(&self) -> Self {
+        let mut functions: PrimaryMap<FunctionIndex, FunctionDefinition> = PrimaryMap::new();
+        let mut name_map = BTreeMap::new();
+        for def in self.function_iter() {
+            let fun = def.function();
+            let ident = fun.ident();
+            let def = FunctionDefinition {
+                index: FunctionIndex(0),
+                fun: fun.clone(),
+            };
+            let index = functions.push(def);
+            name_map.insert((ident.name.name, ident.arity), index);
+        }
+        Self {
+            name: self.name.clone(),
+            functions,
+            name_map,
+        }
+    }
 }
 
 impl Index<FunctionIndex> for Module {
