@@ -122,6 +122,12 @@ impl Module {
         .into()
     }
 }
+impl Eq for Module {}
+impl PartialEq for Module {
+    fn eq(&self, other: &Self) -> bool {
+        self.name.symbol() == other.name.symbol()
+    }
+}
 impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "-module({}).", self.name.symbol())
@@ -191,6 +197,12 @@ impl Include {
         let start = self._hyphen.0;
         let end = self._dot.2;
         ByteSpan::new(start, end)
+    }
+}
+impl Eq for Include {}
+impl PartialEq for Include {
+    fn eq(&self, other: &Self) -> bool {
+        self.path.symbol() == other.path.symbol()
     }
 }
 impl fmt::Display for Include {
@@ -265,6 +277,12 @@ impl IncludeLib {
         ByteSpan::new(start, end)
     }
 }
+impl Eq for IncludeLib {}
+impl PartialEq for IncludeLib {
+    fn eq(&self, other: &Self) -> bool {
+        self.path.symbol() == other.path.symbol()
+    }
+}
 impl fmt::Display for IncludeLib {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "-include_lib({}).", self.path.symbol())
@@ -306,6 +324,12 @@ impl Error {
         let start = self._hyphen.0;
         let end = self._dot.2;
         ByteSpan::new(start, end)
+    }
+}
+impl Eq for Error {}
+impl PartialEq for Error {
+    fn eq(&self, other: &Self) -> bool {
+        self.message.symbol() == other.message.symbol()
     }
 }
 impl fmt::Display for Error {
@@ -351,6 +375,12 @@ impl Warning {
         ByteSpan::new(start, end)
     }
 }
+impl Eq for Warning {}
+impl PartialEq for Warning {
+    fn eq(&self, other: &Self) -> bool {
+        self.message.symbol() == other.message.symbol()
+    }
+}
 impl fmt::Display for Warning {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "-warning({}).", self.message.symbol())
@@ -390,6 +420,12 @@ impl Endif {
         ByteSpan::new(start, end)
     }
 }
+impl Eq for Endif {}
+impl PartialEq for Endif {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
 impl fmt::Display for Endif {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "-endif.")
@@ -424,6 +460,12 @@ impl Else {
         let start = self._hyphen.0;
         let end = self._dot.2;
         ByteSpan::new(start, end)
+    }
+}
+impl Eq for Else {}
+impl PartialEq for Else {
+    fn eq(&self, _other: &Self) -> bool {
+        true
     }
 }
 impl fmt::Display for Else {
@@ -468,6 +510,12 @@ impl Undef {
         self.name.symbol()
     }
 }
+impl Eq for Undef {}
+impl PartialEq for Undef {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
 impl fmt::Display for Undef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "-undef({}).", self.name.symbol())
@@ -510,6 +558,12 @@ impl If {
         ByteSpan::new(start, end)
     }
 }
+impl Eq for If {}
+impl PartialEq for If {
+    fn eq(&self, other: &Self) -> bool {
+        self.condition == other.condition
+    }
+}
 impl fmt::Display for If {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "-if({:?}).", self.condition)
@@ -550,6 +604,12 @@ impl Elif {
         let start = self._hyphen.0;
         let end = self._dot.2;
         ByteSpan::new(start, end)
+    }
+}
+impl Eq for Elif {}
+impl PartialEq for Elif {
+    fn eq(&self, other: &Self) -> bool {
+        self.condition == other.condition
     }
 }
 impl fmt::Display for Elif {
@@ -630,6 +690,12 @@ impl Ifdef {
         self.name.symbol()
     }
 }
+impl Eq for Ifdef {}
+impl PartialEq for Ifdef {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
 impl fmt::Display for Ifdef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "-ifdef({}).", self.name.symbol())
@@ -675,6 +741,12 @@ impl Ifndef {
         self.name.symbol()
     }
 }
+impl Eq for Ifndef {}
+impl PartialEq for Ifndef {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
 impl fmt::Display for Ifndef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "-ifndef({}).", self.name.symbol())
@@ -718,6 +790,14 @@ impl Define {
         let start = self._hyphen.0;
         let end = self._dot.0;
         ByteSpan::new(start, end)
+    }
+}
+impl Eq for Define {}
+impl PartialEq for Define {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name &&
+        self.variables == other.variables &&
+        self.replacement == other.replacement
     }
 }
 impl fmt::Display for Define {
@@ -801,6 +881,12 @@ impl File {
         let start = self._hyphen.0;
         let end = self._dot.0;
         ByteSpan::new(start, end)
+    }
+}
+impl Eq for File {}
+impl PartialEq for File {
+    fn eq(&self, other: &Self) -> bool {
+        self.path.symbol() == other.path.symbol() && self.line == other.line
     }
 }
 impl fmt::Display for File {

@@ -40,6 +40,7 @@ impl MacroName {
         }
     }
 }
+impl Eq for MacroName {}
 impl PartialEq for MacroName {
     fn eq(&self, other: &Self) -> bool {
         self.value() == other.value()
@@ -95,6 +96,12 @@ impl MacroVariables {
         ByteSpan::new(self._open_paren.0, self._close_paren.2)
     }
 }
+impl Eq for MacroVariables {}
+impl PartialEq for MacroVariables {
+    fn eq(&self, other: &Self) -> bool {
+        self.list.eq(&other.list)
+    }
+}
 impl fmt::Display for MacroVariables {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({})", self.list)
@@ -140,6 +147,12 @@ impl MacroArgs {
         ByteSpan::new(self._open_paren.0, self._close_paren.2)
     }
 }
+impl Eq for MacroArgs {}
+impl PartialEq for MacroArgs {
+    fn eq(&self, other: &Self) -> bool {
+        self.list.eq(&other.list)
+    }
+}
 impl fmt::Display for MacroArgs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({})", self.list)
@@ -159,7 +172,7 @@ impl ReadFrom for MacroArgs {
 }
 
 /// Macro argument.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MacroArg {
     /// Tokens which represent a macro argument.
     ///
@@ -249,6 +262,19 @@ pub enum Tail<T> {
         tail: Box<Tail<T>>,
     },
 }
+impl<T: PartialEq> Eq for Tail<T> {}
+impl<T: PartialEq> PartialEq for Tail<T> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Nil, Self::Nil) => true,
+            (Self::Cons { head: lh, tail: lt, .. }, 
+             Self::Cons { head: rh, tail: rt, .. }) => {
+                lh == rh && lt == rt
+            }
+            _ => false
+        }
+    }
+}
 impl<T: fmt::Display> fmt::Display for Tail<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -285,6 +311,19 @@ impl<T> List<T> {
     /// Returns an iterator which iterates over the elements in this list.
     pub fn iter(&self) -> ListIter<T> {
         ListIter(ListIterInner::List(self))
+    }
+}
+impl<T: PartialEq> Eq for List<T> {}
+impl<T: PartialEq> PartialEq for List<T> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Nil, Self::Nil) => true,
+            (Self::Cons { head: lh, tail: lt }, 
+             Self::Cons { head: rh, tail: rt }) => {
+                lh == rh && lt == rt
+            }
+            _ => false,
+        }
     }
 }
 impl<T: fmt::Display> fmt::Display for List<T> {
