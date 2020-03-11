@@ -28,6 +28,14 @@ where
         let reads = state.function.block_reads(block);
 
         let op_doc = match op {
+            OpKind::Case { clauses, .. } => {
+                let block = arena.nil();
+
+                arena.nil()
+                  .append(arena.text("case"))
+                  .append(arena.space())
+                  .append(block.nest(1).braces())
+            },
             OpKind::Match { branches } => {
                 let targets_opt = get_value_list(state.function, reads[0]);
                 let targets_one = &[reads[0]];
@@ -41,7 +49,6 @@ where
                     .append(block.nest(1).braces())
             },
             OpKind::Call(CallKind::Function) => {
-                println!("args: {:?}", reads);
                 let fun_val = self.value_use_to_doc(config, state, reads[0]);
                 let call_args = arena.intersperse(
                     reads.iter().skip(3)
@@ -126,6 +133,18 @@ where
                 }
             },
             OpKind::Unreachable => arena.text("unreachable"),
+            OpKind::Intrinsic(name) => {
+                let intrinsic_args = arena.intersperse(
+                    reads.iter().map(|v| self.value_use_to_doc(config, state, *v)),
+                    arena.text(",").append(arena.softline()),
+                ).nest(1).parens();
+
+                arena.nil()
+                    .append(arena.text("intrinsic"))
+                    .append(arena.space())
+                    .append(arena.text(name.as_str().get()))
+                    .append(intrinsic_args)
+            }
             _ => {
                 println!("UNIMPL: {:?}", op);
                 arena.text("unknown")
