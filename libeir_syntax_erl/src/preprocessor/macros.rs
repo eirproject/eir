@@ -63,7 +63,7 @@ impl From<&super::directives::Define> for MacroIdent {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MacroContainer {
     func_defines: HashMap<Symbol, HashMap<usize, MacroDef>>,
     const_defines: HashMap<Symbol, MacroDef>,
@@ -123,7 +123,7 @@ impl MacroContainer {
 }
 
 /// Macro Definition.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MacroDef {
     Boolean(bool),
     String(Symbol),

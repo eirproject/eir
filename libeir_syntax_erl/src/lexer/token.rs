@@ -8,7 +8,7 @@ use libeir_util_number::{Integer, ToPrimitive};
 
 use super::{LexicalError, Symbol, TokenConvertError, TokenConvertResult};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LexicalToken(pub ByteIndex, pub Token, pub ByteIndex);
 impl LexicalToken {
     #[inline]
@@ -58,7 +58,7 @@ impl fmt::Display for TokenType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AtomToken(pub ByteIndex, pub Token, pub ByteIndex);
 impl AtomToken {
     pub fn token(&self) -> Token {
@@ -106,7 +106,7 @@ impl fmt::Display for AtomToken {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IdentToken(pub ByteIndex, pub Token, pub ByteIndex);
 impl IdentToken {
     pub fn token(&self) -> Token {
@@ -147,7 +147,7 @@ impl fmt::Display for IdentToken {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StringToken(pub ByteIndex, pub Token, pub ByteIndex);
 impl StringToken {
     pub fn token(&self) -> Token {
@@ -188,7 +188,7 @@ impl fmt::Display for StringToken {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IntegerToken(pub ByteIndex, pub Token, pub ByteIndex);
 impl IntegerToken {
     pub fn token(&self) -> Token {
@@ -229,7 +229,7 @@ impl fmt::Display for IntegerToken {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SymbolToken(pub ByteIndex, pub Token, pub ByteIndex);
 impl SymbolToken {
     pub fn token(&self) -> Token {
@@ -267,7 +267,7 @@ impl fmt::Display for SymbolToken {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DelayedSubstitution {
     FunctionName,
     FunctionArity,

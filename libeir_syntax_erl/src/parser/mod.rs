@@ -58,6 +58,7 @@ pub use self::errors::*;
 /// The type of result returned from parsing functions
 pub type ParseResult<T> = Result<T, Vec<ParserError>>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseConfig {
     pub warnings_as_errors: bool,
     pub no_warn: bool,
