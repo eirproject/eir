@@ -23,8 +23,7 @@ pub(super) fn lower_literal(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: 
             match intern_binary_const(*ident, b.cons_mut()) {
                 Ok(bin) => b.value(bin),
                 Err(err) => {
-                    ctx.failed = true;
-                    ctx.errors.push(err);
+                    ctx.error(err);
                     b.value(BinaryTerm(vec![]))
                 }
             }

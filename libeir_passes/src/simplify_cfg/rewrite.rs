@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
 
-use log::trace;
-
 use bumpalo::Bump;
 
 use libeir_ir::FunctionBuilder;

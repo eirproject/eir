@@ -7,8 +7,7 @@ use libeir_intern::{ Symbol, LocalInternedString };
 
 use libeir_ir::{ FunctionIdent, Block };
 
-use libeir_util_binary::{ BitRead };
-use libeir_util_binary::{ BitVec, BitSlice, copy as bit_copy };
+use libeir_util_binary::{ BitVec, BitSlice };
 
 use ::num_bigint::BigInt;
 use ::num_traits::cast::ToPrimitive;
@@ -560,7 +559,7 @@ impl Term {
         }
     }
 
-    pub fn to_doc(term: Rc<Term>) -> pretty::Doc<'static, pretty::BoxDoc<'static>> {
+    pub fn to_doc(_term: Rc<Term>) -> pretty::Doc<'static, pretty::BoxDoc<'static>> {
         unimplemented!()
         //use pretty::{ Doc };
         //match &*term {

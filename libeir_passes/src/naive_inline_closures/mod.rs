@@ -4,8 +4,6 @@ use libeir_ir::{Block, OpKind};
 
 use super::FunctionPass;
 
-use log::trace;
-
 #[cfg(test)]
 mod tests;
 

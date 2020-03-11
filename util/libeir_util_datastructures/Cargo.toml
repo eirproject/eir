@@ -9,4 +9,4 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 cranelift-entity = "0.56.0"
-hashbrown = { git = "https://github.com/hansihe/hashbrown.git", features = ["raw", "nightly"] }
+hashbrown = { git = "https://github.com/bitwalker/hashbrown.git", features = ["raw", "nightly"] }

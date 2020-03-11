@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
 
-use log::trace;
-
 use bumpalo::Bump;
 use hashbrown::HashMap;
 use fnv::FnvBuildHasher;

@@ -23,7 +23,7 @@ lazy_static = "1.2.0"
 itertools = "0.8.0"
 
 cranelift-entity = "0.56.0"
-bumpalo = { git = "https://github.com/hansihe/bumpalo", branch = "nightly_alloc", features = ["nightly", "collections"] }
+bumpalo = { git = "https://github.com/bitwalker/bumpalo", branch = "nightly_alloc", features = ["nightly", "collections"] }
 
 petgraph = "0.4"
 
