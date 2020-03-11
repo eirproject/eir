@@ -235,7 +235,7 @@ impl StringSink {
         self.string
     }
 }
-impl BlockFormatSink for &mut StringSink {
+impl BlockFormatSink for StringSink {
     type LineIndex = ();
     fn write_str(&mut self, string: &str) -> Result<(), DynError> {
         self.string.push_str(string);
@@ -444,7 +444,7 @@ where
 fn format_function_body_state<B, V, L, S>(
     config: &mut FormatConfig<B, V, L>,
     state: &mut FormatState,
-    mut sink: S,
+    sink: &mut S,
 ) -> Result<(), DynError>
 where
     B: BlockIteratorConfig,
@@ -492,7 +492,7 @@ where
 pub fn format_function_body<B, V, L, S>(
     function: &Function,
     config: &mut FormatConfig<B, V, L>,
-    mut sink: S,
+    sink: &mut S,
 ) -> Result<(), DynError>
 where
     B: BlockIteratorConfig,
@@ -510,7 +510,7 @@ where
 pub fn format_module<B, V, L, S>(
     module: &Module,
     config: &mut FormatConfig<B, V, L>,
-    mut sink: S,
+    sink: &mut S,
 ) -> Result<(), DynError>
 where
     B: BlockIteratorConfig,
@@ -518,7 +518,23 @@ where
     L: BlockValueLayout,
     S: BlockFormatSink,
 {
-    unimplemented!()
+    sink.write_str(&format!("{} {{\n", module.name().name.as_str().get()));
+
+    for fun in module.function_iter() {
+        let function = fun.function();
+        let ident = function.ident();
+        sink.write_str(&format!("  {}/{} {{\n", &ident.name, ident.arity));
+        let mut state = FormatState {
+            function,
+            nesting: 2,
+        };
+        format_function_body_state(config, &mut state, sink)?;
+        sink.write_str("\n  }\n\n");
+    }
+
+    sink.write_str("\n}\n");
+
+    Ok(())
 }
 
 impl Function {
