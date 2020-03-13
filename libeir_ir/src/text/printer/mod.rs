@@ -9,7 +9,7 @@ use cranelift_entity::EntityRef;
 use pretty::{DocAllocator, Arena, RefDoc};
 use petgraph::visit::Dfs;
 
-use crate::{Function, Block, Value, Const, ValueKind, OpKind, CallKind, PrimOpKind, Module};
+use crate::{Function, Block, Value, Const, ValueKind, OpKind, CallKind, PrimOpKind, Module, LogicOp, BinOp};
 use crate::graph::EntityVisitMap;
 
 mod operation;
@@ -382,6 +382,22 @@ where
                              .append(arena.space())
                              .append(self.value_use_to_doc(config, state, reads[1]))
                              .append(arena.text("]"))
+                    },
+                    PrimOpKind::BinOp(BinOp::Equal) => {
+                        assert!(reads.len() == 2);
+                        arena.nil()
+                             .append(self.value_use_to_doc(config, state, reads[0]))
+                             .append(arena.space())
+                             .append(arena.text("=="))
+                             .append(arena.space())
+                             .append(self.value_use_to_doc(config, state, reads[1]))
+                    },
+                    PrimOpKind::LogicOp(LogicOp::And) => {
+                        arena.intersperse(
+                            reads.iter()
+                                 .map(|r| self.value_use_to_doc(config, state, *r)),
+                            arena.text(",").append(arena.space())
+                        ).enclose("and[", "]")
                     },
                     _ => unimplemented!("{:?}", prim_kind),
                 }

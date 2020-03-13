@@ -1,6 +1,6 @@
 #![deny(warnings)]
 
-use log::debug;
+use log::{debug, trace};
 
 use libeir_ir::{ Module, FunctionBuilder };
 
@@ -48,11 +48,13 @@ impl PassManager {
 
             let mut b = FunctionBuilder::new(fun);
             b.fun().graph_validate_global();
+            trace!("{}", b.fun().to_text_standard());
             for pass in self.passes.iter_mut() {
                 match pass {
                     PassType::Function(fun_pass) => {
                         debug!("======== {} FUNCTION_PASS: {}", ident, fun_pass.name());
                         fun_pass.run_function_pass(&mut b);
+                        trace!("{}", b.fun().to_text_standard());
                     }
                 }
                 b.fun().graph_validate_global();

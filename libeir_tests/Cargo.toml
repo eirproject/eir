@@ -14,3 +14,6 @@ libeir_intern = { path = "../libeir_intern" }
 libeir_interpreter = { path = "../libeir_interpreter" }
 libeir_lowerutils = { path = "../libeir_lowerutils" }
 libeir_util_parse = { path = "../util/libeir_util_parse" }
+
+[dev-dependencies]
+simple_logger = "1.0"
