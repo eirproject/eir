@@ -155,7 +155,7 @@ where
                     branches_formatted.push(formatted.indent(2));
                 }
 
-                let selector = self.value_use_to_doc(config, state, reads[0]);
+                let selector = self.value_use_to_doc(config, state, reads[1]);
 
                 arena.nil()
                     .append(arena.text("match"))
