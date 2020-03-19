@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 
 use cranelift_entity::{PrimaryMap, entity_impl};
 
+use libeir_diagnostics::ByteSpan;
 use libeir_intern::{Ident, Symbol};
 use crate::{Function, FunctionIdent};
 
@@ -34,14 +35,25 @@ entity_impl!(FunctionIndex, "function_index");
 #[derive(Debug)]
 pub struct Module {
     name: Ident,
+    span: ByteSpan,
     functions: PrimaryMap<FunctionIndex, FunctionDefinition>,
     name_map: BTreeMap<(Symbol, usize), FunctionIndex>
 }
 impl Module {
 
     pub fn new(name: Ident) -> Self {
-        Module {
+        Self {
             name,
+            span: Default::default(),
+            functions: PrimaryMap::new(),
+            name_map: BTreeMap::new(),
+        }
+    }
+
+    pub fn new_with_span(name: Ident, span: ByteSpan) -> Self {
+        Self {
+            name,
+            span,
             functions: PrimaryMap::new(),
             name_map: BTreeMap::new(),
         }
@@ -49,6 +61,10 @@ impl Module {
 
     pub fn name(&self) -> Ident {
         self.name
+    }
+
+    pub fn span(&self) -> ByteSpan {
+        self.span
     }
 
     pub fn add_function(&mut self, name: Ident, arity: usize) -> &mut FunctionDefinition {
@@ -107,6 +123,7 @@ impl Clone for Module {
         }
         Self {
             name: self.name.clone(),
+            span: self.span,
             functions,
             name_map,
         }

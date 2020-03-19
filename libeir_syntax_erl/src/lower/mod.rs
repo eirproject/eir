@@ -167,7 +167,7 @@ pub fn lower_module<'a>(
 
     // TODO sort functions for more deterministic compilation
 
-    let mut ir_module = IrModule::new(module.name);
+    let mut ir_module = IrModule::new_with_span(module.name, module.span);
 
     let mut ctx = LowerCtx {
         codemap,
