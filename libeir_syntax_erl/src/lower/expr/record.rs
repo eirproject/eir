@@ -4,6 +4,7 @@ use libeir_ir::{
     Block as IrBlock,
     BinOp as IrBinOp,
 };
+use libeir_diagnostics::ByteSpan;
 
 use libeir_intern::Symbol;
 
@@ -12,34 +13,35 @@ use crate::parser::ast::{ Record, RecordAccess, RecordUpdate, RecordIndex };
 use crate::lower::{ LowerCtx, LowerError };
 use crate::lower::expr::lower_single;
 
-fn make_rec_fail(ctx: &mut LowerCtx, b: &mut FunctionBuilder, recname_val: IrValue) -> IrBlock {
+fn make_rec_fail(ctx: &mut LowerCtx, b: &mut FunctionBuilder, span: ByteSpan, recname_val: IrValue) -> IrBlock {
     let fail_block = b.block_insert();
     let block = fail_block;
 
     let fail_type = b.value(Symbol::intern("error")); // TODO double check correct type
 
     let badrecord_val = b.value(Symbol::intern("badrecord"));
-    let fail_error = b.prim_tuple(&[badrecord_val, recname_val]);
+    let fail_error = b.prim_tuple(span, &[badrecord_val, recname_val]);
 
-    ctx.exc_stack.make_error_jump(b, block, fail_type, fail_error);
+    ctx.exc_stack.make_error_jump(b, span, block, fail_type, fail_error);
 
     fail_block
 }
 
 pub(super) fn lower_record_access_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
                                        rec: &RecordAccess) -> (IrBlock, IrValue) {
+    let span = rec.span;
     let rec_def = &ctx.module.records[&rec.name.name];
     let recname_val = b.value(rec.name);
 
     let idx = rec_def.field_idx_map[&rec.field];
 
-    let fail_block = make_rec_fail(ctx, b, recname_val);
+    let fail_block = make_rec_fail(ctx, b, span, recname_val);
 
     let record_val = map_block!(block, lower_single(ctx, b, block, &rec.record));
 
-    let mut match_builder = b.op_match_build();
+    let mut match_builder = b.op_match_build(span);
     let unpack_ok_block = match_builder.push_tuple(rec_def.record.fields.len() + 1, b);
-    let unpack_fail_block = match_builder.push_wildcard(b);
+    let unpack_fail_block = match_builder.push_wildcard(span, b);
     match_builder.finish(block, record_val, b);
     block = unpack_ok_block;
 
@@ -48,8 +50,8 @@ pub(super) fn lower_record_access_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
     let recname_test_val = b.block_args(block)[0];
     let rec_field_val = b.block_args(block)[idx + 1];
 
-    let eq_cond = b.prim_binop(IrBinOp::Equal, recname_test_val, recname_val);
-    let eq_fail_block = map_block!(block, b.op_if_bool_strict(block, eq_cond));
+    let eq_cond = b.prim_binop(span, IrBinOp::Equal, recname_test_val, recname_val);
+    let eq_fail_block = map_block!(block, b.op_if_bool_strict(span, block, eq_cond));
     b.op_call_flow(eq_fail_block, fail_block, &[]);
 
     (block, rec_field_val)
@@ -57,20 +59,21 @@ pub(super) fn lower_record_access_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
 
 pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
                                        rec: &RecordUpdate) -> (IrBlock, IrValue) {
+    let span = rec.span;
     // TODO Warn/error when updates overlap?
     let rec_def = &ctx.module.records[&rec.name.name];
     let recname_val = b.value(rec.name);
 
     let num_fields = rec_def.record.fields.len();
 
-    let fail_block = make_rec_fail(ctx, b, recname_val);
+    let fail_block = make_rec_fail(ctx, b, span, recname_val);
 
     // Unpack tuple
     let record_val = map_block!(block, lower_single(ctx, b, block, &rec.record));
 
-    let mut match_builder = b.op_match_build();
+    let mut match_builder = b.op_match_build(span);
     let unpack_ok_block = match_builder.push_tuple(num_fields + 1, b);
-    let unpack_fail_block = match_builder.push_wildcard(b);
+    let unpack_fail_block = match_builder.push_wildcard(span, b);
     match_builder.finish(block, record_val, b);
     block = unpack_ok_block;
 
@@ -84,8 +87,8 @@ pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
 
     // Check first tuple element
     let recname_test_val = b.block_args(block)[0];
-    let eq_cond = b.prim_binop(IrBinOp::Equal, recname_test_val, recname_val);
-    let eq_fail_block = map_block!(block, b.op_if_bool_strict(block, eq_cond));
+    let eq_cond = b.prim_binop(span, IrBinOp::Equal, recname_test_val, recname_val);
+    let eq_fail_block = map_block!(block, b.op_if_bool_strict(span, block, eq_cond));
     b.op_call_flow(eq_fail_block, fail_block, &[]);
 
     // Update fields
@@ -100,13 +103,14 @@ pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
     let mut tup_values = Vec::new();
     tup_values.push(recname_val);
     tup_values.extend(elems.iter().cloned());
-    let tup = b.prim_tuple(&tup_values);
+    let tup = b.prim_tuple(span, &tup_values);
 
     (block, tup)
 }
 
 pub(super) fn lower_record_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
                                 rec: &Record) -> (IrBlock, IrValue) {
+    let span = rec.span;
     let rec_def = &ctx.module.records[&rec.name.name];
     let recname_val = b.value(rec.name);
 
@@ -149,7 +153,7 @@ pub(super) fn lower_record_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
     let mut tup_values = Vec::new();
     tup_values.push(recname_val);
     tup_values.extend(elems.iter().map(|e| e.unwrap()));
-    let tup = b.prim_tuple(&tup_values);
+    let tup = b.prim_tuple(span, &tup_values);
 
     (block, tup)
 }

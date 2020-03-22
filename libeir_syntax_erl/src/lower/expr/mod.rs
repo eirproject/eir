@@ -97,6 +97,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
     let mut block = block;
     match expr {
         Expr::Apply(Apply { span, callee, args, .. }) => {
+            let span = *span;
             let mut arg_vals = vec![];
 
             let arity_val = b.value(args.len());
@@ -106,7 +107,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                     let mod_val = map_block!(block, lower_single(ctx, b, block, module));
                     let fun_val = map_block!(block, lower_single(ctx, b, block, function));
 
-                    b.prim_capture_function(mod_val, fun_val, arity_val)
+                    b.prim_capture_function(span, mod_val, fun_val, arity_val)
                 }
                 Expr::Literal(Literal::Atom(_id, name)) => {
                     let local = LocalFunctionName {
@@ -132,7 +133,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                     let mod_val = b.value(module);
                     let fun_val = b.value(function);
 
-                    b.prim_capture_function(mod_val, fun_val, arity_val)
+                    b.prim_capture_function(span, mod_val, fun_val, arity_val)
                 }
                 expr => {
                     map_block!(block, lower_single_same_scope(ctx, b, block, expr))
@@ -146,11 +147,11 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 arg_vals.push(arg_val);
             }
 
-            let loc = ctx.current_location(b, *span);
+            let loc = ctx.current_location(b, span);
             b.block_set_location(block, loc);
 
             let (ok_block, fail_block) = b.op_call_function(
-                block, callee_val, &arg_vals);
+                span, block, callee_val, &arg_vals);
 
             let fail_type = b.block_args(fail_block)[0];
             let fail_error = b.block_args(fail_block)[1];
@@ -187,17 +188,17 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
             {
                 let typ_val = b.value(Symbol::intern("error"));
                 let badmatch_val = b.value(Symbol::intern("badmatch"));
-                let err_val = b.prim_tuple(&[badmatch_val, match_val]);
-                ctx.exc_stack.make_error_jump(b, no_match, typ_val, err_val);
+                let err_val = b.prim_tuple(mat.span, &[badmatch_val, match_val]);
+                ctx.exc_stack.make_error_jump(b, mat.span, no_match, typ_val, err_val);
             }
 
-            match lower_clause(ctx, b, &mut block, false,
+            match lower_clause(ctx, b, &mut block, false, mat.span,
                                [&mat.pattern].iter().map(|i| &***i), None)
             {
                 Ok(lowered) => {
                     let (_scope_token, body) = lowered.make_body(ctx, b);
 
-                    let mut match_case = b.op_case_build();
+                    let mut match_case = b.op_case_build(mat.span);
                     match_case.match_on = Some(match_val);
                     match_case.no_match = Some(b.value(no_match));
 
@@ -227,7 +228,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
         Expr::Cons(cons) => {
             let head = map_block!(block, lower_single(ctx, b, block, &cons.head));
             let tail = map_block!(block, lower_single(ctx, b, block, &cons.tail));
-            let list = b.prim_list_cell(head, tail);
+            let list = b.prim_list_cell(cons.span, head, tail);
             (block, list)
         }
         Expr::Nil(_nil) => {
@@ -243,7 +244,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 vals.push(val);
             }
 
-            let tuple = b.prim_tuple(&vals);
+            let tuple = b.prim_tuple(tup.span, &vals);
             (block, tuple)
         }
         Expr::Fun(fun) => {
@@ -271,19 +272,19 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
 
                 map_block!(block, lower_single(ctx, b, block, &after.timeout))
             } else {
-                b.op_unreachable(after_block);
+                b.op_unreachable(recv.span, after_block);
                 b.value(Ident::from_str("infinity"))
             };
 
             // Receive start
-            let mut recv_start_b = b.op_intrinsic_build(Symbol::intern("receive_start"));
+            let mut recv_start_b = b.op_intrinsic_build(recv.span, Symbol::intern("receive_start"));
             recv_start_b.push_value(recv_wait_block, b);
             recv_start_b.push_value(after_timeout_val, b);
             recv_start_b.block = Some(block);
             recv_start_b.finish(b);
 
             // Receive wait
-            let mut recv_start_b = b.op_intrinsic_build(Symbol::intern("receive_wait"));
+            let mut recv_start_b = b.op_intrinsic_build(recv.span, Symbol::intern("receive_wait"));
             recv_start_b.push_value(after_block, b);
             recv_start_b.push_value(body_block, b);
             recv_start_b.block = Some(recv_wait_block);
@@ -294,7 +295,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 let no_match = b.block_insert();
                 b.op_call_flow(no_match, recv_wait_block, &[recv_ref_val]);
 
-                let mut case_b = b.op_case_build();
+                let mut case_b = b.op_case_build(recv.span);
                 case_b.match_on = Some(body_message_arg);
                 case_b.no_match = Some(b.value(no_match));
 
@@ -302,7 +303,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
 
                 for clause in clauses.iter() {
                     match lower_clause(ctx, b, &mut body_block, false,
-                                       [&clause.pattern].iter().map(|i| *i),
+                                       clause.span, [&clause.pattern].iter().map(|i| *i),
                                        clause.guard.as_ref())
                     {
                         Ok(lowered) => {
@@ -315,7 +316,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                             // This enables us to do things like copy from
                             // a heap fragment to the main process heap.
                             let mut recv_done_b = b.op_intrinsic_build(
-                                Symbol::intern("receive_done"));
+                                recv.span, Symbol::intern("receive_done"));
                             recv_done_b.push_value(body_mapped, b);
                             for bind in lowered.binds.iter() {
                                 let val = b.block_arg_insert(body);
@@ -365,7 +366,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                     let function = b.value(resolved.function);
                     let arity = b.value(resolved.arity);
 
-                    let fun_val = b.prim_capture_function(module, function, arity);
+                    let fun_val = b.prim_capture_function(resolved.span, module, function, arity);
 
                     (block, fun_val)
                 }
@@ -381,7 +382,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                     let function = b.value(resolved.function);
                     let arity = b.value(resolved.arity);
 
-                    let fun_val = b.prim_capture_function(module, function, arity);
+                    let fun_val = b.prim_capture_function(partial.span, module, function, arity);
 
                     (block, fun_val)
                 }
@@ -400,7 +401,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                         Arity::Var(var) => b.value(var),
                     };
 
-                    let fun_val = b.prim_capture_function(module, function, arity);
+                    let fun_val = b.prim_capture_function(unresolved.span, module, function, arity);
 
                     (block, fun_val)
                 }

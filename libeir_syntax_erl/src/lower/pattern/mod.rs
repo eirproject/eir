@@ -10,7 +10,7 @@ use libeir_ir::pattern::{
     PatternClause,
     PatternValue,
 };
-
+use libeir_diagnostics::ByteSpan;
 
 use crate::parser::ast::{ Expr, Guard };
 
@@ -32,6 +32,7 @@ enum EqGuard {
 }
 
 struct ClauseLowerCtx {
+    span: ByteSpan,
 
     // The clause we are constructing
     pat_clause: PatternClause,
@@ -126,16 +127,18 @@ impl UnreachableClause {
 /// * The body is empty
 pub(super) fn lower_clause<'a, P>(
     ctx: &mut LowerCtx, b: &mut FunctionBuilder, pre_case: &mut IrBlock,
-    shadow: bool, patterns: P, guard: Option<&Vec<Guard>>,
+    shadow: bool, span: ByteSpan, patterns: P, guard: Option<&Vec<Guard>>,
 ) -> Result<LoweredClause, UnreachableClause>
 where
     P: Iterator<Item = &'a Expr>,
 {
     assert!(b.fun().block_kind(*pre_case).is_none());
 
-    let pat_clause = b.pat_mut().clause_start();
+    let pat_clause = b.pat_mut().clause_start(span);
 
     let mut clause_ctx = ClauseLowerCtx {
+        span,
+
         pat_clause,
         pre_case: *pre_case,
 
@@ -245,14 +248,14 @@ impl ClauseLowerCtx {
             };
 
             let fun_val = b.prim_capture_function(
-                erlang_atom, exact_eq_atom, two_atom);
+                self.span, erlang_atom, exact_eq_atom, two_atom);
 
             let (ok_block, err_block) = b.op_call_function(
-                block, fun_val, &[lhs, rhs]);
+                self.span, block, fun_val, &[lhs, rhs]);
             let res_val = b.block_args(ok_block)[0];
             block = ok_block;
 
-            b.op_unreachable(err_block);
+            b.op_unreachable(self.span, err_block);
 
             top_and.push(res_val);
         }
@@ -270,17 +273,17 @@ impl ClauseLowerCtx {
                     block = block_new;
                 }
 
-                let val = b.prim_logic_op(LogicOp::And, &and);
+                let val = b.prim_logic_op(guard.span, LogicOp::And, &and);
                 and.clear();
                 or.push(val);
             }
 
-            let val = b.prim_logic_op(LogicOp::Or, &or);
+            let val = b.prim_logic_op(self.span, LogicOp::Or, &or);
             or.clear();
             top_and.push(val);
         }
 
-        let result_bool = b.prim_logic_op(LogicOp::And, &top_and);
+        let result_bool = b.prim_logic_op(self.span, LogicOp::And, &top_and);
         b.op_call_flow(block, ret_cont, &[result_bool]);
 
         ctx.exc_stack.pop_handler();

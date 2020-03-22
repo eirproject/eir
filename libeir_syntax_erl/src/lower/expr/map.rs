@@ -18,7 +18,7 @@ pub(super) fn lower_map_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder,
 {
     let entry_map_val = map_block!(block, lower_single(
         ctx, b, block, &map.map));
-    let mut map_builder = b.op_map_put_build(entry_map_val);
+    let mut map_builder = b.op_map_put_build(map.span, entry_map_val);
 
     for field in map.updates.iter() {
         let (key, value, action) = match field {
@@ -42,8 +42,8 @@ pub(super) fn lower_map_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder,
     let typ_val = b.value(Symbol::intern("error"));
     let badmatch_val = b.value(Symbol::intern("badkey"));
     let failed_key = b.block_args(fail)[0];
-    let err_val = b.prim_tuple(&[badmatch_val, failed_key]);
-    ctx.exc_stack.make_error_jump(b, fail, typ_val, err_val);
+    let err_val = b.prim_tuple(map.span, &[badmatch_val, failed_key]);
+    ctx.exc_stack.make_error_jump(b, map.span, fail, typ_val, err_val);
 
     (ok, b.block_args(ok)[0])
 }
@@ -53,7 +53,7 @@ pub(super) fn lower_map_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder,
                              map: &Map) -> (IrBlock, IrValue)
 {
     let empty_map = b.value(EmptyMap);
-    let mut map_builder = b.op_map_put_build(empty_map);
+    let mut map_builder = b.op_map_put_build(map.span, empty_map);
 
     for field in map.fields.iter() {
         let (key, value, action) = match field {
@@ -77,8 +77,8 @@ pub(super) fn lower_map_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder,
     let typ_val = b.value(Symbol::intern("error"));
     let badmatch_val = b.value(Symbol::intern("badkey"));
     let failed_key = b.block_args(fail)[0];
-    let err_val = b.prim_tuple(&[badmatch_val, failed_key]);
-    ctx.exc_stack.make_error_jump(b, fail, typ_val, err_val);
+    let err_val = b.prim_tuple(map.span, &[badmatch_val, failed_key]);
+    ctx.exc_stack.make_error_jump(b, map.span, fail, typ_val, err_val);
 
     (ok, b.block_args(ok)[0])
 }

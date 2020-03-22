@@ -10,7 +10,7 @@ use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, EntitySet,
 use libeir_util_datastructures::aux_hash_map::{ AuxHash, AuxEq };
 use libeir_util_datastructures::dedup_aux_primary_map::DedupAuxPrimaryMap;
 
-use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
+use libeir_diagnostics::ByteSpan;
 
 use crate::{ FunctionIdent };
 use crate::constant::{ ConstantContainer, Const, ConstKind };
@@ -318,7 +318,15 @@ impl Function {
 /// Blocks
 impl Function {
 
+    #[inline(always)]
     fn block_insert(&mut self) -> Block {
+        self.block_insert_with_span(None)
+    }
+
+    fn block_insert_with_span(&mut self, span: Option<ByteSpan>) -> Block {
+        let location = span
+            .map(|s| self.locations.location(None, None, None, s))
+            .unwrap_or_else(|| self.locations.location_empty());
         let block = self.blocks.push(BlockData {
             arguments: EntityList::new(),
 
@@ -328,7 +336,7 @@ impl Function {
             predecessors: EntitySet::new(),
             successors: EntitySet::new(),
 
-            location: self.locations.location_empty(),
+            location,
         });
         self.values.push(ValueKind::Block(block));
         block
@@ -421,7 +429,6 @@ impl Function {
     pub fn block_iter(&self) -> impl Iterator<Item = Block> {
         self.blocks.keys()
     }
-
 }
 
 /// Graph
@@ -508,10 +515,10 @@ impl SetPoolProvider for Block {
 
 impl Function {
 
-    pub fn new(ident: FunctionIdent) -> Self {
+    pub fn new(span: ByteSpan, ident: FunctionIdent) -> Self {
         Function {
             ident,
-            span: DUMMY_SPAN,
+            span,
 
             blocks: PrimaryMap::new(),
             values: ValueMap::new(),

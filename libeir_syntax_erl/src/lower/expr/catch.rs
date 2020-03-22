@@ -19,6 +19,7 @@ use crate::lower::pattern::lower_clause;
 pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
                              try_expr: &Try) -> (IrBlock, IrValue) {
 
+    let span = try_expr.span;
     let exc_block = b.block_insert();
 
     let exc_type = b.block_arg_insert(exc_block);
@@ -42,17 +43,17 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
             let block = no_match;
             let typ_val = b.value(Symbol::intern("error"));
             let try_clause_val = b.value(Symbol::intern("try_clause"));
-            let err_val = b.prim_tuple(&[try_clause_val, body_ret]);
-            ctx.exc_stack.make_error_jump(b, block, typ_val, err_val);
+            let err_val = b.prim_tuple(span, &[try_clause_val, body_ret]);
+            ctx.exc_stack.make_error_jump(b, span, block, typ_val, err_val);
         }
 
-        let mut case_b = b.op_case_build();
+        let mut case_b = b.op_case_build(span);
         case_b.match_on = Some(body_ret);
         case_b.no_match = Some(b.value(no_match));
 
         for clause in clauses {
             match lower_clause(ctx, b, &mut block, false,
-                               [&clause.pattern].iter().map(|i| *i),
+                               clause.span, [&clause.pattern].iter().map(|i| *i),
                                clause.guard.as_ref())
             {
                 Ok(lowered) => {
@@ -92,7 +93,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
 
         let match_val = b.prim_value_list(&[exc_type, exc_error]);
 
-        let mut case_b = b.op_case_build();
+        let mut case_b = b.op_case_build(span);
         case_b.match_on = Some(match_val);
         case_b.no_match = Some(b.value(catch_no_match_block));
 
@@ -108,7 +109,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
             };
 
             match lower_clause(
-                ctx, b, &mut block, false,
+                ctx, b, &mut block, false, clause.span,
                 [
                     &kind_expr,
                     &clause.error,
@@ -183,25 +184,26 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
 
 pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
                                catch_expr: &Catch) -> (IrBlock, IrValue) {
+    let span = catch_expr.span;
     let exc_block = b.block_insert();
 
     let exc_type = b.block_arg_insert(exc_block);
     let exc_error = b.block_arg_insert(exc_block);
     let exc_trace = b.block_arg_insert(exc_block);
 
-    let mut case_b = b.op_case_build();
+    let mut case_b = b.op_case_build(span);
 
     // Atoms
     let big_exit_atom = b.value(Symbol::intern("EXIT"));
 
     let make_value_clause = |b: &mut FunctionBuilder, case_b: &mut CaseBuilder, val: IrValue| {
-        let clause = b.pat_mut().clause_start();
+        let clause = b.pat_mut().clause_start(span);
 
         // Value
         case_b.push_value(val, b);
         let pat_val = b.pat_mut().clause_value(clause);
 
-        let pat = b.pat_mut().node_empty();
+        let pat = b.pat_mut().node_empty(Some(span));
         b.pat_mut().value(pat, pat_val);
 
         b.pat_mut().clause_node_push(clause, pat);
@@ -230,7 +232,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
 
     // no_match is unreachable
     let no_match = b.block_insert();
-    b.op_unreachable(no_match);
+    b.op_unreachable(span, no_match);
 
     // Guard lambda returning true
     let guard = b.block_insert();
@@ -250,8 +252,8 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
         let error_block_val = b.value(error_block);
         case_b.push_clause(error_clause, guard_val, error_block_val, b);
 
-        let inner_tup = b.prim_tuple(&[exc_error, exc_trace]);
-        let ret_tup = b.prim_tuple(&[big_exit_atom, inner_tup]);
+        let inner_tup = b.prim_tuple(span, &[exc_error, exc_trace]);
+        let ret_tup = b.prim_tuple(span, &[big_exit_atom, inner_tup]);
 
         b.op_call_flow(error_block, join_block, &[ret_tup]);
     }
@@ -262,7 +264,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
         let exit_block_val = b.value(exit_block);
         case_b.push_clause(exit_clause, guard_val, exit_block_val, b);
 
-        let ret_tup = b.prim_tuple(&[big_exit_atom, exc_error]);
+        let ret_tup = b.prim_tuple(span, &[big_exit_atom, exc_error]);
 
         b.op_call_flow(exit_block, join_block, &[ret_tup]);
     }

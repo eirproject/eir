@@ -45,7 +45,6 @@ pub struct ValueMap {
 }
 
 impl ValueMap {
-
     pub fn new() -> Self {
         ValueMap {
             primary: PrimaryMap::new(),
@@ -54,12 +53,16 @@ impl ValueMap {
     }
 
     pub fn push(&mut self, kind: ValueKind) -> Value {
+        self.push_with_location(kind, None)
+    }
+
+    pub fn push_with_location(&mut self, kind: ValueKind, location: Option<Location>) -> Value {
         if let Some(key) = self.back.get(&kind) {
             *key
         } else {
             let val = self.primary.push(ValueData {
                 kind,
-                location: None,
+                location,
                 usages: EntitySet::new(),
             });
             self.back.insert(kind, val);
@@ -70,7 +73,6 @@ impl ValueMap {
     pub fn get(&self, kind: ValueKind) -> Option<Value> {
         self.back.get(&kind).cloned()
     }
-
 }
 
 impl Index<Value> for ValueMap {

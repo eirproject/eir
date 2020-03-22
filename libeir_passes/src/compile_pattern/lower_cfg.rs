@@ -6,6 +6,8 @@ use libeir_ir::pattern::{ PatternClause, PatternNode };
 
 use libeir_util_pattern_compiler::{ PatternCfg, CfgNodeKind, EdgeRef, NodeIndex };
 
+use libeir_diagnostics::DUMMY_SPAN;
+
 use super::BFnvHashMap;
 use super::erlang_pattern_provider::{
     ErlangPatternProvider, NodeKind, Var, ValueOrConst,
@@ -152,14 +154,21 @@ fn lower_cfg_rec(
     block: Block,
     node: NodeIndex,
 ) {
+    let block_value = b.fun().block_value(block);
+    let block_span = b.fun().value_locations(block_value)
+        .map(|spans| spans.first().copied().unwrap_or(DUMMY_SPAN))
+        .unwrap_or(DUMMY_SPAN);
     match cfg.graph[node] {
         CfgNodeKind::Root => unreachable!(),
         CfgNodeKind::Match(var) => {
             let match_val = ctx.get_var_value(var);
+            let span = b.fun().value_locations(match_val)
+                .map(|spans| spans.first().copied().unwrap_or(DUMMY_SPAN))
+                .unwrap_or(DUMMY_SPAN);
 
             let mut wildcard_node = None;
 
-            let mut match_builder = b.op_match_build();
+            let mut match_builder = b.op_match_build(span);
 
             for outgoing in cfg.graph.edges(node) {
                 let weight = outgoing.weight();
@@ -271,7 +280,7 @@ fn lower_cfg_rec(
 
             let wildcard_edge = wildcard_node.unwrap();
             assert!(wildcard_edge.weight().variable_binds.len() == 0);
-            let wildcard_block = match_builder.push_wildcard(b);
+            let wildcard_block = match_builder.push_wildcard(span, b);
             lower_cfg_rec(
                 bump, b, ctx, cfg, clauses,
                 wildcard_block, wildcard_edge.target(),
@@ -295,16 +304,16 @@ fn lower_cfg_rec(
 
             // Call to guard lambda
             let (ok_block, thr_block) = b.op_call_function(
-                block, ctx.destinations.guards[leaf_num], &args);
+                block_span, block, ctx.destinations.guards[leaf_num], &args);
             let ok_ret = b.block_args(ok_block)[0];
 
             // Throw is unreachable
-            b.op_unreachable(thr_block);
+            b.op_unreachable(block_span, thr_block);
 
             // Conditional on return
             let (true_block, false_block, non_block) = b.op_if_bool(
-                ok_block, ok_ret);
-            b.op_unreachable(non_block);
+                block_span, ok_block, ok_ret);
+            b.op_unreachable(block_span, non_block);
 
             // If guard succeeds, we enter the body
             b.op_call_flow(true_block, ctx.destinations.bodies[leaf_num], &args);

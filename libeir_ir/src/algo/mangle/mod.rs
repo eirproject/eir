@@ -2,6 +2,8 @@ use std::collections::{ BTreeSet, BTreeMap };
 
 use bumpalo::{Bump, collections::Vec as BVec};
 
+use libeir_diagnostics::DUMMY_SPAN;
+
 use crate::{ Function, FunctionBuilder };
 use crate::{ Block };
 use crate::{ ValueKind };
@@ -354,6 +356,7 @@ impl Mangler {
         }
 
         let kind = val.map_fun(recv, |f, v| f.value_kind(v));
+        let locs = val.map_fun(recv, |f, v| f.value_locations(v));
         let dest: ToValue = match kind.inner() {
             ValueKind::Const(_) => {
                 recv.map_const(val)
@@ -363,6 +366,11 @@ impl Mangler {
                 let kind = prim
                     .map_fun(recv, |f, _v| *f.primop_kind(prim.inner()))
                     .inner();
+
+                let span = locs
+                    .inner()
+                    .map(|spans| spans.first().copied().unwrap_or(DUMMY_SPAN))
+                    .unwrap_or(DUMMY_SPAN);
 
                 let mut buf = BVec::new_in(bump);
                 {
@@ -375,7 +383,7 @@ impl Mangler {
                     *value = self.map(bump, recv, value_m).inner();
                 }
 
-                recv.to().prim_from_kind(kind, &buf).into()
+                recv.to().prim_from_kind(span, kind, &buf).into()
             },
             ValueKind::Block(block) => {
                 let block = val.new_with(block);

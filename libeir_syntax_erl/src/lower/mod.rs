@@ -133,7 +133,7 @@ impl<'a> LowerCtx<'a> {
     where
         M: IntoValue, F: IntoValue
     {
-        let fun_val = b.prim_capture_function(m, f, args.len());
+        let fun_val = b.prim_capture_function(span, m, f, args.len());
 
         self.val_buf.clear();
         for arg in args.iter() {
@@ -144,7 +144,7 @@ impl<'a> LowerCtx<'a> {
         b.block_set_location(block, loc);
 
         let (ok_block, fail_block) = b.op_call_function(
-            block, fun_val, args);
+            span, block, fun_val, args);
 
         let fail_type = b.block_args(fail_block)[0];
         let fail_error = b.block_args(fail_block)[1];
@@ -190,7 +190,7 @@ pub fn lower_module<'a>(
         assert!(ctx.scope.height() == 0);
         ctx.fun_num = 0;
 
-        let fun_def = ir_module.add_function(ident.function, function.arity);
+        let fun_def = ir_module.add_function(function.span, ident.function, function.arity);
         let mut fun = fun_def.function_mut();
         let mut builder = FunctionBuilder::new(&mut fun);
 
@@ -220,7 +220,7 @@ fn lower_function(
     ctx: &mut LowerCtx, b: &mut FunctionBuilder,
     fun: &Function,
 ) -> IrBlock {
-    let entry = b.block_insert();
+    let entry = b.block_insert_with_span(Some(fun.span()));
 
     match fun {
         Function::Named(_named) => {
@@ -245,7 +245,7 @@ fn lower_function_base(
     ctx: &mut LowerCtx, b: &mut FunctionBuilder,
     // The block the function should be lowered into
     entry: IrBlock,
-    _span: ByteSpan,
+    span: ByteSpan,
     arity: usize,
     clauses: &[FunctionClause],
 ) {
@@ -275,14 +275,15 @@ fn lower_function_base(
     {
         let typ_val = b.value(Symbol::intern("error"));
         let err_val = b.value(Symbol::intern("function_clause"));
-        ctx.exc_stack.make_error_jump(b, match_fail_block, typ_val, err_val);
+        ctx.exc_stack.make_error_jump(b, span, match_fail_block, typ_val, err_val);
     }
 
     let entry_exc_height = ctx.exc_stack.len();
 
     // Top level function case expression
     {
-        let mut func_case = b.op_case_build();
+        // TODO: Fuse locations of function heads
+        let mut func_case = b.op_case_build(span);
 
         func_case.match_on = Some(args_list);
         func_case.no_match = Some(b.value(match_fail_block));
@@ -290,6 +291,7 @@ fn lower_function_base(
         for clause in clauses.iter() {
 
             match lower_clause(ctx, b, &mut block, true,
+                               clause.span,
                                clause.params.iter(),
                                clause.guard.as_ref())
             {

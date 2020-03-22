@@ -1,4 +1,5 @@
 use libeir_ir::{ FunctionBuilder, Value, Block };
+use libeir_diagnostics::ByteSpan;
 
 pub struct ExceptionHandlerStack {
     stack: Vec<(Value, bool)>,
@@ -32,10 +33,10 @@ impl ExceptionHandlerStack {
     }
 
     pub fn make_error_jump(
-        &self, b: &mut FunctionBuilder, block: Block,
+        &self, b: &mut FunctionBuilder, span: ByteSpan, block: Block,
         typ: Value, error: Value)
     {
-        let cont = b.op_trace_capture_raw(block);
+        let cont = b.op_trace_capture_raw(span, block);
         let trace = b.block_args(cont)[0];
         self.make_error_jump_trace(b, cont, typ, error, trace);
     }

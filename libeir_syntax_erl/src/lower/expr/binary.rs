@@ -311,11 +311,11 @@ pub(crate) fn lower_binary_elem(
     };
 
     let err_cont = map_block!(block, b.op_binary_push(
-        block, spec, bin, bit_val, size_val));
+        elem.span, block, spec, bin, bit_val, size_val));
     let res_arg = b.block_args(block)[0];
 
     // TODO: Proper error
-    b.op_unreachable(err_cont);
+    b.op_unreachable(elem.span, err_cont);
 
     (block, res_arg)
 }

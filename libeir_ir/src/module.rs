@@ -67,7 +67,7 @@ impl Module {
         self.span
     }
 
-    pub fn add_function(&mut self, name: Ident, arity: usize) -> &mut FunctionDefinition {
+    pub fn add_function(&mut self, span: ByteSpan, name: Ident, arity: usize) -> &mut FunctionDefinition {
         let ident = FunctionIdent {
             module: self.name,
             name,
@@ -75,7 +75,7 @@ impl Module {
         };
         assert!(!self.name_map.contains_key(&(name.name, arity)));
 
-        let fun = Function::new(ident);
+        let fun = Function::new(span, ident);
         let def = FunctionDefinition {
             index: FunctionIndex(0),
             fun,

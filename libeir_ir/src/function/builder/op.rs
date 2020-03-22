@@ -1,4 +1,5 @@
 use libeir_intern::Symbol;
+use libeir_diagnostics::ByteSpan;
 
 use cranelift_entity::{ EntityList };
 
@@ -28,6 +29,7 @@ impl<'a> FunctionBuilder<'a> {
 
     pub fn op_call_function_next<'b, V>(
         &'b mut self,
+        span: ByteSpan,
         block: Block,
         target: V,
         ret: Value,
@@ -47,11 +49,13 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(ret, &mut self.fun.pool.value);
         data.reads.push(thr, &mut self.fun.pool.value);
         data.reads.extend(args.iter().cloned(), &mut self.fun.pool.value);
+        data.location = self.fun.locations.location(None, None, None, span);
 
         self.graph_update_block(block);
     }
     pub fn op_call_function<'b, V>(
         &'b mut self,
+        span: ByteSpan,
         block: Block,
         target: V,
         args: &[Value],
@@ -65,51 +69,53 @@ impl<'a> FunctionBuilder<'a> {
         self.block_arg_insert(thr);
         self.block_arg_insert(thr);
 
-        self.op_call_function_next(block, target, ret_val, thr_val, args);
+        self.op_call_function_next(span, block, target, ret_val, thr_val, args);
 
         (ret, thr)
     }
 
-    pub fn op_trace_capture_raw_next(&mut self, block: Block, next: Value) {
+    pub fn op_trace_capture_raw_next(&mut self, span: ByteSpan, block: Block, next: Value) {
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
         data.op = Some(OpKind::TraceCaptureRaw);
         data.reads.push(next, &mut self.fun.pool.value);
+        data.location = self.fun.locations.location(None, None, None, span);
 
         self.graph_update_block(block);
     }
-    pub fn op_trace_capture_raw(&mut self, block: Block) -> Block {
+    pub fn op_trace_capture_raw(&mut self, span: ByteSpan, block: Block) -> Block {
         let cont = self.fun.block_insert();
         let cont_val = self.value(cont);
         self.fun.block_arg_insert(cont);
 
-        self.op_trace_capture_raw_next(block, cont_val);
+        self.op_trace_capture_raw_next(span, block, cont_val);
 
         cont
     }
 
-    pub fn op_intrinsic<'b>(&'b mut self, block: Block, name: Symbol, args: &[Value]) {
+    pub fn op_intrinsic<'b>(&'b mut self, span: ByteSpan, block: Block, name: Symbol, args: &[Value]) {
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
         data.op = Some(OpKind::Intrinsic(name));
         data.reads.extend(args.iter().cloned(), &mut self.fun.pool.value);
+        data.location = self.fun.locations.location(None, None, None, span);
 
         self.graph_update_block(block);
     }
-    pub fn op_intrinsic_build(&mut self, name: Symbol) -> IntrinsicBuilder {
-        IntrinsicBuilder::new(name, self)
+    pub fn op_intrinsic_build(&mut self, span: ByteSpan, name: Symbol) -> IntrinsicBuilder {
+        IntrinsicBuilder::new(span, name, self)
     }
 
-    pub fn op_map_put_build(&mut self, value: Value) -> MapPutBuilder {
-        MapPutBuilder::new(value, self)
+    pub fn op_map_put_build(&mut self, span: ByteSpan, value: Value) -> MapPutBuilder {
+        MapPutBuilder::new(span, value, self)
     }
 
-    pub fn op_case_build(&mut self) -> CaseBuilder {
-        CaseBuilder::new()
+    pub fn op_case_build(&mut self, span: ByteSpan) -> CaseBuilder {
+        CaseBuilder::new(span)
     }
 
     pub fn op_unpack_value_list_next(&mut self, block: Block, target: Value, list: Value, num: usize) {
@@ -133,7 +139,7 @@ impl<'a> FunctionBuilder<'a> {
         cont
     }
 
-    pub fn op_if_bool_next(&mut self, block: Block, t: Value, f: Value, o: Value, value: Value) {
+    pub fn op_if_bool_next(&mut self, span: ByteSpan, block: Block, t: Value, f: Value, o: Value, value: Value) {
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
@@ -143,10 +149,11 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(f, &mut self.fun.pool.value);
         data.reads.push(o, &mut self.fun.pool.value);
         data.reads.push(value, &mut self.fun.pool.value);
+        data.location = self.fun.locations.location(None, None, None, span);
 
         self.graph_update_block(block);
     }
-    pub fn op_if_bool(&mut self, block: Block, value: Value) -> (Block, Block, Block) {
+    pub fn op_if_bool(&mut self, span: ByteSpan, block: Block, value: Value) -> (Block, Block, Block) {
         let true_cont = self.fun.block_insert();
         let true_cont_val = self.value(true_cont);
         let false_cont = self.fun.block_insert();
@@ -154,12 +161,12 @@ impl<'a> FunctionBuilder<'a> {
         let non_cont = self.fun.block_insert();
         let non_cont_val = self.value(non_cont);
 
-        self.op_if_bool_next(block, true_cont_val, false_cont_val, non_cont_val, value);
+        self.op_if_bool_next(span, block, true_cont_val, false_cont_val, non_cont_val, value);
 
         (true_cont, false_cont, non_cont)
     }
 
-    pub fn op_if_bool_strict_next(&mut self, block: Block, t: Value, f: Value, value: Value) {
+    pub fn op_if_bool_strict_next(&mut self, span: ByteSpan, block: Block, t: Value, f: Value, value: Value) {
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
@@ -168,21 +175,22 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(t, &mut self.fun.pool.value);
         data.reads.push(f, &mut self.fun.pool.value);
         data.reads.push(value, &mut self.fun.pool.value);
+        data.location = self.fun.locations.location(None, None, None, span);
 
         self.graph_update_block(block);
     }
-    pub fn op_if_bool_strict(&mut self, block: Block, value: Value) -> (Block, Block) {
+    pub fn op_if_bool_strict(&mut self, span: ByteSpan, block: Block, value: Value) -> (Block, Block) {
         let true_cont = self.fun.block_insert();
         let true_cont_val = self.value(true_cont);
         let false_cont = self.fun.block_insert();
         let false_cont_val = self.value(false_cont);
 
-        self.op_if_bool_strict_next(block, true_cont_val, false_cont_val, value);
+        self.op_if_bool_strict_next(span, block, true_cont_val, false_cont_val, value);
 
         (true_cont, false_cont)
     }
 
-    pub fn op_binary_push(&mut self, block: Block, specifier: BinaryEntrySpecifier,
+    pub fn op_binary_push(&mut self, span: ByteSpan, block: Block, specifier: BinaryEntrySpecifier,
                           bin: Value, value: Value, size: Option<Value>) -> (Block, Block) {
         if size.is_some() {
             assert!(specifier.has_size());
@@ -208,6 +216,7 @@ impl<'a> FunctionBuilder<'a> {
         if let Some(size) = size {
             data.reads.push(size, &mut self.fun.pool.value);
         }
+        data.location = self.fun.locations.location(None, None, None, span);
 
         self.graph_update_block(block);
 
@@ -215,32 +224,35 @@ impl<'a> FunctionBuilder<'a> {
     }
 
 
-    pub fn op_unreachable(&mut self, block: Block) {
+    pub fn op_unreachable(&mut self, span: ByteSpan, block: Block) {
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
         data.op = Some(OpKind::Unreachable);
+        data.location = self.fun.locations.location(None, None, None, span);
 
         self.graph_update_block(block);
     }
 
-    pub fn op_match_build(&mut self) -> MatchBuilder {
-        MatchBuilder::new()
+    pub fn op_match_build(&mut self, span: ByteSpan) -> MatchBuilder {
+        MatchBuilder::new(span)
     }
 
 }
 
 pub struct IntrinsicBuilder {
     name: Symbol,
+    span: ByteSpan,
     pub block: Option<Block>,
     values: EntityList<Value>,
 }
 impl IntrinsicBuilder {
 
-    pub fn new<'a>(name: Symbol, _b: &mut FunctionBuilder<'a>) -> Self {
+    pub fn new<'a>(span: ByteSpan, name: Symbol, _b: &mut FunctionBuilder<'a>) -> Self {
         IntrinsicBuilder {
             name,
+            span,
             block: None,
             values: EntityList::new(),
         }
@@ -264,6 +276,7 @@ impl IntrinsicBuilder {
 
         data.op = Some(OpKind::Intrinsic(self.name));
         data.reads = self.values;
+        data.location = b.fun.locations.location(None, None, None, self.span);
 
         b.graph_update_block(block);
     }
@@ -271,6 +284,8 @@ impl IntrinsicBuilder {
 }
 
 pub struct CaseBuilder {
+    span: ByteSpan,
+
     pub match_on: Option<Value>,
     pub no_match: Option<Value>,
 
@@ -282,6 +297,7 @@ pub struct CaseBuilder {
 impl Default for CaseBuilder {
     fn default() -> Self {
         CaseBuilder {
+            span: libeir_diagnostics::DUMMY_SPAN,
             match_on: None,
             no_match: None,
 
@@ -294,8 +310,10 @@ impl Default for CaseBuilder {
 
 impl CaseBuilder {
 
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(span: ByteSpan) -> Self {
+        let mut this = Self::default();
+        this.span = span;
+        this
     }
 
     pub fn push_clause<'a>(&mut self, clause: PatternClause, guard: Value, body: Value, b: &mut FunctionBuilder<'a>) {
@@ -324,6 +342,7 @@ impl CaseBuilder {
         data.op = Some(OpKind::Case {
             clauses: self.clauses,
         });
+        data.location = b.fun.locations.location(None, None, None, self.span);
 
         let mut buf = b.value_buf.take().unwrap();
         buf.clear();
@@ -359,6 +378,7 @@ impl CaseBuilder {
 }
 
 pub struct MatchBuilder {
+    span: ByteSpan,
     branches: EntityList<Value>,
     branch_args: EntityList<Value>,
 
@@ -367,6 +387,7 @@ pub struct MatchBuilder {
 impl Default for MatchBuilder {
     fn default() -> Self {
         MatchBuilder {
+            span: libeir_diagnostics::DUMMY_SPAN,
             branches: EntityList::new(),
             branch_args: EntityList::new(),
 
@@ -376,8 +397,10 @@ impl Default for MatchBuilder {
 }
 impl MatchBuilder {
 
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(span: ByteSpan) -> Self {
+        let mut this = Self::default();
+        this.span = span;
+        this
     }
 
     pub fn push_value_next(&mut self, next: Value, val: Value, b: &mut FunctionBuilder) {
@@ -490,8 +513,12 @@ impl MatchBuilder {
         let args = b.prim_value_list(&[]);
         self.branch_args.push(args, &mut b.fun.pool.value);
     }
-    pub fn push_wildcard(&mut self, b: &mut FunctionBuilder) -> Block {
+    pub fn push_wildcard(&mut self, span: ByteSpan, b: &mut FunctionBuilder) -> Block {
         let (block, block_val) = b.block_insert_get_val();
+        {
+            let mut block_data = b.fun.blocks.get_mut(block).unwrap();
+            block_data.location = b.fun.locations.location(None, None, None, span);
+        }
         self.push_wildcard_next(block_val, b);
         block
     }
@@ -517,6 +544,7 @@ impl MatchBuilder {
             branches: self.kinds,
         });
         data.reads = reads;
+        data.location = b.fun.locations.location(None, None, None, self.span);
 
         b.graph_update_block(block);
         b.fun.graph_validate_block(block);
@@ -525,6 +553,7 @@ impl MatchBuilder {
 }
 
 pub struct MapPutBuilder {
+    span: ByteSpan,
     ok: Block,
     fail: Block,
     reads: EntityList<Value>,
@@ -532,7 +561,7 @@ pub struct MapPutBuilder {
 }
 impl MapPutBuilder {
 
-    pub fn new(value: Value, b: &mut FunctionBuilder) -> Self {
+    pub fn new(span: ByteSpan, value: Value, b: &mut FunctionBuilder) -> Self {
         let (ok, ok_val) = b.block_insert_get_val();
         b.block_arg_insert(ok);
 
@@ -546,6 +575,7 @@ impl MapPutBuilder {
         reads.push(value, &mut b.fun.pool.value);
 
         MapPutBuilder {
+            span,
             ok,
             fail,
             reads,
@@ -569,6 +599,7 @@ impl MapPutBuilder {
 
         data.op = Some(OpKind::MapPut { action: self.actions });
         data.reads = self.reads;
+        data.location = b.fun.locations.location(None, None, None, self.span);
 
         b.graph_update_block(block);
 

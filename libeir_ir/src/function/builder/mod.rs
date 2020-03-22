@@ -1,3 +1,5 @@
+use libeir_diagnostics::{ByteSpan, DUMMY_SPAN};
+
 use super::{ Block, Value, PrimOp, Const, Location };
 use super::ValueKind;
 use super::{ PrimOpData, PrimOpKind };
@@ -120,7 +122,11 @@ impl<'a> FunctionBuilder<'a> {
                 }
 
                 let kind = self.fun().primop_kind(prim).clone();
-                self.prim_from_kind(kind, &values)
+                let span = self.fun()
+                    .value_locations(value)
+                    .map(|spans| spans.first().copied().unwrap_or(DUMMY_SPAN))
+                    .unwrap_or(DUMMY_SPAN);
+                self.prim_from_kind(span, kind, &values)
             }
             _ => value,
         }
@@ -199,6 +205,10 @@ impl<'a> FunctionBuilder<'a> {
 
     pub fn block_insert(&mut self) -> Block {
         self.fun.block_insert()
+    }
+
+    pub fn block_insert_with_span(&mut self, span: Option<ByteSpan>) -> Block {
+        self.fun.block_insert_with_span(span)
     }
 
     /// Inserts a new block and get its value
@@ -315,6 +325,7 @@ mod tests {
     use crate::FunctionIdent;
 
     use libeir_intern::Ident;
+    use libeir_diagnostics::DUMMY_SPAN;
 
     #[test]
     fn graph_impl() {
@@ -323,7 +334,7 @@ mod tests {
             name: Ident::from_str("test"),
             arity: 1,
         };
-        let mut fun = Function::new(ident);
+        let mut fun = Function::new(DUMMY_SPAN, ident);
         let mut b = fun.builder();
 
         {

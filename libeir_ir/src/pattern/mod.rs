@@ -53,6 +53,7 @@ impl Default for PatternContainer {
 
 #[derive(Debug, Clone)]
 struct PatternClauseData {
+    span: ByteSpan,
     root_nodes: EntityList<PatternNode>,
 
     node_binds_keys: EntityList<PatternNode>,
@@ -144,11 +145,11 @@ impl PatternContainer {
         val
     }
 
-    pub fn node_empty(&mut self) -> PatternNode {
+    pub fn node_empty(&mut self, span: Option<ByteSpan>) -> PatternNode {
         self.nodes.push(PatternNodeData {
             kind: None,
             finished: false,
-            span: DUMMY_SPAN,
+            span: span.unwrap_or(DUMMY_SPAN),
         })
     }
 
@@ -242,8 +243,10 @@ impl PatternContainer {
         self.nodes[node].span = span;
     }
 
-    pub fn clause_start(&mut self) -> PatternClause {
+    pub fn clause_start(&mut self, span: ByteSpan) -> PatternClause {
         self.clauses.push(PatternClauseData {
+            span,
+
             root_nodes: EntityList::new(),
 
             node_binds_keys: EntityList::new(),
@@ -387,19 +390,19 @@ fn copy_pattern_node(
     let data = &from.nodes[node];
     match data.kind.as_ref().unwrap() {
         PatternNodeKind::Wildcard => {
-            let new = to.node_empty();
+            let new = to.node_empty(Some(data.span));
             to.wildcard(new);
             node_map.insert(node, new);
             new
         },
         PatternNodeKind::Value(val) => {
-            let new = to.node_empty();
+            let new = to.node_empty(Some(data.span));
             to.value(new, *val);
             node_map.insert(node, new);
             new
         }
         PatternNodeKind::Tuple(elems) => {
-            let new = to.node_empty();
+            let new = to.node_empty(Some(data.span));
             to.tuple(new);
 
             for elem in elems.as_slice(&from.node_pool) {
@@ -415,14 +418,14 @@ fn copy_pattern_node(
             let head_copied = copy_pattern_node(value_map, node_map, *head, from, to);
             let tail_copied = copy_pattern_node(value_map, node_map, *tail, from, to);
 
-            let new = to.node_empty();
+            let new = to.node_empty(Some(data.span));
             to.list(new, head_copied, tail_copied);
 
             node_map.insert(node, new);
             new
         }
         PatternNodeKind::Map { keys, values } => {
-            let new = to.node_empty();
+            let new = to.node_empty(Some(data.span));
             to.map(new);
 
             for (key, val) in keys.as_slice(&from.value_pool).iter()
@@ -456,13 +459,15 @@ impl<'a> FunctionBuilder<'a> {
         let rhs_kind = self.pat().nodes[rhs].kind.clone().unwrap();
         println!("MERGE {:?} {:?}", lhs_kind, rhs_kind);
 
+        // TODO: Fuse locations
+        let fused_span = self.pat().nodes[lhs].span;
         match (lhs_kind, rhs_kind) {
             (PatternNodeKind::Value(l_val), PatternNodeKind::Value(r_val)) if l_val == r_val => {
                 map.insert(rhs, lhs);
                 Ok(lhs)
             }
-            (PatternNodeKind::Const(l), _) => self.merge_pattern_constant(map, rhs, l),
-            (_, PatternNodeKind::Const(r)) => self.merge_pattern_constant(map, lhs, r),
+            (PatternNodeKind::Const(l), _) => self.merge_pattern_constant(map, fused_span, rhs, l),
+            (_, PatternNodeKind::Const(r)) => self.merge_pattern_constant(map, fused_span, lhs, r),
             (PatternNodeKind::Wildcard, _) => {
                 map.insert(lhs, rhs);
                 Ok(rhs)
@@ -475,7 +480,7 @@ impl<'a> FunctionBuilder<'a> {
                 let l1_len = l1.len(&self.pat().node_pool);
                 let l2_len = l2.len(&self.pat().node_pool);
                 if l1_len == l2_len {
-                    let new_tup = self.pat_mut().node_empty();
+                    let new_tup = self.pat_mut().node_empty(Some(fused_span));
                     self.pat_mut().tuple(new_tup);
                     for idx in 0..l1_len {
                         let ln = l1.get(idx, &self.pat().node_pool).unwrap();
@@ -499,7 +504,7 @@ impl<'a> FunctionBuilder<'a> {
                 }
             }
             (PatternNodeKind::Map { keys: k1, values: v1 }, PatternNodeKind::Map { keys: k2, values: v2 }) => {
-                let new_map = self.pat_mut().node_empty();
+                let new_map = self.pat_mut().node_empty(Some(fused_span));
                 self.pat_mut().map(new_map);
 
                 for idx in 0..(k1.len(&self.pat().value_pool)) {
@@ -524,7 +529,7 @@ impl<'a> FunctionBuilder<'a> {
                 let new_head = self.merge_patterns(map, h1, h2)?;
                 let new_tail = self.merge_patterns(map, t1, t2)?;
 
-                let list = self.pat_mut().node_empty();
+                let list = self.pat_mut().node_empty(Some(fused_span));
                 self.pat_mut().list(list, new_head, new_tail);
 
                 map.insert(lhs, list);
@@ -546,6 +551,7 @@ impl<'a> FunctionBuilder<'a> {
     pub fn merge_pattern_constant(
         &mut self,
         map: &mut HashMap<PatternNode, PatternNode>,
+        fused_span: ByteSpan,
         lhs: PatternNode,
         rhs: Const,
     ) -> Result<PatternNode, PatternMergeFail>
@@ -566,7 +572,7 @@ impl<'a> FunctionBuilder<'a> {
                 })
             }
             (PatternNodeKind::Wildcard, _) => {
-                let node = self.pat_mut().node_empty();
+                let node = self.pat_mut().node_empty(Some(fused_span));
                 self.pat_mut().constant(node, rhs);
                 map.insert(lhs, node);
                 Ok(node)
@@ -583,7 +589,7 @@ impl<'a> FunctionBuilder<'a> {
                     });
                 }
 
-                let node = self.pat_mut().node_empty();
+                let node = self.pat_mut().node_empty(Some(fused_span));
                 self.pat_mut().tuple(node);
 
                 for n in 0..pat_len {
@@ -592,7 +598,9 @@ impl<'a> FunctionBuilder<'a> {
                     let const_node = const_entries
                         .get(n, &self.cons().const_pool).unwrap();
 
-                    let new = self.merge_pattern_constant(map, pat_node, const_node)?;
+                    // TODO: Fuse locations
+                    let fspan = self.pat().nodes[pat_node].span;
+                    let new = self.merge_pattern_constant(map, fspan, pat_node, const_node)?;
                     self.pat_mut().tuple_elem_push(node, new);
                 }
 
@@ -609,10 +617,10 @@ impl<'a> FunctionBuilder<'a> {
             }
             (PatternNodeKind::List { head: pat_head, tail: pat_tail },
              ConstKind::ListCell { head: cons_head, tail: cons_tail }) => {
-                let head = self.merge_pattern_constant(map, pat_head, cons_head)?;
-                let tail = self.merge_pattern_constant(map, pat_tail, cons_tail)?;
+                let head = self.merge_pattern_constant(map, fused_span, pat_head, cons_head)?;
+                let tail = self.merge_pattern_constant(map, fused_span, pat_tail, cons_tail)?;
 
-                let node = self.pat_mut().node_empty();
+                let node = self.pat_mut().node_empty(Some(fused_span));
                 self.pat_mut().list(node, head, tail);
                 map.insert(lhs, node);
 

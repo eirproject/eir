@@ -7,6 +7,7 @@ use libeir_ir::{
     PatternNode,
 };
 use libeir_intern::Ident;
+use libeir_diagnostics::DUMMY_SPAN;
 
 use super::{ Tree, TreeNode, TreeNodeKind, ConstraintKind };
 use super::super::{ ClauseLowerCtx, EqGuard };
@@ -84,7 +85,7 @@ fn create_nodes(
 ) {
     assert!(!map.contains_key(&node));
 
-    let p_node = b.pat_mut().node_empty();
+    let p_node = b.pat_mut().node_empty(Some(DUMMY_SPAN));
     map.insert(node, p_node);
 
     match &t.nodes[node] {

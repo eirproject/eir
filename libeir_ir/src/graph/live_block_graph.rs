@@ -134,6 +134,7 @@ mod tests {
 
     use crate::{ FunctionIdent, Function, FunctionBuilder };
     use libeir_intern::Ident;
+    use libeir_diagnostics::DUMMY_SPAN;
 
     use petgraph::Direction;
     use petgraph::visit::IntoNeighborsDirected;
@@ -145,7 +146,7 @@ mod tests {
             name: Ident::from_str("woo"),
             arity: 1,
         };
-        let mut fun = Function::new(ident);
+        let mut fun = Function::new(DUMMY_SPAN, ident);
         let mut b = FunctionBuilder::new(&mut fun);
 
         let b1 = b.block_insert();

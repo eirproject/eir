@@ -21,17 +21,18 @@ pub(super) fn lower_case_expr(
     case: &Case,
 ) -> (IrBlock, IrValue)
 {
+    let span = case.span;
     let match_val = map_block!(block, lower_single(ctx, b, block, &case.expr));
 
     let no_match = b.block_insert();
     {
         let typ_val = b.value(Symbol::intern("error"));
         let case_clause_val = b.value(Symbol::intern("case_clause"));
-        let err_val = b.prim_tuple(&[case_clause_val, match_val]);
-        ctx.exc_stack.make_error_jump(b, no_match, typ_val, err_val);
+        let err_val = b.prim_tuple(span, &[case_clause_val, match_val]);
+        ctx.exc_stack.make_error_jump(b, span, no_match, typ_val, err_val);
     }
 
-    let mut case_b = b.op_case_build();
+    let mut case_b = b.op_case_build(span);
     case_b.match_on = Some(match_val);
     case_b.no_match = Some(b.value(no_match));
 
@@ -40,7 +41,7 @@ pub(super) fn lower_case_expr(
     let mut scope_merge = ScopeMerge::new();
 
     for clause in case.clauses.iter() {
-        match lower_clause(ctx, b, &mut block, false, [&clause.pattern].iter()
+        match lower_clause(ctx, b, &mut block, false, clause.span, [&clause.pattern].iter()
                            .map(|i| *i), clause.guard.as_ref())
         {
             Ok(lowered) => {
@@ -79,6 +80,7 @@ pub(super) fn lower_case_expr(
 pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
                             if_expr: &If) -> (IrBlock, IrValue)
 {
+    let span = if_expr.span;
     let match_val = b.prim_value_list(&[]);
 
     let no_match = b.block_insert();
@@ -86,11 +88,11 @@ pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut blo
         let block = no_match;
         let typ_val = b.value(Symbol::intern("error"));
         let badmatch_val = b.value(Symbol::intern("badmatch"));
-        let err_val = b.prim_tuple(&[badmatch_val, match_val]);
-        ctx.exc_stack.make_error_jump(b, block, typ_val, err_val);
+        let err_val = b.prim_tuple(span, &[badmatch_val, match_val]);
+        ctx.exc_stack.make_error_jump(b, span, block, typ_val, err_val);
     }
 
-    let mut case_b = b.op_case_build();
+    let mut case_b = b.op_case_build(span);
     case_b.match_on = Some(match_val);
     case_b.no_match = Some(b.value(no_match));
 
@@ -100,7 +102,7 @@ pub(super) fn lower_if_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut blo
 
     for clause in if_expr.clauses.iter() {
         match lower_clause(ctx, b, &mut block, false,
-                           [].iter(), Some(&clause.guards))
+                           span, [].iter(), Some(&clause.guards))
         {
             Ok(lowered) => {
                 let (scope_token, body) = lowered.make_body(ctx, b);
