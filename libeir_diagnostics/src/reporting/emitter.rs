@@ -347,6 +347,16 @@ pub fn yellow_bold() -> ColorSpec {
 }
 
 #[inline]
+pub fn red() -> ColorSpec {
+    color(Color::Red)
+}
+
+#[inline]
+pub fn red_bold() -> ColorSpec {
+    color_bold(Color::Red)
+}
+
+#[inline]
 pub fn white() -> ColorSpec {
     color_bold(Color::White)
 }
