@@ -96,6 +96,12 @@ impl BitVec {
 
 }
 
+impl Default for BitVec {
+    fn default() -> Self {
+        BitVec::new()
+    }
+}
+
 impl From<Vec<u8>> for BitVec {
     fn from(buf: Vec<u8>) -> BitVec {
         BitVec {

@@ -112,6 +112,10 @@ impl ConstantContainer {
         val.into_const(self)
     }
 
+    pub fn get<T>(&self, val: T) -> Option<Const> where T: IntoConst {
+        val.get_const(self)
+    }
+
     //pub fn print<T>(&self, val: Const, fmt: &mut T)
     //where T: crate::text::TextFormatter
     //{
@@ -195,6 +199,11 @@ impl ConstantContainer {
 
 }
 
+pub trait IntoConst {
+    fn into_const(self, c: &mut ConstantContainer) -> Const;
+    fn get_const(self, fun: &ConstantContainer) -> Option<Const>;
+}
+
 pub struct EmptyMap;
 impl IntoConst for EmptyMap {
     fn into_const(self, c: &mut ConstantContainer) -> Const {
@@ -203,15 +212,20 @@ impl IntoConst for EmptyMap {
             values: EntityList::new(),
         })
     }
-}
-
-pub trait IntoConst {
-    fn into_const(self, c: &mut ConstantContainer) -> Const;
+    fn get_const(self, c: &ConstantContainer) -> Option<Const> {
+        c.get(ConstKind::Map {
+            keys: EntityList::new(),
+            values: EntityList::new(),
+        })
+    }
 }
 
 impl<T> IntoConst for T where T: Into<AtomicTerm> {
     fn into_const(self, c: &mut ConstantContainer) -> Const {
         c.from(ConstKind::Atomic(self.into()))
+    }
+    fn get_const(self, c: &ConstantContainer) -> Option<Const> {
+        c.get(ConstKind::Atomic(self.into()))
     }
 }
 
@@ -225,17 +239,26 @@ impl IntoConst for ConstKind {
             val
         }
     }
+    fn get_const(self, c: &ConstantContainer) -> Option<Const> {
+        c.value_map.get(&self, &c.const_pool).cloned()
+    }
 }
 
 impl IntoConst for Const {
     fn into_const(self, _c: &mut ConstantContainer) -> Const {
         self
     }
+    fn get_const(self, _c: &ConstantContainer) -> Option<Const> {
+        Some(self)
+    }
 }
 
 impl IntoConst for Ident {
     fn into_const(self, c: &mut ConstantContainer) -> Const {
         self.name.into_const(c)
+    }
+    fn get_const(self, c: &ConstantContainer) -> Option<Const> {
+        self.name.get_const(c)
     }
 }
 

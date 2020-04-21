@@ -1,5 +1,6 @@
 use crate::Function;
 use crate::{Block, Value, OpKind, CallKind};
+use crate::traits::OpBranches;
 
 pub struct BranchIter<'a> {
     fun: &'a Function,
@@ -64,16 +65,19 @@ impl Function {
             OpKind::TraceConstruct => 1,
             OpKind::UnpackValueList(_) => 1,
             OpKind::MapPut { .. } => 2,
-            OpKind::BinaryPush { .. } => 2,
             OpKind::Case { clauses } => 1 + clauses.len(&self.pool.clause),
-            OpKind::Intrinsic(name) => {
-                match name.as_str().get() {
-                    "receive_start" => 1,
-                    "receive_wait" => 2,
-                    "receive_done" => 1,
-                    _ => unimplemented!(),
-                }
-            }
+            OpKind::Dyn(dyn_op) => {
+                let op_branches = self.dialect().get_op_branches(&**dyn_op).unwrap();
+                op_branches.branches_len()
+            },
+            //OpKind::Intrinsic(name) => {
+            //    match name.as_str().get() {
+            //        "receive_start" => 1,
+            //        "receive_wait" => 2,
+            //        "receive_done" => 1,
+            //        _ => unimplemented!(),
+            //    }
+            //}
         };
 
         Some(res)
@@ -109,22 +113,22 @@ impl Function {
             (OpKind::TraceConstruct, _, 0) => reads[0],
             (OpKind::UnpackValueList(_), _, 0) => reads[0],
             (OpKind::MapPut { .. }, _, n) if n < 2 => reads[n],
-            (OpKind::BinaryPush { .. }, _, n) if n < 2 => reads[n],
 
             (OpKind::Match { .. }, _, n) =>
                 self.value_list_get_n(reads[0], n).unwrap(),
 
-            (OpKind::Intrinsic(name), _, n) => {
-                match name.as_str().get() {
-                    // receive_start only has a single branch target
-                    "receive_start" if n == 0 => reads[0],
-                    // receive_wait only has two branch targets
-                    "receive_wait" if n < 2 => reads[n],
-                    // receive_done only has a single branch target
-                    "receive_done" if n == 0 => reads[0],
-                    _ => unimplemented!(),
-                }
-            }
+            (OpKind::Dyn(_dyn), _, _) => unimplemented!(),
+            //(OpKind::Intrinsic(name), _, n) => {
+            //    match name.as_str().get() {
+            //        // receive_start only has a single branch target
+            //        "receive_start" if n == 0 => reads[0],
+            //        // receive_wait only has two branch targets
+            //        "receive_wait" if n < 2 => reads[n],
+            //        // receive_done only has a single branch target
+            //        "receive_done" if n == 0 => reads[0],
+            //        _ => unimplemented!(),
+            //    }
+            //}
             _ => panic!(),
         }
     }

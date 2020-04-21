@@ -31,6 +31,7 @@ mod case;
 pub mod binary;
 pub use binary::TypeName as BinaryTypeName;
 mod map;
+mod receive;
 
 pub(super) fn lower_block<'a, T>(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                                  exprs: T) -> (IrBlock, IrValue) where T: IntoIterator<Item = &'a Expr>
@@ -250,114 +251,6 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
             let fun = lower_function(ctx, b, fun);
             (block, b.value(fun))
         }
-        Expr::Receive(recv) => {
-
-            let join_block = b.block_insert();
-            let join_arg = b.block_arg_insert(join_block);
-
-            let recv_wait_block = b.block_insert();
-            let recv_ref_val = b.block_arg_insert(recv_wait_block);
-
-            let mut body_block = b.block_insert();
-            let body_message_arg = b.block_arg_insert(body_block);
-
-            // The after continuation, called on timeout
-            let after_block = b.block_insert();
-
-            // The timeout time
-            let after_timeout_val = if let Some(after) = &recv.after {
-                let (after_ret_block, after_ret) = lower_block(ctx, b, after_block, &after.body);
-                b.op_call_flow(after_ret_block, join_block, &[after_ret]);
-
-                map_block!(block, lower_single(ctx, b, block, &after.timeout))
-            } else {
-                b.op_unreachable(after_block);
-                b.value(Ident::from_str("infinity"))
-            };
-
-            // Receive start
-            let mut recv_start_b = b.op_intrinsic_build(Symbol::intern("receive_start"));
-            recv_start_b.push_value(recv_wait_block, b);
-            recv_start_b.push_value(after_timeout_val, b);
-            recv_start_b.block = Some(block);
-            recv_start_b.finish(b);
-
-            // Receive wait
-            let mut recv_start_b = b.op_intrinsic_build(Symbol::intern("receive_wait"));
-            recv_start_b.push_value(after_block, b);
-            recv_start_b.push_value(body_block, b);
-            recv_start_b.block = Some(recv_wait_block);
-            recv_start_b.finish(b);
-
-            if let Some(clauses) = &recv.clauses {
-
-                let no_match = b.block_insert();
-                b.op_call_flow(no_match, recv_wait_block, &[recv_ref_val]);
-
-                let mut case_b = b.op_case_build();
-                case_b.match_on = Some(body_message_arg);
-                case_b.no_match = Some(b.value(no_match));
-
-                let entry_exc_height = ctx.exc_stack.len();
-
-                for clause in clauses.iter() {
-                    match lower_clause(ctx, b, &mut body_block, false,
-                                       [&clause.pattern].iter().map(|i| *i),
-                                       clause.guard.as_ref())
-                    {
-                        Ok(lowered) => {
-                            let scope_token = ctx.scope.push();
-                            let body = b.block_insert();
-
-                            let body_mapped = b.block_insert();
-
-                            // Map all matched values through receive_done.
-                            // This enables us to do things like copy from
-                            // a heap fragment to the main process heap.
-                            let mut recv_done_b = b.op_intrinsic_build(
-                                Symbol::intern("receive_done"));
-                            recv_done_b.push_value(body_mapped, b);
-                            for bind in lowered.binds.iter() {
-                                let val = b.block_arg_insert(body);
-                                recv_done_b.push_value(val, b);
-
-                                let mapped_val = b.block_arg_insert(body_mapped);
-                                if let Some(name) = bind {
-                                    ctx.bind(*name, mapped_val);
-                                }
-                            }
-                            recv_done_b.block = Some(body);
-                            recv_done_b.finish(b);
-
-                            // Add to case
-                            let body_val = b.value(body);
-                            case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
-                            for value in lowered.values.iter() {
-                                case_b.push_value(*value, b);
-                            }
-
-                            let (body_ret_block, body_ret) = lower_block(
-                                ctx, b, body_mapped, &clause.body);
-
-                            // Call to join block
-                            b.op_call_flow(body_ret_block, join_block, &[body_ret]);
-
-                            // Pop scope pushed in lower_clause
-                            ctx.scope.pop(scope_token);
-                        }
-                        Err(_lowered) => {}
-                    }
-                    assert!(ctx.exc_stack.len() == entry_exc_height)
-                }
-
-                case_b.finish(body_block, b);
-
-            } else {
-                b.op_call_flow(body_block, join_block, &[body_message_arg]);
-            }
-
-            (join_block, join_arg)
-        }
         Expr::FunctionName(name) => {
             match name {
                 FunctionName::Resolved(resolved) => {
@@ -406,6 +299,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 }
             }
         }
+        Expr::Receive(recv) => receive::lower_receive(ctx, b, block, recv),
         Expr::Map(map) => map::lower_map_expr(ctx, b, block, map),
         Expr::MapUpdate(map) => map::lower_map_update_expr(ctx, b, block, map),
         Expr::Begin(begin) => lower_block_same_scope(ctx, b, block, &begin.body),

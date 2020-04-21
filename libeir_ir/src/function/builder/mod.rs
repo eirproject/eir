@@ -24,20 +24,30 @@ impl Function {
 
 pub trait IntoValue {
     fn into_value<'a>(self, b: &mut FunctionBuilder<'a>) -> Value;
+    fn get_value(self, fun: &Function) -> Option<Value>;
 }
 impl IntoValue for Value {
     fn into_value<'a>(self, _b: &mut FunctionBuilder<'a>) -> Value {
         self
+    }
+    fn get_value(self, _fun: &Function) -> Option<Value> {
+        Some(self)
     }
 }
 impl IntoValue for Block {
     fn into_value<'a>(self, b: &mut FunctionBuilder<'a>) -> Value {
         b.fun.values.push(ValueKind::Block(self))
     }
+    fn get_value(self, fun: &Function) -> Option<Value> {
+        fun.values.get(ValueKind::Block(self))
+    }
 }
 impl IntoValue for PrimOp {
     fn into_value<'a>(self, b: &mut FunctionBuilder<'a>) -> Value {
         b.fun.values.push(ValueKind::PrimOp(self))
+    }
+    fn get_value(self, fun: &Function) -> Option<Value> {
+        fun.values.get(ValueKind::PrimOp(self))
     }
 }
 impl<T> IntoValue for T where T: IntoConst {
@@ -46,6 +56,55 @@ impl<T> IntoValue for T where T: IntoConst {
         let value = b.fun.values.push(ValueKind::Const(constant));
         b.fun.constant_values.insert(value);
         value
+    }
+    fn get_value(self, fun: &Function) -> Option<Value> {
+        let constant = fun.constant_container.get(self);
+        constant.and_then(|v| fun.values.get(ValueKind::Const(v)))
+    }
+}
+
+pub enum DynValue {
+    Value(Value),
+    Block(Block),
+    PrimOp(PrimOp),
+    Const(Const),
+}
+impl Into<DynValue> for Value {
+    fn into(self) -> DynValue {
+        DynValue::Value(self)
+    }
+}
+impl Into<DynValue> for Block {
+    fn into(self) -> DynValue {
+        DynValue::Block(self)
+    }
+}
+impl Into<DynValue> for PrimOp {
+    fn into(self) -> DynValue {
+        DynValue::PrimOp(self)
+    }
+}
+impl Into<DynValue> for Const {
+    fn into(self) -> DynValue {
+        DynValue::Const(self)
+    }
+}
+impl IntoValue for DynValue {
+    fn into_value<'a>(self, b: &mut FunctionBuilder<'a>) -> Value {
+        match self {
+            DynValue::Value(val) => val,
+            DynValue::Block(block) => b.value(block),
+            DynValue::PrimOp(prim) => b.value(prim),
+            DynValue::Const(cons) => b.value(cons),
+        }
+    }
+    fn get_value(self, fun: &Function) -> Option<Value> {
+        match self {
+            DynValue::Value(val) => Some(val),
+            DynValue::Block(block) => fun.value_get(block),
+            DynValue::PrimOp(prim) => fun.value_get(prim),
+            DynValue::Const(cons) => fun.value_get(cons),
+        }
     }
 }
 

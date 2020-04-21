@@ -1,12 +1,96 @@
 use pretty::{RefDoc, DocAllocator};
 
-use crate::{Block, Value, OpKind, CallKind, MatchKind, BasicType};
+use crate::{Block, Value, DynValue, OpKind, CallKind, MatchKind, BasicType};
+use crate::traits::FormatOpCtx;
+use crate::binary::{BinaryEntrySpecifier, Endianness};
 
 use super::{
     FunctionFormatData, FormatConfig, FormatState,
     BlockIteratorConfig, ValueFormatter, BlockValueLayout,
     get_value_list,
 };
+
+pub struct FormatOpCtxImpl<'a, 'b, 'doc, B, V, L>
+where
+    B: BlockIteratorConfig,
+    V: ValueFormatter,
+    L: BlockValueLayout,
+{
+    format_data: &'a mut FunctionFormatData<'doc, B, V, L>,
+    config: &'a FormatConfig<B, V, L>,
+    state: &'a mut FormatState<'b>,
+}
+
+impl<'a, 'b, 'doc, B, V, L> FormatOpCtx<'doc> for FormatOpCtxImpl<'a, 'b, 'doc, B, V, L>
+where
+    B: BlockIteratorConfig,
+    V: ValueFormatter,
+    L: BlockValueLayout,
+{
+
+    fn arena(&self) -> &'doc pretty::Arena<'doc> {
+        self.format_data.arena
+    }
+
+    fn value_use_to_doc(&mut self, value: DynValue) -> RefDoc<'doc, ()> {
+        let val = self.state.function.value_get(value).unwrap();
+        self.format_data.value_use_to_doc(self.config, self.state, val)
+    }
+
+}
+
+fn binary_specifier_to_doc<'a>(arena: &'a pretty::Arena<'a>, spec: &BinaryEntrySpecifier) -> RefDoc<'a, ()> {
+    let f_endianness = |end| {
+        match end {
+            &Endianness::Big => arena.text("big"),
+            &Endianness::Little => arena.text("little"),
+            &Endianness::Native => arena.text("native"),
+        }
+    };
+    let f_signed = |signed| {
+        match signed {
+            true => arena.text("signed"),
+            false => arena.text("unsigned"),
+        }
+    };
+
+    match spec {
+        BinaryEntrySpecifier::Integer { signed, endianness, unit } => {
+            let items = [
+                f_signed(*signed),
+                f_endianness(endianness),
+                arena.as_string(unit),
+            ];
+            arena.text("integer").append(
+                arena.intersperse(items.iter().cloned(), arena.text(",")).parens()
+            ).into_doc()
+        },
+        BinaryEntrySpecifier::Float { endianness, unit } => {
+            let items = [
+                f_endianness(endianness),
+                arena.as_string(unit),
+            ];
+            arena.text("float").append(
+                arena.intersperse(items.iter().cloned(), arena.text(",")).parens()
+            ).into_doc()
+        },
+        BinaryEntrySpecifier::Bytes { unit } => {
+            arena.text("bytes").append(arena.as_string(unit).parens()).into_doc()
+        },
+        BinaryEntrySpecifier::Bits { unit } => {
+            arena.text("bits").append(arena.as_string(unit).parens()).into_doc()
+        },
+        BinaryEntrySpecifier::Utf8 => {
+            arena.text("utf8").append(arena.nil().parens()).into_doc()
+        },
+        BinaryEntrySpecifier::Utf16 { endianness } => {
+            arena.text("utf16").append(f_endianness(endianness)).into_doc()
+        },
+        BinaryEntrySpecifier::Utf32 { endianness } => {
+            arena.text("utf32").append(f_endianness(endianness)).into_doc()
+        },
+    }
+}
 
 impl<'a, B, V, L> FunctionFormatData<'a, B, V, L>
 where
@@ -85,7 +169,8 @@ where
                                 .append(arena.nil().append(body))
                         }
                         MatchKind::Binary(ref spec) => {
-                            unimplemented!();
+                            let doc = binary_specifier_to_doc(arena, spec);
+                            arena.nil().append(doc)
                         }
                         MatchKind::Tuple(arity) => {
                             let block_args = arena.intersperse(
@@ -253,18 +338,21 @@ where
                 }
             },
             OpKind::Unreachable => arena.text("unreachable"),
-            OpKind::Intrinsic(name) => {
-                let intrinsic_args = arena.intersperse(
-                    reads.iter().map(|v| self.value_use_to_doc(config, state, *v)),
-                    arena.text(",").append(arena.softline()),
-                ).nest(1).parens();
+            OpKind::Dyn(op) => {
+                if let Some(printer) = state.function.dialect().get_op_printer(&**op) {
+                    let mut ctx_impl = FormatOpCtxImpl {
+                        format_data: self,
+                        config,
+                        state,
+                    };
 
-                arena.nil()
-                    .append(arena.text("intrinsic"))
-                    .append(arena.space())
-                    .append(arena.text(name.as_str().get()))
-                    .append(intrinsic_args)
-            }
+                    let doc = printer.to_doc(&mut ctx_impl, block);
+                    arena.nil().append(doc)
+
+                } else {
+                    arena.as_string(op.name())
+                }
+            },
             _ => {
                 println!("UNIMPL: {:?}", op);
                 arena.text("unknown")

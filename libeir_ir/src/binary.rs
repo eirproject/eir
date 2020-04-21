@@ -1,3 +1,4 @@
+use std::default::Default;
 use serde::{ Serialize, Deserialize };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -44,4 +45,14 @@ impl BinaryEntrySpecifier {
         }
     }
 
+}
+
+impl Default for BinaryEntrySpecifier {
+    fn default() -> Self {
+        BinaryEntrySpecifier::Integer {
+            signed: false,
+            endianness: Endianness::Big,
+            unit: 8,
+        }
+    }
 }

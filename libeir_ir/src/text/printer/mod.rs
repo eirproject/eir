@@ -399,6 +399,13 @@ where
                             arena.text(",").append(arena.space())
                         ).enclose("and[", "]")
                     },
+                    PrimOpKind::LogicOp(LogicOp::Or) => {
+                        arena.intersperse(
+                            reads.iter()
+                                 .map(|r| self.value_use_to_doc(config, state, *r)),
+                            arena.text(",").append(arena.space())
+                        ).enclose("or[", "]")
+                    },
                     _ => unimplemented!("{:?}", prim_kind),
                 }
             },

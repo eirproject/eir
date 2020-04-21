@@ -1,4 +1,4 @@
-#![feature(specialization)]
+#![feature(specialization, raw)]
 //#![deny(warnings)]
 
 use std::fmt::{ Display, Formatter };
@@ -7,6 +7,13 @@ use std::cmp::Ordering;
 use libeir_intern::Ident;
 
 mod function;
+
+mod dialect;
+pub use dialect::{ArcDialect, Dialect};
+
+pub mod operation;
+
+pub mod traits;
 
 // Auxiliary utilities
 mod algo;
@@ -26,11 +33,10 @@ pub use function::{ Function, Block, Value, PrimOp, Location };
 pub use function::{ OpKind, MatchKind, BasicType, MapPutUpdate, PrimOpKind, BinOp,
                     LogicOp, CallKind };
 pub use function::{ ValueKind };
-pub use function::{ Dialect };
 pub use function::{ AttributeKey, AttributeValue };
 pub use function::{ ContainerDebug, ContainerDebugAdapter };
 
-pub use function::builder::{ FunctionBuilder, CaseBuilder, IntoValue };
+pub use function::builder::{ FunctionBuilder, CaseBuilder, IntoValue, DynValue };
 
 pub use algo::live::LiveValues;
 pub use algo::mangle::{Mangler, MangleTarget, MangleTo, MangleFrom};

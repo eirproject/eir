@@ -1,11 +1,13 @@
 use std::rc::Rc;
 use std::collections::HashMap;
+use std::any::TypeId;
 
 use num_traits::cast::ToPrimitive;
 
 use libeir_ir::{ FunctionIdent, Block, Value, OpKind, BinOp, ValueKind, PrimOpKind, LogicOp };
 use libeir_ir::{ MapPutUpdate };
 use libeir_ir::{ BinaryEntrySpecifier, Endianness };
+use libeir_ir::operation::binary_construct::{BinaryConstructStart, BinaryConstructPush, BinaryConstructFinish};
 use libeir_ir::constant::{ Const, ConstKind, AtomicTerm };
 use libeir_intern::Ident;
 
@@ -340,85 +342,193 @@ impl CallExecutor {
             OpKind::Match { branches } => {
                 self::r#match::match_op(self, fun, branches, block)
             }
-            OpKind::BinaryPush { specifier } => {
-                let bin_term = self.make_term(fun, reads[2]);
-                let mut bin = match &*bin_term {
-                    Term::Binary(bin) => (**bin).clone(),
-                    Term::BinarySlice { buf, bit_offset, bit_length } => {
-                        let slice = BitSlice::with_offset_length(
-                            &**buf, *bit_offset, *bit_length);
-                        let mut new = BitVec::new();
-                        new.push(slice);
-                        new
+            OpKind::Dyn(dyn_op) => {
+                let tid = dyn_op.type_id();
+                match () {
+                    _ if tid == TypeId::of::<BinaryConstructStart>() => {
+                        TermCall {
+                            fun: self.make_term(fun, reads[0]),
+                            args: vec![Term::Binary(Default::default()).into()],
+                        }
                     }
-                    _ => panic!(),
-                };
+                    _ if tid == TypeId::of::<BinaryConstructPush>() => {
+                        let ok_cont = reads[0];
+                        let err_cont = reads[1];
+                        let bin_ref = reads[2];
+                        let value = reads[3];
+                        let size = reads.get(4);
 
-                let val_term = self.make_term(fun, reads[3]);
+                        let bin_push = dyn_op.downcast_ref::<BinaryConstructPush>().unwrap();
+                        let specifier = bin_push.specifier;
 
-                assert!(reads.len() == 4 || reads.len() == 5);
-                let size_term = reads.get(4).map(|r| self.make_term(fun, *r));
-
-                match specifier {
-                    BinaryEntrySpecifier::Integer {
-                        signed: _, unit, endianness } =>
-                    {
-                        let size = size_term.unwrap().as_usize().unwrap();
-                        let bit_size = *unit as usize * size;
-
-                        let endian = match *endianness {
-                            Endianness::Big => Endian::Big,
-                            Endianness::Little => Endian::Little,
-                            Endianness::Native => Endian::Big,
-                        };
-
-                        let val = val_term.as_integer().unwrap().clone();
-                        let carrier = integer_to_carrier(
-                            val, bit_size, endian);
-
-                        bin.push(carrier);
-                    }
-                    BinaryEntrySpecifier::Float {
-                        endianness: Endianness::Big, unit } =>
-                    {
-                        let size = size_term.unwrap().as_usize().unwrap();
-                        let bit_size = *unit as usize * size;
-
-                        assert!(bit_size == 32 || bit_size == 64);
-
-                        let num = match &*val_term {
-                            Term::Float(flt) => flt.0,
-                            Term::Integer(int) => {
-                                let int_f = int.to_i64().unwrap();
-                                int_f as f64
+                        let bin_term = self.make_term(fun, bin_ref);
+                        let mut bin = match &*bin_term {
+                            Term::Binary(bin) => (**bin).clone(),
+                            Term::BinarySlice { buf, bit_offset, bit_length } => {
+                                let slice = BitSlice::with_offset_length(
+                                    &**buf, *bit_offset, *bit_length);
+                                let mut new = BitVec::new();
+                                new.push(slice);
+                                new
                             }
                             _ => panic!(),
                         };
 
-                        match bit_size {
-                            32 => bin.push(&num),
-                            64 => bin.push(&num),
-                            _ => unreachable!(),
+                        let val_term = self.make_term(fun, reads[3]);
+
+                        assert!(reads.len() == 4 || reads.len() == 5);
+                        let size_term = reads.get(4).map(|r| self.make_term(fun, *r));
+
+                        match specifier {
+                            BinaryEntrySpecifier::Integer {
+                                signed: _, unit, endianness } =>
+                            {
+                                let size = size_term.unwrap().as_usize().unwrap();
+                                let bit_size = unit as usize * size;
+
+                                let endian = match endianness {
+                                    Endianness::Big => Endian::Big,
+                                    Endianness::Little => Endian::Little,
+                                    Endianness::Native => Endian::Big,
+                                };
+
+                                let val = val_term.as_integer().unwrap().clone();
+                                let carrier = integer_to_carrier(
+                                    val, bit_size, endian);
+
+                                bin.push(carrier);
+                            }
+                            BinaryEntrySpecifier::Float {
+                                endianness: Endianness::Big, unit } =>
+                            {
+                                let size = size_term.unwrap().as_usize().unwrap();
+                                let bit_size = unit as usize * size;
+
+                                assert!(bit_size == 32 || bit_size == 64);
+
+                                let num = match &*val_term {
+                                    Term::Float(flt) => flt.0,
+                                    Term::Integer(int) => {
+                                        let int_f = int.to_i64().unwrap();
+                                        int_f as f64
+                                    }
+                                    _ => panic!(),
+                                };
+
+                                match bit_size {
+                                    32 => bin.push(&num),
+                                    64 => bin.push(&num),
+                                    _ => unreachable!(),
+                                }
+                            }
+                            BinaryEntrySpecifier::Bytes { unit: 1 } => {
+                                let binary = val_term.as_binary().unwrap();
+
+                                if let Some(size_term) = size_term {
+                                    dbg!(&size_term, &binary);
+                                    assert!(size_term.as_usize().unwrap() == binary.len());
+                                }
+
+                                bin.push(binary);
+                            }
+                            k => unimplemented!("{:?}", k),
+                        }
+
+                        return TermCall {
+                            fun: self.make_term(fun, ok_cont),
+                            args: vec![Term::Binary(bin.into()).into()],
+                        };
+                    }
+                    _ if tid == TypeId::of::<BinaryConstructFinish>() => {
+                        TermCall {
+                            fun: self.make_term(fun, reads[0]),
+                            args: vec![self.make_term(fun, reads[1])],
                         }
                     }
-                    BinaryEntrySpecifier::Bytes { unit: 1 } => {
-                        let binary = val_term.as_binary().unwrap();
-
-                        if let Some(size_term) = size_term {
-                            dbg!(&size_term, &binary);
-                            assert!(size_term.as_usize().unwrap() == binary.len());
-                        }
-
-                        bin.push(binary);
+                    _ => {
+                        unimplemented!()
                     }
-                    k => unimplemented!("{:?}", k),
                 }
-
-                return TermCall {
-                    fun: self.make_term(fun, reads[0]),
-                    args: vec![Term::Binary(bin.into()).into()],
-                };
             }
+            //OpKind::BinaryPush { specifier } => {
+            //    let bin_term = self.make_term(fun, reads[2]);
+            //    let mut bin = match &*bin_term {
+            //        Term::Binary(bin) => (**bin).clone(),
+            //        Term::BinarySlice { buf, bit_offset, bit_length } => {
+            //            let slice = BitSlice::with_offset_length(
+            //                &**buf, *bit_offset, *bit_length);
+            //            let mut new = BitVec::new();
+            //            new.push(slice);
+            //            new
+            //        }
+            //        _ => panic!(),
+            //    };
+
+            //    let val_term = self.make_term(fun, reads[3]);
+
+            //    assert!(reads.len() == 4 || reads.len() == 5);
+            //    let size_term = reads.get(4).map(|r| self.make_term(fun, *r));
+
+            //    match specifier {
+            //        BinaryEntrySpecifier::Integer {
+            //            signed: _, unit, endianness } =>
+            //        {
+            //            let size = size_term.unwrap().as_usize().unwrap();
+            //            let bit_size = *unit as usize * size;
+
+            //            let endian = match *endianness {
+            //                Endianness::Big => Endian::Big,
+            //                Endianness::Little => Endian::Little,
+            //                Endianness::Native => Endian::Big,
+            //            };
+
+            //            let val = val_term.as_integer().unwrap().clone();
+            //            let carrier = integer_to_carrier(
+            //                val, bit_size, endian);
+
+            //            bin.push(carrier);
+            //        }
+            //        BinaryEntrySpecifier::Float {
+            //            endianness: Endianness::Big, unit } =>
+            //        {
+            //            let size = size_term.unwrap().as_usize().unwrap();
+            //            let bit_size = *unit as usize * size;
+
+            //            assert!(bit_size == 32 || bit_size == 64);
+
+            //            let num = match &*val_term {
+            //                Term::Float(flt) => flt.0,
+            //                Term::Integer(int) => {
+            //                    let int_f = int.to_i64().unwrap();
+            //                    int_f as f64
+            //                }
+            //                _ => panic!(),
+            //            };
+
+            //            match bit_size {
+            //                32 => bin.push(&num),
+            //                64 => bin.push(&num),
+            //                _ => unreachable!(),
+            //            }
+            //        }
+            //        BinaryEntrySpecifier::Bytes { unit: 1 } => {
+            //            let binary = val_term.as_binary().unwrap();
+
+            //            if let Some(size_term) = size_term {
+            //                dbg!(&size_term, &binary);
+            //                assert!(size_term.as_usize().unwrap() == binary.len());
+            //            }
+
+            //            bin.push(binary);
+            //        }
+            //        k => unimplemented!("{:?}", k),
+            //    }
+
+            //    return TermCall {
+            //        fun: self.make_term(fun, reads[0]),
+            //        args: vec![Term::Binary(bin.into()).into()],
+            //    };
+            //}
             OpKind::MapPut { action } => {
                 let map_term = self.make_term(fun, reads[2]);
                 let mut map = map_term.as_map().unwrap().clone();
