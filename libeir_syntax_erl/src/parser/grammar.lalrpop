@@ -1,5 +1,5 @@
 //-*- mode: rust -*-
-use libeir_diagnostics::{ByteSpan, ByteIndex, Diagnostic, Label, DUMMY_SPAN};
+use libeir_diagnostics::*;
 
 use libeir_util_number::{Integer, ToPrimitive};
 
@@ -64,7 +64,7 @@ pub Module: Module = {
             None => Vec::new(),
             Some(body) => body,
         };
-        Module::new(errs, ByteSpan::new(l, r), nid, name, body)
+        Module::new(errs, span!(l, r), nid, name, body)
     }
 };
 
@@ -211,10 +211,14 @@ DeprecatedAttribute: Attribute = {
                 ]))
             }
             other => {
+                let span = span!(l, r);
                 errs.error(PreprocessorError::ShowDiagnostic {
-                    diagnostic: Diagnostic::new_warning("invalid deprecated attribute")
-                        .with_label(Label::new_primary(span!(l, r))
-                            .with_message("expected 'module', '{module, Flag}', 'Function/Arity', or '{Function/Arity, Flag}'"))
+                    diagnostic: Diagnostic::warning()
+                        .with_message("invalid deprecated attribute")
+                        .with_labels(vec![
+                            Label::primary(span.source_id(), span)
+                                .with_message("expected 'module', '{module, Flag}', 'Function/Arity', or '{Function/Arity, Flag}'")
+                        ])
                 }.into());
                 Err(to_lalrpop_err!(()))
             }
@@ -250,10 +254,14 @@ DeprecatedFlag: DeprecatedFlag = {
             "next_version" => DeprecatedFlag::NextVersion,
             "next_major_release" => DeprecatedFlag::NextMajorRelease,
             other => {
+                let span = span!(l, r);
                 errs.warning(ParserError::ShowDiagnostic {
-                    diagnostic: Diagnostic::new_warning("invalid deprecation flag")
-                        .with_label(Label::new_primary(span!(l, r))
-                            .with_message(format!("expected one of 'eventually', 'next_version', or 'next_major_release', got '{}'", other))),
+                    diagnostic: Diagnostic::warning()
+                        .with_message("invalid deprecation flag")
+                        .with_labels(vec![
+                            Label::primary(span.source_id(), span)
+                                .with_message(format!("expected one of 'eventually', 'next_version', or 'next_major_release', got '{}'", other))
+                        ]),
                 });
                 DeprecatedFlag::Eventually
             }
@@ -284,15 +292,15 @@ TypeDef: TypeDef = {
 };
 
 TypeDef100: TypeDef = {
-    <name:atom> "(" <params:CommaOpt<atom_or_var>> ")" "::" <ty:TopType100> "." <r:@R>
-        => TypeDef { span: ByteSpan::default(), name, params, ty, opaque: false },
+    <l:@L> <name:atom> "(" <params:CommaOpt<atom_or_var>> ")" "::" <ty:TopType100> "." <r:@R>
+        => TypeDef { span: span!(l, r), name, params, ty, opaque: false },
 };
 
 TypeSpec: TypeSpec = {
-    "(" <module:(<atom> ":")?> <function:atom> <sigs:Semi<TypeSig>> ")" "."
-        => TypeSpec { span: ByteSpan::default(), module, function, sigs },
-    <module:(<atom> ":")?> <function:atom> <sigs:Semi<TypeSig>> "."
-        => TypeSpec { span: ByteSpan::default(), module, function, sigs },
+    <l:@L> "(" <module:(<atom> ":")?> <function:atom> <sigs:Semi<TypeSig>> ")" "." <r:@R>
+        => TypeSpec { span: span!(l, r), module, function, sigs },
+    <l:@L> <module:(<atom> ":")?> <function:atom> <sigs:Semi<TypeSig>> "." <r:@R>
+        => TypeSpec { span: span!(l, r), module, function, sigs },
 };
 
 TypeSig: TypeSig = {
@@ -309,10 +317,14 @@ TypeGuard: TypeGuard = {
             "is_subtype" =>
                 Ok(TypeGuard { span: span!(l, r), var, ty }),
             name => {
+                let span = span!(l, r);
                 errs.error(PreprocessorError::ShowDiagnostic {
-                    diagnostic: Diagnostic::new_error("invalid type constraint")
-                        .with_label(Label::new_primary(span!(l, r))
-                            .with_message(format!("expected constraint in the form `Name :: Type`"))),
+                    diagnostic: Diagnostic::error()
+                        .with_message("invalid type constraint")
+                        .with_labels(vec![
+                            Label::primary(span.source_id(), span)
+                                .with_message("expected constraint in the form `Name :: Type`")
+                        ]),
                 }.into());
                 Err(to_lalrpop_err!(()))
             }
@@ -421,9 +433,9 @@ TypeName: Name = {
 
 BinaryType: Type = {
     <l:@L> "<<" ">>" <r:@R>
-        => Type::Binary(span!(l, r), Box::new(Type::Integer(DUMMY_SPAN, 0.into())), Box::new(Type::Integer(DUMMY_SPAN, 0.into()))),
+        => Type::Binary(span!(l, r), Box::new(Type::Integer(span!(l, r), 0.into())), Box::new(Type::Integer(span!(l, r), 0.into()))),
     <l:@L> "<<" ident ":" <m:TopType> ">>" <r:@R>
-        => Type::Binary(span!(l, r), Box::new(m), Box::new(Type::Integer(DUMMY_SPAN, 0.into()))),
+        => Type::Binary(span!(l, r), Box::new(m), Box::new(Type::Integer(span!(l, r), 0.into()))),
     <l:@L> "<<" ident ":" <m:TopType> "," ident ":" <n:TopType> ">>" <r:@R>
         => Type::Binary(span!(l, r), Box::new(m), Box::new(n)),
 };
@@ -698,7 +710,7 @@ Try: Expr = {
         => Expr::Try(Try { span: span!(l, catch.2), id: nid.next(), exprs, clauses: None, catch_clauses: catch.0, after: catch.1 })
 };
 
-TryCatch: (Option<Vec<TryClause>>, Option<Vec<Expr>>, ByteIndex) = {
+TryCatch: (Option<Vec<TryClause>>, Option<Vec<Expr>>, SourceIndex) = {
     "catch" <clauses:Semi<TryClause>> "end" <r:@R>
         => (Some(clauses), None, r),
     "catch" <clauses:Semi<TryClause>> "after" <body:Comma<Expr>> "end" <r:@R>
@@ -1037,7 +1049,7 @@ Float: f64 = {
 };
 
 extern {
-    type Location = ByteIndex;
+    type Location = SourceIndex;
     type Error = ();
 
     enum Token {

@@ -1,22 +1,12 @@
 use std::collections::HashMap;
 
-use libeir_ir::{
-    FunctionBuilder,
-    Value as IrValue,
-    Block as IrBlock,
-    LogicOp,
-};
-use libeir_ir::pattern::{
-    PatternClause,
-    PatternValue,
-};
-use libeir_diagnostics::ByteSpan;
+use libeir_diagnostics::SourceSpan;
+use libeir_ir::pattern::{PatternClause, PatternValue};
+use libeir_ir::{Block as IrBlock, FunctionBuilder, LogicOp, Value as IrValue};
 
-use crate::parser::ast::{ Expr, Guard };
+use crate::parser::ast::{Expr, Guard};
 
-
-use super::{ LowerCtx, lower_block, ScopeToken };
-
+use super::{lower_block, LowerCtx, ScopeToken};
 
 use libeir_intern::Ident;
 
@@ -32,7 +22,7 @@ enum EqGuard {
 }
 
 struct ClauseLowerCtx {
-    span: ByteSpan,
+    span: SourceSpan,
 
     // The clause we are constructing
     pat_clause: PatternClause,
@@ -55,12 +45,10 @@ struct ClauseLowerCtx {
     eq_guards: Vec<EqGuard>,
 
     value_dedup: HashMap<IrValue, PatternValue>,
-
 }
 
 impl ClauseLowerCtx {
-    pub fn clause_value(&mut self, b: &mut FunctionBuilder, val: IrValue
-    ) -> PatternValue {
+    pub fn clause_value(&mut self, b: &mut FunctionBuilder, val: IrValue) -> PatternValue {
         if let Some(pat_val) = self.value_dedup.get(&val) {
             *pat_val
         } else {
@@ -79,8 +67,7 @@ pub(crate) struct LoweredClause {
     pub binds: Vec<Option<Ident>>,
 }
 impl LoweredClause {
-    pub fn make_body(&self, ctx: &mut LowerCtx, b: &mut FunctionBuilder
-    ) -> (ScopeToken, IrBlock) {
+    pub fn make_body(&self, ctx: &mut LowerCtx, b: &mut FunctionBuilder) -> (ScopeToken, IrBlock) {
         let scope_token = ctx.scope.push();
         let body_block = b.block_insert();
 
@@ -104,8 +91,7 @@ pub(crate) struct UnreachableClause {
     pub binds: Vec<Ident>,
 }
 impl UnreachableClause {
-    pub fn make_body(&self, ctx: &mut LowerCtx, b: &mut FunctionBuilder
-    ) -> (ScopeToken, IrBlock) {
+    pub fn make_body(&self, ctx: &mut LowerCtx, b: &mut FunctionBuilder) -> (ScopeToken, IrBlock) {
         let scope_token = ctx.scope.push();
         let body_block = b.block_insert();
 
@@ -126,8 +112,13 @@ impl UnreachableClause {
 /// * A scope will be pushed with the bound variables in the body block
 /// * The body is empty
 pub(super) fn lower_clause<'a, P>(
-    ctx: &mut LowerCtx, b: &mut FunctionBuilder, pre_case: &mut IrBlock,
-    shadow: bool, span: ByteSpan, patterns: P, guard: Option<&Vec<Guard>>,
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    pre_case: &mut IrBlock,
+    shadow: bool,
+    span: SourceSpan,
+    patterns: P,
+    guard: Option<&Vec<Guard>>,
 ) -> Result<LoweredClause, UnreachableClause>
 where
     P: Iterator<Item = &'a Expr>,
@@ -194,8 +185,13 @@ where
 }
 
 impl ClauseLowerCtx {
-
-    fn lower_guard(&self, ctx: &mut LowerCtx, b: &mut FunctionBuilder, shadow: bool, guard: Option<&Vec<Guard>>) -> IrBlock {
+    fn lower_guard(
+        &self,
+        ctx: &mut LowerCtx,
+        b: &mut FunctionBuilder,
+        shadow: bool,
+        guard: Option<&Vec<Guard>>,
+    ) -> IrBlock {
         let guard_lambda_block = b.block_insert();
 
         let ret_cont = b.block_arg_insert(guard_lambda_block);
@@ -247,11 +243,9 @@ impl ClauseLowerCtx {
                 }
             };
 
-            let fun_val = b.prim_capture_function(
-                self.span, erlang_atom, exact_eq_atom, two_atom);
+            let fun_val = b.prim_capture_function(self.span, erlang_atom, exact_eq_atom, two_atom);
 
-            let (ok_block, err_block) = b.op_call_function(
-                self.span, block, fun_val, &[lhs, rhs]);
+            let (ok_block, err_block) = b.op_call_function(self.span, block, fun_val, &[lhs, rhs]);
             let res_val = b.block_args(ok_block)[0];
             block = ok_block;
 
@@ -267,8 +261,8 @@ impl ClauseLowerCtx {
         if let Some(guard_seq) = guard {
             for guard in guard_seq {
                 for condition in guard.conditions.iter() {
-                    let (block_new, val) = lower_block(
-                        ctx, b, block, [condition].iter().map(|v| *v));
+                    let (block_new, val) =
+                        lower_block(ctx, b, block, [condition].iter().map(|v| *v));
                     and.push(val);
                     block = block_new;
                 }
@@ -291,5 +285,4 @@ impl ClauseLowerCtx {
 
         guard_lambda_block
     }
-
 }

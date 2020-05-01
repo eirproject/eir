@@ -1,12 +1,12 @@
 use std;
 
-use libeir_diagnostics::{ByteSpan, Diagnostic, Label};
 use itertools::Itertools;
 use snafu::Snafu;
 
-use libeir_util_parse::{PathVariableSubstituteError, SourceError, ToDiagnostic};
-use crate::lexer::{LexicalError, LexicalToken, TokenConvertError};
+use libeir_diagnostics::*;
+use libeir_util_parse::SourceError;
 
+use crate::lexer::{LexicalError, LexicalToken, TokenConvertError};
 use crate::parser::ParserError;
 
 use super::directive::Directive;
@@ -15,89 +15,60 @@ use super::macros::{MacroCall, MacroDef, Stringify};
 
 #[derive(Debug, Snafu)]
 pub enum PreprocessorError {
+    #[snafu(visibility(pub), display("{}", source))]
+    Lexical { source: LexicalError },
 
     #[snafu(visibility(pub), display("{}", source))]
-    Lexical {
-        source: LexicalError,
-    },
-
-    #[snafu(visibility(pub), display("{}", source))]
-    Source {
-        source: SourceError,
-    },
+    Source { source: SourceError },
 
     #[snafu(display("unable to parse constant expression"))]
     ParseError {
-        span: ByteSpan,
+        span: SourceSpan,
         inner: Box<ParserError>,
     },
 
     #[snafu(display("{}", reason))]
     CompilerError {
-        span: Option<ByteSpan>,
+        span: Option<SourceSpan>,
         reason: String,
     },
 
     #[snafu(display("invalid constant expression found in preprocessor directive"))]
-    InvalidConstExpression {
-        span: ByteSpan,
-    },
+    InvalidConstExpression { span: SourceSpan },
 
     #[snafu(visibility(pub))]
-    BadDirective {
-        source: DirectiveError,
-    },
+    BadDirective { source: DirectiveError },
 
     #[snafu(display("invalid conditional expression"))]
-    InvalidConditional {
-        span: ByteSpan,
-    },
+    InvalidConditional { span: SourceSpan },
 
     #[snafu(visibility(pub), display("call to builtin function failed"))]
     BuiltinFailed {
-        span: ByteSpan,
+        span: SourceSpan,
         source: Box<dyn std::error::Error>,
     },
 
     #[snafu(display("found orphaned '-end.' directive"))]
-    OrphanedEnd {
-        directive: Directive,
-    },
+    OrphanedEnd { directive: Directive },
 
     #[snafu(display("found orphaned '-else.' directive"))]
-    OrphanedElse {
-        directive: Directive,
-    },
+    OrphanedElse { directive: Directive },
 
     #[snafu(display("undefined macro"))]
-    UndefinedStringifyMacro {
-        call: Stringify,
-    },
+    UndefinedStringifyMacro { call: Stringify },
 
     #[snafu(display("undefined macro"))]
-    UndefinedMacro {
-        call: MacroCall
-    },
+    UndefinedMacro { call: MacroCall },
 
     #[snafu(display("invalid macro invocation"))]
     BadMacroCall {
         call: MacroCall,
         def: MacroDef,
-        reason: String
+        reason: String,
     },
 
-    #[snafu(display("orphaned else"))]
-    OrphanedBranchElse,
-
-    #[snafu(visibility(pub), display("{}", source))]
-    PathSubstitute {
-        source: PathVariableSubstituteError,
-    },
-
-    #[snafu(display("{}", diagnostic))]
-    ShowDiagnostic {
-        diagnostic: Diagnostic,
-    },
+    #[snafu(display("{}", diagnostic.message))]
+    ShowDiagnostic { diagnostic: Diagnostic },
 
     #[snafu(display("unexpected token"))]
     InvalidTokenType {
@@ -115,118 +86,159 @@ pub enum PreprocessorError {
     UnexpectedEOF,
 }
 impl PreprocessorError {
-    pub fn span(&self) -> Option<ByteSpan> {
-        match self {
-            PreprocessorError::Lexical { source } => Some(source.span()),
-            PreprocessorError::ParseError { span, .. } => Some(span.clone()),
-            PreprocessorError::CompilerError { span: Some(ref span), .. } =>
-                Some(span.clone()),
-            PreprocessorError::InvalidConstExpression { span } => Some(span.clone()),
-            PreprocessorError::InvalidConditional { span } => Some(span.clone()),
-            PreprocessorError::BuiltinFailed { span, .. } => Some(span.clone()),
-            PreprocessorError::OrphanedEnd { directive } => Some(directive.span()),
-            PreprocessorError::OrphanedElse { directive } => Some(directive.span()),
-            PreprocessorError::UndefinedStringifyMacro { call } => Some(call.span()),
-            PreprocessorError::UndefinedMacro { call } => Some(call.span()),
-            PreprocessorError::BadMacroCall { call, .. } => Some(call.span()),
-            PreprocessorError::InvalidTokenType { token, .. } => Some(token.span()),
-            PreprocessorError::UnexpectedToken { token, .. } => Some(token.span()),
-            _ => None,
-        }
-    }
-
     pub fn to_diagnostic(&self) -> Diagnostic {
-        let span = self.span();
-        let msg = self.to_string();
+        //let span = self.span();
+        //let msg = self.to_string();
         match self {
-            PreprocessorError::BadDirective { source } => source.to_diagnostic(),
-            PreprocessorError::ShowDiagnostic { diagnostic } => diagnostic.clone(),
             PreprocessorError::Lexical { source } => source.to_diagnostic(),
             PreprocessorError::Source { source } => source.to_diagnostic(),
-            PreprocessorError::ParseError { inner, .. } => {
-                let mut d = Diagnostic::new_error(msg)
-                    .with_label(Label::new_primary(span.unwrap())
-                        .with_message("invalid constant expression"));
-
+            PreprocessorError::ParseError { span, inner } => {
                 let err = inner.to_diagnostic();
+                let mut labels = vec![
+                    Label::primary(span.source_id(), *span)
+                        .with_message("invalid constant expression")
+                ];
                 for label in err.labels {
-                    d = d.with_label(label);
+                    labels.push(label);
                 }
-                d
+                Diagnostic::error()
+                    .with_message(self.to_string())
+                    .with_labels(labels)
             }
-            PreprocessorError::CompilerError { span: Some(_), .. } =>
-                Diagnostic::new_error("found error directive")
-                    .with_label(Label::new_primary(span.unwrap())
-                        .with_message(msg)),
-            PreprocessorError::InvalidConstExpression { .. } =>
-                Diagnostic::new_error(msg)
-                    .with_label(Label::new_primary(span.unwrap())
-                        .with_message("expected valid constant expression (example: `?OTP_VERSION >= 21`)")),
-            PreprocessorError::InvalidConditional { .. } =>
-                Diagnostic::new_error(msg)
-                    .with_label(Label::new_primary(span.unwrap())
-                        .with_message("expected 'true', 'false', or an expression which can be evaluated to 'true' or 'false'")),
-            PreprocessorError::BuiltinFailed { source, .. } =>
-                Diagnostic::new_error(msg)
-                    .with_label(Label::new_primary(span.unwrap())
-                        .with_message(source.to_string())),
-            PreprocessorError::BadMacroCall { def: MacroDef::String(_), reason, .. } =>
-                Diagnostic::new_error(msg)
-                    .with_label(Label::new_primary(span.unwrap())
-                        .with_message(reason.to_owned())),
-            PreprocessorError::BadMacroCall { def, reason, .. } => {
-                let d = Diagnostic::new_error(msg)
-                            .with_label(Label::new_primary(span.unwrap())
-                                .with_message("this macro call does not match its definition"));
+            PreprocessorError::CompilerError { span: Some(span), reason } =>
+                Diagnostic::error()
+                    .with_message("found error directive")
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), *span)
+                            .with_message(reason)
+                    ]),
+            PreprocessorError::CompilerError { span: None, reason } =>
+                Diagnostic::error().with_message(reason),
+            PreprocessorError::InvalidConstExpression { span, .. } =>
+                Diagnostic::error()
+                    .with_message(self.to_string())
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), *span)
+                            .with_message("expected valid constant expression (example: `?OTP_VERSION >= 21`)")
+                    ]),
+            PreprocessorError::BadDirective { source } => source.to_diagnostic(),
+            PreprocessorError::InvalidConditional { span, .. } =>
+                Diagnostic::error()
+                    .with_message(self.to_string())
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), *span)
+                            .with_message("expected 'true', 'false', or an expression which can be evaluated to 'true' or 'false'")
+                    ]),
+            PreprocessorError::BuiltinFailed { span, source } =>
+                Diagnostic::error()
+                    .with_message(self.to_string())
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), *span)
+                            .with_message(source.to_string())
+                    ]),
+            PreprocessorError::OrphanedEnd { directive } => {
+                let span = directive.span();
+                Diagnostic::error()
+                    .with_message(self.to_string())
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), span)
+                    ])
+            }
+            PreprocessorError::OrphanedElse { directive } => {
+                let span = directive.span();
+                Diagnostic::error()
+                    .with_message(self.to_string())
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), span)
+                    ])
+            }
+            PreprocessorError::UndefinedStringifyMacro { call } => {
+                let span = call.span();
+                Diagnostic::error()
+                    .with_message(self.to_string())
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), span)
+                    ])
+            }
+            PreprocessorError::UndefinedMacro { call } => {
+                let span = call.span();
+                Diagnostic::error()
+                    .with_message(self.to_string())
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), span)
+                    ])
+            }
+            PreprocessorError::BadMacroCall { call, def: MacroDef::String(_), reason, .. } => {
+                let span = call.span();
+                Diagnostic::error()
+                    .with_message(self.to_string())
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), span)
+                            .with_message(reason.to_owned())
+                    ])
+            }
+            PreprocessorError::BadMacroCall { call, def, reason, .. } => {
                 let secondary_span = match def {
-                    MacroDef::Static(ref define) =>
-                        define.span(),
+                    MacroDef::Static(ref define) => define.span(),
                     MacroDef::Dynamic(ref tokens) => {
                         assert!(tokens.len() > 0);
-                        ByteSpan::new(
+                        SourceSpan::new(
                             tokens[0].span().start(),
                             tokens.last().unwrap().span().end()
                         )
                     },
                     _ => unreachable!()
                 };
-                d.with_label(Label::new_secondary(secondary_span)
-                    .with_message(reason.to_owned()))
+                let call_span = call.span();
+                Diagnostic::error()
+                    .with_message(self.to_string())
+                    .with_labels(vec![
+                        Label::primary(call_span.source_id(), call_span)
+                            .with_message("this macro call does not match its definition"),
+                        Label::secondary(secondary_span.source_id(), secondary_span)
+                            .with_message(reason.to_owned())
+                    ])
             }
-            //PreprocessorError::IO(_) =>
-            //    Diagnostic::new_error("i/o failed")
-            //        .with_label(Label::new_primary(span.unwrap())
-            //            .with_message(msg)),
-            PreprocessorError::InvalidTokenType { expected, .. } =>
-                Diagnostic::new_error(msg)
-                    .with_label(Label::new_primary(span.unwrap())
-                        .with_message(format!("expected \"{}\"", expected))),
-            PreprocessorError::UnexpectedToken { expected, .. } => {
+            PreprocessorError::ShowDiagnostic { diagnostic } => diagnostic.clone(),
+            PreprocessorError::InvalidTokenType { token, expected } => {
+                let token_span = token.span();
+                Diagnostic::error()
+                    .with_message(self.to_string())
+                    .with_labels(vec![
+                        Label::primary(token_span.source_id(), token_span)
+                            .with_message(format!("expected \"{}\"", expected))
+                    ])
+            }
+            PreprocessorError::UnexpectedToken { token, expected } => {
+                let token_span = token.span();
                 if expected.len() > 0 {
                     let expected = expected.iter()
                         .map(|t| format!("\"{}\"", t))
                         .join(", ");
-                    Diagnostic::new_error(msg)
-                        .with_label(Label::new_primary(span.unwrap())
-                            .with_message(format!("expected one of {}", expected)))
+                    Diagnostic::error()
+                        .with_message(self.to_string())
+                        .with_labels(vec![
+                            Label::primary(token_span.source_id(), token_span)
+                                .with_message(format!("expected one of {}", expected))
+                        ])
                 } else {
-                    Diagnostic::new_error(msg)
-                        .with_label(Label::new_primary(span.unwrap()))
+                    Diagnostic::error()
+                        .with_message(self.to_string())
+                        .with_labels(vec![
+                            Label::primary(token_span.source_id(), token_span)
+                        ])
                 }
             }
-            _ if span.is_some() =>
-                Diagnostic::new_error("preprocessor error")
-                    .with_label(Label::new_primary(span.unwrap()).with_message(msg)),
-            _ =>
-                Diagnostic::new_error(format!("preprocessor error: {}", msg)),
+            PreprocessorError::UnexpectedEOF =>
+                Diagnostic::error().with_message(self.to_string())
         }
     }
 }
-//impl From<LexicalError> for PreprocessorError {
-//    fn from(err: LexicalError) -> PreprocessorError {
-//        PreprocessorError::Lexical(err)
-//    }
-//}
+impl From<LexicalError> for PreprocessorError {
+    fn from(source: LexicalError) -> PreprocessorError {
+        PreprocessorError::Lexical { source }
+    }
+}
 impl From<SourceError> for PreprocessorError {
     fn from(source: SourceError) -> PreprocessorError {
         PreprocessorError::Source { source }
@@ -238,25 +250,15 @@ impl From<TokenConvertError> for PreprocessorError {
         let token = LexicalToken(span.start(), err.token, span.end());
         PreprocessorError::InvalidTokenType {
             token,
-            expected: err.expected.to_string()
+            expected: err.expected.to_string(),
         }
     }
 }
-//impl From<std::io::Error> for PreprocessorError {
-//    fn from(err: std::io::Error) -> Self {
-//        PreprocessorError::IO(err)
-//    }
-//}
-//impl From<glob::GlobError> for PreprocessorError {
-//    fn from(err: glob::GlobError) -> Self {
-//        PreprocessorError::Diagnostic(Diagnostic::new_error(err.to_string()))
-//    }
-//}
-//impl From<glob::PatternError> for PreprocessorError {
-//    fn from(err: glob::PatternError) -> Self {
-//        PreprocessorError::Diagnostic(Diagnostic::new_error(err.to_string()))
-//    }
-//}
+impl From<std::io::Error> for PreprocessorError {
+    fn from(err: std::io::Error) -> Self {
+        PreprocessorError::Source { source: err.into() }
+    }
+}
 impl From<Diagnostic> for PreprocessorError {
     fn from(diagnostic: Diagnostic) -> Self {
         PreprocessorError::ShowDiagnostic { diagnostic }

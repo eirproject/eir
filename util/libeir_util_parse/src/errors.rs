@@ -3,9 +3,7 @@ use std::rc::Rc;
 
 use scoped_cell::{scoped_cell, ScopedCell};
 
-use libeir_diagnostics::{Diagnostic, Emitter, StandardStreamEmitter, ColorChoice};
-
-use crate::ArcCodemap;
+use libeir_diagnostics::*;
 
 // TODO: I would like to do a lot of things differently here, but things are
 // tricky without GATs. Revisit once it lands.
@@ -35,7 +33,6 @@ pub struct Errors<E, W> {
 }
 
 impl<E, W> Errors<E, W> {
-
     pub fn new() -> Self {
         Errors {
             errors: Vec::new(),
@@ -47,15 +44,17 @@ impl<E, W> Errors<E, W> {
         self.failed
     }
 
-    pub fn print(&self, codemap: &ArcCodemap)
+    pub fn print(&self, codemap: &CodeMap)
     where
         E: ToDiagnostic,
         W: ToDiagnostic,
     {
-        let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
-            .set_codemap(codemap.clone());
+        use term::Config;
+        use term::termcolor::{ColorChoice, StandardStream};
+        let config = Config::default();
+        let mut out = StandardStream::stderr(ColorChoice::Auto);
         for diag in self.iter_diagnostics() {
-            emitter.diagnostic(&diag).unwrap();
+            term::emit(&mut out, &config, codemap, &diag).unwrap();
         }
     }
 
@@ -76,11 +75,12 @@ impl<E, W> Errors<E, W> {
         for ew in other.errors {
             match ew {
                 ErrorOrWarning::Error(err) => self.errors.push(ErrorOrWarning::Error(err.into())),
-                ErrorOrWarning::Warning(warn) => self.errors.push(ErrorOrWarning::Warning(warn.into())),
+                ErrorOrWarning::Warning(warn) => {
+                    self.errors.push(ErrorOrWarning::Warning(warn.into()))
+                }
             }
         }
     }
-
 }
 
 impl<E, W> ErrorReceiver for Errors<E, W> {
@@ -101,83 +101,12 @@ impl<E, W> ErrorReceiver for Errors<E, W> {
     }
 }
 
-//pub struct MultiErrors<E, W> {
-//    inner: Arc<Mutex<Errors<E, W>>>,
-//}
-//
-//// No derive, we want copy impl regardless of whether E and W are copy
-//impl<E, W> Clone for MultiErrors<E, W> {
-//    fn clone(&self) -> Self {
-//        Self {
-//            inner: self.inner.clone(),
-//        }
-//    }
-//}
-//
-//impl<E, W> MultiErrors<E, W> {
-//
-//    pub fn new() -> Self {
-//        Self::with_errors(Errors::new())
-//    }
-//
-//    pub fn with_errors(errors: Errors<E, W>) -> Self {
-//        MultiErrors {
-//            inner: Arc::new(Mutex::new(errors)),
-//        }
-//    }
-//
-//    pub fn inner_mut(&self) -> MutexGuard<Errors<E, W>> {
-//        self.inner.lock().unwrap()
-//    }
-//
-//    pub fn try_unwrap(self) -> Option<Errors<E, W>> {
-//        Arc::try_unwrap(self.inner)
-//            .ok()
-//            .map(|v| v.into_inner().unwrap())
-//    }
-//
-//}
-//
-//impl<E, W> ErrorReceiver for MultiErrors<E, W> {
-//    type E = E;
-//    type W = W;
-//
-//    fn is_failed(&self) -> bool {
-//        self.inner.lock().unwrap().is_failed()
-//    }
-//
-//    fn warning(&mut self, warning: W) {
-//        self.inner.lock().unwrap().warning(warning);
-//    }
-//
-//    fn error(&mut self, error: E) {
-//        self.inner.lock().unwrap().error(error);
-//    }
-//}
-//impl<E, W> ErrorReceiver for &mut MultiErrors<E, W> {
-//    type E = E;
-//    type W = W;
-//
-//    fn is_failed(&self) -> bool {
-//        self.inner.lock().unwrap().is_failed()
-//    }
-//
-//    fn warning(&mut self, warning: W) {
-//        self.inner.lock().unwrap().warning(warning);
-//    }
-//
-//    fn error(&mut self, error: E) {
-//        self.inner.lock().unwrap().error(error);
-//    }
-//}
-
 pub struct MessageIgnore<E, W> {
     failed: bool,
     _phantom: PhantomData<(E, W)>,
 }
 
 impl<E, W> MessageIgnore<E, W> {
-
     pub fn new() -> Self {
         MessageIgnore {
             failed: false,
@@ -188,7 +117,6 @@ impl<E, W> MessageIgnore<E, W> {
     pub fn failed(&self) -> bool {
         self.failed
     }
-
 }
 
 impl<E, W> ErrorReceiver for MessageIgnore<E, W> {
@@ -204,10 +132,6 @@ impl<E, W> ErrorReceiver for MessageIgnore<E, W> {
     }
 }
 
-pub trait ToDiagnostic {
-    fn to_diagnostic(&self) -> Diagnostic;
-}
-
 pub trait ErrorReceiver {
     type E;
     type W;
@@ -217,7 +141,7 @@ pub trait ErrorReceiver {
     fn error(&mut self, error: Self::E);
 }
 
-impl<E, W> ErrorReceiver for &mut dyn ErrorReceiver<E = E, W = W>  {
+impl<E, W> ErrorReceiver for &mut dyn ErrorReceiver<E = E, W = W> {
     type E = E;
     type W = W;
     fn is_failed(&self) -> bool {
@@ -231,93 +155,12 @@ impl<E, W> ErrorReceiver for &mut dyn ErrorReceiver<E = E, W = W>  {
     }
 }
 
-//pub struct ErrorReceiverAdapter<I, OE, OW, FE, FW> {
-//    pub inner: I,
-//    pub error_adapter: FE,
-//    pub warning_adapter: FW,
-//    pub _phantom: PhantomData<(OE, OW)>,
-//}
-//
-//impl<I, OE, OW, FE, FW> ErrorReceiverAdapter<I, OE, OW, FE, FW> {
-//
-//    pub fn new(inner: I, error_adapter: FE, warning_adapter: FW) -> Self
-//    where
-//        I: ErrorReceiver,
-//        FE: Fn(OE) -> I::E + Sized,
-//        FW: Fn(OW) -> I::W + Sized,
-//    {
-//        Self {
-//            inner,
-//            error_adapter,
-//            warning_adapter,
-//            _phantom: PhantomData,
-//        }
-//    }
-//
-//}
-//
-//impl<I, OE, OW, FE, FW> Clone for ErrorReceiverAdapter<I, OE, OW, FE, FW>
-//where
-//    I: Clone,
-//    FE: Clone,
-//    FW: Clone,
-//{
-//    fn clone(&self) -> Self {
-//        Self {
-//            inner: self.inner.clone(),
-//            error_adapter: self.error_adapter.clone(),
-//            warning_adapter: self.warning_adapter.clone(),
-//            _phantom: PhantomData,
-//        }
-//    }
-//}
-//
-//impl<I, OE, OW, FE, FW> ErrorReceiver for ErrorReceiverAdapter<I, OE, OW, FE, FW>
-//where
-//    I: ErrorReceiver,
-//    FE: Fn(OE) -> I::E + Sized,
-//    FW: Fn(OW) -> I::W + Sized,
-//{
-//    type E = OE;
-//    type W = OW;
-//
-//    fn is_failed(&self) -> bool {
-//        self.inner.is_failed()
-//    }
-//    fn warning(&mut self, warning: OW) {
-//        self.inner.warning((self.warning_adapter)(warning))
-//    }
-//    fn error(&mut self, error: OE) {
-//        self.inner.error((self.error_adapter)(error))
-//    }
-//}
-//
-//impl<I, OE, OW, FE, FW> ErrorReceiver for &mut ErrorReceiverAdapter<I, OE, OW, FE, FW>
-//where
-//    I: ErrorReceiver,
-//    FE: Fn(OE) -> I::E + Sized,
-//    FW: Fn(OW) -> I::W + Sized,
-//{
-//    type E = OE;
-//    type W = OW;
-//
-//    fn is_failed(&self) -> bool {
-//        self.inner.is_failed()
-//    }
-//    fn warning(&mut self, warning: OW) {
-//        self.inner.warning((self.warning_adapter)(warning))
-//    }
-//    fn error(&mut self, error: OE) {
-//        self.inner.error((self.error_adapter)(error))
-//    }
-//}
-
 pub fn error_tee<'a, E, W, F, R>(
     receiver: &'a mut (dyn ErrorReceiver<E = E, W = W> + 'a),
     fun: F,
 ) -> R
 where
-    F: FnOnce(ErrorReceiverTee<E, W>) -> R
+    F: FnOnce(ErrorReceiverTee<E, W>) -> R,
 {
     scoped_cell(receiver, |cell| {
         let tee = ErrorReceiverTee { cell };
@@ -337,7 +180,6 @@ impl<'a, E, W> Clone for ErrorReceiverTee<'a, E, W> {
 }
 
 impl<'a, E, W> ErrorReceiverTee<'a, E, W> {
-
     pub fn make_adapter<NE, NW, FE, FW>(
         &mut self,
         error_adapter: FE,
@@ -367,7 +209,6 @@ impl<'a, E, W> ErrorReceiverTee<'a, E, W> {
             phantom: PhantomData,
         }
     }
-
 }
 
 impl<'a, E, W> ErrorReceiver for ErrorReceiverTee<'a, E, W> {
@@ -375,9 +216,7 @@ impl<'a, E, W> ErrorReceiver for ErrorReceiverTee<'a, E, W> {
     type W = W;
 
     fn is_failed(&self) -> bool {
-        self.cell.borrow_mut(|inner| {
-            (*inner).is_failed()
-        })
+        self.cell.borrow_mut(|inner| (*inner).is_failed())
     }
     fn error(&mut self, error: E) {
         self.cell.borrow_mut(|inner| {
@@ -403,9 +242,7 @@ impl<'a, IE, IW, OE, OW> ErrorReceiver for ErrorReceiverTeeAdapter<'a, IE, IW, O
     type W = OW;
 
     fn is_failed(&self) -> bool {
-        self.cell.borrow_mut(|inner| {
-            (*inner).is_failed()
-        })
+        self.cell.borrow_mut(|inner| (*inner).is_failed())
     }
     fn error(&mut self, error: OE) {
         self.cell.borrow_mut(|inner| {
@@ -432,14 +269,12 @@ impl<'a, IE, IW, OE, OW> Clone for ErrorReceiverTeeAdapter<'a, IE, IW, OE, OW> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Errors, ErrorReceiver, error_tee};
+    use super::{error_tee, ErrorReceiver, Errors};
 
     #[test]
     fn basic_usage() {
-
         fn inner2(recv: &mut dyn ErrorReceiver<E = (), W = ()>) {
-            error_tee(recv, |_tee| {
-            });
+            error_tee(recv, |_tee| {});
         }
 
         fn inner(recv: &mut dyn ErrorReceiver<E = (), W = ()>) {
@@ -451,7 +286,5 @@ mod tests {
 
         let mut errors = Errors::new();
         inner(&mut errors);
-
     }
-
 }

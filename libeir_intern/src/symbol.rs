@@ -6,16 +6,16 @@ use std::cell::RefCell;
 use std::cmp::{Ord, Ordering, PartialEq, PartialOrd};
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
 use std::str;
 use std::sync::{Arc, RwLock};
-use std::marker::PhantomData;
 
 use lazy_static::lazy_static;
 use rustc_hash::FxHashMap;
 
 use crate::arena::DroplessArena;
 
-use libeir_diagnostics::{ByteSpan, DUMMY_SPAN};
+use libeir_diagnostics::SourceSpan;
 
 lazy_static! {
     /// A globally accessible symbol table
@@ -39,18 +39,18 @@ unsafe impl Sync for SymbolTable {}
 #[derive(Copy, Clone, Eq)]
 pub struct Ident {
     pub name: Symbol,
-    pub span: ByteSpan,
+    pub span: SourceSpan,
 }
 
 impl Ident {
     #[inline]
-    pub const fn new(name: Symbol, span: ByteSpan) -> Ident {
+    pub const fn new(name: Symbol, span: SourceSpan) -> Ident {
         Ident { name, span }
     }
 
     #[inline]
     pub const fn with_empty_span(name: Symbol) -> Ident {
-        Ident::new(name, DUMMY_SPAN)
+        Ident::new(name, SourceSpan::UNKNOWN)
     }
 
     /// Maps an interned string to an identifier with an empty syntax context.

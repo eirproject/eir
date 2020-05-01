@@ -1,9 +1,10 @@
+use std::ops::Range;
 use std::str::FromStr;
 
-use libeir_diagnostics::{ByteIndex, ByteOffset, ByteSpan};
+use libeir_diagnostics::{SourceIndex, SourceSpan, ByteOffset};
 
-use libeir_util_parse::{Source, Scanner};
 use libeir_util_number::{Integer, ToPrimitive};
+use libeir_util_parse::{Scanner, Source};
 
 use super::errors::LexicalError;
 use super::token::*;
@@ -59,7 +60,7 @@ macro_rules! pop3 {
 /// gathering as many errors as possible.
 pub struct Lexer<S> {
     /// The scanner produces a sequence of chars + location, and can be controlled
-    /// The location produces is a ByteIndex
+    /// The location produces is a SourceIndex
     scanner: Scanner<S>,
 
     /// The most recent token to be lexed.
@@ -68,11 +69,11 @@ pub struct Lexer<S> {
 
     /// The position in the input where the current token starts
     /// At the start this will be the byte index of the beginning of the input
-    token_start: ByteIndex,
+    token_start: SourceIndex,
 
     /// The position in the input where the current token ends
     /// At the start this will be the byte index of the beginning of the input
-    token_end: ByteIndex,
+    token_end: SourceIndex,
 
     /// When we have reached true EOF, this gets set to true, and the only token
     /// produced after that point is Token::EOF, or None, depending on how you are
@@ -127,7 +128,7 @@ where
 
     #[inline]
     fn advance_start(&mut self) {
-        let mut position: ByteIndex;
+        let mut position: SourceIndex;
         loop {
             let (pos, c) = self.scanner.read();
 
@@ -152,7 +153,7 @@ where
     #[inline]
     fn pop(&mut self) -> char {
         let (pos, c) = self.scanner.pop();
-        self.token_end = pos + ByteOffset::from_char_utf8(c);
+        self.token_end = pos + ByteOffset::from_char_len(c);
         c
     }
 
@@ -181,8 +182,8 @@ where
 
     /// Get the span for the current token in `Source`.
     #[inline]
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self.token_start, self.token_end)
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self.token_start, self.token_end)
     }
 
     /// Get a string slice of the current token.
@@ -192,7 +193,7 @@ where
     }
 
     #[inline]
-    fn slice_span(&self, span: ByteSpan) -> &str {
+    fn slice_span(&self, span: impl Into<Range<usize>>) -> &str {
         self.scanner.slice(span)
     }
 
@@ -766,11 +767,10 @@ fn to_integer_literal(literal: &str, radix: u32) -> Token {
 
 #[cfg(test)]
 mod test {
-    use std::borrow::Cow;
-    use std::sync::Arc;
-
-    use libeir_diagnostics::{ByteIndex, ByteSpan, FileMap, FileName};
-    use libeir_util_parse::{FileMapSource, Scanner};
+    use libeir_diagnostics::{
+        ByteIndex, CodeMap, SourceId, SourceIndex, SourceSpan,
+    };
+    use libeir_util_parse::{FileMapSource, Source, Scanner};
     use pretty_assertions::assert_eq;
 
     use crate::lexer::*;
@@ -783,8 +783,10 @@ mod test {
 
     macro_rules! assert_lex(
         ($input:expr, $expected:expr) => ({
-            let filemap = FileMap::new(FileName::Virtual(Cow::Borrowed("nofile")), $input);
-            let source = FileMapSource::new(Arc::new(filemap));
+            let codemap = CodeMap::new();
+            let id = codemap.add("nofile", $input.to_string());
+            let file = codemap.get(id).unwrap();
+            let source = FileMapSource::new(file);
             let scanner = Scanner::new(source);
             let lexer = Lexer::new(scanner);
             let results = lexer.map(|result| {
@@ -836,10 +838,22 @@ mod test {
         assert_lex!("41.0e+9", vec![Ok((1, Token::Float(41e+9), 8))]);
 
         // With leading negative sign
-        assert_lex!("-700.5", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(700.5), 7))]);
-        assert_lex!("-9.0e2", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(9.0e2), 7))]);
-        assert_lex!("-0.5e1", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(0.5e1), 7))]);
-        assert_lex!("-0.0", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(0.0), 5))]);
+        assert_lex!(
+            "-700.5",
+            vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(700.5), 7))]
+        );
+        assert_lex!(
+            "-9.0e2",
+            vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(9.0e2), 7))]
+        );
+        assert_lex!(
+            "-0.5e1",
+            vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(0.5e1), 7))]
+        );
+        assert_lex!(
+            "-0.0",
+            vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(0.0), 5))]
+        );
     }
 
     #[test]
@@ -872,14 +886,41 @@ mod test {
         // Decimal
         assert_lex!("1", vec![Ok((1, Token::Integer(1.into()), 2))]);
         assert_lex!("9624", vec![Ok((1, Token::Integer(9624.into()), 5))]);
-        assert_lex!("-1", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(1.into()), 3))]);
-        assert_lex!("-9624", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(9624.into()), 6))]);
+        assert_lex!(
+            "-1",
+            vec![
+                Ok((1, Token::Minus, 2)),
+                Ok((2, Token::Integer(1.into()), 3))
+            ]
+        );
+        assert_lex!(
+            "-9624",
+            vec![
+                Ok((1, Token::Minus, 2)),
+                Ok((2, Token::Integer(9624.into()), 6))
+            ]
+        );
 
         // Hexadecimal
         assert_lex!(r#"\x00"#, vec![Ok((1, Token::Integer(0x0.into()), 5))]);
-        assert_lex!(r#"\x{1234FF}"#, vec![Ok((1, Token::Integer(0x1234FF.into()), 11))]);
-        assert_lex!("-16#0", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(0x0.into()), 6))]);
-        assert_lex!("-16#1234FF", vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Integer(0x1234FF.into()), 11))]);
+        assert_lex!(
+            r#"\x{1234FF}"#,
+            vec![Ok((1, Token::Integer(0x1234FF.into()), 11))]
+        );
+        assert_lex!(
+            "-16#0",
+            vec![
+                Ok((1, Token::Minus, 2)),
+                Ok((2, Token::Integer(0x0.into()), 6))
+            ]
+        );
+        assert_lex!(
+            "-16#1234FF",
+            vec![
+                Ok((1, Token::Minus, 2)),
+                Ok((2, Token::Integer(0x1234FF.into()), 11))
+            ]
+        );
 
         // Octal
         assert_lex!(r#"\00"#, vec![Ok((1, Token::Integer(0.into()), 4))]);
@@ -888,7 +929,10 @@ mod test {
         // Octal integer literal followed by non-octal digits.
         assert_lex!(
             r#"\008"#,
-            vec![Ok((1, Token::Integer(0.into()), 4)), Ok((4, Token::Integer(8.into()), 5))]
+            vec![
+                Ok((1, Token::Integer(0.into()), 4)),
+                Ok((4, Token::Integer(8.into()), 5))
+            ]
         );
         assert_lex!(
             r#"\01238"#,
@@ -909,7 +953,10 @@ mod test {
         assert_lex!(
             r#""this is a string"#,
             vec![Err(LexicalError::UnclosedString {
-                span: ByteSpan::new(ByteIndex(1), ByteIndex(18))
+                span: SourceSpan::new(
+                    SourceIndex::new(SourceId::UNKNOWN, ByteIndex(1)),
+                    SourceIndex::new(SourceId::UNKNOWN, ByteIndex(18))
+                )
             })]
         );
     }

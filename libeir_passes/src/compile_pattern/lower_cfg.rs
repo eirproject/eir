@@ -6,7 +6,7 @@ use libeir_ir::pattern::{ PatternClause, PatternNode };
 
 use libeir_util_pattern_compiler::{ PatternCfg, CfgNodeKind, EdgeRef, NodeIndex };
 
-use libeir_diagnostics::DUMMY_SPAN;
+use libeir_diagnostics::SourceSpan;
 
 use super::BFnvHashMap;
 use super::erlang_pattern_provider::{
@@ -156,15 +156,15 @@ fn lower_cfg_rec(
 ) {
     let block_value = b.fun().block_value(block);
     let block_span = b.fun().value_locations(block_value)
-        .map(|spans| spans.first().copied().unwrap_or(DUMMY_SPAN))
-        .unwrap_or(DUMMY_SPAN);
+        .map(|spans| spans.first().copied().unwrap_or(SourceSpan::UNKNOWN))
+        .unwrap_or(SourceSpan::UNKNOWN);
     match cfg.graph[node] {
         CfgNodeKind::Root => unreachable!(),
         CfgNodeKind::Match(var) => {
             let match_val = ctx.get_var_value(var);
             let span = b.fun().value_locations(match_val)
-                .map(|spans| spans.first().copied().unwrap_or(DUMMY_SPAN))
-                .unwrap_or(DUMMY_SPAN);
+                .map(|spans| spans.first().copied().unwrap_or(SourceSpan::UNKNOWN))
+                .unwrap_or(SourceSpan::UNKNOWN);
 
             let mut wildcard_node = None;
 

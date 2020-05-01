@@ -2,18 +2,17 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use libeir_diagnostics::{ByteSpan, Diagnostic, Label};
+use libeir_diagnostics::{Diagnostic, Label, SourceSpan};
 use libeir_util_parse::ErrorReceiver;
 
 use crate::preprocessor::PreprocessorError;
 
-use super::{Expr, NodeIdGenerator, NodeId, Ident, Name, Arity, TypeSpec};
 use super::ParserError;
-
+use super::{Arity, Expr, Ident, Name, NodeId, NodeIdGenerator, TypeSpec};
 
 #[derive(Debug, Copy, Clone)]
 pub struct LocalFunctionName {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub function: Ident,
     pub arity: usize,
 }
@@ -48,7 +47,7 @@ impl Ord for LocalFunctionName {
 /// Represents a fully-resolved function name, with module/function/arity explicit
 #[derive(Debug, Clone)]
 pub struct ResolvedFunctionName {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub module: Ident,
     pub function: Ident,
@@ -100,7 +99,7 @@ impl ResolvedFunctionName {
 /// This is typically used to express local captures, e.g. `fun do_stuff/0`
 #[derive(Debug, Clone)]
 pub struct PartiallyResolvedFunctionName {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub function: Ident,
     pub arity: usize,
@@ -154,7 +153,7 @@ impl PartiallyResolvedFunctionName {
 /// module or function is referenced
 #[derive(Debug, Clone)]
 pub struct UnresolvedFunctionName {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub module: Option<Name>,
     pub function: Name,
@@ -192,7 +191,7 @@ pub enum FunctionName {
     Unresolved(UnresolvedFunctionName),
 }
 impl FunctionName {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
             &FunctionName::Resolved(ResolvedFunctionName { ref span, .. }) => span.clone(),
             &FunctionName::PartiallyResolved(PartiallyResolvedFunctionName {
@@ -209,7 +208,13 @@ impl FunctionName {
         }
     }
 
-    pub fn detect(span: ByteSpan, nid: &mut NodeIdGenerator, module: Option<Name>, function: Name, arity: Arity) -> Self {
+    pub fn detect(
+        span: SourceSpan,
+        nid: &mut NodeIdGenerator,
+        module: Option<Name>,
+        function: Name,
+        arity: Arity,
+    ) -> Self {
         if module.is_none() {
             return match (function, arity) {
                 (Name::Atom(f), Arity::Int(a)) => {
@@ -220,15 +225,13 @@ impl FunctionName {
                         arity: a,
                     })
                 }
-                _ => {
-                    FunctionName::Unresolved(UnresolvedFunctionName {
-                        span,
-                        id: nid.next(),
-                        module: None,
-                        function,
-                        arity,
-                    })
-                }
+                _ => FunctionName::Unresolved(UnresolvedFunctionName {
+                    span,
+                    id: nid.next(),
+                    module: None,
+                    function,
+                    arity,
+                }),
             };
         }
 
@@ -299,7 +302,7 @@ impl fmt::Display for FunctionName {
 
 #[derive(Debug, Clone)]
 pub struct NamedFunction {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub name: Ident,
     pub arity: usize,
@@ -317,7 +320,7 @@ impl PartialEq for NamedFunction {
 impl NamedFunction {
     pub fn new(
         errs: &mut dyn ErrorReceiver<E = ParserError, W = ParserError>,
-        span: ByteSpan,
+        span: SourceSpan,
         nid: &mut NodeIdGenerator,
         clauses: Vec<FunctionClause>,
     ) -> Result<Self, ()> {
@@ -325,12 +328,17 @@ impl NamedFunction {
         let (head, rest) = clauses.split_first().unwrap();
 
         if head.name.is_none() {
-            errs.error(PreprocessorError::ShowDiagnostic {
-                diagnostic: Diagnostic::new_error("expected named function").with_label(
-                    Label::new_primary(head.span)
-                        .with_message("this clause has no name, but a name is required here")
-                ),
-            }.into());
+            errs.error(
+                PreprocessorError::ShowDiagnostic {
+                    diagnostic: Diagnostic::error()
+                        .with_message("expected named function")
+                        .with_labels(vec![Label::primary(head.span.source_id(), head.span)
+                            .with_message(
+                                "this clause has no name, but a name is required here",
+                            )]),
+                }
+                .into(),
+            );
             return Err(());
         }
 
@@ -343,19 +351,22 @@ impl NamedFunction {
         let mut last_clause = head_span.clone();
         for clause in rest.iter() {
             if clause.name.is_none() {
-                errs.error(PreprocessorError::ShowDiagnostic {
-                    diagnostic: Diagnostic::new_error("expected named function clause")
-                        .with_label(
-                            Label::new_primary(clause.span).with_message(
-                                "this clause has no name, but a name is required here"
-                            )
-                        )
-                        .with_label(
-                            Label::new_secondary(last_clause).with_message(
-                                "expected a clause with the same name as this clause"
-                            )
-                        ),
-                }.into());
+                errs.error(
+                    PreprocessorError::ShowDiagnostic {
+                        diagnostic: Diagnostic::error()
+                            .with_message("expected named function clause")
+                            .with_labels(vec![
+                                Label::primary(clause.span.source_id(), clause.span).with_message(
+                                    "this clause has no name, but a name is required here",
+                                ),
+                                Label::secondary(last_clause.source_id(), last_clause)
+                                    .with_message(
+                                        "expected a clause with the same name as this clause",
+                                    ),
+                            ]),
+                    }
+                    .into(),
+                );
                 return Err(());
             }
 
@@ -366,27 +377,31 @@ impl NamedFunction {
 
             if clause_name != name {
                 errs.error(ParserError::ShowDiagnostic {
-                    diagnostic: Diagnostic::new_error("unterminated function clause")
-                        .with_label(Label::new_primary(last_clause.clone()).with_message(
-                            "this clause ends with ';', indicating that another clause follows"
-                        ))
-                        .with_label(
-                            Label::new_secondary(clause_span.clone())
-                                .with_message("but this clause has a different name")
-                        ),
+                    diagnostic: Diagnostic::error()
+                        .with_message("unterminated function clause")
+                        .with_labels(vec![
+                            Label::primary(last_clause.source_id(), last_clause.clone())
+                                .with_message(
+                                "this clause ends with ';', indicating that another clause follows",
+                            ),
+                            Label::secondary(clause_span.source_id(), clause_span.clone())
+                                .with_message("but this clause has a different name"),
+                        ]),
                 });
                 continue;
             }
             if clause_arity != arity {
                 errs.error(ParserError::ShowDiagnostic {
-                    diagnostic: Diagnostic::new_error("unterminated function clause")
-                        .with_label(Label::new_primary(last_clause.clone()).with_message(
-                            "this clause ends with ';', indicating that another clause follows"
-                        ))
-                        .with_label(
-                            Label::new_secondary(clause_span.clone())
-                                .with_message("but this clause has a different arity")
-                        ),
+                    diagnostic: Diagnostic::error()
+                        .with_message("unterminated function clause")
+                        .with_labels(vec![
+                            Label::primary(last_clause.source_id(), last_clause.clone())
+                                .with_message(
+                                "this clause ends with ';', indicating that another clause follows",
+                            ),
+                            Label::secondary(clause_span.source_id(), clause_span.clone())
+                                .with_message("but this clause has a different arity"),
+                        ]),
                 });
                 continue;
             }
@@ -407,7 +422,7 @@ impl NamedFunction {
 
 #[derive(Debug, Clone)]
 pub struct Lambda {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub arity: usize,
     pub clauses: Vec<FunctionClause>,
@@ -420,7 +435,7 @@ impl PartialEq for Lambda {
 impl Lambda {
     pub fn new(
         errs: &mut dyn ErrorReceiver<E = ParserError, W = ParserError>,
-        span: ByteSpan,
+        span: SourceSpan,
         nid: &mut NodeIdGenerator,
         clauses: Vec<FunctionClause>,
     ) -> Result<Self, ()> {
@@ -441,28 +456,32 @@ impl Lambda {
 
             if clause_name.is_some() {
                 errs.error(ParserError::ShowDiagnostic {
-                    diagnostic: Diagnostic::new_error("mismatched function clause")
-                        .with_label(
-                            Label::new_primary(clause_span.clone())
-                                .with_message("this clause is named")
-                        )
-                        .with_label(Label::new_secondary(last_clause.clone()).with_message(
-                            "but this clause is unnamed, all clauses must share the same name"
-                        ))
+                    diagnostic: Diagnostic::error()
+                        .with_message("mismatched function clause")
+                        .with_labels(vec![
+                            Label::primary(clause_span.source_id(), clause_span.clone())
+                                .with_message("this clause is named"),
+                            Label::secondary(last_clause.source_id(), last_clause.clone())
+                                .with_message(
+                                "but this clause is unnamed, all clauses must share the same name",
+                            ),
+                        ]),
                 });
                 return Err(());
             }
 
             if clause_arity != arity {
                 errs.error(ParserError::ShowDiagnostic {
-                    diagnostic: Diagnostic::new_error("mismatched function clause")
-                        .with_label(Label::new_primary(clause_span.clone()).with_message(
-                            "the arity of this clause does not match the previous clause"
-                        ))
-                        .with_label(
-                            Label::new_secondary(last_clause.clone())
-                                .with_message("this is the previous clause")
-                        ),
+                    diagnostic: Diagnostic::error()
+                        .with_message("mismatched function clause")
+                        .with_labels(vec![
+                            Label::primary(clause_span.source_id(), clause_span.clone())
+                                .with_message(
+                                    "the arity of this clause does not match the previous clause",
+                                ),
+                            Label::secondary(last_clause.source_id(), last_clause.clone())
+                                .with_message("this is the previous clause"),
+                        ]),
                 });
                 continue;
             }
@@ -485,7 +504,7 @@ pub enum Function {
     Unnamed(Lambda),
 }
 impl Function {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
             &Function::Named(NamedFunction { ref span, .. }) => span.clone(),
             &Function::Unnamed(Lambda { ref span, .. }) => span.clone(),
@@ -500,7 +519,7 @@ impl Function {
 
     pub fn new(
         errs: &mut dyn ErrorReceiver<E = ParserError, W = ParserError>,
-        span: ByteSpan,
+        span: SourceSpan,
         nid: &mut NodeIdGenerator,
         clauses: Vec<FunctionClause>,
     ) -> Result<Self, ()> {
@@ -508,7 +527,9 @@ impl Function {
         let (head, _rest) = clauses.split_first().unwrap();
 
         if head.name.is_some() {
-            Ok(Function::Named(NamedFunction::new(errs, span, nid, clauses)?))
+            Ok(Function::Named(NamedFunction::new(
+                errs, span, nid, clauses,
+            )?))
         } else {
             Ok(Function::Unnamed(Lambda::new(errs, span, nid, clauses)?))
         }
@@ -517,7 +538,7 @@ impl Function {
 
 #[derive(Debug, Clone)]
 pub struct FunctionClause {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub name: Option<Ident>,
     pub params: Vec<Expr>,
     pub guard: Option<Vec<Guard>>,
@@ -533,7 +554,7 @@ impl PartialEq for FunctionClause {
 }
 impl FunctionClause {
     pub fn new(
-        span: ByteSpan,
+        span: SourceSpan,
         name: Option<Ident>,
         params: Vec<Expr>,
         guard: Option<Vec<Guard>>,
@@ -551,7 +572,7 @@ impl FunctionClause {
 
 #[derive(Debug, Clone)]
 pub struct Guard {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub conditions: Vec<Expr>,
 }
 impl PartialEq for Guard {

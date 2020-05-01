@@ -1,6 +1,10 @@
-use libeir_diagnostics::ByteIndex;
+use std::sync::Arc;
+
+use libeir_diagnostics::{CodeMap, SourceIndex};
 use libeir_intern::Ident;
-use libeir_util_parse::{Parser, Parse, Source, Scanner, ErrorReceiver, SourceError, ArcCodemap, error_tee};
+use libeir_util_parse::{
+    self as parse, error_tee, ErrorReceiver, Parse, Scanner, Source, SourceError,
+};
 
 use crate::FunctionIdent;
 
@@ -8,123 +12,12 @@ mod lexer;
 use lexer::{Lexer, Token};
 
 mod errors;
-pub use self::errors::ParserError;
 use self::errors::Errors;
+pub use self::errors::ParserError;
+
 use super::ast::LowerMap;
 
-pub fn module_codemap(text: &str, codemap: &ArcCodemap) -> (Result<crate::Module, ()>, Errors) {
-    let mut errors = Errors::new();
-
-    let parser = Parser::new(());
-
-    let res = match parser.parse_string(&mut errors, &codemap, text) {
-        Ok(module) => {
-            let module: super::ast::Module = module;
-
-            error_tee(&mut errors, |mut errors| {
-                let mut adapter = errors.make_into_adapter();
-
-                match module.lower(&mut adapter) {
-                    Ok(module) => Ok(module),
-                    Err(()) => Err(()),
-                }
-            })
-        },
-        Err(()) => Err(()),
-    };
-
-    (res, errors)
-}
-
-pub fn module(text: &str) -> (Result<crate::Module, ()>, Errors) {
-    let codemap = ArcCodemap::default();
-    module_codemap(text, &codemap)
-}
-
-pub fn module_unwrap(text: &str) -> crate::Module {
-    let codemap = ArcCodemap::default();
-    match module_codemap(text, &codemap) {
-        (Ok(module), errors) => {
-            errors.print(&codemap);
-            module
-        },
-        (Err(()), errors) => {
-            errors.print(&codemap);
-            panic!();
-        },
-    }
-}
-
-pub fn function_map_codemap(text: &str, codemap: &ArcCodemap) -> (Result<(crate::Function, LowerMap), ()>, Errors) {
-    let mut errors = Errors::new();
-
-    let parser = Parser::new(());
-
-    let ret = match parser.parse_string(&mut errors, &codemap, text) {
-        Ok(named) => {
-            let named: NamedFunction = named;
-
-            error_tee(&mut errors, |mut errors| {
-                let mut adapter = errors.make_into_adapter();
-
-                match named.function.lower(&mut adapter, named.name) {
-                    Ok(res) => Ok(res),
-                    Err(()) => Err(()),
-                }
-            })
-        },
-        Err(()) => Err(()),
-    };
-
-    (ret, errors)
-}
-
-pub fn function_map(text: &str) -> (Result<(crate::Function, LowerMap), ()>, Errors) {
-    let codemap = ArcCodemap::default();
-    function_map_codemap(text, &codemap)
-}
-
-pub fn function_codemap(text: &str, codemap: &ArcCodemap) -> (Result<crate::Function, ()>, Errors) {
-    match function_map_codemap(text, codemap) {
-        (Ok((fun, _)), errors) => (Ok(fun), errors),
-        (Err(()), errors) => (Err(()), errors),
-    }
-}
-
-pub fn function(text: &str) -> (Result<crate::Function, ()>, Errors) {
-    match function_map(text) {
-        (Ok((fun, _)), errors) => (Ok(fun), errors),
-        (Err(()), errors) => (Err(()), errors),
-    }
-}
-
-pub fn function_unwrap(text: &str) -> crate::Function {
-    let codemap = ArcCodemap::default();
-    match function_codemap(text, &codemap) {
-        (Ok(fun), errors) => {
-            errors.print(&codemap);
-            fun
-        },
-        (Err(()), errors) => {
-            errors.print(&codemap);
-            panic!();
-        },
-    }
-}
-
-pub fn function_map_unwrap(text: &str) -> (crate::Function, LowerMap) {
-    let codemap = ArcCodemap::default();
-    match function_map_codemap(text, &codemap) {
-        (Ok(fun), errors) => {
-            errors.print(&codemap);
-            fun
-        },
-        (Err(()), errors) => {
-            errors.print(&codemap);
-            panic!();
-        },
-    }
-}
+pub type Parser = parse::Parser<()>;
 
 type ParserErrorReceiver<'a> = dyn ErrorReceiver<E = ParserError, W = ParserError> + 'a;
 
@@ -154,7 +47,7 @@ impl Parse for super::ast::Module {
     type Parser = self::grammar::ModuleParser;
     type Error = ParserError;
     type Config = ();
-    type Token = std::result::Result<(ByteIndex, Token, ByteIndex), ParserError>;
+    type Token = std::result::Result<(SourceIndex, Token, SourceIndex), ParserError>;
 
     fn file_map_error(err: SourceError) -> Self::Error {
         ParserError::Source { source: err }
@@ -162,10 +55,9 @@ impl Parse for super::ast::Module {
 
     fn parse_tokens<S>(errors: &mut ParserErrorReceiver, tokens: S) -> Result<Self, ()>
     where
-        S: IntoIterator<Item = std::result::Result<(ByteIndex, Token, ByteIndex), ParserError>>
+        S: IntoIterator<Item = std::result::Result<(SourceIndex, Token, SourceIndex), ParserError>>,
     {
-        let result = self::grammar::ModuleParser::new()
-            .parse(errors, tokens);
+        let result = self::grammar::ModuleParser::new().parse(errors, tokens);
 
         let ret;
         match result {
@@ -183,21 +75,20 @@ impl Parse for super::ast::Module {
         }
     }
 
-    fn parse<S>(_config: &Self::Config, _codemap: &ArcCodemap, errors: &mut ParserErrorReceiver, source: S) -> Result<Self, ()>
+    fn parse<S>(_parser: &Parser, errors: &mut ParserErrorReceiver, source: S) -> Result<Self, ()>
     where
-        S: Source
+        S: Source,
     {
         let scanner = Scanner::new(source);
         let lexer = Lexer::new(scanner);
         Self::parse_tokens(errors, lexer)
     }
-
 }
 impl Parse for NamedFunction {
     type Parser = self::grammar::StandaloneFunctionParser;
     type Error = ParserError;
     type Config = ();
-    type Token = std::result::Result<(ByteIndex, Token, ByteIndex), ParserError>;
+    type Token = std::result::Result<(SourceIndex, Token, SourceIndex), ParserError>;
 
     fn file_map_error(err: SourceError) -> Self::Error {
         ParserError::Source { source: err }
@@ -205,10 +96,9 @@ impl Parse for NamedFunction {
 
     fn parse_tokens<S>(errors: &mut ParserErrorReceiver, tokens: S) -> Result<Self, ()>
     where
-        S: IntoIterator<Item = std::result::Result<(ByteIndex, Token, ByteIndex), ParserError>>
+        S: IntoIterator<Item = std::result::Result<(SourceIndex, Token, SourceIndex), ParserError>>,
     {
-        let result = self::grammar::StandaloneFunctionParser::new()
-            .parse(errors, tokens);
+        let result = self::grammar::StandaloneFunctionParser::new().parse(errors, tokens);
 
         let name;
         let function;
@@ -216,7 +106,7 @@ impl Parse for NamedFunction {
             std::result::Result::Ok((i, f)) => {
                 name = i;
                 function = f;
-            },
+            }
             std::result::Result::Err(err) => {
                 errors.error(err.into());
                 return Err(());
@@ -226,26 +116,25 @@ impl Parse for NamedFunction {
         if (*errors).is_failed() {
             Err(())
         } else {
-            Ok(NamedFunction {
-                name,
-                function,
-            })
+            Ok(NamedFunction { name, function })
         }
     }
 
-    fn parse<'a, S>(_config: &Self::Config, _codemap: &ArcCodemap, errors: &'a mut ParserErrorReceiver<'a>, source: S) -> Result<Self, ()>
+    fn parse<'a, S>(
+        _parser: &Parser,
+        errors: &'a mut ParserErrorReceiver<'a>,
+        source: S,
+    ) -> Result<Self, ()>
     where
-        S: Source
+        S: Source,
     {
         let scanner = Scanner::new(source);
         let lexer = Lexer::new(scanner);
         Self::parse_tokens(errors, lexer)
     }
-
 }
 
 impl FunctionIdent {
-
     pub fn parse(string: &str) -> std::result::Result<Self, ()> {
         lazy_static::lazy_static! {
             static ref FUNCTION_IDENT_RE: regex::Regex = {
@@ -253,7 +142,8 @@ impl FunctionIdent {
             };
         }
 
-        let captures = FUNCTION_IDENT_RE.captures(string)
+        let captures = FUNCTION_IDENT_RE
+            .captures(string)
             .map(Ok)
             .unwrap_or(Err(()))?;
 
@@ -272,7 +162,8 @@ impl FunctionIdent {
             };
         }
 
-        let captures = FUNCTION_IDENT_RE.captures(string)
+        let captures = FUNCTION_IDENT_RE
+            .captures(string)
             .map(Ok)
             .unwrap_or(Err(()))?;
 
@@ -283,31 +174,145 @@ impl FunctionIdent {
         };
         Ok(res)
     }
-
 }
+
+pub fn module_codemap(text: &str, codemap: Arc<CodeMap>) -> (Result<crate::Module, ()>, Errors) {
+    let mut errors = Errors::new();
+
+    let parser = Parser::new((), codemap);
+
+    let res = match parser.parse_string(&mut errors, text) {
+        Ok(module) => {
+            let module: super::ast::Module = module;
+
+            error_tee(&mut errors, |mut errors| {
+                let mut adapter = errors.make_into_adapter();
+
+                match module.lower(&mut adapter) {
+                    Ok(module) => Ok(module),
+                    Err(()) => Err(()),
+                }
+            })
+        },
+        Err(()) => Err(()),
+    };
+
+    (res, errors)
+}
+
+pub fn module(text: &str) -> (Result<crate::Module, ()>, Errors) {
+    module_codemap(text, Arc::new(CodeMap::new()))
+}
+
+pub fn module_unwrap(text: &str) -> crate::Module {
+    let codemap = Arc::new(CodeMap::new());
+    match module_codemap(text, codemap.clone()) {
+        (Ok(module), errors) => {
+            errors.print(&codemap);
+            module
+        },
+        (Err(()), errors) => {
+            errors.print(&codemap);
+            panic!();
+        },
+    }
+}
+
+pub fn function_map_codemap(text: &str, codemap: Arc<CodeMap>) -> (Result<(crate::Function, LowerMap), ()>, Errors) {
+    let mut errors = Errors::new();
+
+    let parser = Parser::new((), codemap);
+
+    let ret = match parser.parse_string(&mut errors, text) {
+        Ok(named) => {
+            let named: NamedFunction = named;
+
+            error_tee(&mut errors, |mut errors| {
+                let mut adapter = errors.make_into_adapter();
+
+                match named.function.lower(&mut adapter, named.name) {
+                    Ok(res) => Ok(res),
+                    Err(()) => Err(()),
+                }
+            })
+        },
+        Err(()) => Err(()),
+    };
+
+    (ret, errors)
+}
+
+pub fn function_map(text: &str) -> (Result<(crate::Function, LowerMap), ()>, Errors) {
+    function_map_codemap(text, Arc::new(CodeMap::new()))
+}
+
+pub fn function_codemap(text: &str, codemap: Arc<CodeMap>) -> (Result<crate::Function, ()>, Errors) {
+    match function_map_codemap(text, codemap) {
+        (Ok((fun, _)), errors) => (Ok(fun), errors),
+        (Err(()), errors) => (Err(()), errors),
+    }
+}
+
+pub fn function(text: &str) -> (Result<crate::Function, ()>, Errors) {
+    match function_map(text) {
+        (Ok((fun, _)), errors) => (Ok(fun), errors),
+        (Err(()), errors) => (Err(()), errors),
+    }
+}
+
+pub fn function_unwrap(text: &str) -> crate::Function {
+    let codemap = Arc::new(CodeMap::new());
+    match function_codemap(text, codemap.clone()) {
+        (Ok(fun), errors) => {
+            errors.print(&codemap);
+            fun
+        },
+        (Err(()), errors) => {
+            errors.print(&codemap);
+            panic!();
+        },
+    }
+}
+
+pub fn function_map_unwrap(text: &str) -> (crate::Function, LowerMap) {
+    let codemap = Arc::new(CodeMap::new());
+    match function_map_codemap(text, codemap.clone()) {
+        (Ok(fun), errors) => {
+            errors.print(&codemap);
+            fun
+        },
+        (Err(()), errors) => {
+            errors.print(&codemap);
+            panic!();
+        },
+    }
+}
+
 
 #[cfg(test)]
 mod test {
 
-    use std::sync::{RwLock, Arc};
+    use std::sync::Arc;
 
-    use super::{Parser, NamedFunction};
-    use crate::text::ast;
     use super::function_unwrap;
+    use super::{NamedFunction, Parser};
+    use crate::text::ast;
 
     use libeir_diagnostics::CodeMap;
+    use libeir_intern::Ident;
     use libeir_util_parse::Errors;
-    use libeir_intern::{Ident};
 
     use pretty_assertions::assert_eq;
 
     #[test]
     fn parse_empty_function() {
-        let codemap = Arc::new(RwLock::new(CodeMap::new()));
+        let codemap = Arc::new(CodeMap::new());
         let mut errors = Errors::new();
 
-        let parser = Parser::new(());
-        let _module: NamedFunction = parser.parse_string(&mut errors, &codemap, "a'foo':a'foo'/1 {}")
+        let parser = Parser::new((), codemap);
+
+        let _module: NamedFunction = parser
+            .parse_string(&mut errors, "a'foo':a'foo'/1 {}")
             .unwrap();
     }
 
@@ -319,10 +324,13 @@ mod test {
 
     #[test]
     fn parse_kitchen_sink() {
-        let codemap = Arc::new(RwLock::new(CodeMap::new()));
+        let codemap = Arc::new(CodeMap::new());
         let mut errors = Errors::new();
-        let parser = Parser::new(());
-        let module: ast::Module = parser.parse_string(&mut errors, &codemap, "
+        let parser = Parser::new((), codemap);
+        let module: ast::Module = parser
+            .parse_string(
+                &mut errors,
+                "
 a'kitchen_sink' {
     a'something'/1 {
         entry(%return, %throw, %num):
@@ -332,7 +340,9 @@ a'kitchen_sink' {
     }
     a'second_fun'/0 {}
 }
-").unwrap();
+",
+            )
+            .unwrap();
 
         let ref_module = ast::Module {
             name: Ident::from_str("kitchen_sink"),
@@ -383,13 +393,14 @@ a'kitchen_sink' {
 
     #[test]
     fn lower_add_one() {
-        let _fun = function_unwrap("
+        let _fun = function_unwrap(
+            "
 a'foo':a'add_one'/1 {
     entry(%return, %throw, %num):
         %add_fun = a'erlang':a'+'/2;
         %add_fun(%return, %throw, %num, 1);
 }
-");
+",
+        );
     }
-
 }

@@ -3,13 +3,13 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::mem;
 
-use libeir_diagnostics::{ByteIndex, ByteSpan};
+use libeir_diagnostics::{SourceIndex, SourceSpan};
 use libeir_util_number::{Integer, ToPrimitive};
 
 use super::{LexicalError, Symbol, TokenConvertError, TokenConvertResult};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LexicalToken(pub ByteIndex, pub Token, pub ByteIndex);
+pub struct LexicalToken(pub SourceIndex, pub Token, pub SourceIndex);
 impl LexicalToken {
     #[inline]
     pub fn token(&self) -> Token {
@@ -17,8 +17,8 @@ impl LexicalToken {
     }
 
     #[inline]
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self.0, self.2)
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self.0, self.2)
     }
 }
 impl fmt::Display for LexicalToken {
@@ -26,13 +26,13 @@ impl fmt::Display for LexicalToken {
         write!(f, "{}", self.token())
     }
 }
-impl std::convert::Into<(ByteIndex, Token, ByteIndex)> for LexicalToken {
-    fn into(self) -> (ByteIndex, Token, ByteIndex) {
+impl std::convert::Into<(SourceIndex, Token, SourceIndex)> for LexicalToken {
+    fn into(self) -> (SourceIndex, Token, SourceIndex) {
         (self.0, self.1, self.2)
     }
 }
-impl std::convert::From<(ByteIndex, Token, ByteIndex)> for LexicalToken {
-    fn from(triple: (ByteIndex, Token, ByteIndex)) -> LexicalToken {
+impl std::convert::From<(SourceIndex, Token, SourceIndex)> for LexicalToken {
+    fn from(triple: (SourceIndex, Token, SourceIndex)) -> LexicalToken {
         LexicalToken(triple.0, triple.1, triple.2)
     }
 }
@@ -59,13 +59,13 @@ impl fmt::Display for TokenType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct AtomToken(pub ByteIndex, pub Token, pub ByteIndex);
+pub struct AtomToken(pub SourceIndex, pub Token, pub SourceIndex);
 impl AtomToken {
     pub fn token(&self) -> Token {
         self.1.clone()
     }
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self.0, self.2)
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self.0, self.2)
     }
     pub fn symbol(&self) -> Symbol {
         match self.token() {
@@ -107,13 +107,13 @@ impl fmt::Display for AtomToken {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct IdentToken(pub ByteIndex, pub Token, pub ByteIndex);
+pub struct IdentToken(pub SourceIndex, pub Token, pub SourceIndex);
 impl IdentToken {
     pub fn token(&self) -> Token {
         self.1.clone()
     }
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self.0, self.2)
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self.0, self.2)
     }
     pub fn symbol(&self) -> Symbol {
         match self.token() {
@@ -148,13 +148,13 @@ impl fmt::Display for IdentToken {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct StringToken(pub ByteIndex, pub Token, pub ByteIndex);
+pub struct StringToken(pub SourceIndex, pub Token, pub SourceIndex);
 impl StringToken {
     pub fn token(&self) -> Token {
         self.1.clone()
     }
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self.0, self.2)
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self.0, self.2)
     }
     pub fn symbol(&self) -> Symbol {
         match self.token() {
@@ -189,13 +189,13 @@ impl fmt::Display for StringToken {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct IntegerToken(pub ByteIndex, pub Token, pub ByteIndex);
+pub struct IntegerToken(pub SourceIndex, pub Token, pub SourceIndex);
 impl IntegerToken {
     pub fn token(&self) -> Token {
         self.1.clone()
     }
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self.0, self.2)
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self.0, self.2)
     }
     pub fn small_integer(&self) -> Option<i64> {
         match self.token() {
@@ -230,13 +230,13 @@ impl fmt::Display for IntegerToken {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SymbolToken(pub ByteIndex, pub Token, pub ByteIndex);
+pub struct SymbolToken(pub SourceIndex, pub Token, pub SourceIndex);
 impl SymbolToken {
     pub fn token(&self) -> Token {
         self.1.clone()
     }
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self.0, self.2)
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self.0, self.2)
     }
 }
 impl TryFrom<LexicalToken> for SymbolToken {

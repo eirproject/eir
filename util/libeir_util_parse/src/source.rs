@@ -1,89 +1,71 @@
 use std::char;
-use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::ops::Range;
+use std::sync::Arc;
 
-use snafu::{Snafu, ResultExt};
+use snafu::Snafu;
 
-use libeir_diagnostics::{ByteIndex, ByteOffset, ByteSpan, CodeMap, Diagnostic, FileMap, FileName};
+use libeir_diagnostics::*;
 
 pub type SourceResult<T> = std::result::Result<T, SourceError>;
 
 pub trait Source: Sized {
-    fn from_path<P: AsRef<Path>>(codemap: Arc<RwLock<CodeMap>>, path: P) -> SourceResult<Self>;
+    fn new(src: Arc<SourceFile>) -> Self;
 
-    fn read(&mut self) -> Option<(ByteIndex, char)>;
+    fn read(&mut self) -> Option<(SourceIndex, char)>;
 
-    fn peek(&mut self) -> Option<(ByteIndex, char)>;
+    fn peek(&mut self) -> Option<(SourceIndex, char)>;
 
-    fn span(&self) -> ByteSpan;
+    fn span(&self) -> SourceSpan;
 
-    fn slice(&self, span: ByteSpan) -> &str;
+    fn slice(&self, span: impl Into<Range<usize>>) -> &str;
 }
 
 #[derive(Debug, Snafu)]
 pub enum SourceError {
     #[snafu(display("{}", source))]
-    IO {
-        source: std::io::Error,
-    },
+    IO { source: std::io::Error },
 
     #[snafu(display("invalid source path"))]
-    InvalidPath {
-        reason: String,
-    },
+    InvalidPath { reason: String },
 
     #[snafu(display("{}", source))]
     PathVariableSubstitute {
         source: crate::util::PathVariableSubstituteError,
     },
-
 }
 impl SourceError {
     pub fn to_diagnostic(&self) -> Diagnostic {
         match self {
-            SourceError::IO { source } => Diagnostic::new_error(source.to_string()),
+            SourceError::IO { source } => Diagnostic::error().with_message(source.to_string()),
             SourceError::InvalidPath { reason } => {
-                Diagnostic::new_error(format!("invalid path: {}", reason))
+                Diagnostic::error().with_message(format!("invalid path: {}", reason))
             }
-            SourceError::PathVariableSubstitute { source } =>
-                source.to_diagnostic(),
+            SourceError::PathVariableSubstitute { source } => source.to_diagnostic(),
         }
     }
 }
+impl From<std::io::Error> for SourceError {
+    fn from(source: std::io::Error) -> Self {
+        Self::IO { source }
+    }
+}
 
-/// A source which reads from a `diagnostics::FileMap`
+/// A source which reads from a `diagnostics::SourceFile`
 pub struct FileMapSource {
-    src: Arc<FileMap>,
+    src: Arc<SourceFile>,
     bytes: *const [u8],
-    start: ByteIndex,
-    peek: Option<(ByteIndex, char)>,
+    start: SourceIndex,
+    peek: Option<(SourceIndex, char)>,
     end: usize,
     pos: usize,
     eof: bool,
 }
 impl FileMapSource {
-    pub fn new(src: Arc<FileMap>) -> Self {
-        let start = src.span().start();
-        let end = src.src.len();
-        let bytes: *const [u8] = src.src.as_bytes();
-        let mut source = FileMapSource {
-            src,
-            bytes,
-            peek: None,
-            start,
-            end,
-            pos: 0,
-            eof: false,
-        };
-        source.peek = unsafe { source.next_char_internal() };
-        source
-    }
-
-    fn peek_char(&self) -> Option<(ByteIndex, char)> {
+    fn peek_char(&self) -> Option<(SourceIndex, char)> {
         self.peek
     }
 
-    fn next_char(&mut self) -> Option<(ByteIndex, char)> {
+    fn next_char(&mut self) -> Option<(SourceIndex, char)> {
         // If we've peeked a char already, return that
         let result = if self.peek.is_some() {
             std::mem::replace(&mut self.peek, None)
@@ -105,7 +87,7 @@ impl FileMapSource {
     }
 
     #[inline]
-    unsafe fn next_char_internal(&mut self) -> Option<(ByteIndex, char)> {
+    unsafe fn next_char_internal(&mut self) -> Option<(SourceIndex, char)> {
         let mut pos = self.pos;
         let end = self.end;
         if pos == end {
@@ -116,7 +98,7 @@ impl FileMapSource {
             return None;
         }
 
-        let start = self.start + ByteOffset(pos as i64);
+        let start = self.start + pos;
 
         let bytes: &[u8] = &*self.bytes;
 
@@ -190,42 +172,48 @@ impl FileMapSource {
     const CONT_MASK: u8 = 0b0011_1111;
 }
 impl Source for FileMapSource {
-    fn from_path<P: AsRef<Path>>(codemap: Arc<RwLock<CodeMap>>, path: P) -> SourceResult<Self> {
-        let path = crate::util::substitute_path_variables(path)
-            .context(PathVariableSubstitute)?;
-        let filemap = {
-            codemap
-                .write()
-                .unwrap()
-                .add_filemap_from_disk(FileName::real(path))
-                .context(IO)?
+    fn new(src: Arc<SourceFile>) -> Self {
+        let start = SourceIndex::new(src.id(), ByteIndex(0));
+        let mut source = Self {
+            src,
+            bytes: &[],
+            peek: None,
+            start,
+            end: 0,
+            pos: 0,
+            eof: false,
         };
-        Ok(FileMapSource::new(filemap))
+        let s = source.src.source();
+        let bytes = s.as_bytes();
+        source.end = bytes.len();
+        source.bytes = bytes;
+        source.peek = unsafe { source.next_char_internal() };
+        source
     }
 
     #[inline]
-    fn read(&mut self) -> Option<(ByteIndex, char)> {
+    fn read(&mut self) -> Option<(SourceIndex, char)> {
         self.next_char()
     }
 
     #[inline]
-    fn peek(&mut self) -> Option<(ByteIndex, char)> {
+    fn peek(&mut self) -> Option<(SourceIndex, char)> {
         self.peek_char()
     }
 
     #[inline]
-    fn span(&self) -> ByteSpan {
-        ByteSpan::new(self.start.clone(), self.start + ByteOffset(self.end as i64))
+    fn span(&self) -> SourceSpan {
+        self.src.source_span()
     }
 
     #[inline]
-    fn slice(&self, span: ByteSpan) -> &str {
-        self.src.src_slice(span).unwrap()
+    fn slice(&self, span: impl Into<Range<usize>>) -> &str {
+        self.src.source_slice(span).unwrap()
     }
 }
 
 impl Iterator for FileMapSource {
-    type Item = (ByteIndex, char);
+    type Item = (SourceIndex, char);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.read()
@@ -234,21 +222,11 @@ impl Iterator for FileMapSource {
 
 #[cfg(test)]
 mod test {
-    use std::borrow::Cow;
-    use std::sync::Arc;
-
-    use libeir_diagnostics::{ByteIndex, FileMap, FileName};
     use pretty_assertions::assert_eq;
 
     use super::*;
 
-    fn make_source(input: &str) -> FileMapSource {
-        let filemap = FileMap::new(FileName::Virtual(Cow::Borrowed("nofile")), input);
-        FileMapSource::new(Arc::new(filemap))
-    }
-
-    fn read_all_chars(input: &str) -> Vec<char> {
-        let source = make_source(input);
+    fn read_all_chars(source: FileMapSource) -> Vec<char> {
         source.map(|result| result.1).collect()
     }
 
@@ -256,18 +234,45 @@ mod test {
     fn file_source() {
         let expected = vec!['h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', '!'];
 
-        let chars = read_all_chars("hello world!");
+        let codemap = CodeMap::default();
+
+        let id1 = codemap.add("nofile", "hello world!".to_string());
+        let file1 = codemap.get(id1).unwrap();
+        let source1 = FileMapSource::new(file1);
+        let chars = read_all_chars(source1);
 
         assert_eq!(expected, chars);
 
-        let mut source = make_source("hello world!");
-        assert_eq!(Some((ByteIndex(1), 'h')), source.peek());
-        assert_eq!(Some((ByteIndex(1), 'h')), source.next());
+        let id2 = codemap.add("nofile", "hello world!".to_string());
+        let file2 = codemap.get(id2).unwrap();
+        let mut source2 = FileMapSource::new(file2);
+        assert_eq!(
+            Some((SourceIndex::new(id2, ByteIndex(1)), 'h')),
+            source2.peek()
+        );
+        assert_eq!(
+            Some((SourceIndex::new(id2, ByteIndex(1)), 'h')),
+            source2.next()
+        );
 
-        let mut source = make_source("éé");
-        assert_eq!(Some((ByteIndex(1), 'é')), source.peek());
-        assert_eq!(Some((ByteIndex(1), 'é')), source.next());
-        assert_eq!(Some((ByteIndex(3), 'é')), source.peek());
-        assert_eq!(Some((ByteIndex(3), 'é')), source.next());
+        let id3 = codemap.add("nofile", "éé".to_string());
+        let file3 = codemap.get(id3).unwrap();
+        let mut source3 = FileMapSource::new(file3);
+        assert_eq!(
+            Some((SourceIndex::new(id3, ByteIndex(1)), 'é')),
+            source3.peek()
+        );
+        assert_eq!(
+            Some((SourceIndex::new(id3, ByteIndex(1)), 'é')),
+            source3.next()
+        );
+        assert_eq!(
+            Some((SourceIndex::new(id3, ByteIndex(3)), 'é')),
+            source3.peek()
+        );
+        assert_eq!(
+            Some((SourceIndex::new(id3, ByteIndex(3)), 'é')),
+            source3.next()
+        );
     }
 }

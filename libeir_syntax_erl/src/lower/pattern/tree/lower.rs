@@ -7,7 +7,6 @@ use libeir_ir::{
     PatternNode,
 };
 use libeir_intern::Ident;
-use libeir_diagnostics::DUMMY_SPAN;
 
 use super::{ Tree, TreeNode, TreeNodeKind, ConstraintKind };
 use super::super::{ ClauseLowerCtx, EqGuard };
@@ -85,13 +84,14 @@ fn create_nodes(
 ) {
     assert!(!map.contains_key(&node));
 
-    let p_node = b.pat_mut().node_empty(Some(DUMMY_SPAN));
+    let span = t.node_span(node);
+    let p_node = b.pat_mut().node_empty(Some(span));
     map.insert(node, p_node);
 
     match &t.nodes[node] {
         TreeNodeKind::Atomic(_, _) => (),
         TreeNodeKind::Value(_, _) => (),
-        TreeNodeKind::Wildcard => (),
+        TreeNodeKind::Wildcard(_) => (),
         TreeNodeKind::Tuple { elems, .. } => {
             for elem in elems.as_slice(&t.node_pool) {
                 create_nodes(b, t, map, *elem);
@@ -139,7 +139,7 @@ fn lower_tree_node(
         TreeNodeKind::Value(_, Either::Right(_node)) => {
             unimplemented!()
         }
-        TreeNodeKind::Wildcard => {
+        TreeNodeKind::Wildcard(_) => {
             b.pat_mut().wildcard(p_node);
         }
         TreeNodeKind::Tuple { span, elems } => {

@@ -13,7 +13,6 @@ pub trait Print {
 }
 
 impl<R, E> ParseResult<R, E> {
-
     pub fn unwrap(self) -> R {
         match self {
             ParseResult::Fail(_err) => {
@@ -43,5 +42,4 @@ impl<R, E> ParseResult<R, E> {
             },
         }
     }
-
 }

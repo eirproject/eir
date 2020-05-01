@@ -6,7 +6,6 @@ use libeir_ir::{
 use libeir_ir::constant::NilTerm;
 
 use libeir_intern::{ Ident, Symbol };
-use libeir_diagnostics::DUMMY_SPAN;
 
 use super::lower_function;
 
@@ -111,7 +110,7 @@ fn lower_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock,
                 }
                 Expr::Literal(Literal::Atom(_id, name)) => {
                     let local = LocalFunctionName {
-                        span: DUMMY_SPAN,
+                        span: callee.span(),
                         function: *name,
                         arity: args.len(),
                     };

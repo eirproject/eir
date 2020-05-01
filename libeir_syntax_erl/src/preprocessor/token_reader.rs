@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt::Display;
+use std::fs;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use snafu::ResultExt;
 
@@ -12,15 +13,15 @@ use libeir_util_parse::{FileMapSource, Scanner, Source};
 use crate::lexer::{AtomToken, SymbolToken, TokenConvertError};
 use crate::lexer::{Lexed, Lexer, LexicalToken, Symbol, Token};
 
+use super::errors;
 use super::macros::NoArgsMacroCall;
 use super::token_stream::TokenStream;
-use super::{MacroContainer, MacroCall, PreprocessorError, Result};
-use super::errors;
+use super::{MacroCall, MacroContainer, PreprocessorError, Result};
 
 pub trait TokenReader: Sized {
     type Source;
 
-    fn new(codemap: Arc<RwLock<CodeMap>>, tokens: Self::Source) -> Self;
+    fn new(codemap: Arc<CodeMap>, tokens: Self::Source) -> Self;
 
     fn inject_include<P>(&mut self, path: P) -> Result<()>
     where
@@ -34,10 +35,7 @@ pub trait TokenReader: Sized {
         V::try_read_from(self)
     }
 
-    fn try_read_macro_call(
-        &mut self,
-        macros: &MacroContainer,
-    ) -> Result<Option<MacroCall>> {
+    fn try_read_macro_call(&mut self, macros: &MacroContainer) -> Result<Option<MacroCall>> {
         if let Some(call) = self.try_read::<NoArgsMacroCall>()? {
             let span = call.span();
             let start = span.start();
@@ -59,7 +57,6 @@ pub trait TokenReader: Sized {
 
             // If there is a function macro defined with the name...
             if macros.defined_func(&call.name()) {
-
                 let paren_ahead = if let Some(lex_tok) = self.try_read_token()? {
                     let res = if let LexicalToken(_, Token::LParen, _) = lex_tok {
                         true
@@ -76,7 +73,6 @@ pub trait TokenReader: Sized {
                 if paren_ahead {
                     call.args = Some(self.read()?);
                 }
-
             }
 
             Ok(Some(call))
@@ -108,14 +104,14 @@ pub trait TokenReader: Sized {
 
 /// Reads tokens from an in-memory buffer (VecDeque)
 pub struct TokenBufferReader {
-    codemap: Arc<RwLock<CodeMap>>,
+    codemap: Arc<CodeMap>,
     tokens: VecDeque<Lexed>,
     unread: VecDeque<LexicalToken>,
 }
 impl TokenReader for TokenBufferReader {
     type Source = VecDeque<Lexed>;
 
-    fn new(codemap: Arc<RwLock<CodeMap>>, tokens: Self::Source) -> Self {
+    fn new(codemap: Arc<CodeMap>, tokens: Self::Source) -> Self {
         TokenBufferReader {
             codemap: codemap.clone(),
             tokens,
@@ -128,8 +124,13 @@ impl TokenReader for TokenBufferReader {
     where
         P: AsRef<Path>,
     {
-        let source = FileMapSource::from_path(self.codemap.clone(), path)
+        let path = path.as_ref();
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| e.into())
             .context(errors::Source)?;
+        let id = self.codemap.add(path, content);
+        let file = self.codemap.get(id).unwrap();
+        let source = FileMapSource::new(file);
         let scanner = Scanner::new(source);
         let lexer = Lexer::new(scanner);
         let mut tokens: VecDeque<Lexed> = lexer.collect();
@@ -142,9 +143,7 @@ impl TokenReader for TokenBufferReader {
         if let Some(token) = self.unread.pop_front() {
             return Ok(Some(token));
         }
-        self.tokens.pop_front()
-            .transpose()
-            .context(errors::Lexical)
+        self.tokens.pop_front().transpose().context(errors::Lexical)
     }
 
     fn read_token(&mut self) -> Result<LexicalToken> {
@@ -162,7 +161,7 @@ impl TokenReader for TokenBufferReader {
 
 /// Reads tokens from a TokenStream (backed by a Lexer)
 pub struct TokenStreamReader<S> {
-    codemap: Arc<RwLock<CodeMap>>,
+    codemap: Arc<CodeMap>,
     tokens: TokenStream<S>,
     unread: VecDeque<LexicalToken>,
 }
@@ -172,7 +171,7 @@ where
 {
     type Source = Lexer<S>;
 
-    fn new(codemap: Arc<RwLock<CodeMap>>, tokens: Self::Source) -> Self {
+    fn new(codemap: Arc<CodeMap>, tokens: Self::Source) -> Self {
         TokenStreamReader {
             codemap: codemap.clone(),
             tokens: TokenStream::new(tokens),
@@ -185,8 +184,13 @@ where
     where
         P: AsRef<Path>,
     {
-        let source = Source::from_path(self.codemap.clone(), path)
+        let path = path.as_ref();
+        let content = fs::read_to_string(path)
+            .map_err(|e| e.into())
             .context(errors::Source)?;
+        let id = self.codemap.add(path, content);
+        let file = self.codemap.get(id).unwrap();
+        let source = Source::new(file);
         let scanner = Scanner::new(source);
         let lexer = Lexer::new(scanner);
         self.tokens.include(lexer);
@@ -197,9 +201,7 @@ where
         if let Some(token) = self.unread.pop_front() {
             return Ok(Some(token));
         }
-        self.tokens.next()
-            .transpose()
-            .context(errors::Lexical)
+        self.tokens.next().transpose().context(errors::Lexical)
     }
 
     fn read_token(&mut self) -> Result<LexicalToken> {
@@ -252,10 +254,16 @@ pub trait ReadFrom: Sized {
         Self::read_from(reader)
             .map_err(|err| match err {
                 PreprocessorError::UnexpectedToken { token, .. } => {
-                    PreprocessorError::UnexpectedToken { token, expected: vec![expected.to_string()], }
+                    PreprocessorError::UnexpectedToken {
+                        token,
+                        expected: vec![expected.to_string()],
+                    }
                 }
                 PreprocessorError::InvalidTokenType { token, .. } => {
-                    PreprocessorError::InvalidTokenType { token, expected: expected.to_string(), }
+                    PreprocessorError::InvalidTokenType {
+                        token,
+                        expected: expected.to_string(),
+                    }
                 }
                 _ => err,
             })

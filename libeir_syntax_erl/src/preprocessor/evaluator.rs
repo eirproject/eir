@@ -1,6 +1,6 @@
 use libeir_util_number::Integer;
 
-use libeir_diagnostics::ByteSpan;
+use libeir_diagnostics::SourceSpan;
 
 use crate::lexer::{symbols, Ident, Symbol};
 use crate::parser::ast::*;
@@ -83,7 +83,12 @@ pub fn eval(expr: Expr) -> Result<Expr, PreprocessorError> {
             id,
             elements: eval_bin_elements(elements)?,
         }),
-        Expr::Record(Record { span, id, name, fields }) => Expr::Record(Record {
+        Expr::Record(Record {
+            span,
+            id,
+            name,
+            fields,
+        }) => Expr::Record(Record {
             span,
             id,
             name,
@@ -119,10 +124,7 @@ pub fn eval(expr: Expr) -> Result<Expr, PreprocessorError> {
             return Err(PreprocessorError::InvalidConstExpression { span });
         }
         Expr::Apply(Apply {
-            span,
-            callee,
-            args,
-            ..
+            span, callee, args, ..
         }) => {
             let _args = eval_list(args)?;
             match eval(*callee)? {
@@ -156,9 +158,7 @@ pub fn eval(expr: Expr) -> Result<Expr, PreprocessorError> {
             return eval_unary_op(span, op, operand);
         }
         expr => {
-            return Err(PreprocessorError::InvalidConstExpression {
-                span: expr.span(),
-            });
+            return Err(PreprocessorError::InvalidConstExpression { span: expr.span() });
         }
     };
 
@@ -180,13 +180,23 @@ fn eval_map(mut fields: Vec<MapField>) -> Result<Vec<MapField>, PreprocessorErro
 
     for field in fields.drain(..) {
         match field {
-            MapField::Assoc { span, id, key, value } => result.push(MapField::Assoc {
+            MapField::Assoc {
+                span,
+                id,
+                key,
+                value,
+            } => result.push(MapField::Assoc {
                 span,
                 id,
                 key: eval(key)?,
                 value: eval(value)?,
             }),
-            MapField::Exact { span, id, key, value } => result.push(MapField::Exact {
+            MapField::Exact {
+                span,
+                id,
+                key,
+                value,
+            } => result.push(MapField::Exact {
                 span,
                 id,
                 key: eval(key)?,
@@ -279,7 +289,7 @@ fn eval_bin_elements(
 }
 
 fn eval_binary_op(
-    span: ByteSpan,
+    span: SourceSpan,
     id: NodeId,
     lhs: Expr,
     op: BinaryOp,
@@ -312,7 +322,7 @@ fn eval_binary_op(
     }
 }
 
-fn eval_unary_op(span: ByteSpan, op: UnaryOp, rhs: Expr) -> Result<Expr, PreprocessorError> {
+fn eval_unary_op(span: SourceSpan, op: UnaryOp, rhs: Expr) -> Result<Expr, PreprocessorError> {
     let expr = match op {
         UnaryOp::Plus => match rhs {
             Expr::Literal(Literal::Integer(id, span, i)) if i < 0 => {
@@ -337,21 +347,29 @@ fn eval_unary_op(span: ByteSpan, op: UnaryOp, rhs: Expr) -> Result<Expr, Preproc
             _ => return Err(PreprocessorError::InvalidConstExpression { span }),
         },
         UnaryOp::Bnot => match rhs {
-            Expr::Literal(Literal::Integer(id, span, Integer::Small(i))) => Expr::Literal(Literal::Integer(id, span, (!i).into())),
+            Expr::Literal(Literal::Integer(id, span, Integer::Small(i))) => {
+                Expr::Literal(Literal::Integer(id, span, (!i).into()))
+            }
             _ => return Err(PreprocessorError::InvalidConstExpression { span }),
         },
         UnaryOp::Not => match rhs {
             Expr::Literal(Literal::Atom(id, Ident { name, span })) if name == symbols::True => {
-                Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::False,
-                    span,
-                }))
+                Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::False,
+                        span,
+                    },
+                ))
             }
             Expr::Literal(Literal::Atom(id, Ident { name, span })) if name == symbols::False => {
-                Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::True,
-                    span,
-                }))
+                Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::True,
+                        span,
+                    },
+                ))
             }
             _ => return Err(PreprocessorError::InvalidConstExpression { span }),
         },
@@ -360,7 +378,7 @@ fn eval_unary_op(span: ByteSpan, op: UnaryOp, rhs: Expr) -> Result<Expr, Preproc
 }
 
 fn eval_boolean(
-    span: ByteSpan,
+    span: SourceSpan,
     id: NodeId,
     lhs: Expr,
     op: BinaryOp,
@@ -375,40 +393,58 @@ fn eval_boolean(
     match op {
         BinaryOp::Xor => {
             if (left != right) && (left || right) {
-                return Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::True,
-                    span,
-                })));
+                return Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::True,
+                        span,
+                    },
+                )));
             }
-            return Ok(Expr::Literal(Literal::Atom(id, Ident {
-                name: symbols::False,
-                span,
-            })));
+            return Ok(Expr::Literal(Literal::Atom(
+                id,
+                Ident {
+                    name: symbols::False,
+                    span,
+                },
+            )));
         }
         BinaryOp::OrElse | BinaryOp::Or => {
             if left || right {
-                return Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::True,
-                    span,
-                })));
+                return Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::True,
+                        span,
+                    },
+                )));
             } else {
-                return Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::False,
-                    span,
-                })));
+                return Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::False,
+                        span,
+                    },
+                )));
             }
         }
         BinaryOp::AndAlso | BinaryOp::And => {
             if left && right {
-                return Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::True,
-                    span,
-                })));
+                return Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::True,
+                        span,
+                    },
+                )));
             } else {
-                return Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::False,
-                    span,
-                })));
+                return Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::False,
+                        span,
+                    },
+                )));
             }
         }
         _ => unreachable!(),
@@ -416,7 +452,7 @@ fn eval_boolean(
 }
 
 fn eval_equality(
-    span: ByteSpan,
+    span: SourceSpan,
     id: NodeId,
     lhs: Expr,
     op: BinaryOp,
@@ -428,28 +464,40 @@ fn eval_equality(
         match op {
             BinaryOp::Equal => {
                 if lhs == rhs {
-                    Ok(Expr::Literal(Literal::Atom(id, Ident {
-                        name: symbols::True,
-                        span,
-                    })))
+                    Ok(Expr::Literal(Literal::Atom(
+                        id,
+                        Ident {
+                            name: symbols::True,
+                            span,
+                        },
+                    )))
                 } else {
-                    Ok(Expr::Literal(Literal::Atom(id, Ident {
-                        name: symbols::False,
-                        span,
-                    })))
+                    Ok(Expr::Literal(Literal::Atom(
+                        id,
+                        Ident {
+                            name: symbols::False,
+                            span,
+                        },
+                    )))
                 }
             }
             BinaryOp::NotEqual => {
                 if lhs != rhs {
-                    Ok(Expr::Literal(Literal::Atom(id, Ident {
-                        name: symbols::True,
-                        span,
-                    })))
+                    Ok(Expr::Literal(Literal::Atom(
+                        id,
+                        Ident {
+                            name: symbols::True,
+                            span,
+                        },
+                    )))
                 } else {
-                    Ok(Expr::Literal(Literal::Atom(id, Ident {
-                        name: symbols::False,
-                        span,
-                    })))
+                    Ok(Expr::Literal(Literal::Atom(
+                        id,
+                        Ident {
+                            name: symbols::False,
+                            span,
+                        },
+                    )))
                 }
             }
             _ => unreachable!(),
@@ -458,7 +506,7 @@ fn eval_equality(
 }
 
 fn eval_strict_equality(
-    span: ByteSpan,
+    span: SourceSpan,
     id: NodeId,
     lhs: Expr,
     op: BinaryOp,
@@ -467,28 +515,40 @@ fn eval_strict_equality(
     match op {
         BinaryOp::StrictEqual => {
             if lhs == rhs {
-                Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::True,
-                    span,
-                })))
+                Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::True,
+                        span,
+                    },
+                )))
             } else {
-                Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::False,
-                    span,
-                })))
+                Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::False,
+                        span,
+                    },
+                )))
             }
         }
         BinaryOp::StrictNotEqual => {
             if lhs != rhs {
-                Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::True,
-                    span,
-                })))
+                Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::True,
+                        span,
+                    },
+                )))
             } else {
-                Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::False,
-                    span,
-                })))
+                Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::False,
+                        span,
+                    },
+                )))
             }
         }
         _ => unreachable!(),
@@ -496,7 +556,7 @@ fn eval_strict_equality(
 }
 
 fn eval_numeric_equality(
-    span: ByteSpan,
+    span: SourceSpan,
     id: NodeId,
     lhs: Expr,
     op: BinaryOp,
@@ -505,44 +565,70 @@ fn eval_numeric_equality(
     let result = match (lhs, rhs) {
         (Expr::Literal(Literal::Integer(_, _, x)), Expr::Literal(Literal::Integer(_, _, y))) => {
             match op {
-                BinaryOp::Equal if x == y => Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::True,
-                    span,
-                })),
-                BinaryOp::NotEqual if x != y => Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::True,
-                    span,
-                })),
-                BinaryOp::Equal => Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::False,
-                    span,
-                })),
-                BinaryOp::NotEqual => Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::False,
-                    span,
-                })),
+                BinaryOp::Equal if x == y => Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::True,
+                        span,
+                    },
+                )),
+                BinaryOp::NotEqual if x != y => Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::True,
+                        span,
+                    },
+                )),
+                BinaryOp::Equal => Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::False,
+                        span,
+                    },
+                )),
+                BinaryOp::NotEqual => Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::False,
+                        span,
+                    },
+                )),
                 _ => unreachable!(),
             }
         }
-        (Expr::Literal(Literal::Float(_, _, x)), Expr::Literal(Literal::Float(_, _, y))) => match op {
-            BinaryOp::Equal if x == y => Expr::Literal(Literal::Atom(id, Ident {
-                name: symbols::True,
-                span,
-            })),
-            BinaryOp::NotEqual if x != y => Expr::Literal(Literal::Atom(id, Ident {
-                name: symbols::True,
-                span,
-            })),
-            BinaryOp::Equal => Expr::Literal(Literal::Atom(id, Ident {
-                name: symbols::False,
-                span,
-            })),
-            BinaryOp::NotEqual => Expr::Literal(Literal::Atom(id, Ident {
-                name: symbols::False,
-                span,
-            })),
-            _ => unreachable!(),
-        },
+        (Expr::Literal(Literal::Float(_, _, x)), Expr::Literal(Literal::Float(_, _, y))) => {
+            match op {
+                BinaryOp::Equal if x == y => Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::True,
+                        span,
+                    },
+                )),
+                BinaryOp::NotEqual if x != y => Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::True,
+                        span,
+                    },
+                )),
+                BinaryOp::Equal => Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::False,
+                        span,
+                    },
+                )),
+                BinaryOp::NotEqual => Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::False,
+                        span,
+                    },
+                )),
+                _ => unreachable!(),
+            }
+        }
 
         (
             Expr::Literal(Literal::Integer(xspan, xid, x)),
@@ -577,7 +663,7 @@ fn eval_numeric_equality(
 }
 
 fn eval_comparison(
-    span: ByteSpan,
+    span: SourceSpan,
     id: NodeId,
     lhs: Expr,
     op: BinaryOp,
@@ -586,32 +672,44 @@ fn eval_comparison(
     match op {
         BinaryOp::Lt | BinaryOp::Lte => {
             if lhs < rhs {
-                Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::True,
-                    span,
-                })))
+                Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::True,
+                        span,
+                    },
+                )))
             } else if op == BinaryOp::Lte {
                 eval_equality(span, id, lhs, BinaryOp::Equal, rhs)
             } else {
-                Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::False,
-                    span,
-                })))
+                Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::False,
+                        span,
+                    },
+                )))
             }
         }
         BinaryOp::Gt | BinaryOp::Gte => {
             if lhs > rhs {
-                Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::True,
-                    span,
-                })))
+                Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::True,
+                        span,
+                    },
+                )))
             } else if op == BinaryOp::Gte {
                 eval_equality(span, id, lhs, BinaryOp::Equal, rhs)
             } else {
-                Ok(Expr::Literal(Literal::Atom(id, Ident {
-                    name: symbols::False,
-                    span,
-                })))
+                Ok(Expr::Literal(Literal::Atom(
+                    id,
+                    Ident {
+                        name: symbols::False,
+                        span,
+                    },
+                )))
             }
         }
         _ => unreachable!(),
@@ -619,7 +717,7 @@ fn eval_comparison(
 }
 
 fn eval_arith(
-    span: ByteSpan,
+    span: SourceSpan,
     id: NodeId,
     lhs: Expr,
     op: BinaryOp,
@@ -628,9 +726,10 @@ fn eval_arith(
     if is_number(&lhs) && is_number(&rhs) {
         let result = match (lhs, rhs) {
             // Types match
-            (Expr::Literal(Literal::Integer(_, _, x)), Expr::Literal(Literal::Integer(_, _, y))) => {
-                eval_op_int(span, id, x, op, &y)?
-            }
+            (
+                Expr::Literal(Literal::Integer(_, _, x)),
+                Expr::Literal(Literal::Integer(_, _, y)),
+            ) => eval_op_int(span, id, x, op, &y)?,
             (Expr::Literal(Literal::Float(_, _, x)), Expr::Literal(Literal::Float(_, _, y))) => {
                 eval_op_float(span, id, x, op, y)?
             }
@@ -652,17 +751,19 @@ fn eval_arith(
 }
 
 fn eval_op_int(
-    span: ByteSpan,
+    span: SourceSpan,
     id: NodeId,
     x: Integer,
     op: BinaryOp,
-    y: &Integer
+    y: &Integer,
 ) -> Result<Expr, PreprocessorError> {
     let result = match op {
         BinaryOp::Add => Expr::Literal(Literal::Integer(span, id, x + y)),
         BinaryOp::Sub => Expr::Literal(Literal::Integer(span, id, x - y)),
         BinaryOp::Multiply => Expr::Literal(Literal::Integer(span, id, x * y)),
-        BinaryOp::Divide if *y == 0 => return Err(PreprocessorError::InvalidConstExpression{ span }),
+        BinaryOp::Divide if *y == 0 => {
+            return Err(PreprocessorError::InvalidConstExpression { span })
+        }
         BinaryOp::Divide => Expr::Literal(Literal::Float(span, id, x.to_float() / y.to_float())),
         BinaryOp::Div if *y == 0 => return Err(PreprocessorError::InvalidConstExpression { span }),
         BinaryOp::Div => Expr::Literal(Literal::Integer(span, id, x / y)),
@@ -673,11 +774,11 @@ fn eval_op_int(
 }
 
 fn eval_op_float(
-    span: ByteSpan,
+    span: SourceSpan,
     id: NodeId,
     x: f64,
     op: BinaryOp,
-    y: f64
+    y: f64,
 ) -> Result<Expr, PreprocessorError> {
     match op {
         BinaryOp::Add => Ok(Expr::Literal(Literal::Float(span, id, x + y))),
@@ -694,7 +795,7 @@ fn eval_op_float(
 }
 
 fn eval_shift(
-    span: ByteSpan,
+    span: SourceSpan,
     id: NodeId,
     lhs: Expr,
     op: BinaryOp,
@@ -713,7 +814,7 @@ fn eval_shift(
                         _ => unreachable!(),
                     };
                     Ok(Expr::Literal(Literal::Integer(span, id, result.into())))
-                },
+                }
                 _ => return Err(PreprocessorError::InvalidConstExpression { span }),
             }
         }

@@ -4,7 +4,7 @@ mod functions;
 mod module;
 mod types;
 
-use libeir_diagnostics::ByteIndex;
+use libeir_diagnostics::SourceIndex;
 
 pub use self::attributes::*;
 pub use self::expr::*;
@@ -19,7 +19,7 @@ use crate::preprocessor::PreprocessorError;
 
 /// Used for AST functions which need to raise an error to the parser directly
 pub type TryParseResult<T> =
-    Result<T, lalrpop_util::ParseError<ByteIndex, Token, PreprocessorError>>;
+    Result<T, lalrpop_util::ParseError<SourceIndex, Token, PreprocessorError>>;
 
 /// Represents either a concrete name (an atom) or a variable name (an identifier).
 /// This is used in constructs where either are permitted.
@@ -54,7 +54,6 @@ pub struct NodeId(pub usize);
 #[derive(Debug, Clone)]
 pub struct NodeIdGenerator(usize);
 impl NodeIdGenerator {
-
     pub fn new() -> Self {
         NodeIdGenerator(0)
     }
@@ -63,7 +62,6 @@ impl NodeIdGenerator {
         self.0 += 1;
         NodeId(self.0)
     }
-
 }
 
 /// The set of all binary operators which may be used in expressions

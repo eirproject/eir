@@ -1,11 +1,11 @@
 use std::path::Path;
-use std::borrow::Cow;
+use std::sync::Arc;
 
-use libeir_util_parse_listing::{parser::ParseError, ast::Root};
-use libeir_util_parse::{Parse, ArcCodemap, Source, FileMapSource, ToDiagnostic, error_tee};
+use libeir_diagnostics::*;
 use libeir_ir::Module;
-use libeir_diagnostics::{Diagnostic, FileName};
-use libeir_syntax_erl::{lower_module, LowerError, lower_abstr};
+use libeir_syntax_erl::{lower_abstr, lower_module, LowerError};
+use libeir_util_parse::{error_tee, Parse, Parser};
+use libeir_util_parse_listing::{ast::Root, parser::ParseError};
 
 use super::{Frontend, FrontendErrorReceiver};
 
@@ -32,27 +32,30 @@ impl From<LowerError> for Error {
     }
 }
 
-pub struct AbstrErlangFrontend {}
-
+pub struct AbstrErlangFrontend {
+    parser: Parser<()>,
+}
 impl AbstrErlangFrontend {
-    pub fn new() -> Self {
-        AbstrErlangFrontend {}
+    pub fn new(codemap: Arc<CodeMap>) -> Self {
+        Self {
+            parser: Parser::new((), codemap),
+        }
     }
 }
-
 impl Frontend for AbstrErlangFrontend {
     type Error = Error;
 
     fn parse_source<'a>(
         &self,
         errors: &'a mut FrontendErrorReceiver<'a, Self::Error>,
-        codemap: ArcCodemap,
-        source: FileMapSource,
+        source: Arc<SourceFile>,
     ) -> Result<Module, ()> {
         error_tee(errors, |mut errors| {
-            let root: Root = Root::parse(&(), &codemap, &mut errors.make_into_adapter(), source)?;
+            let root = self
+                .parser
+                .parse::<Root>(&mut errors.make_into_adapter(), source)?;
             let ast = lower_abstr(&root);
-            let eir = lower_module(&mut errors.make_into_adapter(), &codemap, &ast)?;
+            let eir = lower_module(&mut errors.make_into_adapter(), self.parser.codemap.clone(), &ast)?;
             Ok(eir)
         })
     }
@@ -60,33 +63,28 @@ impl Frontend for AbstrErlangFrontend {
     fn parse_string<'a>(
         &self,
         errors: &'a mut FrontendErrorReceiver<'a, Self::Error>,
-        codemap: ArcCodemap,
         source: &str,
     ) -> Result<Module, ()> {
-        let filemap = {
-            codemap.write().unwrap().add_filemap(
-                FileName::Virtual(Cow::Borrowed("nofile")),
-                source.to_owned(),
-            )
-        };
-        self.parse_source(errors, codemap, FileMapSource::new(filemap))
+        let id = self.parser.codemap.add("nofile", source.to_string());
+        let file = self.parser.codemap.get(id).unwrap();
+        self.parse_source(errors, file)
     }
 
     fn parse_file<'a>(
         &self,
         errors: &'a mut FrontendErrorReceiver<'a, Self::Error>,
-        codemap: ArcCodemap,
-        source: &Path,
+        path: &Path,
     ) -> Result<Module, ()> {
-        match FileMapSource::from_path(codemap.clone(), source) {
+        match std::fs::read_to_string(path) {
             Err(err) => {
-                errors.error(<Root as Parse<Root>>::file_map_error(err).into());
+                errors.error(<Root as Parse<Root>>::file_map_error(err.into()).into());
                 Err(())
-            },
-            Ok(source) => self.parse_source(errors, codemap, source),
+            }
+            Ok(content) => {
+                let id = self.parser.codemap.add(path, content);
+                let file = self.parser.codemap.get(id).unwrap();
+                self.parse_source(errors, file)
+            }
         }
     }
-
 }
-
-impl_dyn_frontend!(AbstrErlangFrontend);

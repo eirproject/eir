@@ -7,12 +7,10 @@ use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 pub enum PathVariableSubstituteError {
-
     InvalidPathVariable {
         variable: String,
         source: std::env::VarError,
     }
-
 }
 impl PathVariableSubstituteError {
     pub fn to_diagnostic(&self) -> Diagnostic {
@@ -21,19 +19,21 @@ impl PathVariableSubstituteError {
                 source: env::VarError::NotPresent,
                 variable,
             } => {
-                Diagnostic::new_error(format!(
-                    "invalid environment variable '{}': not defined",
-                    variable,
-                ))
+                Diagnostic::error()
+                    .with_message(format!(
+                        "invalid environment variable '{}': not defined",
+                        variable,
+                    ))
             },
             PathVariableSubstituteError::InvalidPathVariable {
                 source: env::VarError::NotUnicode { .. },
                 variable,
             } => {
-                Diagnostic::new_error(format!(
-                    "invalid environment variable '{}': contains invalid unicode data",
-                    variable,
-                ))
+                Diagnostic::error()
+                    .with_message(format!(
+                        "invalid environment variable '{}': contains invalid unicode data",
+                        variable,
+                    ))
             },
         }
     }

@@ -1,68 +1,70 @@
-use std::sync::{RwLock, Arc};
-use std::borrow::Cow;
+use std::sync::Arc;
 use std::path::Path;
 
-use libeir_diagnostics::{CodeMap, FileName};
+use libeir_diagnostics::*;
 
-use crate::{Source, SourceError, FileMapSource};
 use crate::ErrorReceiver;
-
-pub type ArcCodemap = Arc<RwLock<CodeMap>>;
+use crate::{FileMapSource, Source, SourceError};
 
 pub struct Parser<C> {
     pub config: C,
+    pub codemap: Arc<CodeMap>,
 }
 
 impl<C> Parser<C> {
-
-    pub fn new(config: C) -> Self {
-        Parser {
-            config,
-        }
+    pub fn new(config: C, codemap: Arc<CodeMap>) -> Self {
+        Self { config, codemap }
     }
-
 }
 
 impl<C> Parser<C> {
-
-    pub fn parse_string<'a, S, T>(
+    pub fn parse<'a, T>(
         &self,
         errors: &'a mut (dyn ErrorReceiver<E = <T as Parse>::Error, W = <T as Parse>::Error> + 'a),
-        codemap: &ArcCodemap,
+        source: Arc<SourceFile>,
+    ) -> Result<T, ()>
+    where
+        T: Parse<Config = C>,
+    {
+        <T as Parse<T>>::parse(&self, errors, FileMapSource::new(source))
+    }
+
+    pub fn parse_string<'a, T, S>(
+        &self,
+        errors: &'a mut (dyn ErrorReceiver<E = <T as Parse>::Error, W = <T as Parse>::Error> + 'a),
         source: S,
     ) -> Result<T, ()>
     where
-        S: AsRef<str>,
         T: Parse<Config = C>,
+        S: AsRef<str>,
     {
-        let filemap = {
-            codemap.write().unwrap().add_filemap(
-                FileName::Virtual(Cow::Borrowed("nofile")),
-                source.as_ref().to_owned(),
-            )
-        };
-        <T as Parse<T>>::parse(&self.config, codemap, errors, FileMapSource::new(filemap))
+        let id = self.codemap.add("nofile", source.as_ref().to_string());
+        let file = self.codemap.get(id).unwrap();
+        self.parse(errors, file)
     }
 
-    pub fn parse_file<'a, P, T>(
+    pub fn parse_file<'a, T, S>(
         &self,
         errors: &'a mut (dyn ErrorReceiver<E = <T as Parse>::Error, W = <T as Parse>::Error> + 'a),
-        codemap: &ArcCodemap,
-        path: P,
+        source: S,
     ) -> Result<T, ()>
     where
-        P: AsRef<Path>,
         T: Parse<Config = C>,
+        S: AsRef<Path>,
     {
-        match FileMapSource::from_path(codemap.clone(), path) {
+        let path = source.as_ref();
+        match std::fs::read_to_string(path) {
             Err(err) => {
-                errors.error(<T as Parse<T>>::file_map_error(err));
+                errors.error(<T as Parse<T>>::file_map_error(err.into()));
                 Err(())
-            },
-            Ok(source) => <T as Parse<T>>::parse(&self.config, codemap, errors, source),
+            }
+            Ok(content) => {
+                let id = self.codemap.add(path, content);
+                let file = self.codemap.get(id).unwrap();
+                self.parse(errors, file)
+            }
         }
     }
-
 }
 
 pub trait Parse<T = Self> {
@@ -75,8 +77,7 @@ pub trait Parse<T = Self> {
 
     /// Initializes a token stream for the underlying parser and invokes parse_tokens
     fn parse<'a, S>(
-        config: &Self::Config,
-        codemap: &ArcCodemap,
+        parser: &Parser<Self::Config>,
         errors: &'a mut (dyn ErrorReceiver<E = Self::Error, W = Self::Error> + 'a),
         source: S,
     ) -> Result<T, ()>

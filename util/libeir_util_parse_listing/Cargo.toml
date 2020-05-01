@@ -14,5 +14,8 @@ libeir_intern = { path = "../../libeir_intern" }
 
 lalrpop-util = "0.17"
 
+[dev-dependencies]
+codespan-reporting = "0.9"
+
 [build-dependencies]
 lalrpop = "0.17"

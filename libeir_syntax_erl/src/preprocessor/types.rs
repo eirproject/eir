@@ -2,7 +2,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::mem;
 
-use libeir_diagnostics::ByteSpan;
+use libeir_diagnostics::SourceSpan;
 
 use crate::lexer::{AtomToken, IdentToken, SymbolToken};
 use crate::lexer::{LexicalToken, Symbol, Token};
@@ -33,7 +33,7 @@ impl MacroName {
         }
     }
 
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         match *self {
             MacroName::Atom(ref token) => token.span(),
             MacroName::Variable(ref token) => token.span(),
@@ -92,8 +92,8 @@ impl MacroVariables {
         self.len() == 0
     }
 
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self._open_paren.0, self._close_paren.2)
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self._open_paren.0, self._close_paren.2)
     }
 }
 impl Eq for MacroVariables {}
@@ -143,8 +143,8 @@ impl MacroArgs {
         self.len() == 0
     }
 
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self._open_paren.0, self._close_paren.2)
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self._open_paren.0, self._close_paren.2)
     }
 }
 impl Eq for MacroArgs {}
@@ -180,10 +180,10 @@ pub struct MacroArg {
     pub tokens: Vec<LexicalToken>,
 }
 impl MacroArg {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self.tokens.first().unwrap().span().start();
         let end = self.tokens.last().unwrap().span().end();
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 }
 impl fmt::Display for MacroArg {
@@ -267,11 +267,15 @@ impl<T: PartialEq> PartialEq for Tail<T> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Nil, Self::Nil) => true,
-            (Self::Cons { head: lh, tail: lt, .. }, 
-             Self::Cons { head: rh, tail: rt, .. }) => {
-                lh == rh && lt == rt
-            }
-            _ => false
+            (
+                Self::Cons {
+                    head: lh, tail: lt, ..
+                },
+                Self::Cons {
+                    head: rh, tail: rt, ..
+                },
+            ) => lh == rh && lt == rt,
+            _ => false,
         }
     }
 }
@@ -318,8 +322,7 @@ impl<T: PartialEq> PartialEq for List<T> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Nil, Self::Nil) => true,
-            (Self::Cons { head: lh, tail: lt }, 
-             Self::Cons { head: rh, tail: rt }) => {
+            (Self::Cons { head: lh, tail: lt }, Self::Cons { head: rh, tail: rt }) => {
                 lh == rh && lt == rt
             }
             _ => false,

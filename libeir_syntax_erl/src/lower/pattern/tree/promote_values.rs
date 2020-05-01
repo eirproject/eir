@@ -10,7 +10,6 @@ use libeir_ir::{
 };
 
 use libeir_intern::Ident;
-use libeir_diagnostics::DUMMY_SPAN;
 
 use libeir_util_datastructures::hashmap_stack::HashMapStack;
 
@@ -155,7 +154,7 @@ fn promote_values_node(
         for other in const_iter {
             if first != other {
                 prom.ctx.warn(LowerError::UnmatchablePatternWarning {
-                    pat: t.node_span(node),
+                    pat: Some(t.node_span(node)),
                     reason: None,
                 });
                 t.unmatchable = true;
@@ -186,11 +185,11 @@ fn promote_values_node(
                 }
             }
         }
-        TreeNodeKind::Wildcard => {
+        TreeNodeKind::Wildcard(span) => {
             // Prefer to promote to constants, here we have
             // the most information.
             if let Some(cons) = const_constraint {
-                t.nodes[node] = TreeNodeKind::Atomic(DUMMY_SPAN, cons);
+                t.nodes[node] = TreeNodeKind::Atomic(span, cons);
                 return;
             }
             // Second choice is PrimOps. Here we have a certain
@@ -200,7 +199,7 @@ fn promote_values_node(
                 .nth(0)
             {
                 let val = b.value(prim);
-                t.nodes[node] = TreeNodeKind::Value(DUMMY_SPAN, Either::Left(val));
+                t.nodes[node] = TreeNodeKind::Value(span, Either::Left(val));
                 return;
             }
             // Third choice is any other value
@@ -208,7 +207,7 @@ fn promote_values_node(
                 .flat_map(|c| c.value())
                 .nth(0)
             {
-                t.nodes[node] = TreeNodeKind::Value(DUMMY_SPAN, Either::Left(val));
+                t.nodes[node] = TreeNodeKind::Value(span, Either::Left(val));
                 return;
             }
         }

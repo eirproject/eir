@@ -1,11 +1,7 @@
 use crate::lower;
 
-use libeir_ir::{ FunctionIdent };
 use libeir_syntax_erl::{ ParseConfig };
-use libeir_intern::Ident;
 use libeir_passes::PassManager;
-
-use libeir_interpreter::{ VMState, Term };
 
 //-module('Elixir.Keyword').
 //

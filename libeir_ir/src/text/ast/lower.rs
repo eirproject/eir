@@ -1,47 +1,44 @@
 use std::collections::HashMap;
 
-use libeir_util_datastructures::hashmap_stack::HashMapStack;
+use libeir_diagnostics::{Diagnostic, Label, SourceSpan, ToDiagnostic};
 use libeir_intern::Ident;
-use libeir_diagnostics::{ByteSpan, DUMMY_SPAN, Diagnostic, Label};
-use libeir_util_parse::{ErrorReceiver, ToDiagnostic};
+use libeir_util_datastructures::hashmap_stack::HashMapStack;
 use libeir_util_number::ToPrimitive;
+use libeir_util_parse::ErrorReceiver;
 
 use snafu::Snafu;
 
-use crate::{Module, FunctionIdent, Function, FunctionBuilder};
-use crate::{Block, Value};
-use crate::PatternNode;
 use crate::text::ast;
+use crate::PatternNode;
+use crate::{Block, Value};
+use crate::{Function, FunctionBuilder, FunctionIdent, Module};
 
 type ErrCollector<'a> = &'a mut dyn ErrorReceiver<E = LowerError, W = LowerError>;
 
 #[derive(Debug, Snafu)]
 pub enum LowerError {
-
     DuplicateDefinititon {
-        previous: ByteSpan,
-        current: ByteSpan,
+        previous: SourceSpan,
+        current: SourceSpan,
     },
 
     LabelNotFinalized {
-        span: ByteSpan,
+        span: SourceSpan,
     },
 
-    OpOutsideOfLabel {
-    },
+    OpOutsideOfLabel {},
 
     UndefinedVariable {
-        span: ByteSpan,
+        span: SourceSpan,
     },
 
     UndefinedBlock {
-        span: ByteSpan,
+        span: SourceSpan,
     },
 
     UndefinedBind {
-        span: ByteSpan,
+        span: SourceSpan,
     },
-
 }
 
 impl ToDiagnostic for LowerError {
@@ -49,38 +46,36 @@ impl ToDiagnostic for LowerError {
         let msg = self.to_string();
         match self {
             LowerError::DuplicateDefinititon { previous, current } => {
-                Diagnostic::new_error("duplicate identifier definition")
-                    .with_label(
-                        Label::new_primary(*current)
-                            .with_message("attempted redefinition")
-                    )
-                    .with_label(
-                        Label::new_primary(*previous)
-                            .with_message("previously defined here")
-                    )
-            },
-            LowerError::LabelNotFinalized { span } => {
-                Diagnostic::new_error("label not finalized")
-                    .with_label(
-                        Label::new_primary(*span)
-                            .with_message("block does not end with an operation")
-                    )
-            },
+                Diagnostic::error()
+                    .with_message("duplicate identifier definition")
+                    .with_labels(vec![
+                        Label::primary(current.source_id(), *current)
+                            .with_message("attempted redefinition"),
+                        Label::secondary(previous.source_id(), *previous)
+                            .with_message("previously defined here"),
+                    ])
+            }
+            LowerError::LabelNotFinalized { span } => Diagnostic::error()
+                .with_message("label not finalized")
+                .with_labels(vec![
+                    Label::primary(span.source_id(), *span)
+                        .with_message("block does not end with an operation"),
+                ]),
             LowerError::UndefinedVariable { span } => {
-                Diagnostic::new_error("undefined variable name")
-                    .with_label(
-                        Label::new_primary(*span)
-                            .with_message("variable name was not defined in the IR")
-                    )
-            },
-            LowerError::UndefinedBlock { span } => {
-                Diagnostic::new_error("undefined block name")
-                    .with_label(
-                        Label::new_primary(*span)
-                            .with_message("block name was not defined in the IR")
-                    )
-            },
-            _ => Diagnostic::new_error(msg),
+                Diagnostic::error()
+                    .with_message("undefined variable name")
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), *span)
+                            .with_message("variable name was not defined in the IR"),
+                    ])
+            }
+            LowerError::UndefinedBlock { span } => Diagnostic::error()
+                .with_message("undefined block name")
+                .with_labels(vec![
+                    Label::primary(span.source_id(), *span)
+                        .with_message("block name was not defined in the IR"),
+                ]),
+            _ => Diagnostic::error().with_message(msg),
         }
     }
 }
@@ -90,7 +85,6 @@ pub struct LowerMap {
     block_map: HashMap<Ident, Block>,
 }
 impl LowerMap {
-
     pub fn get_value(&self, ident: &str) -> Value {
         self.map[&Name::Value(Ident::from_str(ident))]
     }
@@ -98,7 +92,6 @@ impl LowerMap {
     pub fn get_block(&self, ident: &str) -> Block {
         self.block_map[&Ident::from_str(ident)]
     }
-
 }
 
 impl ast::Module {
@@ -109,7 +102,7 @@ impl ast::Module {
             match item {
                 ast::ModuleItem::Function(fun) => {
                     let fun_ir = module.add_function(
-                        DUMMY_SPAN,
+                        SourceSpan::UNKNOWN,
                         fun.name,
                         fun.arity.to_usize().unwrap(),
                     );
@@ -129,7 +122,7 @@ pub enum Name {
     Block(Ident),
 }
 impl Name {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
             Name::Value(ident) => ident.span,
             Name::Block(ident) => ident.span,
@@ -137,7 +130,12 @@ impl Name {
     }
 }
 
-fn insert_check_duplicate(errors: ErrCollector, scope: &mut HashMapStack<Name, (ByteSpan, Value)>, name: Name, value: Value) -> Result<(), ()> {
+fn insert_check_duplicate(
+    errors: ErrCollector,
+    scope: &mut HashMapStack<Name, (SourceSpan, Value)>,
+    name: Name,
+    value: Value,
+) -> Result<(), ()> {
     if let Some((span, _)) = scope.get(&name) {
         errors.error(LowerError::DuplicateDefinititon {
             previous: *span,
@@ -157,7 +155,7 @@ impl ast::Function {
             name: self.name,
             arity: self.arity.to_usize().unwrap(),
         };
-        let mut fun = Function::new(DUMMY_SPAN, ident);
+        let mut fun = Function::new(SourceSpan::UNKNOWN, ident);
 
         let mut b = fun.builder();
         let map = self.lower_into(errors, &mut b)?;
@@ -165,9 +163,13 @@ impl ast::Function {
         Ok((fun, map))
     }
 
-    pub fn lower_into(&self, errors: ErrCollector, b: &mut FunctionBuilder) -> Result<LowerMap, ()> {
-        let mut blocks: HashMap<Ident, (ByteSpan, Block)> = HashMap::new();
-        let mut scope: HashMapStack<Name, (ByteSpan, Value)> = HashMapStack::new();
+    pub fn lower_into(
+        &self,
+        errors: ErrCollector,
+        b: &mut FunctionBuilder,
+    ) -> Result<LowerMap, ()> {
+        let mut blocks: HashMap<Ident, (SourceSpan, Block)> = HashMap::new();
+        let mut scope: HashMapStack<Name, (SourceSpan, Value)> = HashMapStack::new();
         scope.push();
 
         // 1. Create blocks and their args
@@ -177,17 +179,19 @@ impl ast::Function {
                 ast::FunctionItem::Label(label) => {
                     let block_name = label.name.block().unwrap();
                     let block = b.block_insert();
-                    insert_check_duplicate(errors, &mut scope, Name::Block(block_name),
-                                           b.value(block))?;
-                    scope.insert(Name::Block(block_name),
-                                 (block_name.span, b.value(block)));
+                    insert_check_duplicate(
+                        errors,
+                        &mut scope,
+                        Name::Block(block_name),
+                        b.value(block),
+                    )?;
+                    scope.insert(Name::Block(block_name), (block_name.span, b.value(block)));
                     blocks.insert(block_name, (block_name.span, block));
 
                     for arg in label.args.iter() {
                         let arg_name = arg.value().unwrap();
                         let arg = b.block_arg_insert(block);
-                        insert_check_duplicate(errors, &mut scope, Name::Value(arg_name),
-                                               arg)?;
+                        insert_check_duplicate(errors, &mut scope, Name::Value(arg_name), arg)?;
                         scope.insert(Name::Value(arg_name), (block_name.span, arg));
                     }
 
@@ -202,18 +206,14 @@ impl ast::Function {
         b.block_set_entry(first_block.unwrap());
 
         // 2. Create assignments and bodies
-        let mut current_block: Option<(ByteSpan, Block)> = None;
+        let mut current_block: Option<(SourceSpan, Block)> = None;
         for item in self.items.iter() {
             match item {
                 ast::FunctionItem::Label(label) => {
                     let block_name = label.name.block().unwrap();
 
                     if let Some((span, _)) = current_block {
-                        errors.error(
-                            LowerError::LabelNotFinalized {
-                                span,
-                            }
-                        );
+                        errors.error(LowerError::LabelNotFinalized { span });
                         return Err(());
                     }
 
@@ -227,13 +227,7 @@ impl ast::Function {
                 }
                 ast::FunctionItem::Op(op) => {
                     if let Some((_, block)) = current_block {
-                        lower_operation(
-                            b,
-                            errors,
-                            &mut scope,
-                            block,
-                            op
-                        )?;
+                        lower_operation(b, errors, &mut scope, block, op)?;
                     } else {
                         errors.error(LowerError::OpOutsideOfLabel {});
                         return Err(());
@@ -247,9 +241,7 @@ impl ast::Function {
         }
 
         if let Some((span, _)) = current_block {
-            errors.error(LowerError::LabelNotFinalized {
-                span,
-            });
+            errors.error(LowerError::LabelNotFinalized { span });
             return Err(());
         }
 
@@ -266,15 +258,16 @@ impl ast::Function {
 fn lower_operation(
     b: &mut FunctionBuilder,
     errors: ErrCollector,
-    scope: &mut HashMapStack<Name, (ByteSpan, Value)>,
+    scope: &mut HashMapStack<Name, (SourceSpan, Value)>,
     block: Block,
     op: &ast::Op,
-) -> Result<(), ()>
-{
+) -> Result<(), ()> {
     match op {
         ast::Op::CallControlFlow(call) => {
             let target = lower_value(errors, b, scope, &call.target)?;
-            let args: Result<Vec<_>, _> = call.args.iter()
+            let args: Result<Vec<_>, _> = call
+                .args
+                .iter()
                 .map(|v| lower_value(errors, b, scope, v))
                 .collect();
             b.op_call_flow(block, target, &args?);
@@ -285,10 +278,12 @@ fn lower_operation(
             let ret = lower_value(errors, b, scope, &call.ret)?;
             let thr = lower_value(errors, b, scope, &call.thr)?;
 
-            let args: Result<Vec<_>, _> = call.args.iter()
+            let args: Result<Vec<_>, _> = call
+                .args
+                .iter()
                 .map(|v| lower_value(errors, b, scope, v))
                 .collect();
-            b.op_call_function_next(DUMMY_SPAN, block, target, ret, thr, &args?);
+            b.op_call_function_next(SourceSpan::UNKNOWN, block, target, ret, thr, &args?);
         }
         ast::Op::UnpackValueList(list) => {
             let target = lower_value(errors, b, scope, &list.block)?;
@@ -301,17 +296,17 @@ fn lower_operation(
             let fal = lower_value(errors, b, scope, &if_bool.fal)?;
             if let Some(or) = &if_bool.or {
                 let or = lower_value(errors, b, scope, or)?;
-                b.op_if_bool_next(DUMMY_SPAN, block, tru, fal, or, value);
+                b.op_if_bool_next(SourceSpan::UNKNOWN, block, tru, fal, or, value);
             } else {
-                b.op_if_bool_strict_next(DUMMY_SPAN, block, tru, fal, value);
+                b.op_if_bool_strict_next(SourceSpan::UNKNOWN, block, tru, fal, value);
             }
         }
         ast::Op::TraceCaptureRaw(trace_op) => {
             let then = lower_value(errors, b, scope, &trace_op.then)?;
-            b.op_trace_capture_raw_next(DUMMY_SPAN, block, then);
+            b.op_trace_capture_raw_next(SourceSpan::UNKNOWN, block, then);
         }
         ast::Op::Match(match_op) => {
-            let mut builder = b.op_match_build(DUMMY_SPAN);
+            let mut builder = b.op_match_build(SourceSpan::UNKNOWN);
             for entry in match_op.entries.iter() {
                 let next = lower_value(errors, b, scope, &entry.target)?;
                 match &entry.kind {
@@ -343,22 +338,20 @@ fn lower_operation(
             builder.finish(block, match_val, b);
         }
         ast::Op::Unreachable => {
-            b.op_unreachable(DUMMY_SPAN, block);
+            b.op_unreachable(SourceSpan::UNKNOWN, block);
         }
         ast::Op::Case(case_op) => {
-            let value = lower_value(
-                errors, b, scope, &case_op.value)?;
+            let value = lower_value(errors, b, scope, &case_op.value)?;
 
             let mut binds = HashMap::new();
 
-            let mut case_b = b.op_case_build(DUMMY_SPAN);
+            let mut case_b = b.op_case_build(SourceSpan::UNKNOWN);
             for entry in case_op.entries.iter() {
                 binds.clear();
-                let clause = b.pat_mut().clause_start(DUMMY_SPAN);
+                let clause = b.pat_mut().clause_start(SourceSpan::UNKNOWN);
 
                 for pattern in entry.patterns.iter() {
-                    let pat = lower_case_pattern(
-                        errors, b, scope, &mut binds, pattern)?;
+                    let pat = lower_case_pattern(errors, b, scope, &mut binds, pattern)?;
                     b.pat_mut().clause_node_push(clause, pat);
                 }
 
@@ -366,26 +359,21 @@ fn lower_operation(
                     if let Some(node) = binds.get(bind) {
                         b.pat_mut().clause_bind_push(clause, node.1);
                     } else {
-                        errors.error(LowerError::UndefinedBind {
-                            span: bind.span,
-                        });
+                        errors.error(LowerError::UndefinedBind { span: bind.span });
                         return Err(());
                     }
                 }
 
                 b.pat_mut().clause_finish(clause);
 
-                let guard = lower_value(
-                    errors, b, scope, &entry.guard)?;
-                let target = lower_value(
-                    errors, b, scope, &entry.target)?;
+                let guard = lower_value(errors, b, scope, &entry.guard)?;
+                let target = lower_value(errors, b, scope, &entry.target)?;
 
                 case_b.push_clause(clause, guard, target, b);
             }
 
             if let Some(no_match) = case_op.no_match.as_ref() {
-                let val = lower_value(
-                    errors, b, scope, no_match)?;
+                let val = lower_value(errors, b, scope, no_match)?;
                 case_b.no_match = Some(val);
             }
 
@@ -400,11 +388,10 @@ fn lower_operation(
 fn lower_case_pattern(
     errors: ErrCollector,
     b: &mut FunctionBuilder,
-    scope: &mut HashMapStack<Name, (ByteSpan, Value)>,
-    binds: &mut HashMap<Ident, (ByteSpan, PatternNode)>,
-    pattern: &ast::CasePattern
-) -> Result<PatternNode, ()>
-{
+    scope: &mut HashMapStack<Name, (SourceSpan, Value)>,
+    binds: &mut HashMap<Ident, (SourceSpan, PatternNode)>,
+    pattern: &ast::CasePattern,
+) -> Result<PatternNode, ()> {
     match pattern {
         ast::CasePattern::Binding { name, pattern } => {
             let child = lower_case_pattern(errors, b, scope, binds, pattern)?;
@@ -417,12 +404,12 @@ fn lower_case_pattern(
             }
             binds.insert(*name, (name.span, child));
             Ok(child)
-        },
+        }
         ast::CasePattern::Wildcard => {
-            let node = b.pat_mut().node_empty(Some(DUMMY_SPAN));
+            let node = b.pat_mut().node_empty(Some(SourceSpan::UNKNOWN));
             b.pat_mut().wildcard(node);
             Ok(node)
-        },
+        }
         _ => unimplemented!(),
     }
 }
@@ -430,16 +417,15 @@ fn lower_case_pattern(
 fn lower_value(
     errors: ErrCollector,
     b: &mut FunctionBuilder,
-    scope: &mut HashMapStack<Name, (ByteSpan, Value)>,
-    val: &ast::Value
-) -> Result<Value, ()>
-{
+    scope: &mut HashMapStack<Name, (SourceSpan, Value)>,
+    val: &ast::Value,
+) -> Result<Value, ()> {
     match val {
         ast::Value::Value(i) => {
             if let Some((_, val)) = scope.get(&Name::Value(*i)) {
                 Ok(*val)
             } else {
-                errors.error(LowerError::UndefinedVariable { span: i.span, });
+                errors.error(LowerError::UndefinedVariable { span: i.span });
                 return Err(());
             }
         }
@@ -447,7 +433,7 @@ fn lower_value(
             if let Some((_, val)) = scope.get(&Name::Block(*b)) {
                 Ok(*val)
             } else {
-                errors.error(LowerError::UndefinedBlock { span: b.span, });
+                errors.error(LowerError::UndefinedBlock { span: b.span });
                 return Err(());
             }
         }
@@ -455,48 +441,47 @@ fn lower_value(
             // TODO escapes
             Ok(b.value(crate::constant::AtomTerm(atom.name)))
         }
-        ast::Value::Integer(int) => {
-            match int {
-                crate::constant::Integer::Small(int) => Ok(b.value(*int)),
-                crate::constant::Integer::Big(int) => Ok(b.value(int.clone())),
-            }
-        }
-        ast::Value::Nil => {
-            Ok(b.value(crate::constant::NilTerm))
-        }
+        ast::Value::Integer(int) => match int {
+            crate::constant::Integer::Small(int) => Ok(b.value(*int)),
+            crate::constant::Integer::Big(int) => Ok(b.value(int.clone())),
+        },
+        ast::Value::Nil => Ok(b.value(crate::constant::NilTerm)),
         ast::Value::ValueList(list) => {
-            let v_buf: Result<Vec<Value>, _> = list.iter()
+            let v_buf: Result<Vec<Value>, _> = list
+                .iter()
                 .map(|v| lower_value(errors, b, scope, v))
                 .collect();
             Ok(b.prim_value_list(&v_buf?))
         }
         ast::Value::Tuple(tup) => {
-            let v_buf: Result<Vec<Value>, _> = tup.iter()
+            let v_buf: Result<Vec<Value>, _> = tup
+                .iter()
                 .map(|v| lower_value(errors, b, scope, v))
                 .collect();
-            Ok(b.prim_tuple(DUMMY_SPAN, &v_buf?))
+            Ok(b.prim_tuple(SourceSpan::UNKNOWN, &v_buf?))
         }
         ast::Value::CaptureFunction(m, f, a) => {
             let m_v = lower_value(errors, b, scope, &*m)?;
             let f_v = lower_value(errors, b, scope, &*f)?;
             let a_v = lower_value(errors, b, scope, &*a)?;
 
-            Ok(b.prim_capture_function(DUMMY_SPAN, m_v, f_v, a_v))
+            Ok(b.prim_capture_function(SourceSpan::UNKNOWN, m_v, f_v, a_v))
         }
         ast::Value::BinOp(lhs, op, rhs) => {
             let lhs_v = lower_value(errors, b, scope, &*lhs)?;
             let rhs_v = lower_value(errors, b, scope, &*rhs)?;
 
-            Ok(b.prim_binop(DUMMY_SPAN, *op, lhs_v, rhs_v))
+            Ok(b.prim_binop(SourceSpan::UNKNOWN, *op, lhs_v, rhs_v))
         }
         ast::Value::List(head, tail) => {
-            let mut acc = tail.as_ref()
+            let mut acc = tail
+                .as_ref()
                 .map(|v| lower_value(errors, b, scope, &*v))
                 .transpose()?
                 .unwrap_or(b.value(crate::constant::NilTerm));
             for v in head.iter().rev() {
                 let new_val = lower_value(errors, b, scope, &*v)?;
-                acc = b.prim_list_cell(DUMMY_SPAN, new_val, acc);
+                acc = b.prim_list_cell(SourceSpan::UNKNOWN, new_val, acc);
             }
             Ok(acc)
         }

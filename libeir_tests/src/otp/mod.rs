@@ -8,8 +8,6 @@ use libeir_passes::PassManager;
 
 use libeir_interpreter::{ VMState };
 
-use libeir_lowerutils::analyze;
-
 #[test]
 fn compiler() {
     let mut config = ParseConfig::default();

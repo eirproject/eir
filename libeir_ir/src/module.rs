@@ -1,11 +1,11 @@
-use std::ops::{Index, IndexMut};
 use std::collections::BTreeMap;
+use std::ops::{Index, IndexMut};
 
-use cranelift_entity::{PrimaryMap, entity_impl};
+use cranelift_entity::{entity_impl, PrimaryMap};
 
-use libeir_diagnostics::ByteSpan;
-use libeir_intern::{Ident, Symbol};
 use crate::{Function, FunctionIdent};
+use libeir_diagnostics::SourceSpan;
+use libeir_intern::{Ident, Symbol};
 
 #[derive(Debug)]
 pub struct FunctionDefinition {
@@ -13,7 +13,6 @@ pub struct FunctionDefinition {
     fun: Function,
 }
 impl FunctionDefinition {
-
     pub fn index(&self) -> FunctionIndex {
         self.index
     }
@@ -25,7 +24,6 @@ impl FunctionDefinition {
     pub fn function_mut(&mut self) -> &mut Function {
         &mut self.fun
     }
-
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -35,22 +33,21 @@ entity_impl!(FunctionIndex, "function_index");
 #[derive(Debug)]
 pub struct Module {
     name: Ident,
-    span: ByteSpan,
+    span: SourceSpan,
     functions: PrimaryMap<FunctionIndex, FunctionDefinition>,
-    name_map: BTreeMap<(Symbol, usize), FunctionIndex>
+    name_map: BTreeMap<(Symbol, usize), FunctionIndex>,
 }
 impl Module {
-
     pub fn new(name: Ident) -> Self {
         Self {
             name,
-            span: Default::default(),
+            span: SourceSpan::UNKNOWN,
             functions: PrimaryMap::new(),
             name_map: BTreeMap::new(),
         }
     }
 
-    pub fn new_with_span(name: Ident, span: ByteSpan) -> Self {
+    pub fn new_with_span(name: Ident, span: SourceSpan) -> Self {
         Self {
             name,
             span,
@@ -63,11 +60,16 @@ impl Module {
         self.name
     }
 
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         self.span
     }
 
-    pub fn add_function(&mut self, span: ByteSpan, name: Ident, arity: usize) -> &mut FunctionDefinition {
+    pub fn add_function(
+        &mut self,
+        span: SourceSpan,
+        name: Ident,
+        arity: usize,
+    ) -> &mut FunctionDefinition {
         let ident = FunctionIdent {
             module: self.name,
             name,
@@ -145,7 +147,8 @@ impl IndexMut<FunctionIndex> for Module {
 impl Index<&FunctionIdent> for Module {
     type Output = FunctionDefinition;
     fn index(&self, ident: &FunctionIdent) -> &FunctionDefinition {
-        let idx = self.ident_index(ident)
+        let idx = self
+            .ident_index(ident)
             .expect("function ident not in module");
         &self.functions[idx]
     }

@@ -18,8 +18,8 @@ libeir_util_number = { path = "../util/libeir_util_number" }
 libeir_util_parse = { path = "../util/libeir_util_parse" }
 libeir_util_parse_listing = { path = "../util/libeir_util_parse_listing" }
 
+codespan-reporting = "0.9"
 cranelift-entity = "0.56.0"
-
 rustc-hash = "1.0"
 lalrpop-util = "0.17"
 glob = "0.2"

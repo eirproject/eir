@@ -2,7 +2,7 @@ use std::collections::{ BTreeSet, BTreeMap };
 
 use bumpalo::{Bump, collections::Vec as BVec};
 
-use libeir_diagnostics::DUMMY_SPAN;
+use libeir_diagnostics::SourceSpan;
 
 use crate::{ Function, FunctionBuilder };
 use crate::{ Block };
@@ -369,8 +369,8 @@ impl Mangler {
 
                 let span = locs
                     .inner()
-                    .map(|spans| spans.first().copied().unwrap_or(DUMMY_SPAN))
-                    .unwrap_or(DUMMY_SPAN);
+                    .map(|spans| spans.first().copied().unwrap_or(SourceSpan::UNKNOWN))
+                    .unwrap_or(SourceSpan::UNKNOWN);
 
                 let mut buf = BVec::new_in(bump);
                 {

@@ -1,5 +1,7 @@
-use libeir_util_parse::{Scanner, Parse, Source, SourceError, ErrorReceiver, ToDiagnostic, ArcCodemap};
-use libeir_diagnostics::{Diagnostic, ByteIndex};
+use std::convert::From;
+
+use libeir_diagnostics::*;
+use libeir_util_parse::{ErrorReceiver, Parse, Parser, Scanner, Source, SourceError};
 
 use super::ast;
 use super::token::{Lexer, Token};
@@ -23,17 +25,52 @@ pub(crate) mod grammar {
 
 #[derive(Debug)]
 pub enum ParseError {
-    LalrPop(lalrpop_util::ParseError<ByteIndex, Token, ()>),
+    LalrPop(lalrpop_util::ParseError<SourceIndex, Token, ()>),
 }
-impl From<lalrpop_util::ParseError<ByteIndex, Token, ()>> for ParseError {
-    fn from(v: lalrpop_util::ParseError<ByteIndex, Token, ()>) -> Self {
-        ParseError::LalrPop(v)
+impl ParseError {
+    pub fn new(err: lalrpop_util::ParseError<SourceIndex, Token, ()>) -> Self {
+        ParseError::LalrPop(err)
+    }
+}
+impl From<lalrpop_util::ParseError<SourceIndex, Token, ()>> for ParseError {
+    fn from(err: lalrpop_util::ParseError<SourceIndex, Token, ()>) -> Self {
+        Self::new(err)
     }
 }
 
 impl ToDiagnostic for ParseError {
     fn to_diagnostic(&self) -> Diagnostic {
-        unimplemented!()
+        use lalrpop_util::ParseError::*;
+        match self {
+            Self::LalrPop(InvalidToken { location }) => {
+                let source_id = location.source_id();
+                let index = *location;
+                Diagnostic::error()
+                    .with_message("invalid token")
+                    .with_labels(vec![Label::primary(source_id, SourceSpan::new(index, index))
+                        .with_message("invalid token encountered here")])
+            }
+            Self::LalrPop(UnrecognizedEOF { location, expected }) => {
+                let source_id = location.source_id();
+                let index = *location;
+                Diagnostic::error()
+                    .with_message("unexpected end of file")
+                    .with_labels(vec![Label::primary(source_id, SourceSpan::new(index, index))
+                        .with_message(&format!("expected one of: {}", expected.join(", ")))])
+            }
+            Self::LalrPop(ExtraToken { token: (l, _, r) }) => Diagnostic::error()
+                .with_message("extra token")
+                .with_labels(vec![
+                    Label::primary(l.source_id(), SourceSpan::new(*l, *r)).with_message("did not expect this token")
+                ]),
+            Self::LalrPop(UnrecognizedToken { token: (l, _, r), .. }) => Diagnostic::error()
+                .with_message("unexpected token")
+                .with_labels(vec![
+                    Label::primary(l.source_id(), SourceSpan::new(*l, *r))
+                        .with_message("did not expect this token")
+                ]),
+            Self::LalrPop(User { .. }) => Diagnostic::error().with_message("parsing failed"),
+        }
     }
 }
 
@@ -41,15 +78,14 @@ impl Parse for ast::Root {
     type Parser = grammar::RootParser;
     type Error = ParseError;
     type Config = ();
-    type Token = Result<(ByteIndex, Token, ByteIndex), ()>;
+    type Token = Result<(SourceIndex, Token, SourceIndex), ()>;
 
     fn file_map_error(_err: SourceError) -> Self::Error {
         unimplemented!()
     }
 
     fn parse<S>(
-        _config: &(),
-        _codemap: &ArcCodemap,
+        _parser: &Parser<Self::Config>,
         errors: &mut dyn ErrorReceiver<E = ParseError, W = ParseError>,
         source: S,
     ) -> Result<Self, ()>
@@ -73,45 +109,61 @@ impl Parse for ast::Root {
             Err(err) => {
                 errors.error(err.into());
                 Err(())
-            },
+            }
         }
     }
-
 }
 
 #[cfg(test)]
 mod test {
-    use libeir_util_parse::{Parser, Parse, Errors, ArcCodemap};
-    use super::ParseError;
+    use std::sync::Arc;
+
     use super::ast::Root;
+    use super::ParseError;
+    use libeir_diagnostics::*;
+    use libeir_util_parse::{Errors, Parse, Parser};
 
-    fn parse<'a, T>(input: &'a str) -> T
+    fn fail_with<E, W>(errors: &Errors<E, W>, codemap: &CodeMap) -> ! 
     where
-        T: Parse<T, Config = (), Error = ParseError>
+        E: ToDiagnostic,
+        W: ToDiagnostic,
     {
-        let codemap = ArcCodemap::default();
+        use term::termcolor::{ColorChoice, StandardStream};
 
-        let parser = Parser::new(());
+        let config = term::Config::default();
+        let mut out = StandardStream::stderr(ColorChoice::Always);
+        for diagnostic in errors.iter_diagnostics() {
+            term::emit(&mut out, &config, codemap, &diagnostic).unwrap();
+        }
+        panic!();
+    }
+
+    fn parse<T, S>(input: S) -> T
+    where
+        T: Parse<T, Config = (), Error = ParseError>,
+        S: AsRef<str>,
+    {
+        let parser = Parser::new((), Arc::new(CodeMap::new()));
         let mut errors = Errors::new();
-        match parser.parse_string::<&'a str, T>(&mut errors, &codemap, input) {
+        match parser.parse_string::<T, S>(&mut errors, input) {
             Ok(ast) => return ast,
-            Err(()) => {
-                errors.print(&codemap);
-                panic!();
-            },
+            Err(()) => fail_with(&errors, &parser.codemap),
         };
     }
 
     #[test]
     fn simple() {
-        let _: Root = parse("
+        let _: Root = parse(
+            "
 {woo, '123fwoo', {}}.
-");
+",
+        );
     }
 
     #[test]
     fn basic_ast() {
-        let _: Root = parse("
+        let _: Root = parse(
+            "
 {attribute,1,file,{\"woo.erl\",1}}.
 {attribute,1,module,woo}.
 {attribute,3,export,[{foo,2},{bar,1},{barr,1}]}.
@@ -132,7 +184,7 @@ mod test {
     [{bin,14,[{bin_element,14,{string,14,\"woo\"},default,default}]}]}]}.
 {function,16,string,0,[{clause,16,[],[],[{string,16,\"woo\"}]}]}.
 {eof,17}.
-");
+",
+        );
     }
-
 }

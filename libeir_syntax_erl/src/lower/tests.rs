@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::ast::*;
 use crate::*;
 
@@ -5,29 +7,30 @@ use crate::parser::ParseConfig;
 use crate::lower::lower_module;
 
 use libeir_ir::{Module as IrModule, StandardFormatConfig};
-use libeir_util_parse::{Errors, ArcCodemap};
+use libeir_util_parse::Errors;
+use libeir_diagnostics::CodeMap;
 
-fn parse<T>(input: &str, config: ParseConfig, codemap: &ArcCodemap) -> T
+fn parse<T, S>(input: S, config: ParseConfig, codemap: Arc<CodeMap>) -> T
 where
     T: Parse<T, Config = ParseConfig, Error = ParserError>,
+    S: AsRef<str>,
 {
-    let parser = Parser::new(config);
+    let parser = Parser::new(config, codemap);
     let mut errors = Errors::new();
-    match parser.parse_string::<&str, T>(&mut errors, codemap, input) {
+    match parser.parse_string::<T, S>(&mut errors, input) {
         Ok(ast) => return ast,
         Err(()) => (),
     };
-    errors.print(codemap);
+    errors.print(&parser.codemap);
     panic!("parse failed");
 }
 
 fn lower(input: &str, config: ParseConfig) -> Result<IrModule, ()> {
-    let codemap = ArcCodemap::default();
-   // let mut errors = MultiErrors::new(config.codemap.clone());
-    let parsed: Module = parse(input, config, &codemap);
+    let codemap = Arc::new(CodeMap::new());
+    let parsed: Module = parse(input, config, codemap.clone());
 
     let mut errors = Errors::new();
-    let res = lower_module(&mut errors, &codemap, &parsed);
+    let res = lower_module(&mut errors, codemap.clone(), &parsed);
     errors.print(&codemap);
 
     res

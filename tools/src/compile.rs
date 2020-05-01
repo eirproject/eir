@@ -1,22 +1,19 @@
-use clap::{Arg, App, ArgMatches, arg_enum, value_t, values_t};
-
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use libeir_ir::FunctionIdent;
+use clap::{Arg, App, ArgMatches, arg_enum, value_t, values_t};
 
-use libeir_diagnostics::{
-    ColorChoice, Emitter, StandardStreamEmitter
-};
-use libeir_passes::PassManager;
-
+use libeir_diagnostics::CodeMap;
+use libeir_diagnostics::term::{self, termcolor::{ColorChoice, StandardStream}};
 use libeir_frontend::{
     AnyFrontend, DynFrontend,
     erlang::ErlangFrontend,
     abstr_erlang::AbstrErlangFrontend,
     eir::EirFrontend,
 };
-use libeir_util_parse::ArcCodemap;
+use libeir_ir::FunctionIdent;
+use libeir_passes::PassManager;
 
 arg_enum!{
     #[derive(Debug, PartialEq, Eq)]
@@ -76,7 +73,7 @@ impl LogLevel {
     }
 }
 
-fn make_erlang_frontend(matches: &ArgMatches) -> ErlangFrontend {
+fn make_erlang_frontend(codemap: Arc<CodeMap>, matches: &ArgMatches) -> ErlangFrontend {
     use libeir_syntax_erl::ParseConfig;
 
     let mut config = ParseConfig::default();
@@ -92,14 +89,14 @@ fn make_erlang_frontend(matches: &ArgMatches) -> ErlangFrontend {
         }
     }
 
-    ErlangFrontend::new(config)
+    ErlangFrontend::new(config, codemap)
 }
 
-fn make_frontend(matches: &ArgMatches) -> AnyFrontend {
+fn make_frontend(codemap: Arc<CodeMap>, matches: &ArgMatches) -> AnyFrontend {
     match value_t!(matches, "IN_FORMAT", InputType).unwrap() {
-        InputType::Erl => make_erlang_frontend(matches).into(),
-        InputType::Abstr => AbstrErlangFrontend::new().into(),
-        InputType::Eir => EirFrontend::new().into(),
+        InputType::Erl => make_erlang_frontend(codemap, matches).into(),
+        InputType::Abstr => AbstrErlangFrontend::new(codemap).into(),
+        InputType::Eir => EirFrontend::new(codemap).into(),
     }
 }
 
@@ -171,18 +168,19 @@ fn main() {
 
     setup_logger(value_t!(matches, "LOG_LEVEL", LogLevel).unwrap().to_filter());
 
-    let frontend = make_frontend(&matches);
+    let codemap = Arc::new(CodeMap::new());
+    let frontend = make_frontend(codemap.clone(), &matches);
 
     let in_file_name = matches.value_of("IN_FILE").unwrap();
     let in_file_path = Path::new(in_file_name);
 
-    let codemap = ArcCodemap::default();
-    let (eir_res, diagnostics) = frontend.parse_file_dyn(codemap.clone(), &in_file_path);
-
-    let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
-        .set_codemap(codemap.clone());
-    for diag in diagnostics.iter() {
-        emitter.diagnostic(diag).unwrap();
+    let (eir_res, diagnostics) = frontend.parse_file_dyn(&in_file_path);
+    {
+        let term_config = term::Config::default();
+        let mut out = StandardStream::stderr(ColorChoice::Auto);
+        for diag in diagnostics.iter() {
+            term::emit(&mut out, &term_config, &*codemap, diag).unwrap();
+        }
     }
 
     if eir_res.is_err() {

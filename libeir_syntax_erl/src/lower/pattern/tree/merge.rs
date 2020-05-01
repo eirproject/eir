@@ -32,7 +32,7 @@ fn map_node(
 ) -> TreeNode {
     let new = match t.nodes[node].clone() {
         TreeNodeKind::Atomic(_, _) => node,
-        TreeNodeKind::Wildcard => node,
+        TreeNodeKind::Wildcard(_) => node,
         TreeNodeKind::Tuple { span, elems } => {
             let mut new_elems = EntityList::new();
             for idx in 0..elems.len(&t.node_pool) {
@@ -108,8 +108,8 @@ fn merge_nodes(
     let r_kind = t.nodes[right].clone();
 
     let new = match (l_kind, r_kind) {
-        (TreeNodeKind::Wildcard, _) => right,
-        (_, TreeNodeKind::Wildcard) => left,
+        (TreeNodeKind::Wildcard(_), _) => right,
+        (_, TreeNodeKind::Wildcard(_)) => left,
         (TreeNodeKind::Atomic(s1, c1), TreeNodeKind::Atomic(s2, c2)) => {
             if c1 == c2 {
                 t.nodes.push(TreeNodeKind::Atomic(s1, c1))
@@ -119,7 +119,7 @@ fn merge_nodes(
                     right: Some(s2),
                 });
                 t.unmatchable = true;
-                t.nodes.push(TreeNodeKind::Wildcard)
+                t.nodes.push(TreeNodeKind::Wildcard(s1))
             }
         }
         (TreeNodeKind::Tuple { span: s1, elems: e1 },
@@ -131,7 +131,7 @@ fn merge_nodes(
                     right: Some(s2),
                 });
                 t.unmatchable = true;
-                t.nodes.push(TreeNodeKind::Wildcard)
+                t.nodes.push(TreeNodeKind::Wildcard(s1))
             } else {
                 let mut elems = EntityList::new();
                 for idx in 0..len1 {
@@ -213,8 +213,8 @@ fn merge_nodes(
         (TreeNodeKind::And { .. }, TreeNodeKind::And { .. }) => unreachable!(),
         _ => {
             ctx.warn(LowerError::DisjointPatternUnionWarning {
-                left: t.node_span(left),
-                right: t.node_span(right),
+                left: Some(t.node_span(left)),
+                right: Some(t.node_span(right)),
             });
             t.unmatchable = true;
             t.nodes.push(TreeNodeKind::And { left, right })

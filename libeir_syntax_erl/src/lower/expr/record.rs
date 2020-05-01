@@ -1,19 +1,19 @@
-use libeir_ir::{
-    FunctionBuilder,
-    Value as IrValue,
-    Block as IrBlock,
-    BinOp as IrBinOp,
-};
-use libeir_diagnostics::ByteSpan;
+use libeir_diagnostics::SourceSpan;
+use libeir_ir::{BinOp as IrBinOp, Block as IrBlock, FunctionBuilder, Value as IrValue};
 
 use libeir_intern::Symbol;
 
-use crate::parser::ast::{ Record, RecordAccess, RecordUpdate, RecordIndex };
+use crate::parser::ast::{Record, RecordAccess, RecordIndex, RecordUpdate};
 
-use crate::lower::{ LowerCtx, LowerError };
 use crate::lower::expr::lower_single;
+use crate::lower::{LowerCtx, LowerError};
 
-fn make_rec_fail(ctx: &mut LowerCtx, b: &mut FunctionBuilder, span: ByteSpan, recname_val: IrValue) -> IrBlock {
+fn make_rec_fail(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    span: SourceSpan,
+    recname_val: IrValue,
+) -> IrBlock {
     let fail_block = b.block_insert();
     let block = fail_block;
 
@@ -22,13 +22,18 @@ fn make_rec_fail(ctx: &mut LowerCtx, b: &mut FunctionBuilder, span: ByteSpan, re
     let badrecord_val = b.value(Symbol::intern("badrecord"));
     let fail_error = b.prim_tuple(span, &[badrecord_val, recname_val]);
 
-    ctx.exc_stack.make_error_jump(b, span, block, fail_type, fail_error);
+    ctx.exc_stack
+        .make_error_jump(b, span, block, fail_type, fail_error);
 
     fail_block
 }
 
-pub(super) fn lower_record_access_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
-                                       rec: &RecordAccess) -> (IrBlock, IrValue) {
+pub(super) fn lower_record_access_expr(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    mut block: IrBlock,
+    rec: &RecordAccess,
+) -> (IrBlock, IrValue) {
     let span = rec.span;
     let rec_def = &ctx.module.records[&rec.name.name];
     let recname_val = b.value(rec.name);
@@ -57,8 +62,12 @@ pub(super) fn lower_record_access_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
     (block, rec_field_val)
 }
 
-pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
-                                       rec: &RecordUpdate) -> (IrBlock, IrValue) {
+pub(super) fn lower_record_update_expr(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    mut block: IrBlock,
+    rec: &RecordUpdate,
+) -> (IrBlock, IrValue) {
     let span = rec.span;
     // TODO Warn/error when updates overlap?
     let rec_def = &ctx.module.records[&rec.name.name];
@@ -82,7 +91,7 @@ pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
     // Make a vector with all the values in the unpacked tuple
     let mut elems = Vec::with_capacity(num_fields);
     for idx in 0..num_fields {
-        elems.push(b.block_args(block)[idx+1]);
+        elems.push(b.block_args(block)[idx + 1]);
     }
 
     // Check first tuple element
@@ -94,8 +103,10 @@ pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
     // Update fields
     for update in rec.updates.iter() {
         let idx = rec_def.field_idx_map[&update.name];
-        let new_val = map_block!(block, lower_single(
-            ctx, b, block, update.value.as_ref().unwrap()));
+        let new_val = map_block!(
+            block,
+            lower_single(ctx, b, block, update.value.as_ref().unwrap())
+        );
         elems[idx] = new_val;
     }
 
@@ -108,8 +119,12 @@ pub(super) fn lower_record_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuild
     (block, tup)
 }
 
-pub(super) fn lower_record_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
-                                rec: &Record) -> (IrBlock, IrValue) {
+pub(super) fn lower_record_expr(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    mut block: IrBlock,
+    rec: &Record,
+) -> (IrBlock, IrValue) {
     let span = rec.span;
     let rec_def = &ctx.module.records[&rec.name.name];
     let recname_val = b.value(rec.name);
@@ -125,15 +140,20 @@ pub(super) fn lower_record_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
         if elems[idx].is_some() {
             ctx.error(LowerError::DuplicateRecordField {
                 new: field.name.span,
-                old: rec.fields.iter()
+                old: rec
+                    .fields
+                    .iter()
                     .find(|f| f.name == field.name)
                     .unwrap()
-                    .name.span,
+                    .name
+                    .span,
             });
         }
 
-        let new_val = map_block!(block, lower_single(
-            ctx, b, block, field.value.as_ref().unwrap()));
+        let new_val = map_block!(
+            block,
+            lower_single(ctx, b, block, field.value.as_ref().unwrap())
+        );
         elems[idx] = Some(new_val);
     }
 
@@ -163,8 +183,7 @@ pub(super) fn lower_record_index(
     b: &mut FunctionBuilder,
     block: IrBlock,
     rec: &RecordIndex,
-) -> (IrBlock, IrValue)
-{
+) -> (IrBlock, IrValue) {
     let rec_def = &ctx.module.records[&rec.name.name];
     let index = rec_def.field_idx_map[&rec.field];
     let val = b.value(index);

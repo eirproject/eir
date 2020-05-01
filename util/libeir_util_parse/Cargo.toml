@@ -8,10 +8,11 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-libeir_diagnostics = { path = "../../libeir_diagnostics" }
+codespan-reporting = "0.9"
 scoped_cell = { path = "../scoped_cell" }
-
 snafu = "0.5"
+
+libeir_diagnostics = { path = "../../libeir_diagnostics" }
 
 [dev-dependencies]
 pretty_assertions = "0.5"

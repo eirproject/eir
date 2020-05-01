@@ -1,28 +1,21 @@
-use std::sync::RwLock;
+use std::sync::Arc;
 
 use libeir_ir::{
-    Module as IrModule,
-    FunctionBuilder,
-    Value as IrValue,
-    Block as IrBlock,
-    IntoValue,
-    Location,
+    Block as IrBlock, FunctionBuilder, IntoValue, Location, Module as IrModule, Value as IrValue,
 };
 
-use libeir_diagnostics::{ByteSpan, CodeMap};
-use libeir_intern::{Symbol, Ident};
+use libeir_diagnostics::{CodeMap, SourceSpan};
+use libeir_intern::{Ident, Symbol};
 use libeir_util_parse::ErrorReceiver;
 
-use crate::parser::ast::{Module, NamedFunction, Function, FunctionClause};
+use crate::parser::ast::{Function, FunctionClause, Module, NamedFunction};
 
 macro_rules! map_block {
-    ($block:ident, $call:expr) => {
-        {
-            let (block, val) = $call;
-            $block = block;
-            val
-        }
-    }
+    ($block:ident, $call:expr) => {{
+        let (block, val) = $call;
+        $block = block;
+        val
+    }};
 }
 
 mod pattern;
@@ -44,7 +37,7 @@ use scope::ScopeToken;
 mod tests;
 
 pub(crate) struct LowerCtx<'a> {
-    codemap: &'a RwLock<CodeMap>,
+    codemap: Arc<CodeMap>,
     module: &'a Module,
 
     scope: scope::ScopeTracker,
@@ -63,7 +56,6 @@ pub(crate) struct LowerCtx<'a> {
 }
 
 impl<'a> LowerCtx<'a> {
-
     /// Since we want to catch as many errors as possible in a single
     /// compiler invocation, we frequently purposefully generate invalid
     /// IR so that the lowering process can continue.
@@ -119,19 +111,26 @@ impl<'a> LowerCtx<'a> {
     pub fn function_name(&self) -> String {
         self.functions[self.functions.len() - 1].clone()
     }
-    pub fn current_location(&self, b: &mut FunctionBuilder, span: ByteSpan) -> Location {
-        let read_lock = self.codemap.read().unwrap();
+    pub fn current_location(&self, b: &mut FunctionBuilder, span: SourceSpan) -> Location {
         b.fun_mut().locations.from_bytespan(
-            &*read_lock, span, Some((
-                self.module.name.as_str().to_string(),
-                self.function_name()
-            )))
+            &self.codemap,
+            span,
+            Some((self.module.name.as_str().to_string(), self.function_name())),
+        )
     }
 
-    pub fn call_function<M, F>(&mut self, b: &mut FunctionBuilder, block: IrBlock, span: ByteSpan,
-                                  m: M, f: F, args: &[IrValue]) -> (IrBlock, IrValue)
+    pub fn call_function<M, F>(
+        &mut self,
+        b: &mut FunctionBuilder,
+        block: IrBlock,
+        span: SourceSpan,
+        m: M,
+        f: F,
+        args: &[IrValue],
+    ) -> (IrBlock, IrValue)
     where
-        M: IntoValue, F: IntoValue
+        M: IntoValue,
+        F: IntoValue,
     {
         let fun_val = b.prim_capture_function(span, m, f, args.len());
 
@@ -143,28 +142,25 @@ impl<'a> LowerCtx<'a> {
         let loc = self.current_location(b, span);
         b.block_set_location(block, loc);
 
-        let (ok_block, fail_block) = b.op_call_function(
-            span, block, fun_val, args);
+        let (ok_block, fail_block) = b.op_call_function(span, block, fun_val, args);
 
         let fail_type = b.block_args(fail_block)[0];
         let fail_error = b.block_args(fail_block)[1];
         let fail_trace = b.block_args(fail_block)[2];
-        self.exc_stack.make_error_jump_trace(
-            b, fail_block, fail_type, fail_error, fail_trace);
+        self.exc_stack
+            .make_error_jump_trace(b, fail_block, fail_type, fail_error, fail_trace);
 
         let ok_res = b.block_args(ok_block)[0];
 
         (ok_block, ok_res)
     }
-
 }
 
 pub fn lower_module<'a>(
     errors: &'a mut (dyn ErrorReceiver<E = LowerError, W = LowerError> + 'a),
-    codemap: &RwLock<CodeMap>,
+    codemap: Arc<CodeMap>,
     module: &Module,
 ) -> Result<IrModule, ()> {
-
     // TODO sort functions for more deterministic compilation
 
     let mut ir_module = IrModule::new_with_span(module.name, module.span);
@@ -216,16 +212,11 @@ pub fn lower_module<'a>(
     }
 }
 
-fn lower_function(
-    ctx: &mut LowerCtx, b: &mut FunctionBuilder,
-    fun: &Function,
-) -> IrBlock {
+fn lower_function(ctx: &mut LowerCtx, b: &mut FunctionBuilder, fun: &Function) -> IrBlock {
     let entry = b.block_insert_with_span(Some(fun.span()));
 
     match fun {
-        Function::Named(_named) => {
-            unimplemented!()
-        }
+        Function::Named(_named) => unimplemented!(),
         Function::Unnamed(lambda) => {
             ctx.fun_num += 1;
             let base_fun = &ctx.functions[0];
@@ -242,10 +233,11 @@ fn lower_function(
 }
 
 fn lower_function_base(
-    ctx: &mut LowerCtx, b: &mut FunctionBuilder,
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
     // The block the function should be lowered into
     entry: IrBlock,
-    span: ByteSpan,
+    span: SourceSpan,
     arity: usize,
     clauses: &[FunctionClause],
 ) {
@@ -275,7 +267,8 @@ fn lower_function_base(
     {
         let typ_val = b.value(Symbol::intern("error"));
         let err_val = b.value(Symbol::intern("function_clause"));
-        ctx.exc_stack.make_error_jump(b, span, match_fail_block, typ_val, err_val);
+        ctx.exc_stack
+            .make_error_jump(b, span, match_fail_block, typ_val, err_val);
     }
 
     let entry_exc_height = ctx.exc_stack.len();
@@ -289,12 +282,15 @@ fn lower_function_base(
         func_case.no_match = Some(b.value(match_fail_block));
 
         for clause in clauses.iter() {
-
-            match lower_clause(ctx, b, &mut block, true,
-                               clause.span,
-                               clause.params.iter(),
-                               clause.guard.as_ref())
-            {
+            match lower_clause(
+                ctx,
+                b,
+                &mut block,
+                true,
+                clause.span,
+                clause.params.iter(),
+                clause.guard.as_ref(),
+            ) {
                 Ok(lowered) => {
                     let (scope_token, body) = lowered.make_body(ctx, b);
 
@@ -305,18 +301,17 @@ fn lower_function_base(
                         func_case.push_value(*value, b);
                     }
 
-                    let (body_ret_block, body_ret) = lower_block(
-                        ctx, b, body, &clause.body);
+                    let (body_ret_block, body_ret) = lower_block(ctx, b, body, &clause.body);
 
                     // Call to join block
                     b.op_call_flow(body_ret_block, join_block, &[body_ret]);
 
                     // Pop scope pushed in lower_clause
                     ctx.scope.pop(scope_token);
-                },
+                }
                 // When the pattern of the clause is unmatchable, we don't add it to
                 // the case.
-                Err(_lowered) => {},
+                Err(_lowered) => {}
             }
             assert!(ctx.exc_stack.len() == entry_exc_height)
         }
@@ -325,7 +320,6 @@ fn lower_function_base(
     }
 
     ctx.exc_stack.pop_handler();
-
 }
 
 fn lower_top_function(ctx: &mut LowerCtx, b: &mut FunctionBuilder, function: &NamedFunction) {
@@ -336,10 +330,15 @@ fn lower_top_function(ctx: &mut LowerCtx, b: &mut FunctionBuilder, function: &Na
     assert!(ctx.functions.len() == 0);
     ctx.functions.push(fun_name);
 
-    lower_function_base(ctx, b, entry,
-                        function.span, function.arity, &function.clauses);
+    lower_function_base(
+        ctx,
+        b,
+        entry,
+        function.span,
+        function.arity,
+        &function.clauses,
+    );
 
     ctx.functions.pop().unwrap();
     assert!(ctx.functions.len() == 0);
 }
-
