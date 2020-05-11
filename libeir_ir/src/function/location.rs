@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 use libeir_util_datastructures::dedup_aux_primary_map::DedupPrimaryMap;
 use libeir_util_datastructures::{
     dedup_aux_primary_map::DedupAuxPrimaryMap,
-    aux_hash_map::{AuxHash, AuxEq},
+    aux::{AuxHash, AuxEq},
 };
 
 use libeir_diagnostics::{CodeMap, ByteSpan, DUMMY_SPAN};

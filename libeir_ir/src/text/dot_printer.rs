@@ -41,6 +41,7 @@ where
         let block_val = fun.block_value(block);
 
         let doc = ctx.block_to_doc(&mut config, &mut state, block);
+        buf.clear();
         doc.render_fmt(80, &mut buf).unwrap();
         g.node(block_val, &buf);
 

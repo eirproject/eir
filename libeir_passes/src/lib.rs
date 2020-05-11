@@ -4,6 +4,8 @@ use log::{debug, trace};
 
 use libeir_ir::{ Module, FunctionBuilder };
 
+pub mod util;
+
 mod compile_pattern;
 pub use self::compile_pattern::CompilePatternPass;
 

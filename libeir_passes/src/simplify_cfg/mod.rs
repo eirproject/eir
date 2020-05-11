@@ -1,17 +1,24 @@
+#![warn(warnings)]
+
 use std::collections::BTreeMap;
+
+use log::trace;
 
 use bumpalo::Bump;
 use hashbrown::HashMap;
 use fnv::FnvBuildHasher;
 type BFnvHashMap<'bump, K, V> = HashMap<K, V, FnvBuildHasher, &'bump Bump>;
 
-use libeir_ir::{FunctionBuilder, Mangler, MangleTo};
+use libeir_ir::{FunctionBuilder, Mangler, MangleTo, StandardFormatConfig};
 use libeir_ir::Value;
 
 use super::FunctionPass;
 
 mod analyze;
+mod chain_graph;
 mod rewrite;
+
+use chain_graph::synthesis::SynthesisStrategy;
 
 #[cfg(test)]
 mod tests;
@@ -116,31 +123,67 @@ impl SimplifyCfgPass {
         let graph = b.fun().live_block_graph();
         let live = b.fun().live_values();
 
+        //let func_tree = b.fun().func_tree(&live, false);
+        //let func_order: Vec<_> = func_tree.dfs_post_order_iter().collect();
+        //println!("FUNC ORDER {:?}", func_order);
+
+        let block_order: Vec<_> = graph.dfs_post_order_iter().collect();
+        trace!("BLOCK ORDER {:?}", block_order);
+
+        trace!("{}", b.fun().to_text(&mut StandardFormatConfig::default()));
+
         {
             let analysis = analyze::analyze_graph(&bump, b.fun(), &graph);
-            //dbg!(&analysis);
+            dbg!(&analysis);
+            trace!("analysis done");
 
-            for (target, _blocks) in analysis.chains.iter() {
-                //let graph = b.fun().live_block_graph();
-                //let chain_analysis = analyze::analyze_chain(
-                //    *target, &b.fun(), &graph, &live, &analysis);
-                //dbg!(&chain_analysis);
+            for block in block_order.iter() {
+                if let Some(_blocks) = analysis.trees.get(block) {
+                    let target = block;
 
-                //for edge in chain_analysis.entry_edges.iter() {
-                //    let entry_analysis = analyze::analyze_entry_edge(
-                //        &analysis, &chain_analysis, *edge);
-                //    dbg!(&entry_analysis);
-                //}
+                    // Synthesize CFG for chain
+                    let graph = b.fun().live_block_graph();
+                    let chain_graph = analyze::analyze_chain(
+                        &bump, *target, &b.fun(), &graph, &live, &analysis);
 
-                rewrite::rewrite(
-                    &bump,
-                    *target,
-                    self,
-                    &analysis,
-                    &live,
-                    b,
-                );
+                    let synthesis_impl = chain_graph::synthesis::compound::CompoundStrategy;
+                    let mut synthesis = synthesis_impl.try_run(&chain_graph, b.fun()).unwrap();
+                    synthesis.postprocess(&chain_graph);
+
+                    println!("{:#?}", synthesis);
+
+                    //// .. and apply it to the CFG.
+                    rewrite::rewrite(b, &mut self.map, *target, &chain_graph, &synthesis);
+
+
+                    trace!("{}", b.fun().to_text_standard());
+
+                    //let graph = b.fun().live_block_graph();
+                    //let chain_analysis = analyze::analyze_chain(
+                    //    *target, &b.fun(), &graph, &live, &analysis);
+                    //dbg!(&chain_analysis);
+
+                    //for edge in chain_analysis.entry_edges.iter() {
+                    //    let entry_analysis = analyze::analyze_entry_edge(
+                    //        &analysis, &chain_analysis, *edge);
+                    //    dbg!(&entry_analysis);
+                    //}
+
+                    //trace!("rewrite {}", target);
+
+                    //rewrite::rewrite(
+                    //    &bump,
+                    //    *target,
+                    //    self,
+                    //    &analysis,
+                    //    &live,
+                    //    b,
+                    //);
+                }
+
             }
+
+            trace!("rewrite done");
 
             //let mut new_entry = entry;
             //println!("BEF: {}", new_entry);
@@ -159,8 +202,33 @@ impl SimplifyCfgPass {
                 self.mangler.add_rename(MangleTo(*from), MangleTo(*to));
             }
 
+            //let mut print_ctx = libeir_ir::text::printer::ToEirTextContext::new();
+            //let mut out_str = Vec::new();
+            //for block in b.fun().block_iter() {
+            //    use libeir_ir::text::printer::ToEirTextFun;
+            //    block.to_eir_text_fun(&mut print_ctx, b.fun(), 0, &mut out_str).unwrap();
+            //    out_str.push('\n' as u8);
+            //}
+            //trace!("{}", std::str::from_utf8(&out_str).unwrap());
+
+            //trace!("{:#?}", self.mangler.value_map());
+
             let new_entry = self.mangler.run(b);
             b.block_set_entry(new_entry);
+
+            trace!("{}", b.fun().to_text_standard());
+
+            //let mut print_ctx = libeir_ir::text::printer::ToEirTextContext::new();
+            //let mut out_str = Vec::new();
+            //for block in b.fun().block_iter() {
+            //    use libeir_ir::text::printer::ToEirTextFun;
+            //    block.to_eir_text_fun(&mut print_ctx, b.fun(), 0, &mut out_str).unwrap();
+            //    out_str.push('\n' as u8);
+            //}
+            //trace!("{}", std::str::from_utf8(&out_str).unwrap());
+
+            //trace!("{}", b.fun().to_text());
+
         }
 
         self.map.clear();

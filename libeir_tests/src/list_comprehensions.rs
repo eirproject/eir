@@ -197,6 +197,8 @@ perms(L) -> [H || H <- L].
         println!("{:?}", out);
         assert!(out.len() == 0);
 
+        println!("{}", fun.to_text_standard());
+
         libeir_lowerutils::analyze(fun);
     }
 

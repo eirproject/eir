@@ -34,7 +34,7 @@ where
 
     fn value_use_to_doc(&mut self, value: DynValue) -> RefDoc<'doc, ()> {
         let val = self.state.function.value_get(value).unwrap();
-        self.format_data.value_use_to_doc(self.config, self.state, val)
+        self.format_data.value_use(self.config, self.state, val, None)
     }
 
 }
@@ -108,7 +108,12 @@ where
     {
         let arena = self.arena;
 
-        let op = state.function.block_kind(block).unwrap();
+        let op_opt = state.function.block_kind(block);
+        if op_opt.is_none() {
+            return arena.text("EMPTY_BLOCK").into_doc();
+        }
+
+        let op = op_opt.unwrap();
         let reads = state.function.block_reads(block);
 
         let op_doc = match op {
@@ -127,7 +132,7 @@ where
                 let mut branches_formatted = Vec::with_capacity(num_branches);
                 for (i, kind) in branches.iter().enumerate() {
                     let block = state.function.value_list_get_n(dests, i).unwrap();
-                    let block_val = self.value_use_to_doc(config, state, block);
+                    let block_val = self.value_use(config, state, block, None);
                     let args_vl = reads[i + 2];
                     let num_args = state.function.value_list_length(args_vl);
                     let mut args = Vec::with_capacity(num_args);
@@ -136,9 +141,9 @@ where
                     }
                     let formatted = match kind {
                         MatchKind::Value => {
-                            let val = self.value_use_to_doc(config, state, args[0]);
+                            let val = self.value_use(config, state, args[0], None);
                             let block_args = arena.intersperse(
-                                args.iter().skip(1).map(|v| self.value_use_to_doc(config, state, *v)),
+                                args.iter().skip(1).map(|v| self.value_use(config, state, *v, None)),
                                 arena.text(",").append(arena.softline())
                             ).nest(1).parens();
                             let body = arena.nil()
@@ -153,7 +158,7 @@ where
                         }
                         MatchKind::Type(ty) => {
                             let block_args = arena.intersperse(
-                                args.iter().map(|v| self.value_use_to_doc(config, state, *v)),
+                                args.iter().map(|v| self.value_use(config, state, *v, None)),
                                 arena.text(",").append(arena.softline())
                             ).nest(1).parens();
                             let body = arena.nil()
@@ -174,7 +179,7 @@ where
                         }
                         MatchKind::Tuple(arity) => {
                             let block_args = arena.intersperse(
-                                args.iter().map(|v| self.value_use_to_doc(config, state, *v)),
+                                args.iter().map(|v| self.value_use(config, state, *v, None)),
                                 arena.text(",").append(arena.softline())
                             ).nest(1).parens();
                             let body = arena.nil()
@@ -192,7 +197,7 @@ where
                         }
                         MatchKind::ListCell => {
                             let block_args = arena.intersperse(
-                                args.iter().map(|v| self.value_use_to_doc(config, state, *v)),
+                                args.iter().map(|v| self.value_use(config, state, *v, None)),
                                 arena.text(",").append(arena.softline())
                             ).nest(1).parens();
                             let body = arena.nil()
@@ -206,9 +211,9 @@ where
                                 .append(arena.nil().append(body))
                         }
                         MatchKind::MapItem => {
-                            let val = self.value_use_to_doc(config, state, args[0]);
+                            let val = self.value_use(config, state, args[0], None);
                             let block_args = arena.intersperse(
-                                args.iter().skip(1).map(|v| self.value_use_to_doc(config, state, *v)),
+                                args.iter().skip(1).map(|v| self.value_use(config, state, *v, None)),
                                 arena.text(",").append(arena.softline())
                             ).nest(1).parens();
                             let body = arena.nil()
@@ -223,7 +228,7 @@ where
                         }
                         MatchKind::Wildcard => {
                             let block_args = arena.intersperse(
-                                args.iter().map(|v| self.value_use_to_doc(config, state, *v)),
+                                args.iter().map(|v| self.value_use(config, state, *v, None)),
                                 arena.text(",").append(arena.softline())
                             ).nest(1).parens();
                             let body = arena.nil()
@@ -240,7 +245,7 @@ where
                     branches_formatted.push(formatted.indent(2));
                 }
 
-                let selector = self.value_use_to_doc(config, state, reads[0]);
+                let selector = self.value_use(config, state, reads[1], None);
 
                 arena.nil()
                     .append(arena.text("match"))
@@ -254,14 +259,14 @@ where
                             .braces())
             },
             OpKind::Call(CallKind::Function) => {
-                let callee_val = self.value_use_to_doc(config, state, reads[0]);
+                let callee_val = self.value_use(config, state, reads[0], None);
                 let call_args = arena.intersperse(
                     reads.iter().skip(3)
-                        .map(|v| self.value_use_to_doc(config, state, *v)),
+                        .map(|v| self.value_use(config, state, *v, None)),
                     arena.text(",").append(arena.softline()),
                 ).nest(1).parens();
-                let flow_val = self.value_use_to_doc(config, state, reads[1]);
-                let exc_val = self.value_use_to_doc(config, state, reads[2]);
+                let flow_val = self.value_use(config, state, reads[1], None);
+                let exc_val = self.value_use(config, state, reads[2], None);
                 arena.nil()
                     .append(callee_val)
                     .append(call_args)
@@ -275,10 +280,10 @@ where
                     .append(exc_val)
             },
             OpKind::Call(CallKind::ControlFlow) => {
-                let fun_val = self.value_use_to_doc(config, state, reads[0]);
+                let fun_val = self.value_use(config, state, reads[0], None);
                 let call_args = arena.intersperse(
                     reads.iter().skip(1)
-                        .map(|v| self.value_use_to_doc(config, state, *v)),
+                        .map(|v| self.value_use(config, state, *v, None)),
                     arena.text(",").append(arena.softline()),
                 ).nest(1).parens();
                 arena.nil()
@@ -287,7 +292,7 @@ where
             },
             OpKind::TraceCaptureRaw => {
                 assert!(reads.len() == 1);
-                let arg = self.value_use_to_doc(config, state, reads[0]);
+                let arg = self.value_use(config, state, reads[0], None);
                 arena.nil()
                     .append(arena.text("trace_capture_raw"))
                     .append(arena.space())
@@ -295,14 +300,14 @@ where
             },
             OpKind::UnpackValueList(n) => {
                 assert!(reads.len() == 2);
-                let block = self.value_use_to_doc(config, state, reads[0]);
-                let val = self.value_use_to_doc(config, state, reads[1]);
+                let block = self.value_use(config, state, reads[0], None);
+                let val = self.value_use(config, state, reads[1], None);
                 arena.nil()
                     .append(arena.text("unpack"))
                     .append(arena.space())
                     .append(val)
                     .append(arena.space())
-                    .append(arena.text("arena"))
+                    .append(arena.text("arity"))
                     .append(arena.space())
                     .append(arena.as_string(&format!("{}", n)))
                     .append(arena.space())
@@ -316,23 +321,23 @@ where
                         arena.nil()
                             .append(arena.text("if_bool"))
                             .append(arena.space())
-                            .append(self.value_use_to_doc(config, state, reads[2]))
+                            .append(self.value_use(config, state, reads[2], None))
                             .append(arena.space())
-                            .append(self.value_use_to_doc(config, state, reads[0]))
+                            .append(self.value_use(config, state, reads[0], None))
                             .append(arena.space())
-                            .append(self.value_use_to_doc(config, state, reads[1]))
+                            .append(self.value_use(config, state, reads[1], None))
                     },
                     4 => {
                         arena.nil()
                             .append(arena.text("if_bool"))
                             .append(arena.space())
-                            .append(self.value_use_to_doc(config, state, reads[3]))
+                            .append(self.value_use(config, state, reads[3], None))
                             .append(arena.space())
-                            .append(self.value_use_to_doc(config, state, reads[0]))
+                            .append(self.value_use(config, state, reads[0], None))
                             .append(arena.space())
-                            .append(self.value_use_to_doc(config, state, reads[1]))
+                            .append(self.value_use(config, state, reads[1], None))
                             .append(arena.space())
-                            .append(self.value_use_to_doc(config, state, reads[2]))
+                            .append(self.value_use(config, state, reads[2], None))
                     },
                     _ => panic!(),
                 }
@@ -350,7 +355,11 @@ where
                     arena.nil().append(doc)
 
                 } else {
-                    arena.as_string(op.name())
+                    let call_args = arena.intersperse(
+                        reads.iter().map(|v| self.value_use(config, state, *v, None)),
+                        arena.text(",").append(arena.softline()),
+                    ).nest(1).parens();
+                    arena.as_string(op.name()).append(call_args)
                 }
             },
             _ => {

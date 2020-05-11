@@ -38,6 +38,17 @@ pub enum ValueKind {
     PrimOp(PrimOp),
 }
 
+impl ValueKind {
+
+    pub fn is_arg(&self) -> bool {
+        match self {
+            ValueKind::Argument(_, _) => true,
+            _ => false,
+        }
+    }
+
+}
+
 #[derive(Debug, Clone)]
 pub struct ValueMap {
     primary: PrimaryMap<Value, ValueData>,

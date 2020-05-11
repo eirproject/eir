@@ -1,13 +1,14 @@
 use std::any::TypeId;
 use std::sync::Arc;
 use std::fmt::{self, Debug, Formatter};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
+use libeir_intern::Symbol;
 use meta_table::{MetaTable, MetaEntry};
 use lazy_static::lazy_static;
 
 use crate::operation::{self as op, Op};
-use crate::traits::{OpBranches, OpPrinter};
+use crate::traits::{OpBranches, OpPrinter, OpParser};
 
 lazy_static! {
     pub static ref NORMAL: ArcDialect = {
@@ -27,7 +28,9 @@ pub struct Dialect {
     operations: HashSet<TypeId>,
 
     op_branches: MetaTable<dyn OpBranches>,
+
     op_printer: MetaTable<dyn OpPrinter>,
+    op_parser: HashMap<Symbol, Box<dyn OpParser>>,
 }
 impl Debug for Dialect {
     fn fmt(&self, fmt: &mut Formatter) -> Result<(), fmt::Error> {
@@ -42,6 +45,7 @@ impl Dialect {
             operations: HashSet::new(),
             op_branches: MetaTable::new(),
             op_printer: MetaTable::new(),
+            op_parser: HashMap::new(),
         }
     }
 

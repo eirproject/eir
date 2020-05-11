@@ -10,6 +10,7 @@ use libeir_interpreter::{ VMState };
 
 use libeir_lowerutils::analyze;
 
+#[ignore]
 #[test]
 fn compiler() {
     let mut config = ParseConfig::default();
@@ -85,6 +86,7 @@ fn maps() {
     pass_manager.run(&mut eir_mod);
 }
 
+#[ignore]
 #[test]
 fn match_suite() {
     let mut config = ParseConfig::default();

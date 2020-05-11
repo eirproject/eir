@@ -7,7 +7,7 @@ use cranelift_entity::packed_option::ReservedValue;
 
 use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, EntitySet,
                                                      BoundEntitySet };
-use libeir_util_datastructures::aux_hash_map::{ AuxHash, AuxEq };
+use libeir_util_datastructures::aux::{ AuxHash, AuxEq };
 use libeir_util_datastructures::dedup_aux_primary_map::DedupAuxPrimaryMap;
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };

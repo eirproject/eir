@@ -1,254 +1,455 @@
+use log::trace;
+
 use std::collections::BTreeMap;
 
-use bumpalo::Bump;
+use libeir_ir::{FunctionBuilder, Value, Block};
+use libeir_ir::{Mangler, MangleTo};
 
-use libeir_ir::FunctionBuilder;
-use libeir_ir::{Block, OpKind, CallKind};
-use libeir_ir::LiveValues;
-
-use super::SimplifyCfgPass;
-use super::analyze;
-
-macro_rules! copy_map_fun_single {
-    ($chain_analysis:expr, $entry_analysis:expr) => {
-        |mut val| {
-            loop {
-                if let Some(v) = $chain_analysis.static_map.get(&val) {
-                    val = *v;
-                    continue;
-                }
-                if let Some(v) = $entry_analysis.mappings.get(&val) {
-                    match v {
-                        analyze::PhiSource::Scope(iv) => {
-                            val = *iv;
-                            continue;
-                        },
-                        analyze::PhiSource::EntryArg { arg, .. } => {
-                            break Some(*arg);
-                        }
-                    }
-                }
-                break Some(val);
-            }
-        }
-    }
-}
-
-macro_rules! copy_map_fun {
-    ($chain_analysis:expr, $entry_analysis:expr) => {
-        |mut val| {
-
-            loop {
-                // If the argument is of the original target block, it will loop around.
-                // Do not map this value.
-                if $chain_analysis.args.contains_key(&val) {
-                    break Some(val);
-                }
-
-                if let Some(v) = $chain_analysis.static_map.get(&val) {
-                    val = *v;
-                    continue;
-                }
-                if let Some(v) = $entry_analysis.mappings.get(&val) {
-                    match v {
-                        analyze::PhiSource::Scope(iv) => {
-                            val = *iv;
-                            continue;
-                        },
-                        analyze::PhiSource::EntryArg { arg, .. } => {
-                            break Some(*arg);
-                        }
-                    }
-                }
-                break Some(val);
-            }
-        }
-    }
-}
+use super::chain_graph::{
+    ChainGraph, Node, Chain, NodeKind,
+    synthesis::{
+        Synthesis, SegmentData, SegmentHeadKind, SegmentBodyKind, InstanceKind,
+        Instance,
+    },
+};
 
 pub fn rewrite(
-    bump: &Bump,
+    b: &mut FunctionBuilder,
+    map: &mut BTreeMap<Value, Value>,
     target: Block,
-    pass: &mut SimplifyCfgPass,
-    analysis: &analyze::GraphAnalysis,
-    live: &LiveValues,
-    b: &mut FunctionBuilder,
+    graph: &ChainGraph,
+    synthesis: &Synthesis,
 ) {
-    let graph = b.fun().live_block_graph();
-    let chain_analysis = analyze::analyze_chain(
-        bump, target, &b.fun(), &graph, &live, &analysis);
+    let segment_set_pool = synthesis.segment_set_pool.as_ref().unwrap();
+    let segments_back = synthesis.segments_back.as_ref().unwrap();
 
-    if chain_analysis.renames_required {
-        rewrite_chain_generic(bump, pass, &analysis, &chain_analysis, b);
-    } else {
-        // When the renames from the chain are not used outside of
-        // the target block, we can generate better IR.
-        rewrite_chain_norenames(bump, pass, &analysis, &chain_analysis, b);
+    trace!("REWRITE {}", target);
+    //println!("{:#?}", synthesis);
+
+    //assert!(synthesis.segments[synthesis.order[0]].kind.is_out());
+    //assert!(
+    //    synthesis
+    //        .order
+    //        .iter()
+    //        .map(|s| &synthesis.segments[*s])
+    //        .filter(|s| s.kind.is_out())
+    //        .count() == 1
+    //);
+
+    let mut segment_map = BTreeMap::new();
+
+    let mut global_map: BTreeMap<Instance, Value> = BTreeMap::new();
+    let mut local_map: BTreeMap<Node, Value> = BTreeMap::new();
+
+    let mut entry_map: BTreeMap<(Chain, usize), Value> = BTreeMap::new();
+
+    let mut arg_buf = Vec::new();
+
+    let mut walker = crate::util::Walker::new();
+
+    let mut mangler = Mangler::new();
+
+    for (chain, to_value) in synthesis.substitutions.iter() {
+        let chain_entry = graph.get_chain_entry_block(*chain);
+        let from_value = b.value(chain_entry);
+        map.insert(from_value, *to_value);
     }
-}
 
-fn rewrite_chain_generic(
-    bump: &Bump,
-    pass: &mut SimplifyCfgPass,
-    analysis: &analyze::GraphAnalysis,
-    chain_analysis: &analyze::ChainAnalysis,
-    b: &mut FunctionBuilder,
-) {
-    for (from, to) in chain_analysis.static_map.iter() {
-        pass.map.insert(*from, *to);
-    }
+    for segment_id in synthesis.order.iter() {
+        let segment = &synthesis.segments[*segment_id];
 
-    if chain_analysis.entry_edges.len() == 0 { return; }
+        let block = b.block_insert();
+        segment_map.insert(*segment_id, block);
 
-    if chain_analysis.entry_edges.len() == 1 /* || chain_analysis.args.len() == 0 */ {
-        // This code path copies the body of the target into each callee block.
-        // This is safe to do when any of the two below conditions are met:
-        // * There is only one entry edge. In this case any required renames
-        //   can become static renames.
-        // * There are no required renames.
+        match segment.head {
+            SegmentHeadKind::Entry { chain } => {
+                let in_args = segment.in_args.as_slice(&synthesis.instance_pool);
+                for (idx, in_arg) in in_args.iter().enumerate() {
+                    let instance = &synthesis.instances[*in_arg];
 
-        for edge in chain_analysis.entry_edges.clone().keys() {
-            let entry_analysis = analyze::analyze_entry_edge(
-                bump, &analysis, &chain_analysis, *edge);
+                    let key = (chain, idx);
 
-            // If the target is the same as the callee, then this is already optimal.
-            if chain_analysis.target == entry_analysis.callee { return; }
+                    let arg = b.block_arg_insert(block);
+                    assert!(!entry_map.contains_key(&key));
+                    entry_map.insert(key, arg);
 
-            // In the case where there is only one entry edge, all mappings become static.
-            for (from, to) in entry_analysis.mappings.iter() {
-                match *to {
-                    analyze::PhiSource::Scope(to_value) => {
-                        pass.map.insert(*from, to_value);
-                    }
-                    analyze::PhiSource::EntryArg { called, arg, .. } => {
-                        assert!(called == entry_analysis.callee);
-                        pass.map.insert(*from, arg);
+                    global_map.insert(*in_arg, arg);
+
+                    if instance.is_relevant() {
+                        let node = instance.node();
+                        let node_kind = graph.node(node);
+
+                        match node_kind {
+                            NodeKind::EntryArg(entry_arg) => {
+                                assert!(entry_arg.chain == chain);
+                                assert!(entry_arg.arg_index == idx);
+                            }
+                            _ => unreachable!(),
+                        }
                     }
                 }
             }
-
-            // Clear the callee block and copy the target block body.
-            b.block_clear(entry_analysis.callee);
-            b.block_copy_body_map(
-                chain_analysis.target,
-                entry_analysis.callee,
-                &mut copy_map_fun_single!(chain_analysis, entry_analysis),
-            );
+            SegmentHeadKind::Intermediate => {}
         }
-    } else {
+    }
 
-        // Create the new terminal block
-        let new_target_block = b.block_insert();
+    trace!("ENTRY MAP {:?}", entry_map);
 
-        // Insert the arguments and insert the mappings for them
-        let mut new_target_args = Vec::new();
-        for value in chain_analysis.args.keys() {
-            let mapped = b.block_arg_insert(new_target_block);
-            new_target_args.push(mapped);
-            pass.map.insert(*value, mapped);
+    for (from, to) in graph.iter_uniform_mappings() {
+        let to_kind = graph.node(to);
+        match to_kind {
+            NodeKind::Scope(value) => {
+                map.insert(from, *value);
+            },
+            NodeKind::EntryArg(entry_arg) => {
+                if synthesis.substitutions.contains_key(&entry_arg.chain) {
+                    continue;
+                }
+
+                let key = (entry_arg.chain, entry_arg.arg_index);
+                trace!("Entry {:?}", key);
+                let to_value = entry_map[&key];
+                map.insert(from, to_value);
+            },
+            _ => unreachable!(),
         }
+    }
 
-        // Copy the body of the target to the new target block.
-        b.block_copy_body_map(chain_analysis.target, new_target_block,
-                              &mut |val| Some(val));
+    for segment_id in synthesis.order.iter() {
+        local_map.clear();
 
-        // Rewrite all entry edges
-        for edge in chain_analysis.entry_edges.clone().keys() {
-            let entry_analysis = analyze::analyze_entry_edge(
-                bump, &analysis, &chain_analysis, *edge);
+        let segment = &synthesis.segments[*segment_id];
+        let segment_chains = segment.chains.bind(&synthesis.chain_set_pool);
+        let all_chains = segment_chains.size() == graph.chain_count();
+        trace!("SEGMENT {} {:?}", segment_id, segment);
 
-            //if chain_analysis.target == entry_analysis.callee { continue; }
+        let block = segment_map[segment_id];
+        let block_val = b.value(block);
 
-            let new_intermediate = b.block_insert();
-            let mut inter_map = BTreeMap::new();
-            for prev_arg_n in 0..b.fun().block_args(entry_analysis.callee).len() {
-                let prev_arg = b.fun().block_args(entry_analysis.callee)[prev_arg_n];
-                let new_arg = b.block_arg_insert(new_intermediate);
-                inter_map.insert(prev_arg, new_arg);
-                if !pass.map.contains_key(&prev_arg) {
-                    pass.map.insert(prev_arg, new_arg);
+        let in_args = segment.in_args.as_slice(&synthesis.instance_pool);
+        trace!("IN ARGS {:?}", in_args);
+
+        match segment.head {
+            SegmentHeadKind::Entry { chain } => {
+                let old_block = graph.get_chain_entry_block(chain);
+                let old_block_val = b.value(old_block);
+
+                assert!(!map.contains_key(&old_block_val));
+                map.insert(old_block_val, block_val);
+
+                for (idx, in_arg) in in_args.iter().enumerate() {
+                    let key = (chain, idx);
+                    let instance = &synthesis.instances[*in_arg];
+
+                    match instance {
+                        InstanceKind::NotRelevant => (), // TODO
+                        InstanceKind::Arg { node, .. } => {
+                            let node = instance.node();
+                            let arg = entry_map[&key];
+
+                            global_map.insert(*in_arg, arg);
+                            local_map.insert(node, arg);
+                        },
+                        _ => unreachable!(),
+                    }
                 }
             }
-            pass.map.insert(
-                b.value(entry_analysis.callee),
-                b.value(new_intermediate),
-            );
+            SegmentHeadKind::Intermediate => {
+                for (idx, in_arg) in in_args.iter().enumerate() {
+                    let instance = &synthesis.instances[*in_arg];
 
-            let args: Vec<_> = entry_analysis.args.iter()
-                .map(|v| {
-                    b.value_map(
-                        v.value(),
-                        &mut copy_map_fun!(chain_analysis, entry_analysis),
-                    )
-                })
-                .collect();
-            b.op_call_flow(new_intermediate, new_target_block, &args);
-            b.block_value_map(new_intermediate, &mut |v| {
-                inter_map.get(&v).cloned().unwrap_or(v)
-            });
+                    let arg = b.block_arg_insert(block);
+
+                    match instance {
+                        InstanceKind::NotRelevant => (), // TODO
+                        InstanceKind::Arg { node, .. } => {
+                            let node = instance.node();
+
+                            global_map.insert(*in_arg, arg);
+                            local_map.insert(node, arg);
+                        },
+                        _ => unreachable!(),
+                    }
+                }
+            }
+        }
+
+
+        for external in segment.externals.as_slice(&synthesis.instance_pool) {
+            let val = global_map[external];
+            let instance = &synthesis.instances[*external];
+            local_map.insert(instance.node(), val);
+        }
+
+        walker.clear();
+        for instance_id in segment.instances.as_slice(&synthesis.instance_pool) {
+            let instance = &synthesis.instances[*instance_id];
+            walker.put(instance.node());
+        }
+
+        let mut order: Vec<Node> = Vec::new();
+        while let Some(node_id) = walker.next() {
+            if local_map.contains_key(&node_id) {
+                continue;
+            }
+            order.push(node_id);
+
+            let node = graph.node(node_id);
+
+            match node {
+                NodeKind::Phi(phi) => {
+                    let mut pred_node = None;
+                    for (chain, n_pred_node) in phi.entries.iter() {
+                        if segment_chains.contains(*chain) {
+                            if let Some(old_pred_node) = pred_node {
+                                assert!(*n_pred_node == old_pred_node);
+                            }
+                            pred_node = Some(*n_pred_node);
+                        }
+                    }
+                    if let Some(pred_node) = pred_node {
+                        walker.put(pred_node);
+                    }
+                },
+                _ => {
+                    for pred_node in graph.node(node_id).dependencies() {
+                        walker.put(pred_node);
+                    }
+                },
+            }
 
         }
 
-    }
+        trace!("ORDER {:?}", order);
 
-}
+        for node_id in order.iter().rev() {
+            match graph.node(*node_id) {
+                NodeKind::Scope(value) => {
+                    local_map.insert(*node_id, *value);
+                },
+                NodeKind::EntryArg(entry_arg) => {
+                    assert!(local_map.contains_key(node_id));
+                    //let key = (entry_arg.chain, entry_arg.arg_index);
+                    //if !local_map.contains_key(node_id) {
+                    //    let new_entry_arg = entry_map[&key];
+                    //    local_map.insert(*node_id, new_entry_arg);
+                    //}
+                },
+                NodeKind::Phi(phi) => {
+                    trace!("PHI {:#?}, {:?}", phi, segment_chains);
 
-fn rewrite_chain_norenames(
-    bump: &Bump,
-    pass: &mut SimplifyCfgPass,
-    analysis: &analyze::GraphAnalysis,
-    chain_analysis: &analyze::ChainAnalysis,
-    b: &mut FunctionBuilder,
-) {
+                    if let Some(select_node) =
+                        phi.entries
+                           .iter()
+                           .find(|(chain, _node)| segment_chains.contains(**chain))
+                           .map(|(_chain, node)| *node)
+                    {
+                        let from_value = local_map[&select_node];
+                        local_map.insert(*node_id, from_value);
+                    } else {
+                        unreachable!()
+                        //let from_value = phi.value.unwrap();
+                        //local_map.insert(*node_id, from_value);
+                    }
 
-    for (from, to) in chain_analysis.static_map.iter() {
-        pass.map.insert(*from, *to);
-    }
+                },
+                NodeKind::Prim(prim) => {
+                    let mut map_value = |val| -> Option<Value> {
+                        let node = prim.dependencies.get(&val);
+                        node.map(|node| local_map[node])
+                    };
+                    let new_prim = b.value_map(prim.prim, &mut map_value);
+                    local_map.insert(*node_id, new_prim);
+                },
+                NodeKind::BlockCapture(bc) => {
+                    let capture;
+                    if all_chains || bc.dependencies.len() == 0 {
+                        for (from_val, to_node) in bc.dependencies.iter() {
+                            let to_val = local_map[to_node];
+                            map.insert(*from_val, to_val);
+                        }
+                        capture = bc.capture;
+                    } else {
+                        mangler.start(MangleTo(bc.capture));
+                        for (from_val, to_node) in bc.dependencies.iter() {
+                            let to_val = local_map[to_node];
+                            mangler.add_rename(MangleTo(*from_val), MangleTo(to_val));
+                        }
+                        trace!("blockcapturemangle!");
+                        capture = mangler.run(b);
+                    }
+                    let capture_val = b.value(capture);
+                    local_map.insert(*node_id, capture_val);
+                },
+            }
+        }
 
-    match b.fun().block_kind(chain_analysis.target).unwrap() {
-        OpKind::Call(CallKind::ControlFlow) => {
-            for edge in chain_analysis.entry_edges.clone().keys() {
+        for instance_id in segment.instances.as_slice(&synthesis.instance_pool) {
+            let instance = &synthesis.instances[*instance_id];
+            global_map.insert(*instance_id, local_map[&instance.node()]);
+        }
 
-                let entry_analysis = analyze::analyze_entry_edge(
-                    bump, &analysis, &chain_analysis, *edge);
-
-                let call_target_equal_to_callee = {
-                    let fun = b.fun();
-
-                    let c = &fun.block_reads(chain_analysis.target)[1..];
-                    let t = fun.block_args(entry_analysis.callee);
-
-                    c.len() == t.len() && c.iter().zip(t.iter())
-                        .all(|(from, to)| {
-                            let mapped = chain_analysis.static_map.get(from)
-                                .map(|v| analyze::PhiSource::Scope(*v))
-                                .or_else(|| entry_analysis.mappings.get(from).cloned())
-                                .unwrap_or(analyze::PhiSource::Scope(*from))
-                                .value();
-                            mapped == *to
-                        })
+        match &segment.body {
+            SegmentBodyKind::None => unreachable!(),
+            SegmentBodyKind::Terminal { single: true } => {
+                let mut map_value = |val| -> Option<Value> {
+                    let node = graph.get_root(val);
+                    node.map(|node| local_map[&node])
                 };
+                b.block_copy_body_map(target, block, &mut map_value);
 
-                if call_target_equal_to_callee {
-                    // The callee can be replaced by the call target
-                    let callee_val = b.value(entry_analysis.callee);
-                    let call_target = b.fun().block_reads(
-                        chain_analysis.target)[0];
-                    pass.map.insert(callee_val, call_target);
-                } else {
-                    // If the callee is the target, we don't change anything
-                    if entry_analysis.callee == chain_analysis.target { continue; }
+                for (root_val, root_node) in graph.iter_roots() {
+                    let to_val = local_map[&root_node];
+                    map.insert(root_val, to_val);
+                }
+            },
+            SegmentBodyKind::Terminal { single: false } => {
+                let mut map_value = |val| -> Option<Value> {
+                    let node = graph.get_root(val);
+                    node.map(|node| local_map[&node])
+                };
+                b.block_copy_body_map(target, block, &mut map_value);
+            },
+            SegmentBodyKind::ToIntermediate { to, out_args } => {
+                let to_block = segment_map[to];
 
-                    b.block_clear(entry_analysis.callee);
-                    b.block_copy_body_map(
-                        chain_analysis.target,
-                        entry_analysis.callee,
-                        &mut copy_map_fun_single!(chain_analysis, entry_analysis),
-                    );
+                arg_buf.clear();
+                for instance_id in out_args.as_slice(&synthesis.instance_pool) {
+                    arg_buf.push(global_map[instance_id]);
                 }
 
-            }
+                b.op_call_flow(block, to_block, &arg_buf);
+            },
         }
-        _ => rewrite_chain_generic(bump, pass, analysis, chain_analysis, b),
+
+        //match &segment.kind {
+        //    SegmentKind::In { chain, out_args, successor } => {
+        //        local_map.clear();
+
+        //        println!("Chain: {}", chain);
+        //        b.block_clear(*chain);
+
+        //        for node_id in segment.nodes.as_slice(&synthesis.pool).iter().rev() {
+        //            println!("{}", node_id);
+        //            let node = graph.node(*node_id);
+        //            println!("{:?}", node);
+        //            do_node(*node_id, node, &mut local_map, b, graph, synthesis, segment);
+        //        }
+
+        //        arg_buf.clear();
+        //        for out_arg in out_args.as_slice(&synthesis.pool) {
+        //            let arg_val = local_map[out_arg];
+        //            arg_buf.push(arg_val);
+        //        }
+
+        //        let target = segment_map[successor];
+        //        b.op_call_flow(*chain, target, &arg_buf);
+        //    },
+        //    SegmentKind::Middle { in_args, out_args, successor } => {
+        //        todo!()
+        //    },
+        //    SegmentKind::Out { in_args } => {
+        //        local_map.clear();
+
+        //        let block = b.block_insert();
+        //        segment_map.insert(*segment_id, block);
+        //        for arg in in_args.as_slice(&synthesis.pool) {
+        //            let arg_val = b.block_arg_insert(block);
+        //            local_map.insert(*arg, arg_val);
+        //        }
+        //        println!("{:?}", local_map);
+
+        //        for node_id in segment.nodes.as_slice(&synthesis.pool).iter().rev() {
+        //            println!("{}", node_id);
+        //            if !local_map.contains_key(node_id) {
+        //                let node = graph.node(*node_id);
+        //                println!("{:?}", node);
+
+        //                // Phis are never allowed in Out segments since they can
+        //                // never have specialized.
+        //                assert!(!node.is_phi());
+
+        //                do_node(*node_id, node, &mut local_map, b, graph, synthesis, segment);
+        //            }
+        //        }
+
+        //        let mut map_value = |val| -> Option<Value> {
+        //            let node = graph.get_root(val);
+        //            node.map(|n| local_map[&n])
+        //        };
+
+        //        b.block_copy_body_map(target, block, &mut map_value);
+        //    },
+        //    SegmentKind::Single { chain } => {
+        //        local_map.clear();
+
+        //        let block = *chain;
+        //        b.block_clear(block);
+
+        //        for node_id in segment.nodes.as_slice(&synthesis.pool).iter().rev() {
+        //            println!("{}", node_id);
+        //            let node = graph.node(*node_id);
+        //            println!("{:?}", node);
+        //            do_node(*node_id, node, &mut local_map, b, graph, synthesis, segment);
+        //        }
+
+        //        let mut map_value = |val| -> Option<Value> {
+        //            let node = graph.get_root(val);
+        //            node.map(|n| local_map[&n])
+        //        };
+
+        //        b.block_copy_body_map(target, block, &mut map_value);
+        //    },
+        //}
+
     }
+
 }
+
+//fn do_node(
+//    node_id: Node,
+//    node: &NodeKind,
+//    local_map: &mut BTreeMap<Node, Value>,
+//    b: &mut FunctionBuilder,
+//    graph: &ChainGraph,
+//    synthesis: &Synthesis,
+//    segment: &SegmentData,
+//) {
+//    match node {
+//        NodeKind::Value(val) => {
+//            unimplemented!()
+//            //local_map.insert(node_id, *val);
+//        },
+//        NodeKind::Phi(phi) => {
+//            let mut found_node = None;
+//            for block in segment.blocks.iter(&synthesis.block_pool) {
+//                let found_node_d = phi.entries[&block];
+//                if let Some(found_node_i) = found_node {
+//                    assert!(found_node_i == found_node_d);
+//                }
+//                found_node = Some(found_node_d);
+//            }
+//            let found_value = local_map[&found_node.unwrap()];
+//            local_map.insert(node_id, found_value);
+//        },
+//        NodeKind::Prim(prim) => {
+//            let mut map_val = |val| -> Option<Value> {
+//                println!("MAP: {}", val);
+//
+//                let node = prim.dependencies.get(&val);
+//                node.map(|n| local_map[n])
+//
+//                //if val == prim.prim {
+//                //    None
+//                //} else {
+//                //    let node = prim.dependencies.get(&val).unwrap();
+//                //    Some(local_map[node])
+//                //}
+//            };
+//
+//            let new_prim = b.value_map(prim.prim, &mut map_val);
+//            local_map.insert(node_id, new_prim);
+//        },
+//        NodeKind::BlockCapture(_) => todo!(),
+//    }
+//}

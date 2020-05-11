@@ -10,6 +10,7 @@ libeir_ir = { path = "../libeir_ir" }
 libeir_intern = { path = "../libeir_intern" }
 libeir_util_pattern_compiler = { path = "../util/libeir_util_pattern_compiler" }
 libeir_util_dot_graph = { path = "../util/libeir_util_dot_graph" }
+libeir_util_datastructures = { path = "../util/libeir_util_datastructures" }
 
 matches = "0.1.8"
 

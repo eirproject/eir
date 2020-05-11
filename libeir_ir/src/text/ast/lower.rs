@@ -271,6 +271,9 @@ fn lower_operation(
 ) -> Result<(), ()>
 {
     match op {
+        ast::Op::Dyn(ident, opts) => {
+            unimplemented!()
+        }
         ast::Op::CallControlFlow(call) => {
             let target = lower_value(errors, b, scope, &call.target)?;
             let args: Result<Vec<_>, _> = call.args.iter()

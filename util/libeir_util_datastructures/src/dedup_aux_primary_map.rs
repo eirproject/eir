@@ -1,7 +1,9 @@
 use std::ops::Index;
 
 use cranelift_entity::{ PrimaryMap, EntityRef };
-use crate::aux_hash_map::{ AuxHashMap, AuxHash, AuxEq };
+
+use crate::aux::{AuxHash, AuxEq};
+use crate::aux_hash_map::AuxHashMap;
 
 pub type DedupPrimaryMap<K, V> = DedupAuxPrimaryMap<K, V, ()>;
 

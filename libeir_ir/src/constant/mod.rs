@@ -2,7 +2,8 @@ use std::hash::{ Hash, Hasher };
 
 use libeir_intern::{ Ident };
 
-use libeir_util_datastructures::aux_hash_map::{ AuxHashMap, AuxHash, AuxEq };
+use libeir_util_datastructures::aux::{ AuxHash, AuxEq };
+use libeir_util_datastructures::aux_hash_map::AuxHashMap;
 
 use cranelift_entity::{ PrimaryMap, ListPool, EntityList, entity_impl };
 
