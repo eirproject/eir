@@ -3,14 +3,13 @@ use libeir_ir::{
     Value as IrValue,
     Block as IrBlock,
     MapPutUpdate,
+    constant::EmptyMap,
 };
-use libeir_ir::constant::{ EmptyMap };
 
-use libeir_intern::{ Symbol };
+use libeir_intern::Symbol;
 
-use crate::parser::ast::{ Map, MapUpdate, MapField };
-
-use crate::lower::{ LowerCtx, lower_single };
+use crate::parser::ast::{Map, MapUpdate, MapField};
+use crate::lower::{LowerCtx, lower_single};
 
 pub(super) fn lower_map_update_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder,
                                     mut block: IrBlock,

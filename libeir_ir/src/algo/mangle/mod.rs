@@ -116,6 +116,12 @@ impl Mangler {
     {
         self.values_map.insert(old.into(), (new.into(), true));
     }
+
+    /// Adds a value rename that should not be followed in the mangling process.
+    /// This is extremely useful in that it allows you to limit the scope of the
+    /// mangle.
+    /// An example would be allowing you to only mangle the relevant parts when
+    /// inlining a closure.
     pub fn add_rename_nofollow<O, N>(
         &mut self,
         old: O,
@@ -129,6 +135,11 @@ impl Mangler {
 
     /// Runs lambda mangling on a single function container
     pub fn run(&mut self, fun: &mut FunctionBuilder) -> Block {
+        println!("==================================");
+        println!("==================================");
+        println!("======== Mangle!!! ");
+        println!("==================================");
+        println!("==================================");
         let mut recv = receiver::SingleMangleReceiver {
             fun,
         };

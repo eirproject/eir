@@ -1,22 +1,28 @@
 use std::path::PathBuf;
 
-use crate::{ ParseConfig, lower_file, lower };
 use crate::ct_runner::run_ct_suite;
+use crate::{lower, lower_file, ParseConfig};
 
 use libeir_intern::Ident;
 use libeir_passes::PassManager;
 
-use libeir_interpreter::{ VMState };
+use libeir_interpreter::VMState;
 
+use libeir_lowerutils::analyze;
+
+#[ignore]
 #[test]
 fn compiler() {
     let mut config = ParseConfig::default();
 
-    config.include_paths.push_front(PathBuf::from("../otp/lib/compiler/src/"));
-    config.include_paths.push_front(PathBuf::from("../otp/bootstrap/lib/stdlib/include/"));
+    config
+        .include_paths
+        .push_front(PathBuf::from("../otp/lib/compiler/src/"));
+    config
+        .include_paths
+        .push_front(PathBuf::from("../otp/bootstrap/lib/stdlib/include/"));
 
-    let mut eir_mod = lower_file(
-        "../otp/lib/compiler/src/compile.erl", config).unwrap();
+    let mut eir_mod = lower_file("../otp/lib/compiler/src/compile.erl", config).unwrap();
 
     for fun_def in eir_mod.function_iter() {
         let fun = fun_def.function();
@@ -32,11 +38,14 @@ fn compiler() {
 fn beam_disasm() {
     let mut config = ParseConfig::default();
 
-    config.include_paths.push_front(PathBuf::from("../otp/lib/compiler/src/"));
-    config.include_paths.push_front(PathBuf::from("../otp/bootstrap/lib/stdlib/include/"));
+    config
+        .include_paths
+        .push_front(PathBuf::from("../otp/lib/compiler/src/"));
+    config
+        .include_paths
+        .push_front(PathBuf::from("../otp/bootstrap/lib/stdlib/include/"));
 
-    let mut eir_mod = lower_file(
-        "../otp/lib/compiler/src/beam_disasm.erl", config).unwrap();
+    let mut eir_mod = lower_file("../otp/lib/compiler/src/beam_disasm.erl", config).unwrap();
 
     for fun_def in eir_mod.function_iter() {
         let fun = fun_def.function();
@@ -45,7 +54,6 @@ fn beam_disasm() {
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
-
 }
 
 #[ignore]
@@ -53,11 +61,14 @@ fn beam_disasm() {
 fn core_parse() {
     let mut config = ParseConfig::default();
 
-    config.include_paths.push_front(PathBuf::from("../otp/lib/compiler/src/"));
-    config.include_paths.push_front(PathBuf::from("../otp/bootstrap/lib/stdlib/include/"));
+    config
+        .include_paths
+        .push_front(PathBuf::from("../otp/lib/compiler/src/"));
+    config
+        .include_paths
+        .push_front(PathBuf::from("../otp/bootstrap/lib/stdlib/include/"));
 
-    let mut eir_mod = lower_file(
-        "../otp/lib/compiler/src/core_parse.erl", config).unwrap();
+    let mut eir_mod = lower_file("../otp/lib/compiler/src/core_parse.erl", config).unwrap();
 
     for fun_def in eir_mod.function_iter() {
         let fun = fun_def.function();
@@ -71,8 +82,7 @@ fn core_parse() {
 #[test]
 fn maps() {
     let config = ParseConfig::default();
-    let mut eir_mod = lower_file(
-        "../otp/lib/stdlib/src/maps.erl", config).unwrap();
+    let mut eir_mod = lower_file("../otp/lib/stdlib/src/maps.erl", config).unwrap();
 
     for fun_def in eir_mod.function_iter() {
         let fun = fun_def.function();
@@ -83,13 +93,13 @@ fn maps() {
     pass_manager.run(&mut eir_mod);
 }
 
+#[ignore]
 #[test]
 fn match_suite() {
     let mut config = ParseConfig::default();
     config.code_paths.push_front(PathBuf::from("../otp/lib/"));
 
-    let mut eir_mod = lower_file(
-        "../otp/lib/compiler/test/match_SUITE.erl", config).unwrap();
+    let mut eir_mod = lower_file("../otp/lib/compiler/test/match_SUITE.erl", config).unwrap();
 
     for fun_def in eir_mod.function_iter() {
         let fun = fun_def.function();
@@ -122,8 +132,7 @@ fn bs_match_suite() {
     let mut config = ParseConfig::default();
     config.code_paths.push_front(PathBuf::from("../otp/lib/"));
 
-    let mut eir_mod = lower_file(
-        "../otp_build/bs_match_SUITE_patched.erl", config).unwrap();
+    let mut eir_mod = lower_file("../otp_build/bs_match_SUITE_patched.erl", config).unwrap();
 
     for fun_def in eir_mod.function_iter() {
         let fun = fun_def.function();
@@ -144,12 +153,10 @@ fn bs_match_suite() {
 #[test]
 fn maps_suite() {
     let config = ParseConfig::default();
-    let mut maps_eir_mod = lower_file(
-        "../otp/lib/stdlib/src/maps.erl", config).unwrap();
+    let mut maps_eir_mod = lower_file("../otp/lib/stdlib/src/maps.erl", config).unwrap();
 
     let config = ParseConfig::default();
-    let mut eir_mod = lower_file(
-        "../otp/lib/compiler/test/map_SUITE.erl", config).unwrap();
+    let mut eir_mod = lower_file("../otp/lib/compiler/test/map_SUITE.erl", config).unwrap();
 
     for fun_def in maps_eir_mod.function_iter() {
         let fun = fun_def.function();
@@ -177,11 +184,14 @@ fn maps_suite() {
 fn xmerl_scan() {
     let mut config = ParseConfig::default();
     config.code_paths.push_front(PathBuf::from("../otp/lib/"));
-    config.include_paths.push_front(PathBuf::from("../otp/lib/xmerl/src/"));
-    config.include_paths.push_front(PathBuf::from("../otp/lib/xmerl/include/"));
+    config
+        .include_paths
+        .push_front(PathBuf::from("../otp/lib/xmerl/src/"));
+    config
+        .include_paths
+        .push_front(PathBuf::from("../otp/lib/xmerl/include/"));
 
-    let mut eir_mod = lower_file(
-        "../otp/lib/xmerl/src/xmerl_scan.erl", config).unwrap();
+    let mut eir_mod = lower_file("../otp/lib/xmerl/src/xmerl_scan.erl", config).unwrap();
 
     for fun_def in eir_mod.function_iter() {
         let fun = fun_def.function();
@@ -197,11 +207,15 @@ fn xmerl_scan() {
 fn xmerl_sax_parser_utf8() {
     let mut config = ParseConfig::default();
     config.code_paths.push_front(PathBuf::from("../otp/lib/"));
-    config.include_paths.push_front(PathBuf::from("../otp/lib/xmerl/src/"));
-    config.include_paths.push_front(PathBuf::from("../otp/lib/xmerl/include/"));
+    config
+        .include_paths
+        .push_front(PathBuf::from("../otp/lib/xmerl/src/"));
+    config
+        .include_paths
+        .push_front(PathBuf::from("../otp/lib/xmerl/include/"));
 
-    let mut eir_mod = lower_file(
-        "../otp/lib/xmerl/src/xmerl_sax_parser_latin1.erl", config).unwrap();
+    let mut eir_mod =
+        lower_file("../otp/lib/xmerl/src/xmerl_sax_parser_latin1.erl", config).unwrap();
 
     for fun_def in eir_mod.function_iter() {
         let fun = fun_def.function();
@@ -216,8 +230,7 @@ fn xmerl_sax_parser_utf8() {
 #[test]
 fn foo() {
     let config = ParseConfig::default();
-    let mut eir_mod = lower_file(
-        "foo.erl", config).unwrap();
+    let mut eir_mod = lower_file("foo.erl", config).unwrap();
 
     for fun_def in eir_mod.function_iter() {
         let fun = fun_def.function();
@@ -260,7 +273,6 @@ Val
         fun.live_values();
     }
 }
-
 
 #[test]
 fn unary_op_1() {
@@ -332,7 +344,6 @@ unary_op_1(Vop@1) ->
         let fun = fun_def.function();
         fun.live_values();
     }
-
 }
 
 #[test]
@@ -369,5 +380,4 @@ unary_op_1(Vop@1) ->
         let fun = fun_def.function();
         fun.live_values();
     }
-
 }

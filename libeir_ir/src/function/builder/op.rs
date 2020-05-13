@@ -1,13 +1,14 @@
 use libeir_diagnostics::SourceSpan;
-use libeir_intern::Symbol;
 
 use cranelift_entity::EntityList;
 
-use super::FunctionBuilder;
 use crate::binary::BinaryEntrySpecifier;
+use crate::operation::{DynOp, OpBuild};
 use crate::IntoValue;
 use crate::{BasicType, CallKind, MapPutUpdate, MatchKind, OpKind};
 use crate::{Block, PatternClause, Value};
+
+use super::FunctionBuilder;
 
 /// Operation constructors
 impl<'a> FunctionBuilder<'a> {
@@ -99,26 +100,25 @@ impl<'a> FunctionBuilder<'a> {
         cont
     }
 
-    pub fn op_intrinsic<'b>(
+    pub fn op_intrinsic<'b, O: OpBuild>(
         &'b mut self,
-        span: SourceSpan,
         block: Block,
-        name: Symbol,
+        op: O,
         args: &[Value],
+        _token: O::Token,
     ) {
+        assert!(self.fun.dialect.contains_op::<O>());
+
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
         assert!(data.reads.is_empty());
 
-        data.op = Some(OpKind::Intrinsic(name));
+        let dyn_op = DynOp::new(op);
+        data.op = Some(OpKind::Dyn(dyn_op));
         data.reads
             .extend(args.iter().cloned(), &mut self.fun.pool.value);
-        data.location = self.fun.locations.location(None, None, None, span);
 
         self.graph_update_block(block);
-    }
-    pub fn op_intrinsic_build(&mut self, span: SourceSpan, name: Symbol) -> IntrinsicBuilder {
-        IntrinsicBuilder::new(span, name, self)
     }
 
     pub fn op_map_put_build(&mut self, span: SourceSpan, value: Value) -> MapPutBuilder {
@@ -239,44 +239,6 @@ impl<'a> FunctionBuilder<'a> {
         (true_cont, false_cont)
     }
 
-    pub fn op_binary_push(
-        &mut self,
-        span: SourceSpan,
-        block: Block,
-        specifier: BinaryEntrySpecifier,
-        bin: Value,
-        value: Value,
-        size: Option<Value>,
-    ) -> (Block, Block) {
-        if size.is_some() {
-            assert!(specifier.has_size());
-        }
-
-        let ok_cont = self.fun.block_insert();
-        self.fun.block_arg_insert(ok_cont);
-        let ok_cont_val = self.value(ok_cont);
-        let err_cont = self.fun.block_insert();
-        let err_cont_val = self.value(err_cont);
-
-        let data = self.fun.blocks.get_mut(block).unwrap();
-        assert!(data.op.is_none());
-        assert!(data.reads.is_empty());
-
-        data.op = Some(OpKind::BinaryPush { specifier });
-        data.reads.push(ok_cont_val, &mut self.fun.pool.value);
-        data.reads.push(err_cont_val, &mut self.fun.pool.value);
-        data.reads.push(bin, &mut self.fun.pool.value);
-        data.reads.push(value, &mut self.fun.pool.value);
-        if let Some(size) = size {
-            data.reads.push(size, &mut self.fun.pool.value);
-        }
-        data.location = self.fun.locations.location(None, None, None, span);
-
-        self.graph_update_block(block);
-
-        (ok_cont, err_cont)
-    }
-
     pub fn op_unreachable(&mut self, span: SourceSpan, block: Block) {
         let data = self.fun.blocks.get_mut(block).unwrap();
         assert!(data.op.is_none());
@@ -290,49 +252,6 @@ impl<'a> FunctionBuilder<'a> {
 
     pub fn op_match_build(&mut self, span: SourceSpan) -> MatchBuilder {
         MatchBuilder::new(span)
-    }
-}
-
-pub struct IntrinsicBuilder {
-    name: Symbol,
-    span: SourceSpan,
-    pub block: Option<Block>,
-    values: EntityList<Value>,
-}
-impl IntrinsicBuilder {
-    pub fn new<'a>(span: SourceSpan, name: Symbol, _b: &mut FunctionBuilder<'a>) -> Self {
-        IntrinsicBuilder {
-            name,
-            span,
-            block: None,
-            values: EntityList::new(),
-        }
-    }
-
-    pub fn push_value<'a, V>(&mut self, val: V, b: &mut FunctionBuilder<'a>)
-    where
-        V: IntoValue,
-    {
-        let val_n = b.value(val);
-        self.values.push(val_n, &mut b.fun.pool.value);
-    }
-
-    pub fn finish<'a>(self, b: &mut FunctionBuilder<'a>) {
-        if self.values.len(&b.fun().pool.value) == 0 {
-            panic!();
-        }
-
-        let block = self.block.unwrap();
-
-        let data = b.fun.blocks.get_mut(block).unwrap();
-        assert!(data.op.is_none());
-        assert!(data.reads.is_empty());
-
-        data.op = Some(OpKind::Intrinsic(self.name));
-        data.reads = self.values;
-        data.location = b.fun.locations.location(None, None, None, self.span);
-
-        b.graph_update_block(block);
     }
 }
 

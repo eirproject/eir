@@ -2,7 +2,7 @@ use std::hash::{Hash, Hasher};
 
 use libeir_util_datastructures::dedup_aux_primary_map::DedupPrimaryMap;
 use libeir_util_datastructures::{
-    aux_hash_map::{AuxEq, AuxHash},
+    aux::{AuxEq, AuxHash},
     dedup_aux_primary_map::DedupAuxPrimaryMap,
 };
 

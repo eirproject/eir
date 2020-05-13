@@ -1,10 +1,11 @@
 use crate::FunctionPass;
 use super::SimplifyCfgPass;
 
-use libeir_ir::parse_function_unwrap;
+use libeir_ir::{parse_function_unwrap, parse_function_map_unwrap};
 
 #[test]
 fn primop_in_chain() {
+    let _ = simple_logger::init();
 
     let mut fun = parse_function_unwrap("
 a'foo':a'bar'/1 {
@@ -35,6 +36,7 @@ a'foo':a'bar'/1 {
 
 #[test]
 fn double_primop_in_chain() {
+    let _ = simple_logger::init();
 
     let mut fun = parse_function_unwrap("
 a'foo':a'bar'/1 {
@@ -66,6 +68,7 @@ a'foo':a'bar'/1 {
 
 #[test]
 fn split_primop_in_chain() {
+    let _ = simple_logger::init();
 
     let mut fun = parse_function_unwrap("
 a'foo':a'bar'/3 {
@@ -110,6 +113,7 @@ a'foo':a'bar'/3 {
 
 #[test]
 fn two_split_primop_in_chain() {
+    let _ = simple_logger::init();
 
     let mut fun = parse_function_unwrap("
 a'foo':a'bar'/5 {
@@ -119,7 +123,7 @@ a'foo':a'bar'/5 {
     b_true():
         b_true1(%b, %B);
       b_true1(%bb, %BB):
-        b_join({%bb}, {%BB});
+        b_join({{%bb}, %BB}, {%BB});
 
     b_false():
         b_false1(%c, %C);
@@ -142,7 +146,7 @@ a'foo':a'bar'/5 {
     entry(%ret, %thr, %a, %b, %c, %B, %C):
         if_bool %a b_true b_false;
     b_true():
-        %ret({{{%b}}, {{%B}}});
+        %ret({{{{%b}, %B}}, {{%B}}});
     b_false():
         %ret({{{%c}}, {{%C}}});
 }
@@ -153,7 +157,38 @@ a'foo':a'bar'/5 {
 }
 
 #[test]
+fn simple_tail_call_elimination() {
+    let _ = simple_logger::init();
+
+    let mut fun = parse_function_unwrap("
+a'foo':a'bar'/0 {
+    entry(%ret, %thr):
+        a'foo':a'foo'/0(b2, b3);
+    b2(%ret_arg):
+        %ret(%ret_arg);
+    b3(%thr_a, %thr_b, %thr_c):
+        %thr(%thr_a, %thr_b, %thr_c);
+}
+");
+    let mut b = fun.builder();
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    let after = parse_function_unwrap("
+a'foo':a'bar'/0 {
+    entry(%ret, %thr):
+        a'foo':a'foo'/0(%ret, %thr);
+}
+");
+
+    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
+
+}
+
+#[test]
 fn tail_call_elimination() {
+    let _ = simple_logger::init();
 
     let mut fun = parse_function_unwrap("
 a'foo':a'bar'/0 {
@@ -185,6 +220,7 @@ a'foo':a'bar'/0 {
 
 #[test]
 fn recursive_simplification() {
+    let _ = simple_logger::init();
 
     let mut fun = parse_function_unwrap("
 a'foo':a'bar'/0 {
@@ -215,6 +251,7 @@ a'foo':a'bar'/0 {
 
 #[test]
 fn value_list_removal() {
+    let _ = simple_logger::init();
 
     let mut fun = parse_function_unwrap("
 a'foo':a'bar'/2 {
@@ -241,6 +278,7 @@ a'foo':a'bar'/2 {
 
 #[test]
 fn partial_loop() {
+    let _ = simple_logger::init();
 
 let mut fun = parse_function_unwrap("
 a'foo':a'bar'/1 {
@@ -280,8 +318,11 @@ a'foo':a'bar'/1 {
     assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 }
 
+
 #[test]
 fn tight_partial_loop() {
+    let _ = simple_logger::init();
+
     let mut fun = parse_function_unwrap("
 a'foo':a'perms'/1 {
     block0(%1, %2, %3):
@@ -302,6 +343,19 @@ a'foo':a'perms'/1 {
     let mut simplify_cfg_pass = SimplifyCfgPass::new();
     simplify_cfg_pass.run_function_pass(&mut b);
 
+//    let after = parse_function_unwrap("
+//a'foo':a'perms'/1 {
+//    block0(%1, %2, %3):
+//        block1(%3, []);
+//    block1(%5, %6):
+//        match %5 {
+//            [] => block3;
+//        };
+//    block3(%9, %10):
+//        %14 = [%9 | %6];
+//        block1(%10, %14);
+//}
+//");
     let after = parse_function_unwrap("
 a'foo':a'perms'/1 {
     block0(%1, %2, %3):
@@ -320,6 +374,8 @@ a'foo':a'perms'/1 {
 
 #[test]
 fn deep_primop_rename_single_branch() {
+    let _ = simple_logger::init();
+
     let mut fun = parse_function_unwrap("
 a'foo':a'do_map_vars_used'/1 {
     block0(%1, %2, %3):
@@ -354,6 +410,8 @@ a'foo':a'do_map_vars_used'/1 {
 
 #[test]
 fn deep_primop_rename_after_entry_single_branch() {
+    let _ = simple_logger::init();
+
     let mut fun = parse_function_unwrap("
 a'foo':a'do_map_vars_used'/1 {
     block0(%1, %2, %3):
@@ -403,53 +461,9 @@ a'foo':a'do_map_vars_used'/1 {
     assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
 }
 
-#[ignore]
-#[test]
-fn messy_cfg_block_captures() {
-    let mut fun = parse_function_unwrap("
-a'foo':a'grab_bag'/0 {
-    block0(%1, %2):
-        block1(block2);
-    block1(%4):
-        block2(block3);
-    block2(%6):
-        match a'x' {
-            _ => block4;
-        };
-    block3(%8):
-        %1(a'ok');
-    block4():
-        %6(a'x');
-}
-");
-    let mut b = fun.builder();
-
-    let mut simplify_cfg_pass = SimplifyCfgPass::new();
-    simplify_cfg_pass.run_function_pass(&mut b);
-
-    b.fun().live_values();
-
-    let mut out = Vec::new();
-    b.fun().validate(&mut out);
-    assert!(out.len() == 0);
-
-    let after = parse_function_unwrap("
-a'foo':a'grab_bag'/0 {
-    block0(%1, %2):
-        match a'x' {
-            _ => block1;
-        };
-    block1():
-        block2(a'x');
-    block2(%21):
-        %1(a'ok');
-}
-");
-    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
-}
-
 #[test]
 fn converging_from_single() {
+    let _ = simple_logger::init();
 
     let mut fun = parse_function_unwrap("
 a'fib':a'fib'/1 {
@@ -493,7 +507,6 @@ a'fib':a'fib'/1 {
 }
 
 // Fails because of https://github.com/eirproject/eir/issues/24
-#[ignore]
 #[test]
 fn block_capture_with_scope_in_chain() {
     let _ = simple_logger::init();
@@ -501,7 +514,9 @@ fn block_capture_with_scope_in_chain() {
     let mut fun = parse_function_unwrap("
 a'a':a'get_values'/1 {
     block1(%3, %4, %5):
-        block7(%5);
+        bn(%5);
+    bn(%6):
+        block7(%6);
     block7(%27):
         block58(block49);
     block58(%136):
@@ -509,7 +524,7 @@ a'a':a'get_values'/1 {
 
     block49(%116, %117, %118):
         %47 = a'erlang':a'=:='/2;
-        %47(%27, %118) => %116 except %117;
+        %47({%27, 1}, %118) => %116 except %117;
 }
 ");
     let mut b = fun.builder();
@@ -521,3 +536,218 @@ a'a':a'get_values'/1 {
 
 }
 
+#[test]
+fn aaaa() {
+    use libeir_intern::Symbol;
+    use libeir_ir::{Function, FunctionBuilder, FunctionIdent, StandardFormatConfig};
+    use libeir_ir::AtomTerm;
+    use libeir_ir::operation::binary_construct::{BinaryConstructStart, BinaryConstructFinish};
+
+    let (mut fun, map) = parse_function_map_unwrap("
+a'a':a'a'/1 {
+  block1(%1, %2, %3):
+    match %3 {
+      value a'yay' => block2;
+    };
+  block2():
+    block3();
+  block3():
+    block4(a'true');
+  block4(%4):
+    if_bool %4 bt bf be;
+  bf():
+    unreachable;
+  be():
+    unreachable;
+  bt():
+    block5();
+  block5():
+    unreachable;
+  block6(%binref):
+    unreachable;
+  block7(%bin):
+    unreachable;
+}
+");
+
+    let mut b = FunctionBuilder::new(&mut fun);
+
+    let block5 = map.get_block("block5");
+    let block6 = map.get_block("block6");
+    let block7 = map.get_block("block7");
+
+    b.block_clear(block5);
+    BinaryConstructStart::build_target(&mut b, block5, block6);
+    let bin_ref = b.block_args(block6)[0];
+
+    b.block_clear(block6);
+    BinaryConstructFinish::build_target(&mut b, block6, bin_ref, block7);
+
+    println!("{}", b.fun().to_text(&mut StandardFormatConfig::default()));
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    println!("{}", b.fun().to_text(&mut StandardFormatConfig::default()));
+
+    //@binary_construct_start(block6);
+    //@binary_construct_finish(block7, %binref);
+
+
+}
+
+
+#[test]
+fn bbbb() {
+    let _ = simple_logger::init();
+
+    let mut fun = parse_function_unwrap("
+a'a':a'a'/1 {
+  block1(%3, %4, %5):
+    block33(%5);
+  block33(%101):
+    unpack %101 arity 1 => block34;
+  block34(%103):
+    %47 = <>;
+    %133 = <block35, block46>;
+    match %103 {
+      [] => block35;
+      _ => block46;
+    };
+  block46():
+    block71();
+  block71():
+    block47(a'true');
+  block47(%125):
+    if_bool %125 block49 block50 block51;
+  block51():
+    unreachable;
+  block50():
+    block3();
+  block3():
+    trace_capture_raw block4;
+  block4(%12):
+    %4(a'error', a'function_clause', %12);
+  block49():
+    block10(%103);
+  block10(%37):
+    block11(%37, []);
+  block11(%39, %40):
+    %41 = [] == %39;
+    if_bool %41 block12 block13;
+  block13():
+    %47 = <>;
+    %49 = <block14, block15>;
+    match %39 {
+      [] => block14;
+      _ => block15;
+    };
+  block15():
+    trace_capture_raw block16;
+  block16(%51):
+    %4(a'error', a'function_clause', %51);
+  block14(%45, %46):
+    block52(%45);
+  block52(%135):
+    unpack %135 arity 1 => block53;
+  block53(%137):
+    block69();
+  block69():
+    block54(a'true');
+  block54(%139):
+    if_bool %139 block56 block57 block58;
+  block58():
+    unreachable;
+  block57():
+    block17();
+  block17():
+    block11(%46, []);
+  block56():
+    block20(%137);
+  block20(%62):
+    block21(%37, %40);
+  block21(%64, %65):
+    %66 = [] == %64;
+    if_bool %66 block22 block23;
+  block23():
+    %47 = <>;
+    %73 = <block24, block25>;
+    match %64 {
+      [] => block24;
+      _ => block25;
+    };
+  block25():
+    trace_capture_raw block26;
+  block26(%75):
+    %4(a'error', a'function_clause', %75);
+  block24(%70, %71):
+    block59(%70);
+  block59(%148):
+    unpack %148 arity 1 => block60;
+  block60(%150):
+    block67();
+  block67():
+    block61(a'true');
+  block61(%152):
+    if_bool %152 block63 block64 block65;
+  block65():
+    unreachable;
+  block64():
+    block27();
+  block27():
+    block21(%71, %40);
+  block63():
+    block30(%150);
+  block30(%86):
+    %87 = [%86 | []];
+    %88 = [%62 | %87];
+    %89 = [%88 | %65];
+    block21(%71, %89);
+  block22():
+    block11(%46, %65);
+  block12():
+    %93 = a'lists':a'reverse'/1;
+    %93(%40) => block31 except block32;
+  block32(%97, %98, %99):
+    %4(%97, %98, %99);
+  block31(%95):
+    block2(%95);
+  block2(%7):
+    %3(%7);
+  block35():
+    block75();
+  block75():
+    block36(a'true');
+  block36(%106):
+    if_bool %106 block38 block39 block40;
+  block40():
+    unreachable;
+  block39():
+    block73();
+  block73():
+    block41(a'true');
+  block41(%115):
+    if_bool %115 block43 block44 block45;
+  block45():
+    unreachable;
+  block44():
+    block3();
+  block43():
+    block10(%103);
+  block38():
+    block7();
+  block7():
+    block2([[] | []]);
+}
+");
+
+    let mut b = fun.builder();
+
+    let dot = libeir_ir::text::function_to_dot(b.fun());
+    println!("{}", dot);
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+
+}

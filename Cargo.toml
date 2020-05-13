@@ -19,4 +19,5 @@ members = [
     "util/libeir_util_parse_listing",
     "util/libeir_util_dot_graph",
     "util/scoped_cell",
+    "util/meta_table",
 ]

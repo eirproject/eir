@@ -20,6 +20,7 @@ use libeir_passes::PassManager;
 
 #[test]
 fn get_values() {
+    let _ = simple_logger::init_by_env();
 
     let mut eir_mod = lower(
         "-module('Elixir.Keyword').

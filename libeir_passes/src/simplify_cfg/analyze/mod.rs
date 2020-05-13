@@ -1,10 +1,26 @@
-use std::collections::{BTreeSet, VecDeque};
+
+// TODO
+// Something might be broken with what values become Scope vs EntryArg.
+// Revisit this and make sure things are correct.
+// Should all values that are arguments of a block in the tree become
+// EntryArg?
+// Maybe not since then we would need to special case references from
+// primops/blocks?
+
+use std::collections::{BTreeSet, BTreeMap, VecDeque};
 
 use bumpalo::{Bump, collections::Vec as BVec};
+
+use libeir_util_datastructures::pooled_entity_set::{EntitySetPool, EntitySet};
+
 use super::BFnvHashMap;
 
 use libeir_ir::{Block, Value, OpKind, ValueKind, CallKind};
 use libeir_ir::{Function, LiveBlockGraph, LiveValues};
+
+use log::trace;
+
+use super::chain_graph::{Node, Chain};
 
 mod call;
 mod if_bool;
@@ -19,27 +35,44 @@ pub struct GraphAnalysis<'bump> {
     pub static_branches: BFnvHashMap<'bump, Block, Value>,
     pub static_branches_blocks: BFnvHashMap<'bump, Block, Block>,
 
-    pub chains: BFnvHashMap<'bump, Block, Chain<'bump>>,
+    pub trees: BFnvHashMap<'bump, Block, TreeData<'bump>>,
 
     pub phis: BFnvHashMap<'bump, Value, CondValue<'bump>>,
     pub static_renames: BFnvHashMap<'bump, Value, Value>,
 }
 
 #[derive(Debug)]
-pub struct Chain<'bump> {
+pub struct TreeData<'bump> {
     pub entry_edges: BFnvHashMap<'bump, Block, ()>,
     pub edges: BFnvHashMap<'bump, BlockEdge, ()>,
     pub blocks: BFnvHashMap<'bump, Block, ()>,
+    pub entry_values: BFnvHashMap<'bump, Value, (Block, usize)>,
 }
 
 impl<'bump> GraphAnalysis<'bump> {
 
-    fn is_value_relevant(&self, chain_target: Block, value: Value) -> bool {
-        if let Some(cond) = self.phis.get(&value) {
-            let chain = &self.chains[&chain_target];
+    fn is_before(&self, lhs: Block, rhs: Block) -> bool {
+        let mut curr = lhs;
 
-            // Check if it's instead relevant to another chain
-            if !chain.blocks.contains_key(&cond.block) && cond.block != chain_target {
+        loop {
+            if let Some(prev) = self.static_branches_blocks.get(&curr) {
+                curr = *prev;
+            } else {
+                return false;
+            }
+
+            if curr == rhs {
+                return true;
+            }
+        }
+    }
+
+    fn is_value_relevant(&self, tree_target: Block, value: Value) -> bool {
+        if let Some(cond) = self.phis.get(&value) {
+            let tree = &self.trees[&tree_target];
+
+            // Check if it's instead relevant to another tree
+            if !tree.blocks.contains_key(&cond.block) && cond.block != tree_target {
                 false
             } else {
                 true
@@ -71,46 +104,26 @@ pub struct ChainAnalysis<'bump> {
 #[derive(Debug)]
 pub struct CondValue<'bump> {
     pub value: Value,
-    pub value_num: Option<usize>,
+    pub value_index: usize,
     pub block: Block,
     pub sources: BFnvHashMap<'bump, Block, PhiSource>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum PhiSource {
-    /// The phi source is a value from the scope, not partial
-    /// of the chain.
-    Scope(Value),
-
-    /// The phi source is renamed to an argument of a block that
-    /// is part of the chain.
-    EntryArg {
-        /// The block that is called as the entry edge.
-        /// This MUST be part of the chain.
-        called: Block,
-        /// The argument value of the above index
-        arg: Value,
-    },
-}
-impl PhiSource {
-    pub fn is_scope(&self) -> bool {
-        match self {
-            PhiSource::Scope(_) => true,
-            _ => false,
-        }
-    }
-    pub fn scope(&self) -> Option<Value> {
-        match self {
-            PhiSource::Scope(val) => Some(*val),
-            _ => None,
-        }
-    }
-    pub fn value(&self) -> Value {
-        match self {
-            PhiSource::Scope(val) => *val,
-            PhiSource::EntryArg { arg, .. } => *arg,
-        }
-    }
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PhiSource {
+    /// The value on the other side of the phi.
+    /// If this is None, then this is an anonymous entry edge.
+    value: Option<Value>,
+    /// The block calling the phi.
+    /// If this is None, then this is an anonymous entry edge.
+    caller: Option<Block>,
+    /// The block that is called as the entry edge.
+    /// This MUST be part of the chain.
+    called: Block,
+    /// The index of the argment on the called block.
+    arg_index: usize,
+    /// The argument value itself.
+    arg: Value,
 }
 
 #[derive(Debug)]
@@ -189,14 +202,22 @@ impl<'bump, 'a> AnalysisContext<'bump, 'a> {
             let cond = CondValue {
                 block: callee,
                 value: callee_arg,
-                value_num: Some(callee_arg_num),
+                value_index: callee_arg_num,
                 sources: BFnvHashMap::with_hasher_in(Default::default(), self.bump),
             };
             self.phis.insert(callee_arg, cond);
         }
+
+        let phi_source = PhiSource {
+            value: Some(caller_read),
+            caller: Some(caller),
+            called: callee,
+            arg_index: callee_arg_num,
+            arg: callee_arg,
+        };
         self.phis
             .get_mut(&callee_arg).unwrap()
-            .sources.insert(caller, PhiSource::Scope(caller_read));
+            .sources.insert(caller, phi_source);
     }
 
 }
@@ -278,13 +299,23 @@ pub fn analyze_graph<'bump, 'fun>(
         if !changed { break; }
     }
 
+    trace!("======== Results after initial traversal:");
+    trace!("Phis: {:?}", ctx.phis);
+    trace!("Static renames: {:?}", ctx.static_renames);
+    trace!("========");
+
     // Populate incoming edges in phis
     for phi in ctx.phis.values_mut() {
         for incoming in graph.incoming(phi.block) {
             if !phi.sources.contains_key(&incoming) {
-                phi.sources.insert(incoming, PhiSource::EntryArg {
-                    arg: phi.value,
+                phi.sources.insert(incoming, PhiSource {
+                    // Not relevant since the edge is not part of the tree
+                    value: None,
+                    caller: None,
+
                     called: phi.block,
+                    arg_index: phi.value_index,
+                    arg: phi.value,
                 });
             }
         }
@@ -301,7 +332,7 @@ pub fn analyze_graph<'bump, 'fun>(
 
     // Group chains
     // TODO: Handle cycles
-    let mut chains = BFnvHashMap::with_hasher_in(
+    let mut trees = BFnvHashMap::with_hasher_in(
         Default::default(), bump);
     for (from, to) in static_branches.iter() {
         let mut next_target_value = *to;
@@ -330,21 +361,22 @@ pub fn analyze_graph<'bump, 'fun>(
             }
 
             // If the chains map doesn't contain the target, seed it
-            if !chains.contains_key(&target_block) {
-                let mut chain = Chain {
+            if !trees.contains_key(&target_block) {
+                let mut tree = TreeData {
                     edges: BFnvHashMap::with_hasher_in(Default::default(), bump),
                     blocks: BFnvHashMap::with_hasher_in(Default::default(), bump),
                     entry_edges: BFnvHashMap::with_hasher_in(Default::default(), bump),
+                    entry_values: BFnvHashMap::with_hasher_in(Default::default(), bump),
                 };
-                chain.blocks.insert(target_block, ());
-                chains.insert(target_block, chain);
+                tree.blocks.insert(target_block, ());
+                trees.insert(target_block, tree);
             }
 
             // Update the current chain with this edge
-            let chain = chains.get_mut(&target_block).unwrap();
-            chain.blocks.insert(*from, ());
+            let tree = trees.get_mut(&target_block).unwrap();
+            tree.blocks.insert(*from, ());
             if let Some(to_block) = to_has_block {
-                chain.edges.insert((*from, to_block), ());
+                tree.edges.insert((*from, to_block), ());
             }
 
             break;
@@ -352,68 +384,202 @@ pub fn analyze_graph<'bump, 'fun>(
     }
 
     // Find incoming edges into the chain
-    for chain in chains.values_mut() {
-        for block in chain.blocks.keys() {
+    for tree in trees.values_mut() {
+        for block in tree.blocks.keys() {
             if *block == entry {
-                chain.entry_edges.insert(*block, ());
+                tree.entry_edges.insert(*block, ());
+                for (arg_idx, arg) in fun.block_args(*block).iter().enumerate() {
+                    tree.entry_values.insert(*arg, (*block, arg_idx));
+                }
             }
             for incoming in graph.incoming(*block) {
                 let edge = (incoming, *block);
-                if chain.edges.contains_key(&edge) {
+                if tree.edges.contains_key(&edge) {
                     continue;
                 }
-                chain.entry_edges.insert(*block, ());
+
+                tree.entry_edges.insert(*block, ());
+                for (arg_idx, arg) in fun.block_args(*block).iter().enumerate() {
+                    tree.entry_values.insert(*arg, (*block, arg_idx));
+                }
             }
         }
     }
 
-    GraphAnalysis {
+    let analysis = GraphAnalysis {
         entry,
         static_branches,
         static_branches_blocks,
         phis,
         static_renames,
-        chains,
+        trees,
+    };
+
+    trace!("GRAPH ANALYSIS: {:?}", analysis);
+
+    analysis
+}
+
+pub struct ChainMapping {
+    entry_to_chain: BTreeMap<Block, Chain>,
+    block_to_entries: BTreeMap<Block, BTreeSet<Block>>,
+
+}
+impl ChainMapping {
+    pub fn iter_entries_for<'a>(&'a self, block: Block) -> impl Iterator<Item = Block> + 'a {
+        self.block_to_entries[&block].iter().cloned()
+    }
+    pub fn entry_to_chain(&self, entry: Block) -> Chain {
+        self.entry_to_chain[&entry]
     }
 }
 
-fn expand_phi<'bump>(
+pub fn build_node<'bump>(
     bump: &'bump Bump,
-    phi_entry: Value,
-    _target: Block,
-    _graph: &LiveBlockGraph,
-    analysis: &GraphAnalysis
-) -> BFnvHashMap<'bump, Block, PhiSource>
+    fun: &Function,
+    //graph: &LiveBlockGraph,
+    live: &LiveValues,
+    analysis: &'bump GraphAnalysis,
+    target: Block,
+    block_graph: &ChainMapping,
+    last_loc: Block,
+    value: Value,
+    chain_graph: &mut super::chain_graph::ChainGraph,
+    existing_nodes: &mut BTreeMap<Value, Node>,
+) -> (bool, Node)
 {
+    trace!("{:?} {:?}", value, fun.value_kind(value));
 
-    // The root phis form the initial set we want to walk down from
-    let mut to_walk = Vec::new();
-    to_walk.push(phi_entry);
+    let tree = &analysis.trees[&target];
 
-    let mut added = BFnvHashMap::with_hasher_in(Default::default(), bump);
-    let mut entries: BFnvHashMap<Block, PhiSource> =
-        BFnvHashMap::with_hasher_in(Default::default(), bump);
+    match fun.value_kind(value) {
+        ValueKind::Argument(block, arg_index) => {
+            trace!("ARGUMENT {} {}", block, arg_index);
 
-    // While we have values to walk, get the next one.
-    // Then add the mappings to the entries and walk downwards.
-    while let Some(v) = to_walk.pop() {
-        if added.contains_key(&v) { continue; }
-        added.insert(v, ());
+            trace!("A1");
 
-        if let Some(cond_value) = analysis.phis.get(&v) {
-            for (_, v) in cond_value.sources.iter() {
-                if let PhiSource::Scope(value) = v {
-                    to_walk.push(*value);
+            // If it's not an argument of a block in the chain, we simply refer
+            // to the scope.
+            if !tree.blocks.contains_key(&block) {
+                return (false, chain_graph.insert_scoped(value));
+            }
+
+            if !(block == last_loc || analysis.is_before(block, last_loc)) {
+                return (false, chain_graph.insert_scoped(value));
+            }
+
+            trace!("A2 last_loc: {}", last_loc);
+
+            // Look up existing node
+            if let Some(existing) = existing_nodes.get(&value) {
+                return (true, *existing);
+            }
+
+            trace!("A6");
+
+            // If the value is a phi, we build recursively
+            let v_phi = chain_graph.insert_phi(0, value);
+
+            // If there exists a phi for the value, add those to phi
+            if let Some(phi) = analysis.phis.get(&value) {
+                for (from_block, source) in phi.sources.iter() {
+                    if let Some(from_val) = source.value {
+                        let (_req, node) = build_node(
+                            bump,
+                            fun,
+                            //graph,
+                            live,
+                            analysis,
+                            target,
+                            block_graph,
+                            *from_block,
+                            from_val,
+                            chain_graph,
+                            existing_nodes
+                        );
+                        for entry in block_graph.iter_entries_for(*from_block) {
+                            let chain = block_graph.entry_to_chain(entry);
+                            chain_graph.phi_add_entry(v_phi, chain, node);
+                        }
+                    }
                 }
             }
-            entries.extend(
-                cond_value.sources.iter()
-                    .map(|(k, v)| (*k, *v))
-            );
-        }
-    }
 
-    entries
+            // If current block is an entry, add that to the phi
+            if tree.entry_edges.contains_key(&block) {
+                let chain = block_graph.entry_to_chain(block);
+                let node = chain_graph.insert_chain_entry_arg(
+                    chain, arg_index, value);
+                chain_graph.phi_add_entry(v_phi, chain, node);
+            }
+
+            existing_nodes.insert(value, v_phi);
+            (true, v_phi)
+        },
+        ValueKind::Block(block) => {
+            // Look up existing node
+            if let Some(existing) = existing_nodes.get(&value) {
+                return (true, *existing);
+            }
+
+            let env = live.live_at(block);
+
+            let v_block = chain_graph.insert_block_capture(value, block);
+            for dep_value in env.iter() {
+                let (_req, node) = build_node(
+                    bump,
+                    fun,
+                    //graph,
+                    live,
+                    analysis,
+                    target,
+                    block_graph,
+                    last_loc,
+                    dep_value,
+                    chain_graph,
+                    existing_nodes
+                );
+                chain_graph.add_dep(v_block, node, dep_value);
+            }
+
+            existing_nodes.insert(value, v_block);
+            (true, v_block)
+        },
+        ValueKind::PrimOp(prim) => {
+            // Look up existing node
+            if let Some(existing) = existing_nodes.get(&value) {
+                return (true, *existing);
+            }
+
+            let v_prim = chain_graph.insert_prim(value);
+            let mut required = false;
+            for p_read in fun.primop_reads(prim) {
+                let (req, dep_node) = build_node(
+                    bump,
+                    fun,
+                    //graph,
+                    live,
+                    analysis,
+                    target,
+                    block_graph,
+                    last_loc,
+                    *p_read,
+                    chain_graph,
+                    existing_nodes
+                );
+                chain_graph.add_dep(v_prim, dep_node, *p_read);
+                if req {
+                    required = true;
+                }
+            }
+
+            existing_nodes.insert(value, v_prim);
+            (required, v_prim)
+        },
+        ValueKind::Const(_) => {
+            (false, chain_graph.insert_scoped(value))
+        },
+    }
 }
 
 pub fn analyze_chain<'bump>(
@@ -423,234 +589,86 @@ pub fn analyze_chain<'bump>(
     graph: &LiveBlockGraph,
     live: &LiveValues,
     analysis: &'bump GraphAnalysis,
-) -> ChainAnalysis<'bump> {
-    let chain = &analysis.chains[&target];
+) -> super::chain_graph::ChainGraph {
+    let tree = &analysis.trees[&target];
 
     // Get the live values in the body of the block.
-    let mut primary_conds = BTreeSet::new();
-    let target_live = live.live_in(target);
-    primary_conds.extend(target_live.iter());
+    //let mut primary_conds = BTreeSet::new();
+    //let target_live = live.live_in(target);
+    //primary_conds.extend(target_live.iter());
 
-    // These are value mappings for the chain that don't depend on any control
-    // flow in the chain.
-    let mut static_map: BFnvHashMap<Value, Value> =
-        BFnvHashMap::with_hasher_in(Default::default(), bump);
+    let mut chain_graph = super::chain_graph::ChainGraph::new(target);
 
-    // These are value mappings that do depend on control flow in the chain.
-    // The values in here refer to a phi node in `self.phis`.
-    let mut cond_map = BFnvHashMap::with_hasher_in(Default::default(), bump);
+    // Mapping from entry `Block`s to its `Chain`.
+    let mut entry_to_chain: BTreeMap<Block, Chain> = BTreeMap::new();
+    // Mapping from all `Block`s to all `Chain`s each is part of.
+    let mut block_to_entries: BTreeMap<Block, BTreeSet<Block>> = BTreeMap::new();
 
-    // The arguments that need to placed to the new target block.
-    let mut args = BFnvHashMap::with_hasher_in(Default::default(), bump);
+    for (entry_block, _) in tree.entry_edges.iter() {
+        let mut block_chain = Vec::new();
 
-    // Using the live values in the target block as a seed, walk through
-    // and combine phis. All values referenced in the target that have
-    // phis for it, need to be added as arguments to the new target block
-    // we generate.
-    // For primops, we need to recurse down and handle the reads of the
-    // PHI as well. Whenever we cross the phi boundary, the args from that
-    // primop no longer should be added to the args set, since that primop
-    // needs to be placed before the join edge in the generated IR.
-    let mut to_visit: VecDeque<_> = primary_conds.iter().map(|v| (true, *v)).collect();
-    let mut visited = BTreeSet::new();
-    while let Some((as_arg, read)) = to_visit.pop_front() {
+        block_chain.push(*entry_block);
 
-        // If the value is already visited, skip
-        if visited.contains(&read) { continue; }
-        visited.insert(read);
-
-        let block;
-
-        // NOTE: This reports an unused assignment warning,
-        // but it clearly is used in both cases.
-        // Compiler bug?
-        #[allow(unused_assignments)]
-        let mut arg_num = None;
-
-        match fun.value_kind(read) {
-            // If the value is an argument, it might be a phi
-            ValueKind::Argument(arg_block, arg_num_n) => {
-                block = arg_block;
-                arg_num = Some(arg_num_n);
-            }
-            // If the value is a primop, we need to visit its reads
-            ValueKind::PrimOp(prim) => {
-                let needs_as_arg = as_arg &&
-                    fun.primop_reads(prim).iter()
-                    .any(|v| analysis.is_value_relevant(target, *v));
-
-                for read in fun.primop_reads(prim) {
-                    to_visit.push_back((needs_as_arg, *read));
+        // Walk blocks in order, adding to chain list
+        let mut curr = *entry_block;
+        loop {
+            if let Some(next) = analysis.static_branches_blocks.get(&curr) {
+                curr = *next;
+                block_chain.push(curr);
+                if curr == target {
+                    break;
                 }
-                continue;
-            }
-            // Other alternatives are Const and Block, none of which can contain
-            // values we care about.
-            _ => continue,
-        }
-
-        // If the value is not relevant to the chain, we skip it
-        if !analysis.is_value_relevant(target, read) { continue; }
-
-        // Expand phi chains
-        let entries = expand_phi(bump, read, target, graph, analysis);
-
-        let first_value = entries.iter().next().unwrap().1;
-        if entries.iter().all(|(_, v)| *v == *first_value) && first_value.is_scope() {
-            let first_value_scope = first_value.scope().unwrap();
-
-            // If the mappings for all phi sources are identical, this is a universal
-            // mapping.
-            static_map.insert(read, first_value_scope);
-
-            // If the phi targets a primop, it might reference other phis.
-            // We need to walk its destinations.
-            // We might need the subvalues as arguments if we have a static
-            // mapping since we would like to insert any potential primop
-            // in the target block in this case.
-            to_visit.push_back((as_arg, first_value_scope));
-        } else {
-            // If the phi targets a primop, it might reference other phis.
-            // We need to walk its destinations.
-            // We don't need the subvalues as args since the primop needs to be in
-            // the callee block regardless.
-            for (_, v) in entries.iter() {
-                if let PhiSource::Scope(iv) = v {
-                    to_visit.push_back((false, *iv));
-                }
-            }
-
-            // Else, this is a conditional mapping.
-            // This should be mapped to an argument on the new target block.
-            cond_map.insert(read, CondValue {
-                value: read,
-                value_num: arg_num,
-                block: block,
-                sources: entries,
-            });
-
-            if as_arg {
-                // The value needs to be added as an argument
-                args.insert(read, ());
+            } else {
+                break;
             }
         }
 
+        let num_args = fun.block_args(*entry_block).len();
+
+        // Create map of `Block` to all `Chain`s it's part of.
+        for block in block_chain.iter() {
+            block_to_entries
+                .entry(*block)
+                .or_insert_with(|| BTreeSet::new())
+                .insert(*entry_block);
+        }
+
+        // Create chain in graph
+        let chain = chain_graph.entry_chain(num_args, block_chain.clone());
+
+        assert!(!entry_to_chain.contains_key(entry_block));
+        entry_to_chain.insert(*entry_block, chain);
+
     }
 
-    let mut renames_required = false;
-    // If number of target block arguments is not above 0,
-    // then no renames CAN be required.
-    if args.len() > 0 {
-        // Walk each of the reads in the target, if the value is a block...
-        let _ = fun.block_walk_nested_values::<_, ()>(target, &mut |val| {
-            let mapped = static_map.get(&val).cloned().unwrap_or(val);
-            if let Some(block) = fun.value_block(mapped) {
-                // .. if any one of the values in the cond map are live
-                // in that map, we need to respect renames.
-                for value in cond_map.keys() {
-                    if live.is_live_at(block, *value) {
-                        renames_required = true;
-                        return Err(());
-                    }
-                }
-            }
-            Ok(())
-        });
+    let chain_mapping = ChainMapping {
+        entry_to_chain,
+        block_to_entries,
+    };
+
+    let mut existing_nodes = BTreeMap::new();
+
+    for root_value in live.live_in(target).iter() {
+        let (required, node) = build_node(
+            bump,
+            fun,
+            live,
+            analysis,
+            target,
+            &chain_mapping,
+            target,
+            root_value,
+            &mut chain_graph,
+            &mut existing_nodes,
+        );
+        if required {
+            chain_graph.mark_root(root_value, node);
+        }
     }
 
-    ChainAnalysis {
-        target,
+    //chain_graph.gen_dot(&std::path::Path::new("woo_bef.png"));
+    chain_graph.process();
+    //chain_graph.gen_dot(&std::path::Path::new("woo.png"));
 
-        blocks: chain.blocks.clone(),
-        entry_edges: chain.entry_edges.clone(),
-        edges: chain.edges.clone(),
-
-        args,
-        cond_map,
-        static_map,
-        // TODO:
-        // Whether any blocks in the scope of the target block requires
-        // the renames to be present.
-        // If this is false, it is possible to generate better control
-        // flow.
-        // Loop through every read in the target, if the read value is a
-        // block, check that none of the live values in that block are
-        // in the cond_map.
-        renames_required,
-    }
-}
-
-pub fn analyze_entry_edge<'bump>(
-    bump: &'bump Bump,
-    analysis: &GraphAnalysis,
-    chain_analysis: &ChainAnalysis,
-    callee: Block,
-) -> EntryEdgeAnalysis<'bump> {
-
-    let mut o_map: BFnvHashMap<Value, PhiSource> =
-        BFnvHashMap::with_hasher_in(Default::default(), bump);
-    o_map.extend(
-        chain_analysis.cond_map.values()
-            .filter_map(|cond_value| {
-                let mut curr = callee;
-                assert!(!chain_analysis.static_map.contains_key(&cond_value.value));
-
-                loop {
-                    if let Some(source) = cond_value.sources.get(&curr) {
-                        break Some((cond_value.value, *source));
-                    }
-
-                    if let Some(next) = analysis.static_branches_blocks.get(&curr) {
-                        // Follow the chain of static branches
-                        curr = *next;
-                    } else {
-                        // If we reached the end of the chain without finding the phi,
-                        // then this is only relevant for another subbranch.
-                        break None;
-                    }
-                }
-            })
-    );
-
-    // Specialize each of the phis for the current entry edge
-    let mut map: BFnvHashMap<Value, PhiSource> =
-        BFnvHashMap::with_hasher_in(Default::default(), bump);
-    map.extend(
-        chain_analysis.cond_map.values()
-            .filter_map(|cond_value| {
-                let mut curr = callee;
-                assert!(!chain_analysis.static_map.contains_key(&cond_value.value));
-
-                loop {
-                    if let Some(source) = cond_value.sources.get(&curr) {
-                        break Some((cond_value.value, *source));
-                    }
-
-                    if let Some(next) = analysis.static_branches_blocks.get(&curr) {
-                        // Follow the chain of static branches
-                        curr = *next;
-                    } else {
-                        // If we reached the end of the chain without finding the phi,
-                        // then this is only relevant for another subbranch.
-                        break None;
-                    }
-                }
-            })
-    );
-
-    // Produce the argument list the target block should be called with.
-    let mut calling_args = BVec::new_in(bump);
-    calling_args.extend(
-        chain_analysis.args.keys()
-            .map(|v| {
-                o_map.get(v).cloned().unwrap_or(PhiSource::Scope(*v))
-            })
-    );
-
-    EntryEdgeAnalysis {
-        callee,
-
-        mappings: map,
-        args: calling_args,
-    }
+    chain_graph
 }

@@ -122,6 +122,19 @@ impl<'a> IntoNeighborsDirected for &'a BlockGraph<'a> {
 pub struct EntityVisitMap<E> where E: EntityRef {
     set: EntitySet<E>,
 }
+impl<E> EntityVisitMap<E> where E: EntityRef {
+    pub fn new(size: usize) -> Self {
+        let mut set = EntitySet::new();
+        set.resize(size);
+        EntityVisitMap {
+            set,
+        }
+    }
+    pub fn reset(&mut self, size: usize) {
+        self.set.clear();
+        self.set.resize(size);
+    }
+}
 impl<E> VisitMap<E> for EntityVisitMap<E> where E: EntityRef {
     fn visit(&mut self, a: E) -> bool {
         self.set.insert(a)
@@ -134,15 +147,10 @@ impl<E> VisitMap<E> for EntityVisitMap<E> where E: EntityRef {
 impl<'a> Visitable for BlockGraph<'a> {
     type Map = EntityVisitMap<Block>;
     fn visit_map(&self) -> EntityVisitMap<Block> {
-        let mut set = EntitySet::new();
-        set.resize(self.fun.blocks.len());
-        EntityVisitMap {
-            set,
-        }
+        EntityVisitMap::new(self.fun.blocks.len())
     }
     fn reset_map(&self, map: &mut EntityVisitMap<Block>) {
-        map.set.clear();
-        map.set.resize(self.fun.blocks.len());
+        map.reset(self.fun.blocks.len());
     }
 }
 

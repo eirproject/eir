@@ -4,15 +4,13 @@ use std::marker::PhantomData;
 use std::borrow::Borrow;
 use std::fmt::Debug;
 
+use crate::aux::{AuxHash, AuxEq};
+
 //use cranelift_entity::{ListPool, EntityList, EntityRef};
 //use cranelift_entity::packed_option::ReservedValue;
 
 use hashbrown::raw::{RawTable, RawIter, Global, AllocRef};
 
-/// Hashes a data type with access to auxiliary data
-pub trait AuxHash<C> {
-    fn aux_hash<H: Hasher>(&self, state: &mut H, container: &C);
-}
 impl<C, T> AuxHash<C> for T where T: Hash {
     fn aux_hash<H: Hasher>(&self, state: &mut H, _container: &C) {
         self.hash(state)
@@ -27,13 +25,6 @@ impl<C, T> AuxHash<C> for T where T: Hash {
 //    }
 //}
 
-/// Tests equality with access to auxiliary data
-pub trait AuxEq<C> {
-    fn aux_eq(&self, other: &Self, container: &C) -> bool;
-    fn aux_ne(&self, other: &Self, container: &C) -> bool {
-        !self.aux_eq(other, container)
-    }
-}
 impl<C, T: ?Sized> AuxEq<C> for T where T: Eq {
     fn aux_eq(&self, other: &Self, _container: &C) -> bool {
         self.eq(other)

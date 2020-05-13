@@ -12,7 +12,7 @@ use crate::text::ast::{Module, ModuleItem, Function, FunctionItem, Label,
                        Op, CallControlFlowOp, CallFunctionOp, Value,
                        Assignment, UnpackValueListOp, IfBoolOp,
                        TraceCaptureRawOp, MatchEntry, MatchKind,
-                       MatchOp, CaseOp, CaseEntry, CasePattern};
+                       MatchOp, CaseOp, CaseEntry, CasePattern, DynOpt};
 use super::ParserErrorReceiver;
 use super::errors::{ParserError, Errors};
 
@@ -119,8 +119,22 @@ FunctionAssignItem: FunctionItem = {
     }
 };
 
+DynOpt: DynOpt = {
+    "(" <entries:Comma<DynOpt>> ")" => DynOpt::Parens(entries),
+    <value:Value> => DynOpt::Value(value),
+};
+
+DynOpts: Vec<DynOpt> = {
+    <opts:DynOpt*> => opts,
+};
+
 #[inline]
 FunctionOp: Op = {
+
+    // Intrinsic/Dynop
+    "@" <name:ident> <opts:DynOpts> => {
+        Op::Dyn(name, opts)
+    },
 
     // Call
     <target:Value> "(" <args:Comma<Value>> ")" "=>" <ret:Value> "except" <thr:Value> => {

@@ -9,7 +9,7 @@ use cranelift_entity::EntityRef;
 use pretty::{DocAllocator, Arena, RefDoc};
 use petgraph::visit::Dfs;
 
-use crate::{Function, Block, Value, Const, ValueKind, OpKind, CallKind, PrimOpKind, Module};
+use crate::{Function, Block, Value, Const, ValueKind, OpKind, CallKind, PrimOpKind, Module, LogicOp, BinOp};
 use crate::graph::EntityVisitMap;
 
 mod operation;
@@ -358,7 +358,7 @@ where
                         arena
                             .intersperse(
                                 reads.iter()
-                                     .map(|r| self.value_use_to_doc(config, state, *r)),
+                                     .map(|r| self.value_use(config, state, *r, Some(value))),
                                 arena.text(",").append(arena.space())
                             )
                             .enclose(arena.text("{"), arena.text("}"))
@@ -367,7 +367,7 @@ where
                         arena
                             .intersperse(
                                 reads.iter()
-                                     .map(|r| self.value_use_to_doc(config, state, *r)),
+                                     .map(|r| self.value_use(config, state, *r, Some(value))),
                                 arena.text(",").append(arena.space())
                             )
                             .enclose(arena.text("<"), arena.text(">"))
@@ -376,12 +376,35 @@ where
                         assert!(reads.len() == 2);
                         arena.nil()
                              .append(arena.text("["))
-                             .append(self.value_use_to_doc(config, state, reads[0]))
+                             .append(self.value_use(config, state, reads[0], Some(value)))
                              .append(arena.space())
                              .append(arena.text("|"))
                              .append(arena.space())
-                             .append(self.value_use_to_doc(config, state, reads[1]))
+                             .append(self.value_use(config, state, reads[1], Some(value)))
                              .append(arena.text("]"))
+                    },
+                    PrimOpKind::BinOp(BinOp::Equal) => {
+                        assert!(reads.len() == 2);
+                        arena.nil()
+                             .append(self.value_use(config, state, reads[0], Some(value)))
+                             .append(arena.space())
+                             .append(arena.text("=="))
+                             .append(arena.space())
+                             .append(self.value_use(config, state, reads[1], Some(value)))
+                    },
+                    PrimOpKind::LogicOp(LogicOp::And) => {
+                        arena.intersperse(
+                            reads.iter()
+                                 .map(|r| self.value_use(config, state, *r, Some(value))),
+                            arena.text(",").append(arena.space())
+                        ).enclose("and[", "]")
+                    },
+                    PrimOpKind::LogicOp(LogicOp::Or) => {
+                        arena.intersperse(
+                            reads.iter()
+                                 .map(|r| self.value_use(config, state, *r, Some(value))),
+                            arena.text(",").append(arena.space())
+                        ).enclose("or[", "]")
                     },
                     _ => unimplemented!("{:?}", prim_kind),
                 }
@@ -408,7 +431,7 @@ where
             .into_doc()
     }
 
-    fn constant_to_doc(
+    fn constant(
         &mut self,
         _config: &FormatConfig<B, V, L>,
         state: &mut FormatState,
@@ -417,7 +440,7 @@ where
         self::constant::constant_to_doc(&self.arena, state.function.cons(), constant)
     }
 
-    fn value_use_to_doc(
+    fn value_use_only(
         &mut self,
         config: &FormatConfig<B, V, L>,
         state: &mut FormatState,
@@ -433,6 +456,25 @@ where
         self.arena.as_string(&self.buf).into_doc()
     }
 
+    fn value_use(
+        &mut self,
+        config: &FormatConfig<B, V, L>,
+        state: &mut FormatState,
+        value: Value,
+        within: Option<Value>,
+    ) -> RefDoc<'a, ()>
+    {
+        if config.block_value_layout.should_layout(value, within) {
+            match state.function.value_kind(value) {
+                ValueKind::Const(cons) =>
+                    self.constant(config, state, cons),
+                _ => self.value_use_only(config, state, value),
+            }
+        } else {
+            self.value_use_only(config, state, value)
+        }
+    }
+
     fn format_callee(
         &mut self, 
         config: &FormatConfig<B, V, L>,
@@ -443,19 +485,19 @@ where
 
         // Resolve arity first, since we should always know arity
         let ac = state.function.value_const(reads[2]).unwrap();
-        let arity = self.constant_to_doc(config, state, ac);
+        let arity = self.constant(config, state, ac);
 
         let m = reads[0];
         let f = reads[1];
         let mk = state.function.value_kind(m);
         if let ValueKind::Const(mc) = mk {
-            let doc = self.constant_to_doc(config, state, mc);
+            let doc = self.constant(config, state, mc);
             let fk = state.function.value_kind(f);
             if let ValueKind::Const(fc) = fk {
                 arena.nil()
                     .append(doc)
                     .append(arena.text(":"))
-                    .append(self.constant_to_doc(config, state, fc))
+                    .append(self.constant(config, state, fc))
                     .append(arena.text("/"))
                     .append(arity)
                     .into_doc()
@@ -463,16 +505,16 @@ where
                 arena.nil()
                    .append(doc)
                    .append(arena.text(":"))
-                   .append(self.value_use_to_doc(config, state, f))
+                   .append(self.value_use_only(config, state, f))
                    .append(arena.text("/"))
                    .append(arity)
                    .into_doc()
             }
         } else {
             arena.nil()
-                .append(self.value_use_to_doc(config, state, m))
+                .append(self.value_use_only(config, state, m))
                 .append(arena.text(":"))
-                .append(self.value_use_to_doc(config, state, f))
+                .append(self.value_use_only(config, state, f))
                 .append(arena.text("/"))
                 .append(arity)
                 .into_doc()

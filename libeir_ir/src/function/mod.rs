@@ -5,7 +5,7 @@ use std::hash::{Hash, Hasher};
 use cranelift_entity::packed_option::ReservedValue;
 use cranelift_entity::{entity_impl, EntityList, EntityRef, ListPool, PrimaryMap};
 
-use libeir_util_datastructures::aux_hash_map::{AuxEq, AuxHash};
+use libeir_util_datastructures::aux::{AuxEq, AuxHash};
 use libeir_util_datastructures::dedup_aux_primary_map::DedupAuxPrimaryMap;
 use libeir_util_datastructures::pooled_entity_set::{BoundEntitySet, EntitySet, EntitySetPool};
 
@@ -13,9 +13,10 @@ use libeir_diagnostics::SourceSpan;
 
 use crate::constant::{Const, ConstKind, ConstantContainer};
 use crate::pattern::{PatternClause, PatternContainer};
-use crate::FunctionIdent;
+use crate::{ArcDialect, FunctionIdent};
 
 pub mod builder;
+use builder::IntoValue;
 
 mod pool_container;
 use pool_container::PoolContainer;
@@ -99,17 +100,6 @@ impl AuxEq<PoolContainer> for PrimOpData {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum Dialect {
-    /// Allows all operations, including high level pattern matching construct.
-    High,
-    /// High minus pattern matching construct.
-    Normal,
-    /// Continuation passing style.
-    /// Normal minus returning calls. Only tail calls allowed.
-    CPS,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum AttributeKey {
     Continuation,
 }
@@ -124,6 +114,8 @@ pub struct Function {
     ident: FunctionIdent,
     entry_block: Option<Block>,
     span: SourceSpan,
+
+    dialect: ArcDialect,
 
     pub(crate) blocks: PrimaryMap<Block, BlockData>,
     pub(crate) values: ValueMap,
@@ -140,6 +132,10 @@ pub struct Function {
 }
 
 impl Function {
+    pub fn dialect(&self) -> &ArcDialect {
+        &self.dialect
+    }
+
     pub fn span(&self) -> SourceSpan {
         self.span
     }
@@ -155,6 +151,13 @@ impl Function {
 
 /// Values
 impl Function {
+    pub fn value_get<T>(&self, v: T) -> Option<Value>
+    where
+        T: IntoValue,
+    {
+        v.get_value(self)
+    }
+
     pub fn iter_constants(&self) -> std::collections::hash_set::Iter<'_, Value> {
         self.constant_values.iter()
     }
@@ -416,16 +419,11 @@ impl Function {
             (_, OpKind::Case { .. }) => unimplemented!(),
             (OpKind::Call(l), OpKind::Call(r)) => l == r,
             (OpKind::IfBool, OpKind::IfBool) => true,
-            (OpKind::Intrinsic(sym1), OpKind::Intrinsic(sym2)) if sym1 == sym2 => true,
+            (OpKind::Dyn(l), OpKind::Dyn(r)) => l.op_eq(&**r),
             (OpKind::TraceCaptureRaw, OpKind::TraceCaptureRaw) => true,
             (OpKind::TraceConstruct, OpKind::TraceConstruct) => true,
             (OpKind::MapPut { action: a1 }, OpKind::MapPut { action: a2 }) if a1 == a2 => true,
             (OpKind::UnpackValueList(n1), OpKind::UnpackValueList(n2)) if n1 == n2 => true,
-            (OpKind::BinaryPush { specifier: s1 }, OpKind::BinaryPush { specifier: s2 })
-                if s1 == s2 =>
-            {
-                true
-            }
             (OpKind::Match { branches: b1 }, OpKind::Match { branches: b2 }) if b1 == b2 => true,
             (OpKind::Unreachable, OpKind::Unreachable) => true,
             _ => false,
@@ -529,6 +527,8 @@ impl Function {
         Function {
             ident,
             span,
+
+            dialect: crate::dialect::NORMAL.clone(),
 
             blocks: PrimaryMap::new(),
             values: ValueMap::new(),

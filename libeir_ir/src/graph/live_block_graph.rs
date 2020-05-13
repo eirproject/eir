@@ -57,9 +57,14 @@ impl<'a> LiveBlockGraph<'a> {
     pub fn dfs_iter(&'a self) -> impl Iterator<Item = Block> + 'a {
         self.graph.dfs_iter()
     }
+
     pub fn dfs_post_order(&self) -> DfsPostOrder<Block, EntityVisitMap<Block>> {
         self.graph.dfs_post_order()
     }
+    pub fn dfs_post_order_iter(&'a self) -> impl Iterator<Item = Block> + 'a {
+        self.graph.dfs_post_order_iter()
+    }
+
     pub fn outgoing(&'a self, block: Block) -> impl Iterator<Item = Block> + 'a {
         self.graph.outgoing(block)
     }

@@ -47,7 +47,14 @@ pub struct Assignment {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+pub enum DynOpt {
+    Parens(Vec<DynOpt>),
+    Value(Value),
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Op {
+    Dyn(Ident, Vec<DynOpt>),
     UnpackValueList(UnpackValueListOp),
     CallControlFlow(CallControlFlowOp),
     CallFunction(CallFunctionOp),

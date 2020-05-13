@@ -7,7 +7,7 @@ use cranelift_entity::ListPool;
 use cranelift_entity::EntityList;
 use cranelift_entity::packed_option::ReservedValue;
 
-use crate::aux_hash_map::{AuxHash, AuxEq};
+use crate::aux::{AuxDebug, AuxHash, AuxEq};
 
 #[derive(Debug, Clone)]
 pub struct EntitySetPool<E> {
@@ -53,6 +53,13 @@ where
     unused: PhantomData<K>,
 }
 
+impl<K: EntityRef + Debug> AuxDebug<EntitySetPool<K>> for EntitySet<K> {
+    fn aux_fmt(&self, f: &mut std::fmt::Formatter, aux: &EntitySetPool<K>) -> std::fmt::Result {
+        let mut b = f.debug_set();
+        b.entries(self.iter(aux));
+        b.finish()
+    }
+}
 impl<K: EntityRef> AuxHash<EntitySetPool<K>> for EntitySet<K> {
     fn aux_hash<H: Hasher>(&self, hasher: &mut H, pool: &EntitySetPool<K>) {
         let mut n = 0;
