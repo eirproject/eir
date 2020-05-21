@@ -7,7 +7,7 @@ use cranelift_entity::{ EntityRef, EntitySet };
 
 use itertools::Either;
 
-use libeir_util_datastructures::pooled_entity_set::EntitySetIter;
+use cranelift_bforest::SetIter;
 
 use crate::Function;
 use crate::{ Block };
@@ -68,17 +68,18 @@ impl<'a> BlockGraph<'a> {
 pub struct BlockEdge(Block, usize);
 
 pub struct BlockSuccessors<'a> {
-    iter: EntitySetIter<'a, Block>,
+    iter: SetIter<'a, Block>,
 }
 impl<'a> Iterator for BlockSuccessors<'a> {
     type Item = Block;
+    #[inline]
     fn next(&mut self) -> Option<Block> {
         self.iter.next()
     }
 }
 
 pub struct BlockPredecessors<'a> {
-    iter: EntitySetIter<'a, Block>,
+    iter: SetIter<'a, Block>,
 }
 impl<'a> BlockPredecessors<'a> {
     fn new(graph: &'a BlockGraph, block: Block) -> Self {
@@ -90,6 +91,7 @@ impl<'a> BlockPredecessors<'a> {
 }
 impl<'a> Iterator for BlockPredecessors<'a> {
     type Item = Block;
+    #[inline]
     fn next(&mut self) -> Option<Block> {
         self.iter.next()
     }
@@ -102,6 +104,7 @@ impl<'a> GraphBase for BlockGraph<'a> {
 
 impl<'a> IntoNeighbors for &'a BlockGraph<'a> {
     type Neighbors = BlockSuccessors<'a>;
+    #[inline]
     fn neighbors(self, block: Block) -> Self::Neighbors {
         BlockSuccessors {
             iter: self.fun.blocks[block].successors
@@ -111,6 +114,7 @@ impl<'a> IntoNeighbors for &'a BlockGraph<'a> {
 }
 impl<'a> IntoNeighborsDirected for &'a BlockGraph<'a> {
     type NeighborsDirected = Either<BlockSuccessors<'a>, BlockPredecessors<'a>>;
+    #[inline]
     fn neighbors_directed(self, block: Block, dir: Direction) -> Self::NeighborsDirected {
         match dir {
             Direction::Outgoing => Either::Left(self.neighbors(block)),
@@ -136,9 +140,11 @@ impl<E> EntityVisitMap<E> where E: EntityRef {
     }
 }
 impl<E> VisitMap<E> for EntityVisitMap<E> where E: EntityRef {
+    #[inline]
     fn visit(&mut self, a: E) -> bool {
         self.set.insert(a)
     }
+    #[inline]
     fn is_visited(&self, a: &E) -> bool {
         self.set.contains(*a)
     }
@@ -146,9 +152,11 @@ impl<E> VisitMap<E> for EntityVisitMap<E> where E: EntityRef {
 
 impl<'a> Visitable for BlockGraph<'a> {
     type Map = EntityVisitMap<Block>;
+    #[inline]
     fn visit_map(&self) -> EntityVisitMap<Block> {
         EntityVisitMap::new(self.fun.blocks.len())
     }
+    #[inline]
     fn reset_map(&self, map: &mut EntityVisitMap<Block>) {
         map.reset(self.fun.blocks.len());
     }

@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 use libeir_util_datastructures::dedup_aux_primary_map::DedupPrimaryMap;
 use libeir_util_datastructures::{
     dedup_aux_primary_map::DedupAuxPrimaryMap,
-    aux::{AuxHash, AuxEq},
+    aux_traits::{AuxHash, AuxEq},
 };
 
 use libeir_diagnostics::{CodeMap, ByteSpan, DUMMY_SPAN};
@@ -34,6 +34,17 @@ struct LocationTerminalData {
     span: ByteSpan,
 }
 
+impl AuxHash<()> for LocationTerminalData {
+    fn aux_hash<H: Hasher>(&self, state: &mut H, _container: &()) {
+        self.hash(state)
+    }
+}
+impl AuxEq<()> for LocationTerminalData {
+    fn aux_eq(&self, rhs: &Self, _self_aux: &(), _rhs_aux: &()) -> bool {
+        self.eq(rhs)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct LocationData {
     terminals: EntityList<LocationTerminal>,
@@ -44,9 +55,9 @@ impl AuxHash<ListPool<LocationTerminal>> for LocationData {
     }
 }
 impl AuxEq<ListPool<LocationTerminal>> for LocationData {
-    fn aux_eq(&self, other: &Self, container: &ListPool<LocationTerminal>) -> bool {
-        self.terminals.as_slice(container)
-            == other.terminals.as_slice(container)
+    fn aux_eq(&self, other: &Self, self_aux: &ListPool<LocationTerminal>, other_aux: &ListPool<LocationTerminal>) -> bool {
+        self.terminals.as_slice(self_aux)
+            == other.terminals.as_slice(other_aux)
     }
 }
 

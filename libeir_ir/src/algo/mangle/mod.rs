@@ -133,11 +133,6 @@ impl Mangler {
 
     /// Runs lambda mangling on a single function container
     pub fn run(&mut self, fun: &mut FunctionBuilder) -> Block {
-        println!("==================================");
-        println!("==================================");
-        println!("======== Mangle!!! ");
-        println!("==================================");
-        println!("==================================");
         let mut recv = receiver::SingleMangleReceiver {
             fun,
         };

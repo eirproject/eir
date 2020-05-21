@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use libeir_ir::{Function, Value};
 use cranelift_entity::{ListPool, EntityList, PrimaryMap, SecondaryMap, entity_impl};
 use libeir_util_datastructures::pooled_entity_set::{EntitySet, EntitySetPool};
-use libeir_util_datastructures::aux::{AuxDebug, AuxDebugImpl};
+use libeir_util_datastructures::aux_traits::{AuxDebug, AuxImpl};
 use super::{ChainGraph, Node, Chain};
 
 pub mod simple;
@@ -32,7 +32,7 @@ pub struct Synthesis {
 impl std::fmt::Debug for Synthesis {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut b = f.debug_struct("Synthesis");
-        b.field("segments", &AuxDebugImpl(&self.segments, self));
+        b.field("segments", &AuxImpl(&self.segments, self));
         b.field("order", &self.order);
         b.field("instances", &self.instances);
         b.field("substitutions", &self.substitutions);
@@ -42,7 +42,7 @@ impl std::fmt::Debug for Synthesis {
                 b.field("segments_back", &none)
             },
             Some(inner) =>
-                b.field("segments_back", &AuxDebugImpl(
+                b.field("segments_back", &AuxImpl(
                     inner,
                     self.segment_set_pool.as_ref().unwrap()
                 )),
@@ -346,12 +346,12 @@ impl AuxDebug<Synthesis> for SegmentData {
     fn aux_fmt(&self, f: &mut std::fmt::Formatter<'_>, aux: &Synthesis) -> std::fmt::Result {
         let mut b = f.debug_struct("SegmentData");
         b.field("head", &self.head);
-        b.field("in_args", &AuxDebugImpl(&self.in_args, &aux.instance_pool));
-        b.field("externals", &AuxDebugImpl(&self.externals, &aux.instance_pool));
-        b.field("instances", &AuxDebugImpl(&self.instances, &aux.instance_pool));
-        b.field("body", &AuxDebugImpl(&self.body, aux));
-        b.field("chains", &AuxDebugImpl(&self.chains, &aux.chain_set_pool));
-        b.field("node_ord", &AuxDebugImpl(&self.node_ord, &aux.instance_pool));
+        b.field("in_args", &AuxImpl(&self.in_args, &aux.instance_pool));
+        b.field("externals", &AuxImpl(&self.externals, &aux.instance_pool));
+        b.field("instances", &AuxImpl(&self.instances, &aux.instance_pool));
+        b.field("body", &AuxImpl(&self.body, aux));
+        b.field("chains", &AuxImpl(&self.chains, &aux.chain_set_pool));
+        b.field("node_ord", &AuxImpl(&self.node_ord, &aux.instance_pool));
         b.finish()
     }
 }
@@ -443,7 +443,7 @@ impl AuxDebug<Synthesis> for SegmentBodyKind {
             SegmentBodyKind::ToIntermediate { to, out_args } => {
                 let mut b = f.debug_struct("ToIntermediate");
                 b.field("to", to);
-                b.field("out_args", &AuxDebugImpl(out_args, &aux.instance_pool));
+                b.field("out_args", &AuxImpl(out_args, &aux.instance_pool));
                 b.finish()
             },
             SegmentBodyKind::Terminal { single } => {

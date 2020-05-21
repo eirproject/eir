@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 use libeir_ir::{FunctionBuilder, Value, Block};
 use libeir_ir::{Mangler, MangleTo};
 
+use libeir_util_datastructures::aux_traits::AuxImpl;
+
 use super::chain_graph::{
     ChainGraph, Node, Chain, NodeKind,
     synthesis::{
@@ -99,6 +101,7 @@ pub fn rewrite(
         let to_kind = graph.node(to);
         match to_kind {
             NodeKind::Scope(value) => {
+                trace!("Uniform mapping: {} -> {} ({})", from, to, value);
                 map.insert(from, *value);
             },
             NodeKind::EntryArg(entry_arg) => {
@@ -109,6 +112,7 @@ pub fn rewrite(
                 let key = (entry_arg.chain, entry_arg.arg_index);
                 trace!("Entry {:?}", key);
                 let to_value = entry_map[&key];
+                trace!("Uniform mapping: {} -> {} ({})", from, to, to_value);
                 map.insert(from, to_value);
             },
             _ => unreachable!(),
@@ -121,7 +125,7 @@ pub fn rewrite(
         let segment = &synthesis.segments[*segment_id];
         let segment_chains = segment.chains.bind(&synthesis.chain_set_pool);
         let all_chains = segment_chains.size() == graph.chain_count();
-        trace!("SEGMENT {} {:?}", segment_id, segment);
+        trace!("SEGMENT {} {:?}", segment_id, AuxImpl(segment, synthesis));
 
         let block = segment_map[segment_id];
         let block_val = b.value(block);

@@ -6,7 +6,6 @@ use cranelift_entity::{PrimaryMap, entity_impl};
 use libeir_intern::{Ident, Symbol};
 use crate::{Function, FunctionIdent};
 
-#[derive(Debug)]
 pub struct FunctionDefinition {
     index: FunctionIndex,
     fun: Function,
@@ -31,7 +30,6 @@ impl FunctionDefinition {
 pub struct FunctionIndex(u32);
 entity_impl!(FunctionIndex, "function_index");
 
-#[derive(Debug)]
 pub struct Module {
     name: Ident,
     functions: PrimaryMap<FunctionIndex, FunctionDefinition>,

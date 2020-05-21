@@ -6,7 +6,7 @@ use petgraph::visit::{ Dfs, DfsPostOrder };
 
 use itertools::Either;
 
-use libeir_util_datastructures::pooled_entity_set::EntitySetIter;
+use cranelift_bforest::SetIter;
 
 use crate::Function;
 use crate::{ Block };
@@ -79,7 +79,7 @@ impl<'a> LiveBlockGraph<'a> {
 
 pub struct LiveBlockPredecessors<'a> {
     graph: &'a LiveBlockGraph<'a>,
-    iter: EntitySetIter<'a, Block>,
+    iter: SetIter<'a, Block>,
 }
 impl<'a> LiveBlockPredecessors<'a> {
     fn new(graph: &'a LiveBlockGraph, block: Block) -> Self {
@@ -92,6 +92,7 @@ impl<'a> LiveBlockPredecessors<'a> {
 }
 impl<'a> Iterator for LiveBlockPredecessors<'a> {
     type Item = Block;
+    #[inline]
     fn next(&mut self) -> Option<Block> {
         while let Some(block) = self.iter.next() {
             if self.graph.live.contains(&block) {
@@ -109,6 +110,7 @@ impl<'a> GraphBase for LiveBlockGraph<'a> {
 
 impl<'a> IntoNeighbors for &'a LiveBlockGraph<'a> {
     type Neighbors = BlockSuccessors<'a>;
+    #[inline]
     fn neighbors(self, block: Block) -> Self::Neighbors {
         self.graph.neighbors(block)
     }
@@ -116,6 +118,7 @@ impl<'a> IntoNeighbors for &'a LiveBlockGraph<'a> {
 
 impl<'a> IntoNeighborsDirected for &'a LiveBlockGraph<'a> {
     type NeighborsDirected = Either<BlockSuccessors<'a>, LiveBlockPredecessors<'a>>;
+    #[inline]
     fn neighbors_directed(self, block: Block, dir: Direction) -> Self::NeighborsDirected {
         match dir {
             Direction::Outgoing => Either::Left(self.graph.neighbors(block)),
@@ -126,9 +129,11 @@ impl<'a> IntoNeighborsDirected for &'a LiveBlockGraph<'a> {
 
 impl<'a> Visitable for &'a LiveBlockGraph<'a> {
     type Map = EntityVisitMap<Block>;
+    #[inline]
     fn visit_map(&self) -> EntityVisitMap<Block> {
         Visitable::visit_map(&self.graph)
     }
+    #[inline]
     fn reset_map(&self, map: &mut EntityVisitMap<Block>) {
         Visitable::reset_map(&self.graph, map)
     }

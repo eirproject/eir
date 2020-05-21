@@ -18,7 +18,7 @@ pub(super) fn propagate(ctx: &mut AnalysisContext, block: Block, n: usize) -> bo
         // Value list of length 1 can't exist, always the value itself
         if n == 1 {
             ctx.set_branch(target);
-            ctx.add_rename(target_block, list, 0);
+            ctx.add_rename(target_block, reads[1], 0);
             return true;
         }
 

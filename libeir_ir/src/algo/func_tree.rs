@@ -217,7 +217,6 @@ impl Function {
             functions,
         };
 
-        println!("{:?}", tree);
         assert!(tree.validate_no_cycles(tree.root_fun, 0, tree.functions.len()).is_some());
 
         tree
@@ -228,7 +227,6 @@ impl Function {
 impl FunctionTree {
 
     fn validate_no_cycles(&self, entry: Block, mut curr: usize, limit: usize) -> Option<usize> {
-        println!("curr: {} limit: {}", curr, limit);
         if curr > limit {
             return None;
         }

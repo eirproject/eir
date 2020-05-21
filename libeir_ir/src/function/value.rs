@@ -3,7 +3,9 @@ use std::ops::{ Index, IndexMut };
 
 use cranelift_entity::{ PrimaryMap, entity_impl };
 use cranelift_entity::packed_option::ReservedValue;
+use cranelift_bforest::Set;
 use libeir_util_datastructures::pooled_entity_set::EntitySet;
+use libeir_util_datastructures::aux_traits::AuxDebug;
 use super::{ Block, Const, PrimOp, Location };
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -12,6 +14,11 @@ entity_impl!(Value, "value");
 impl Default for Value {
     fn default() -> Self {
         Value::reserved_value()
+    }
+}
+impl<C> AuxDebug<C> for Value {
+    fn aux_fmt(&self, f: &mut std::fmt::Formatter<'_>, _aux: &C) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
     }
 }
 
@@ -23,11 +30,11 @@ impl NodeId for Value {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ValueData {
     pub(crate) kind: ValueKind,
     pub(crate) location: Option<Location>,
-    pub(crate) usages: EntitySet<Block>,
+    pub(crate) usages: Set<Block>,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -49,7 +56,7 @@ impl ValueKind {
 
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ValueMap {
     primary: PrimaryMap<Value, ValueData>,
     back: HashMap<ValueKind, Value>,
@@ -71,7 +78,7 @@ impl ValueMap {
             let val = self.primary.push(ValueData {
                 kind,
                 location: None,
-                usages: EntitySet::new(),
+                usages: Set::new(),
             });
             self.back.insert(kind, val);
             val

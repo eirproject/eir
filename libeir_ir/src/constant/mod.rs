@@ -2,7 +2,7 @@ use std::hash::{ Hash, Hasher };
 
 use libeir_intern::{ Ident };
 
-use libeir_util_datastructures::aux::{ AuxHash, AuxEq };
+use libeir_util_datastructures::aux_traits::{ AuxHash, AuxEq };
 use libeir_util_datastructures::aux_hash_map::AuxHashMap;
 
 use cranelift_entity::{ PrimaryMap, ListPool, EntityList, entity_impl };
@@ -59,16 +59,16 @@ impl AuxHash<ListPool<Const>> for ConstKind {
     }
 }
 impl AuxEq<ListPool<Const>> for ConstKind {
-    fn aux_eq(&self, rhs: &ConstKind, container: &ListPool<Const>) -> bool {
+    fn aux_eq(&self, rhs: &ConstKind, self_aux: &ListPool<Const>, other_aux: &ListPool<Const>) -> bool {
         match (self, rhs) {
             (ConstKind::Atomic(l), ConstKind::Atomic(r)) => l == r,
             (ConstKind::ListCell { head: lh, tail: lt },
              ConstKind::ListCell { head: rh, tail: rt }) => lh == rh && lt == rt,
             (ConstKind::Tuple { entries: l }, ConstKind::Tuple { entries: r }) =>
-                l.as_slice(container) == r.as_slice(container),
+                l.as_slice(self_aux) == r.as_slice(other_aux),
             (ConstKind::Map { keys: lk, values: lv }, ConstKind::Map { keys: rk, values: rv }) =>
-                lk.as_slice(container) == rk.as_slice(container)
-                && lv.as_slice(container) == rv.as_slice(container),
+                lk.as_slice(self_aux) == rk.as_slice(other_aux)
+                && lv.as_slice(self_aux) == rv.as_slice(other_aux),
             _ => false,
         }
     }

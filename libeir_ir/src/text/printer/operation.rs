@@ -150,6 +150,8 @@ where
                                 .append(block_val)
                                 .append(block_args);
                             arena.nil()
+                                .append(arena.text("value"))
+                                .append(arena.space())
                                 .append(val)
                                 .append(arena.space())
                                 .append(arena.text("=>"))

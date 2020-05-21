@@ -15,6 +15,7 @@ libeir_util_datastructures = { path = "../util/libeir_util_datastructures" }
 matches = "0.1.8"
 
 cranelift-entity = "0.56.0"
+cranelift-bforest = { path = "../../wasmtime/cranelift/bforest" }
 
 petgraph = "0.4"
 
@@ -27,4 +28,5 @@ log = "0.4"
 hashbrown = { git = "https://github.com/hansihe/hashbrown.git", features = ["raw", "nightly"] }
 
 [dev-dependencies]
+env_logger = "0.7"
 simple_logger = "1.0"

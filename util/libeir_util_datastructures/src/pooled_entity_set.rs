@@ -7,7 +7,7 @@ use cranelift_entity::ListPool;
 use cranelift_entity::EntityList;
 use cranelift_entity::packed_option::ReservedValue;
 
-use crate::aux::{AuxDebug, AuxHash, AuxEq};
+use crate::aux_traits::{HasAux, AuxDebug, AuxHash, AuxEq};
 
 #[derive(Debug, Clone)]
 pub struct EntitySetPool<E> {
@@ -53,26 +53,26 @@ where
     unused: PhantomData<K>,
 }
 
-impl<K: EntityRef + Debug> AuxDebug<EntitySetPool<K>> for EntitySet<K> {
-    fn aux_fmt(&self, f: &mut std::fmt::Formatter, aux: &EntitySetPool<K>) -> std::fmt::Result {
+impl<C: HasAux<EntitySetPool<K>>, K: EntityRef + Debug> AuxDebug<C> for EntitySet<K> {
+    fn aux_fmt(&self, f: &mut std::fmt::Formatter, aux: &C) -> std::fmt::Result {
         let mut b = f.debug_set();
-        b.entries(self.iter(aux));
+        b.entries(self.iter(aux.get_aux()));
         b.finish()
     }
 }
-impl<K: EntityRef> AuxHash<EntitySetPool<K>> for EntitySet<K> {
-    fn aux_hash<H: Hasher>(&self, hasher: &mut H, pool: &EntitySetPool<K>) {
+impl<C: HasAux<EntitySetPool<K>>, K: EntityRef> AuxHash<C> for EntitySet<K> {
+    fn aux_hash<H: Hasher>(&self, hasher: &mut H, aux: &C) {
         let mut n = 0;
-        for key in self.iter(pool) {
+        for key in self.iter(aux.get_aux()) {
             key.index().hash(hasher);
             n += 1;
         }
         n.hash(hasher);
     }
 }
-impl<K: EntityRef> AuxEq<EntitySetPool<K>> for EntitySet<K> {
-    fn aux_eq(&self, other: &Self, pool: &EntitySetPool<K>) -> bool {
-        self.eq(other, pool)
+impl<C: HasAux<EntitySetPool<K>>, K: EntityRef> AuxEq<C> for EntitySet<K> {
+    fn aux_eq(&self, other: &Self, self_aux: &C, other_aux: &C) -> bool {
+        self.eq_other(other, self_aux.get_aux(), other_aux.get_aux())
     }
 }
 
@@ -310,13 +310,19 @@ pub struct EntitySetIter<'a, T> where T: EntityRef {
 }
 impl<'a, T> Iterator for EntitySetIter<'a, T> where T: EntityRef {
     type Item = T;
+    #[inline]
     fn next(&mut self) -> Option<T> {
         loop {
             if self.finished { return None; }
             let rem = self.current % 63;
             if rem == 0 {
                 self.current_data = self.list.get(self.current / 63, self.pool);
-                if self.current_data.is_none() {
+                if let Some(current_data) = self.current_data {
+                    if current_data.0 == 0 {
+                        self.current += 63;
+                        continue;
+                    }
+                } else {
                     self.finished = true;
                     return None;
                 }

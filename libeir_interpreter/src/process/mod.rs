@@ -129,7 +129,7 @@ impl CallExecutor {
                 for (v, t) in live.iter().zip(env.iter()) {
                     self.binds.insert(v, t.clone());
                 }
-                assert!(live.size() == env.len());
+                assert!(live.iter().count() == env.len());
 
                 block
             } else {

@@ -86,9 +86,10 @@ fn maps() {
     pass_manager.run(&mut eir_mod);
 }
 
-#[ignore]
 #[test]
 fn match_suite() {
+    env_logger::init();
+
     let mut config = ParseConfig::default();
     config.code_paths.push_front(PathBuf::from("../otp/lib/"));
 
@@ -123,6 +124,8 @@ fn match_suite() {
 #[ignore]
 #[test]
 fn bs_match_suite() {
+    env_logger::init();
+
     let mut config = ParseConfig::default();
     config.code_paths.push_front(PathBuf::from("../otp/lib/"));
 
@@ -144,9 +147,10 @@ fn bs_match_suite() {
     run_ct_suite(&mut vm, Ident::from_str("bs_match_SUITE"));
 }
 
-#[ignore]
 #[test]
 fn maps_suite() {
+    env_logger::init();
+
     let config = ParseConfig::default();
     let mut maps_eir_mod = lower_file(
         "../otp/lib/stdlib/src/maps.erl", config).unwrap();

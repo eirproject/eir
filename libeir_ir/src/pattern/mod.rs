@@ -454,7 +454,6 @@ impl<'a> FunctionBuilder<'a> {
         // This clone is really cheap since entitylists are basically just an usize
         let lhs_kind = self.pat().nodes[lhs].kind.clone().unwrap();
         let rhs_kind = self.pat().nodes[rhs].kind.clone().unwrap();
-        println!("MERGE {:?} {:?}", lhs_kind, rhs_kind);
 
         match (lhs_kind, rhs_kind) {
             (PatternNodeKind::Value(l_val), PatternNodeKind::Value(r_val)) if l_val == r_val => {

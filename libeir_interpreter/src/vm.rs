@@ -57,11 +57,27 @@ impl VMState {
 
     pub fn add_erlang_module(&mut self, module: Module) {
         let erl_mod = ErlangModule::from_eir(module);
-        self.modules.insert(erl_mod.name, ModuleType::Erlang(erl_mod, None));
+        match self.modules.remove(&erl_mod.name) {
+            None => {
+                self.modules.insert(erl_mod.name, ModuleType::Erlang(erl_mod, None));
+            },
+            Some(ModuleType::Native(native)) => {
+                self.modules.insert(erl_mod.name, ModuleType::Erlang(erl_mod, Some(native)));
+            },
+            _ => panic!(),
+        }
     }
 
     pub fn add_native_module(&mut self, module: NativeModule) {
-        self.modules.insert(module.name, ModuleType::Native(module));
+        match self.modules.remove(&module.name) {
+            None => {
+                self.modules.insert(module.name, ModuleType::Native(module));
+            },
+            Some(ModuleType::Erlang(erl, None)) => {
+                self.modules.insert(module.name, ModuleType::Erlang(erl, Some(module)));
+            },
+            _ => panic!(),
+        }
     }
 
     pub fn add_nif_overlay(&mut self, module: NativeModule) {
@@ -78,6 +94,7 @@ impl VMState {
         self.add_native_module(crate::erl_lib::make_erlang());
         self.add_native_module(crate::erl_lib::make_lists());
         self.add_native_module(crate::erl_lib::make_math());
+        self.add_native_module(crate::erl_lib::make_maps());
     }
 
     pub fn call(&mut self, fun: &FunctionIdent, args: &[Term]) -> Result<Rc<Term>, (Rc<Term>, Rc<Term>, Rc<Term>)> {

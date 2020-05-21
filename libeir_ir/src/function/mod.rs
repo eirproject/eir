@@ -4,10 +4,11 @@ use std::cmp::Eq;
 
 use cranelift_entity::{ EntityRef, PrimaryMap, ListPool, EntityList, entity_impl };
 use cranelift_entity::packed_option::ReservedValue;
+use cranelift_bforest::{SetForest, BoundSet, Set};
 
 use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, EntitySet,
                                                      BoundEntitySet };
-use libeir_util_datastructures::aux::{ AuxHash, AuxEq };
+use libeir_util_datastructures::aux_traits::{ HasAux, AuxDebug, AuxHash, AuxEq };
 use libeir_util_datastructures::dedup_aux_primary_map::DedupAuxPrimaryMap;
 
 use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
@@ -49,6 +50,11 @@ impl Default for Block {
         Block::reserved_value()
     }
 }
+impl<C> AuxDebug<C> for Block {
+    fn aux_fmt(&self, f: &mut std::fmt::Formatter<'_>, _aux: &C) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub struct Argument(u32);
@@ -63,7 +69,7 @@ entity_impl!(FunRef, "fun_ref");
 pub struct PrimOp(u32);
 entity_impl!(PrimOp, "prim_op");
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BlockData {
     pub(crate) arguments: EntityList<Value>,
 
@@ -76,8 +82,8 @@ pub struct BlockData {
 
     // These will contain all the connected blocks, regardless
     // of whether they are actually alive or not.
-    pub(crate) predecessors: EntitySet<Block>,
-    pub(crate) successors: EntitySet<Block>,
+    pub(crate) predecessors: Set<Block>,
+    pub(crate) successors: Set<Block>,
 }
 
 #[derive(Debug, Clone)]
@@ -92,10 +98,10 @@ impl AuxHash<PoolContainer> for PrimOpData {
     }
 }
 impl AuxEq<PoolContainer> for PrimOpData {
-    fn aux_eq(&self, rhs: &PrimOpData, container: &PoolContainer) -> bool {
+    fn aux_eq(&self, rhs: &PrimOpData, self_aux: &PoolContainer, other_aux: &PoolContainer) -> bool {
         if self.op != rhs.op { return false; }
-        self.reads.as_slice(&container.value)
-            == rhs.reads.as_slice(&container.value)
+        self.reads.as_slice(&self_aux.value)
+            == rhs.reads.as_slice(&other_aux.value)
     }
 }
 
@@ -108,7 +114,7 @@ pub enum AttributeValue {
     None,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Function {
 
     // Meta
@@ -149,6 +155,34 @@ impl Function {
         &self.constant_container
     }
 
+}
+
+impl HasAux<ListPool<Value>> for Function {
+    fn get_aux(&self) -> &ListPool<Value> {
+        &self.pool.value
+    }
+}
+impl HasAux<ListPool<PatternClause>> for Function {
+    fn get_aux(&self) -> &ListPool<PatternClause> {
+        &self.pool.clause
+    }
+}
+impl HasAux<SetForest<Block>> for Function {
+    fn get_aux(&self) -> &SetForest<Block> {
+        &self.pool.block_set
+    }
+}
+
+impl<C: HasAux<Function>> AuxDebug<C> for Function {
+    fn aux_fmt(&self, f: &mut std::fmt::Formatter<'_>, container: &C) -> std::fmt::Result {
+        unimplemented!()
+    }
+}
+
+impl std::fmt::Debug for Function {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.aux_fmt(fmt, self)
+    }
 }
 
 /// Values
@@ -247,8 +281,8 @@ impl Function {
         }
     }
 
-    pub fn value_usages(&self, value: Value) -> BoundEntitySet<Block> {
-        self.values[value].usages.bind(&self.pool.block_set)
+    pub fn value_usages(&self, value: Value) -> BoundSet<Block, ()> {
+        self.values[value].usages.bind(&self.pool.block_set, &())
     }
 
     /// Walks all nested values contained within
@@ -325,8 +359,8 @@ impl Function {
             op: None,
             reads: EntityList::new(),
 
-            predecessors: EntitySet::new(),
-            successors: EntitySet::new(),
+            predecessors: Set::new(),
+            successors: Set::new(),
 
             location: self.locations.location_empty(),
         });
@@ -435,15 +469,15 @@ impl Function {
         self.block_walk_nested_values::<_, ()>(block, &mut |val| {
             if let ValueKind::Block(succ_block) = self.value_kind(val) {
                 assert!(block_data.successors.contains(
-                    succ_block, &self.pool.block_set));
+                    succ_block, &self.pool.block_set, &()));
                 assert!(self.blocks[succ_block].predecessors.contains(
-                    block, &self.pool.block_set));
+                    block, &self.pool.block_set, &()));
                 successors_set.insert(succ_block);
             }
             Ok(())
         }).unwrap();
 
-        assert!(block_data.successors.size(&self.pool.block_set)
+        assert!(block_data.successors.iter(&self.pool.block_set).count()
                 == successors_set.len());
     }
 
@@ -483,24 +517,24 @@ impl<V> GeneralSet<V> for HashSet<V> where V: Hash + Eq {
         HashSet::insert(self, key)
     }
 }
-impl<V> GeneralSet<V> for EntitySet<V> where V: EntityRef + SetPoolProvider {
+impl<V> GeneralSet<V> for Set<V> where V: Copy + Ord + SetPoolProvider {
     fn contains(&self, key: &V, fun: &Function) -> bool {
-        EntitySet::contains(self, *key, V::pool(fun))
+        Set::contains(self, *key, V::pool(fun), &())
     }
     fn insert(&mut self, key: V, fun: &mut Function) -> bool {
-        EntitySet::insert(self, key, V::pool_mut(fun))
+        Set::insert(self, key, V::pool_mut(fun), &())
     }
 }
 
-pub trait SetPoolProvider: Sized {
-    fn pool(fun: &Function) -> &EntitySetPool<Self>;
-    fn pool_mut(fun: &mut Function) -> &mut EntitySetPool<Self>;
+pub trait SetPoolProvider: Sized + Copy {
+    fn pool(fun: &Function) -> &SetForest<Self>;
+    fn pool_mut(fun: &mut Function) -> &mut SetForest<Self>;
 }
 impl SetPoolProvider for Block {
-    fn pool(fun: &Function) -> &EntitySetPool<Block> {
+    fn pool(fun: &Function) -> &SetForest<Block> {
         &fun.pool.block_set
     }
-    fn pool_mut(fun: &mut Function) -> &mut EntitySetPool<Block> {
+    fn pool_mut(fun: &mut Function) -> &mut SetForest<Block> {
         &mut fun.pool.block_set
     }
 }
@@ -523,7 +557,7 @@ impl Function {
             pool: PoolContainer {
                 value: ListPool::new(),
                 clause: ListPool::new(),
-                block_set: EntitySetPool::new(),
+                block_set: SetForest::new(),
             },
 
             pattern_container: PatternContainer::new(),

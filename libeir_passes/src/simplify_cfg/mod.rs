@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use log::trace;
+use log::{debug, trace};
 
 use bumpalo::Bump;
 use hashbrown::HashMap;
@@ -134,7 +134,7 @@ impl SimplifyCfgPass {
 
         {
             let analysis = analyze::analyze_graph(&bump, b.fun(), &graph);
-            dbg!(&analysis);
+            trace!("analysis = {:#?}", analysis);
             trace!("analysis done");
 
             for block in block_order.iter() {
@@ -150,7 +150,7 @@ impl SimplifyCfgPass {
                     let mut synthesis = synthesis_impl.try_run(&chain_graph, b.fun()).unwrap();
                     synthesis.postprocess(&chain_graph);
 
-                    println!("{:#?}", synthesis);
+                    trace!("{:#?}", synthesis);
 
                     //// .. and apply it to the CFG.
                     rewrite::rewrite(b, &mut self.map, *target, &chain_graph, &synthesis);

@@ -209,7 +209,7 @@ impl<'a> FunctionBuilder<'a> {
         for successor in block_buf.iter() {
             let block_data = &mut self.fun.blocks[*successor];
             block_data.predecessors.remove(
-                *successor, &mut self.fun.pool.block_set);
+                *successor, &mut self.fun.pool.block_set, &());
         }
 
         // 2. Add new successors to block
@@ -226,13 +226,13 @@ impl<'a> FunctionBuilder<'a> {
             for value in value_buf.iter() {
                 let value_data = &mut self.fun.values[*value];
                 // Insert block as usage of value
-                value_data.usages.insert(block, &mut self.fun.pool.block_set);
+                value_data.usages.insert(block, &mut self.fun.pool.block_set, &());
 
                 // If the value is a block capture, insert into successors
                 // for current block
                 if let ValueKind::Block(dest_block) = &value_data.kind {
                     block_data.successors.insert(
-                        *dest_block, &mut self.fun.pool.block_set);
+                        *dest_block, &mut self.fun.pool.block_set, &());
                     block_buf.push(*dest_block);
                 }
             }
@@ -242,7 +242,7 @@ impl<'a> FunctionBuilder<'a> {
         // 3. Add block as predecessor to all successors
         for dest_block in block_buf.iter() {
             let block_data = &mut self.fun.blocks[*dest_block];
-            block_data.predecessors.insert(block, &mut self.fun.pool.block_set);
+            block_data.predecessors.insert(block, &mut self.fun.pool.block_set, &());
         }
 
         block_buf.clear();
@@ -311,12 +311,12 @@ impl<'a> FunctionBuilder<'a> {
 
         for value in value_buf.iter() {
             let data = &mut self.fun.values[*value];
-            data.usages.remove(block, &mut self.fun.pool.block_set);
+            data.usages.remove(block, &mut self.fun.pool.block_set, &());
 
             if let ValueKind::Block(successor_block) = data.kind {
                 let data = self.fun.blocks.get_mut(successor_block).unwrap();
                 data.predecessors
-                    .remove(block, &mut self.fun.pool.block_set);
+                    .remove(block, &mut self.fun.pool.block_set, &());
             }
         }
 

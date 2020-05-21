@@ -17,3 +17,4 @@ libeir_util_parse = { path = "../util/libeir_util_parse" }
 
 [dev-dependencies]
 simple_logger = "1.6"
+env_logger = "0.7"

@@ -751,3 +751,169 @@ a'a':a'a'/1 {
 
 
 }
+
+
+#[test]
+fn cccc() {
+    env_logger::init();
+
+    let mut fun = parse_function_unwrap("
+a'a':a'underscore'/1 {
+  block55(%154, %155, %156):
+    block83(%156);
+  block83(%214):
+    unpack %214 arity 1 => block84;
+  block84(%216):
+    block138();
+  block138():
+    %27 = a'erlang':a'is_list'/1;
+    %27(%216) => block85 except block137;
+  block137(%307, %308, %309):
+    block85(a'false');
+  block85(%218):
+    if_bool %218 block87 block88 block89;
+  block89():
+    unreachable;
+  block88():
+    block56();
+  block56():
+    trace_capture_raw block82;
+  block82(%208):
+    %155(a'error', a'function_clause', %208);
+  block87():
+    block58(%216);
+  block58(%163):
+    block90(%163);
+  block90(%227):
+    unpack %227 arity 1 => block91;
+  block91(%229):
+    %233 = <>;
+    %255 = <block92, block98, block104>;
+    match %229 {
+      [] => block92;
+      value [] => block98;
+      _ => block104;
+    };
+  block104():
+    block59();
+  block59():
+    trace_capture_raw block80;
+  block80(%202):
+    %209 = {a'case_clause', %163};
+    %155(a'error', %209, %202);
+  block98():
+    block131();
+  block131():
+    block99(a'true');
+  block99(%246):
+    if_bool %246 block101 block102 block103;
+  block103():
+    unreachable;
+  block102():
+    block59();
+  block101():
+    block60();
+  block60():
+    %51 = a'erlang':a'length'/1;
+    %51(%163) => block61 except %155;
+  block61(%167):
+    block119(%167);
+  block119(%283):
+    unpack %283 arity 1 => block120;
+  block120(%285):
+    block129();
+  block129():
+    block121(a'true');
+  block121(%287):
+    if_bool %287 block123 block124 block125;
+  block125():
+    unreachable;
+  block124():
+    block62();
+  block62():
+    trace_capture_raw block78;
+  block78(%197):
+    %210 = {a'badmatch', %167};
+    %155(a'error', %210, %197);
+  block123():
+    block72();
+  block72():
+    block71();
+  block71():
+    %27 = a'erlang':a'is_list'/1;
+    %27(%163) => block66 except %155;
+  block66(%174):
+    block112(%174);
+  block112(%270):
+    unpack %270 arity 1 => block113;
+  block113(%272):
+    block127();
+  block127():
+    block114(a'true');
+  block114(%274):
+    if_bool %274 block116 block117 block118;
+  block118():
+    unreachable;
+  block117():
+    block67();
+  block67():
+    trace_capture_raw block70;
+  block70(%181):
+    %212 = {a'badmatch', %174};
+    %155(a'error', %212, %181);
+  block116():
+    block68();
+  block68():
+    %154(a'ok');
+  block92(%231, %232):
+    block135();
+  block135():
+    block93(a'true');
+  block93(%235):
+    if_bool %235 block95 block96 block97;
+  block97():
+    unreachable;
+  block96():
+    block59();
+  block95():
+    block63();
+  block63():
+    %80 = a'erlang':a'list_to_tuple'/1;
+    %80(%163) => block64 except %155;
+  block64(%171):
+    block105(%171);
+  block105(%257):
+    unpack %257 arity 1 => block106;
+  block106(%259):
+    block133();
+  block133():
+    block107(a'true');
+  block107(%261):
+    if_bool %261 block109 block110 block111;
+  block111():
+    unreachable;
+  block110():
+    block65();
+  block65():
+    trace_capture_raw block75;
+  block75(%189):
+    %211 = {a'badmatch', %171};
+    %155(a'error', %211, %189);
+  block109():
+    block73();
+  block73():
+    block71();
+}
+");
+
+    let mut b = fun.builder();
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    let mut errs = Vec::new();
+    b.fun().validate(&mut errs);
+    println!("{:?}", errs);
+
+    panic!()
+}

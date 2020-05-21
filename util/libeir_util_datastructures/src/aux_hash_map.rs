@@ -1,21 +1,21 @@
 use std::collections::hash_map::RandomState;
-use std::hash::{ Hash, Hasher, BuildHasher };
+use std::hash::{Hasher, BuildHasher};
 use std::marker::PhantomData;
 use std::borrow::Borrow;
 use std::fmt::Debug;
 
-use crate::aux::{AuxHash, AuxEq};
+use crate::aux_traits::{AuxHash, AuxEq};
 
 //use cranelift_entity::{ListPool, EntityList, EntityRef};
 //use cranelift_entity::packed_option::ReservedValue;
 
 use hashbrown::raw::{RawTable, RawIter, Global, AllocRef};
 
-impl<C, T> AuxHash<C> for T where T: Hash {
-    fn aux_hash<H: Hasher>(&self, state: &mut H, _container: &C) {
-        self.hash(state)
-    }
-}
+//impl<C, T> AuxHash<C> for T where T: Hash {
+//    fn aux_hash<H: Hasher>(&self, state: &mut H, _container: &C) {
+//        self.hash(state)
+//    }
+//}
 //impl<E> AuxHash<ListPool<E>> for EntityList<E>
 //where
 //    E: EntityRef + ReservedValue + Hash
@@ -25,14 +25,14 @@ impl<C, T> AuxHash<C> for T where T: Hash {
 //    }
 //}
 
-impl<C, T: ?Sized> AuxEq<C> for T where T: Eq {
-    fn aux_eq(&self, other: &Self, _container: &C) -> bool {
-        self.eq(other)
-    }
-    fn aux_ne(&self, other: &Self, _container: &C) -> bool {
-        self.ne(other)
-    }
-}
+//impl<C, T: ?Sized> AuxEq<C> for T where T: Eq {
+//    fn aux_eq(&self, other: &Self, _container: &C) -> bool {
+//        self.eq(other)
+//    }
+//    fn aux_ne(&self, other: &Self, _container: &C) -> bool {
+//        self.ne(other)
+//    }
+//}
 //impl<E> AuxEq<ListPool<E>> for EntityList<E>
 //where
 //    E: EntityRef + ReservedValue + Eq
@@ -99,7 +99,7 @@ where
     #[inline]
     pub fn try_insert(&mut self, k: K, v: V, container: &C) -> Result<(), ()> {
         let hash = make_hash(&self.hash_builder, container, &k);
-        if let Some(_item) = self.table.find(hash, |x| k.aux_eq(&x.0, container)) {
+        if let Some(_item) = self.table.find(hash, |x| k.aux_eq(&x.0, container, container)) {
             Err(())
         } else {
             let hash_builder = &self.hash_builder;
@@ -126,7 +126,7 @@ where
     {
         let hash = make_hash(&self.hash_builder, container, k);
         self.table
-            .find(hash, |x| k.aux_eq(x.0.borrow(), container))
+            .find(hash, |x| k.aux_eq(x.0.borrow(), container, container))
             .map(|item| unsafe {
                 let &(ref key, ref value) = item.as_ref();
                 (key, value)

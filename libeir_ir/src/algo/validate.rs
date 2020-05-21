@@ -1,8 +1,12 @@
-use std::collections::{ HashMap, HashSet };
+use std::collections::HashSet;
+
+use hashbrown::HashMap;
+use fnv::FnvBuildHasher;
+type FnvHashMap<K, V> = HashMap<K, V, FnvBuildHasher>;
 
 use petgraph::algo::dominators::Dominators;
 
-use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, EntitySet };
+use cranelift_bforest::{SetForest, Set};
 
 use crate::{ Function, OpKind, MatchKind, CallKind };
 use crate::{ Block, Value };
@@ -224,14 +228,14 @@ impl Function {
     fn validate_ssa_visibility(&self, doms: &Dominators<Block>, errors: &mut Vec<ValidationError>) {
         let entry_block = self.block_entry();
 
-        let mut pool = EntitySetPool::new();
+        let mut pool = SetForest::new();
 
         // Live variables on block entry and exit
-        let mut live_variables: HashMap<Block, EntitySet<Value>>
-            = HashMap::new();
+        let mut live_variables: FnvHashMap<Block, Set<Value>>
+            = FnvHashMap::with_hasher(Default::default());
 
         // Seed entry node
-        let entry_vals = EntitySet::new();
+        let entry_vals = Set::new();
         self.insert_live_for_node(entry_block, entry_vals,
                                   &mut pool,
                                   &mut live_variables);
@@ -279,7 +283,7 @@ impl Function {
             for read in self.block_reads(block) {
                 self.value_walk_nested_values::<_, ()>(*read, &mut |val| {
                     if self.value_argument(val).is_some()
-                        && !visible.contains(val, &pool)
+                        && !visible.contains(val, &pool, &())
                     {
                         errors.push(ValidationError::InvalidRead {
                             value: val,
@@ -293,14 +297,13 @@ impl Function {
 
     }
 
-    fn insert_live_for_node(&self, block: Block, base_set: EntitySet<Value>,
-                            pool: &mut EntitySetPool<Value>,
-                            live: &mut HashMap<Block, EntitySet<Value>>) {
-        let mut set = base_set.make_copy(pool);
+    fn insert_live_for_node(&self, block: Block, mut base_set: Set<Value>,
+                            pool: &mut SetForest<Value>,
+                            live: &mut FnvHashMap<Block, Set<Value>>) {
         for arg in self.block_args(block) {
-            set.insert(*arg, pool);
+            base_set.insert(*arg, pool, &());
         }
-        live.insert(block, set);
+        live.insert(block, base_set);
     }
 
 }
