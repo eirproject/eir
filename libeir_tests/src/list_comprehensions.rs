@@ -11,6 +11,8 @@ use libeir_interpreter::{ErlEq, Term, VMState};
 
 #[test]
 fn test_list_comprehension_single_filter() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).
@@ -63,6 +65,8 @@ woo(N) -> [1 || erlang:is_integer(N)].
 
 #[test]
 fn test_list_comprehension_single_list_generator() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).
@@ -139,6 +143,8 @@ woo(L) -> [X*2 || X <- L].
 
 #[test]
 fn test_list_comprehension_combinations() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).
@@ -213,6 +219,8 @@ comb(L) -> [[A, B] || A <- L, B <- L].
 
 #[test]
 fn test_basic_comprehension() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).
@@ -250,6 +258,8 @@ perms(L) -> [H || H <- L].
 
 #[test]
 fn test_list_comprehension_permutations() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).

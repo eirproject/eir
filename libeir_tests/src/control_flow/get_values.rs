@@ -20,7 +20,7 @@ use libeir_syntax_erl::ParseConfig;
 
 #[test]
 fn get_values() {
-    let _ = simple_logger::init_by_env();
+    let _ = env_logger::try_init();
 
     let mut eir_mod = lower(
         "-module('Elixir.Keyword').

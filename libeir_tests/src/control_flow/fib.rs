@@ -9,6 +9,8 @@ use libeir_interpreter::{Term, VMState};
 
 #[test]
 fn test_fib() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "-module(fib).
 

@@ -9,6 +9,8 @@ use libeir_interpreter::{Term, VMState};
 
 #[test]
 fn test_basic_catch() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).
@@ -48,6 +50,8 @@ end.
 
 #[test]
 fn test_basic_catch_miss() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).

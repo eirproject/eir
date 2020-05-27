@@ -11,6 +11,8 @@ use std::rc::Rc;
 
 #[test]
 fn test_list_acc() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "-module(woo).
 

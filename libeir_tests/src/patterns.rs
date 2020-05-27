@@ -11,6 +11,8 @@ use libeir_interpreter::{ErlEq, Term, VMState};
 
 #[test]
 fn test_pattern_equality() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).
@@ -41,6 +43,8 @@ basic_pat(_, _) -> false.
 
 #[test]
 fn test_tuple_pattern() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).
@@ -105,6 +109,8 @@ woo(_) -> 3.
 
 #[test]
 fn test_list_pattern() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).
@@ -152,6 +158,8 @@ woo(_) -> 4.
 
 #[test]
 fn test_fun_atom_pattern() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).
@@ -201,6 +209,8 @@ woo(def) -> 2.
 
 #[test]
 fn test_case_atom_pattern() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).

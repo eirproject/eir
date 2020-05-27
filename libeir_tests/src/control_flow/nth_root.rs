@@ -1,17 +1,20 @@
 use std::rc::Rc;
 
-use crate::{ lower, write_dot };
+use crate::{lower, write_dot};
 
-use libeir_ir::{ FunctionIdent };
-use libeir_syntax_erl::{ ParseConfig };
-use libeir_intern::{ Ident, Symbol };
+use libeir_intern::{Ident, Symbol};
+use libeir_ir::FunctionIdent;
 use libeir_passes::PassManager;
+use libeir_syntax_erl::ParseConfig;
 
-use libeir_interpreter::{ VMState, Term, ErlEq };
+use libeir_interpreter::{ErlEq, Term, VMState};
 
 #[test]
 fn test_nth_root() {
-    let mut eir_mod = lower("
+    let _ = env_logger::try_init();
+
+    let mut eir_mod = lower(
+        "
 -module(woo).
 
 fixed_point(F, Guess, Tolerance) ->
@@ -25,7 +28,10 @@ nth_root(N, X) -> nth_root(N, X, 1.0e-5).
 nth_root(N, X, Precision) ->
     F = fun(Prev) -> ((N - 1) * Prev + X / math:pow(Prev, (N-1))) / N end,
     fixed_point(F, X, Precision).
-", ParseConfig::default()).unwrap();
+",
+        ParseConfig::default(),
+    )
+    .unwrap();
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);

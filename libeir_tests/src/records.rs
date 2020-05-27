@@ -9,6 +9,8 @@ use libeir_interpreter::{ErlEq, Term, VMState};
 
 #[test]
 fn record_creation() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woo).
@@ -135,6 +137,8 @@ create_5(A, B) -> #alien{name=A, planet=B}.
 
 #[test]
 fn record_creation_a() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "
 -module(woohoo).

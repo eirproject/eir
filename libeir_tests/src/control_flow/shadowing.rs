@@ -9,6 +9,8 @@ use libeir_interpreter::VMState;
 
 #[test]
 fn pattern_variable_shadowing() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "-module(shadowing).
 
@@ -50,6 +52,8 @@ fun_shadowing(A, B) ->
 
 #[test]
 fn pattern_variable_shadowing_a() {
+    let _ = env_logger::try_init();
+
     let mut eir_mod = lower(
         "-module(shadowinga).
 

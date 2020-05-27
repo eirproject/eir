@@ -13,6 +13,8 @@ use libeir_lowerutils::analyze;
 #[ignore]
 #[test]
 fn compiler() {
+    let _ = env_logger::try_init();
+
     let mut config = ParseConfig::default();
 
     config
@@ -36,6 +38,8 @@ fn compiler() {
 #[ignore]
 #[test]
 fn beam_disasm() {
+    let _ = env_logger::try_init();
+
     let mut config = ParseConfig::default();
 
     config
@@ -59,6 +63,8 @@ fn beam_disasm() {
 #[ignore]
 #[test]
 fn core_parse() {
+    let _ = env_logger::try_init();
+
     let mut config = ParseConfig::default();
 
     config
@@ -81,6 +87,8 @@ fn core_parse() {
 
 #[test]
 fn maps() {
+    let _ = env_logger::try_init();
+
     let config = ParseConfig::default();
     let mut eir_mod = lower_file("../otp/lib/stdlib/src/maps.erl", config).unwrap();
 
@@ -95,7 +103,7 @@ fn maps() {
 
 #[test]
 fn match_suite() {
-    env_logger::init();
+    let _ = env_logger::try_init();
 
     let mut config = ParseConfig::default();
     config.code_paths.push_front(PathBuf::from("../otp/lib/"));
@@ -130,7 +138,7 @@ fn match_suite() {
 #[ignore]
 #[test]
 fn bs_match_suite() {
-    env_logger::init();
+    let _ = env_logger::try_init();
 
     let mut config = ParseConfig::default();
     config.code_paths.push_front(PathBuf::from("../otp/lib/"));
@@ -154,7 +162,7 @@ fn bs_match_suite() {
 
 #[test]
 fn maps_suite() {
-    env_logger::init();
+    let _ = env_logger::try_init();
 
     let config = ParseConfig::default();
     let mut maps_eir_mod = lower_file("../otp/lib/stdlib/src/maps.erl", config).unwrap();
@@ -186,6 +194,8 @@ fn maps_suite() {
 #[ignore]
 #[test]
 fn xmerl_scan() {
+    let _ = env_logger::try_init();
+
     let mut config = ParseConfig::default();
     config.code_paths.push_front(PathBuf::from("../otp/lib/"));
     config
@@ -209,6 +219,8 @@ fn xmerl_scan() {
 #[ignore]
 #[test]
 fn xmerl_sax_parser_utf8() {
+    let _ = env_logger::try_init();
+
     let mut config = ParseConfig::default();
     config.code_paths.push_front(PathBuf::from("../otp/lib/"));
     config
@@ -233,6 +245,8 @@ fn xmerl_sax_parser_utf8() {
 #[ignore]
 #[test]
 fn foo() {
+    let _ = env_logger::try_init();
+
     let config = ParseConfig::default();
     let mut eir_mod = lower_file("foo.erl", config).unwrap();
 
@@ -249,6 +263,8 @@ fn foo() {
 
 #[test]
 fn aa() {
+    let _ = env_logger::try_init();
+
     let text = "
 -module(foo).
 
@@ -280,6 +296,8 @@ Val
 
 #[test]
 fn unary_op_1() {
+    let _ = env_logger::try_init();
+
     let text = "
 -module(foo).
 
@@ -352,6 +370,8 @@ unary_op_1(Vop@1) ->
 
 #[test]
 fn unary_op_1_a() {
+    let _ = env_logger::try_init();
+
     let text = "
 -module(foobarrr).
 

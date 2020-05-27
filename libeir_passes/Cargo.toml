@@ -26,4 +26,3 @@ libeir_util_datastructures = { path = "../util/libeir_util_datastructures" }
 
 [dev-dependencies]
 env_logger = "0.7"
-simple_logger = "1.0"

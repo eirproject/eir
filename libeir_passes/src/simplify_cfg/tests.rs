@@ -5,7 +5,7 @@ use libeir_ir::{parse_function_map_unwrap, parse_function_unwrap};
 
 #[test]
 fn primop_in_chain() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -42,7 +42,7 @@ a'foo':a'bar'/1 {
 
 #[test]
 fn double_primop_in_chain() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -80,7 +80,7 @@ a'foo':a'bar'/1 {
 
 #[test]
 fn split_primop_in_chain() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -131,7 +131,7 @@ a'foo':a'bar'/3 {
 
 #[test]
 fn two_split_primop_in_chain() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -182,7 +182,7 @@ a'foo':a'bar'/5 {
 
 #[test]
 fn simple_tail_call_elimination() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -218,7 +218,7 @@ a'foo':a'bar'/0 {
 
 #[test]
 fn tail_call_elimination() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -256,7 +256,7 @@ a'foo':a'bar'/0 {
 
 #[test]
 fn recursive_simplification() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -294,7 +294,7 @@ a'foo':a'bar'/0 {
 
 #[test]
 fn value_list_removal() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -328,7 +328,7 @@ a'foo':a'bar'/2 {
 
 #[test]
 fn partial_loop() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -377,7 +377,7 @@ a'foo':a'bar'/1 {
 
 #[test]
 fn tight_partial_loop() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -437,7 +437,7 @@ a'foo':a'perms'/1 {
 
 #[test]
 fn deep_primop_rename_single_branch() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -479,7 +479,7 @@ a'foo':a'do_map_vars_used'/1 {
 
 #[test]
 fn deep_primop_rename_after_entry_single_branch() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -539,7 +539,7 @@ a'foo':a'do_map_vars_used'/1 {
 
 #[test]
 fn converging_from_single() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -591,7 +591,7 @@ a'fib':a'fib'/1 {
 // Fails because of https://github.com/eirproject/eir/issues/24
 #[test]
 fn block_capture_with_scope_in_chain() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -681,7 +681,7 @@ a'a':a'a'/1 {
 
 #[test]
 fn bbbb() {
-    let _ = simple_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -836,7 +836,7 @@ a'a':a'a'/1 {
 
 #[test]
 fn cccc() {
-    env_logger::init();
+    let _ = env_logger::try_init();
 
     let mut fun = parse_function_unwrap(
         "
@@ -997,6 +997,5 @@ a'a':a'underscore'/1 {
     let mut errs = Vec::new();
     b.fun().validate(&mut errs);
     println!("{:?}", errs);
-
-    panic!()
+    assert!(errs.len() == 0)
 }
