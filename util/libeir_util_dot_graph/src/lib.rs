@@ -1,8 +1,7 @@
 #![feature(allocator_api)]
 
 use std::fmt::Display;
-use std::fs::File;
-use std::fmt::{Write, Error};
+use std::fmt::{Error, Write};
 use std::path::Path;
 
 //mod tablegen;
@@ -81,12 +80,11 @@ impl Content for &str {
     }
 }
 
-pub struct StructuredNode {
-}
+pub struct StructuredNode {}
 impl StructuredNode {
-    pub fn text<F: ContentFormatting>(&mut self, content: F) {}
-    pub fn vertical(&mut self, cells: &[()]) {}
-    pub fn horizontal(&mut self, cells: &[()]) {}
+    pub fn text<F: ContentFormatting>(&mut self, _content: F) {}
+    pub fn vertical(&mut self, _cells: &[()]) {}
+    pub fn horizontal(&mut self, _cells: &[()]) {}
 }
 
 pub struct GraphPrinter<O: Write> {
@@ -96,12 +94,11 @@ pub struct GraphPrinter<O: Write> {
 }
 
 impl GraphPrinter<String> {
-
     pub fn new() -> Self {
         Self::with_out(String::new())
     }
 
-    pub fn finish_run_dot(mut self, out: &Path) {
+    pub fn finish_run_dot(self, out: &Path) {
         let dot_res = self.finish().unwrap();
 
         let dir = std::env::temp_dir();
@@ -119,8 +116,10 @@ impl GraphPrinter<String> {
         use std::process::Command;
         let res = Command::new("dot")
             .args(&[
-                "-o", out.to_str().unwrap(),
-                "-T", ext.to_str().unwrap(),
+                "-o",
+                out.to_str().unwrap(),
+                "-T",
+                ext.to_str().unwrap(),
                 dot_path.to_str().unwrap(),
             ])
             .output()
@@ -133,11 +132,9 @@ impl GraphPrinter<String> {
             panic!();
         }
     }
-
 }
 
 impl<O: Write> GraphPrinter<O> {
-
     pub fn with_out(out: O) -> Self {
         let mut g = GraphPrinter {
             out,
@@ -146,7 +143,10 @@ impl<O: Write> GraphPrinter<O> {
         };
         g.w(|w| {
             write!(w, "digraph g {{\n")?;
-            write!(w, "node [labeljust=\"l\", shape=record, fontname=\"Courier New\"]\n")?;
+            write!(
+                w,
+                "node [labeljust=\"l\", shape=record, fontname=\"Courier New\"]\n"
+            )?;
             write!(w, "edge [fontname=\"Courier New\" ]\n\n")?;
             Ok(())
         });
@@ -219,13 +219,12 @@ impl<O: Write> GraphPrinter<O> {
 
     fn w<F>(&mut self, f: F)
     where
-        F: FnOnce(&mut O) -> Result<(), Error>
+        F: FnOnce(&mut O) -> Result<(), Error>,
     {
         if self.error.is_ok() {
             self.error = f(&mut self.out);
         }
     }
-
 }
 
 //#[allow(clippy::write_with_newline)]
@@ -277,8 +276,8 @@ impl<O: Write> GraphPrinter<O> {
 
 #[cfg(test)]
 mod test {
-    use std::path::Path;
     use crate::{GraphPrinter, NodeId};
+    use std::path::Path;
 
     #[test]
     fn basic() {
@@ -301,5 +300,4 @@ mod test {
 
         std::fs::remove_file(Path::new("something.png")).unwrap();
     }
-
 }

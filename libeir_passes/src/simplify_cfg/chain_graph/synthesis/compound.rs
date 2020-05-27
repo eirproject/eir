@@ -1,17 +1,15 @@
 use log::trace;
 
-use libeir_ir::Function;
-use super::{SynthesisStrategy, Synthesis};
 use super::super::ChainGraph;
+use super::{Synthesis, SynthesisStrategy};
+use libeir_ir::Function;
 
 /// Synthesis strategy that dispatches to any number of other strategies
 /// depending on the chain graph.
 pub struct CompoundStrategy;
 
 impl SynthesisStrategy for CompoundStrategy {
-
     fn try_run(&self, graph: &ChainGraph, fun: &Function) -> Option<Synthesis> {
-
         trace!("TS1");
         // Try the single strategy.
         // Will only succeed if there is a single entry.
@@ -32,7 +30,5 @@ impl SynthesisStrategy for CompoundStrategy {
         // handled by SingleStrategy above).
         let simple_strategy = super::simple::SimpleStrategy;
         Some(simple_strategy.try_run(graph, fun).unwrap())
-
     }
-
 }

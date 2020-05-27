@@ -2,10 +2,10 @@ use log::trace;
 
 use libeir_ir::Function;
 
-use crate::util::Walker;
-use super::{SynthesisStrategy, Synthesis};
-use super::single::can_subsitute;
 use super::super::ChainGraph;
+use super::single::can_subsitute;
+use super::{Synthesis, SynthesisStrategy};
+use crate::util::Walker;
 
 /// A synthesis strategy that specializes the target into every entry.
 /// This is only valid for target blocks that terminate/don't use any values
@@ -17,15 +17,13 @@ use super::super::ChainGraph;
 pub struct TerminatingTargetStrategy;
 
 impl SynthesisStrategy for TerminatingTargetStrategy {
-
     fn try_run(&self, graph: &ChainGraph, fun: &Function) -> Option<Synthesis> {
         // TODO change this to check outgoing values instead
 
         let target = graph.target_block;
         let target_reads = fun.block_reads(target);
 
-        if !(fun.block_kind(target).unwrap().is_call()
-             && fun.value_kind(target_reads[0]).is_arg())
+        if !(fun.block_kind(target).unwrap().is_call() && fun.value_kind(target_reads[0]).is_arg())
         {
             return None;
         }
@@ -34,7 +32,7 @@ impl SynthesisStrategy for TerminatingTargetStrategy {
         let mut synthesis = Synthesis::new();
 
         for chain in graph.chains.keys() {
-            if can_subsitute(graph, fun, chain){
+            if can_subsitute(graph, fun, chain) {
                 synthesis.substitute(chain, target_reads[0]);
             } else {
                 let segment = synthesis.create_entry_segment(chain, graph);
@@ -48,10 +46,8 @@ impl SynthesisStrategy for TerminatingTargetStrategy {
 
                 synthesis.visit_segment(segment);
             }
-
         }
 
         Some(synthesis)
     }
-
 }

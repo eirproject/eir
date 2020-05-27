@@ -5,15 +5,16 @@ use super::ToT;
 
 #[test]
 fn simple_mangle() {
-
-    let (mut ir, map) = crate::parse_function_map_unwrap("
+    let (mut ir, map) = crate::parse_function_map_unwrap(
+        "
 a'foo':a'bar'/1 {
     entry(%ret, %thr, %a):
         b1();
     b1():
         %ret(%a);
 }
-");
+",
+    );
 
     let mut b = ir.builder();
 
@@ -34,28 +35,33 @@ a'foo':a'bar'/1 {
     let new_b1 = mangler.run(&mut b);
     b.block_set_entry(new_b1);
 
-    let after = crate::parse_function_unwrap("
+    let after = crate::parse_function_unwrap(
+        "
 a'foo':a'bar'/1 {
     entry(%ret):
         b1();
     b1():
         %ret([]);
 }
-");
+",
+    );
 
-    assert!(b.fun().graph_eq(new_b1, &after, after.block_entry()).is_ok());
-
+    assert!(b
+        .fun()
+        .graph_eq(new_b1, &after, after.block_entry())
+        .is_ok());
 }
 
 #[test]
 fn mangle_primop() {
-
-    let (mut ir, map) = crate::parse_function_map_unwrap("
+    let (mut ir, map) = crate::parse_function_map_unwrap(
+        "
 a'foo':a'bar'/1 {
     entry(%ret, %thr, %a):
         %ret({%a});
 }
-");
+",
+    );
 
     let mut b = ir.builder();
 
@@ -69,21 +75,25 @@ a'foo':a'bar'/1 {
     mangler.add_rename(ToT(b1_arg), ToT(nil_term));
     let new_b1 = mangler.run(&mut b);
 
-    let after = crate::parse_function_unwrap("
+    let after = crate::parse_function_unwrap(
+        "
 a'foo':a'bar'/1 {
     entry(%ret, %thr, %a):
         %ret({[]});
 }
-");
+",
+    );
 
-    assert!(b.fun().graph_eq(new_b1, &after, after.block_entry()).is_ok());
-
+    assert!(b
+        .fun()
+        .graph_eq(new_b1, &after, after.block_entry())
+        .is_ok());
 }
 
 #[test]
 fn mangle_recursive() {
-
-    let (mut ir, map) = crate::parse_function_map_unwrap("
+    let (mut ir, map) = crate::parse_function_map_unwrap(
+        "
 a'foo':a'bar'/2 {
     entry(%ret, %thr, %a, %b):
         b2(%a);
@@ -96,7 +106,8 @@ a'foo':a'bar'/2 {
     dummy(%t):
         %t();
 }
-");
+",
+    );
 
     let mut b = ir.builder();
     println!("{}", b.fun().to_text(&mut StandardFormatConfig::default()));
@@ -119,22 +130,27 @@ a'foo':a'bar'/2 {
     b.block_set_entry(new_entry);
     println!("{}", b.fun().to_text(&mut StandardFormatConfig::default()));
 
-    let after = crate::parse_function_unwrap("
+    let after = crate::parse_function_unwrap(
+        "
 a'foo':a'bar'/2 {
     entry(%ret, %thr, %a, %b):
         b1(%a);
     b1(%m):
         %ret(%b);
 }
-");
+",
+    );
 
-    assert!(b.fun().graph_eq(new_entry, &after, after.block_entry()).is_ok());
-
+    assert!(b
+        .fun()
+        .graph_eq(new_entry, &after, after.block_entry())
+        .is_ok());
 }
 
 #[test]
 fn mangle_entry() {
-    let (mut ir, map) = crate::parse_function_map_unwrap("
+    let (mut ir, map) = crate::parse_function_map_unwrap(
+        "
 a'foo':a'bar'/0 {
     block0(%1, %2):
         unreachable;
@@ -143,7 +159,8 @@ a'foo':a'bar'/0 {
     block2(%7):
         %4();
 }
-");
+",
+    );
     let entry = map.get_block("block0");
 
     let mut b = ir.builder();
@@ -165,15 +182,20 @@ a'foo':a'bar'/0 {
     b.fun().validate(&mut errors);
     assert_eq!(errors.len(), 0, "{:#?}", errors);
 
-    let after = crate::parse_function_unwrap("
+    let after = crate::parse_function_unwrap(
+        "
 a'foo':a'bar'/0 {
     block3(%9, %10):
         block4(%10);
     block4(%12):
         %9();
 }
-");
-    assert!(b.fun().graph_eq(new_entry, &after, after.block_entry()).is_ok());
+",
+    );
+    assert!(b
+        .fun()
+        .graph_eq(new_entry, &after, after.block_entry())
+        .is_ok());
 
     //{
     //    value0#block0: (
@@ -205,5 +227,4 @@ a'foo':a'bar'/0 {
     //        true,
     //    ),
     //}
-
 }

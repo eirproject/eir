@@ -10,7 +10,7 @@ macro_rules! kwlist {
         let mut elements = vec![$($element),*];
         elements.reverse();
         elements.fold(nil!($nid), |acc, (key, val)| {
-            cons!($nid, Expr::Tuple(Tuple { span: ByteSpan::default(), id: $nid.next(), elements: vec![key, val] }), acc)
+            cons!($nid, Expr::Tuple(Tuple { span: SourceSpan::UNKNOWN, id: $nid.next(), elements: vec![key, val] }), acc)
         })
     }
 }
@@ -45,7 +45,7 @@ macro_rules! list {
 macro_rules! cons {
     ($nid:expr, $head:expr, $tail:expr) => {
         Expr::Cons(Cons {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             id: $nid.next(),
             head: Box::new($head),
             tail: Box::new($tail),
@@ -55,7 +55,7 @@ macro_rules! cons {
 
 macro_rules! nil {
     ($nid:expr) => {
-        Expr::Nil(Nil(ByteSpan::default(), $nid.next()))
+        Expr::Nil(Nil(SourceSpan::UNKNOWN, $nid.next()))
     };
 }
 
@@ -63,7 +63,7 @@ macro_rules! nil {
 macro_rules! tuple {
     ($nid:expr, $($element:expr),*) => {
         Expr::Tuple(Tuple{
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             id: $nid.next(),
             elements: vec![$($element),*],
         })
@@ -73,19 +73,23 @@ macro_rules! tuple {
 /// Produces an integer literal expression
 macro_rules! int {
     ($nid:expr, $i:expr) => {
-        Expr::Literal(Literal::Integer(ByteSpan::default(), $nid.next(), $i))
+        Expr::Literal(Literal::Integer(SourceSpan::UNKNOWN, $nid.next(), $i))
     };
 }
 
 /// Produces a literal expression which evaluates to an atom
 macro_rules! atom {
     ($nid:expr, $sym:ident) => {
-        Expr::Literal(Literal::Atom($nid.next(), Ident::with_empty_span(Symbol::intern(
-            stringify!($sym),
-        ))))
+        Expr::Literal(Literal::Atom(
+            $nid.next(),
+            Ident::with_empty_span(Symbol::intern(stringify!($sym))),
+        ))
     };
     ($nid:expr, $sym:expr) => {
-        Expr::Literal(Literal::Atom($nid.next(), Ident::with_empty_span(Symbol::intern($sym))))
+        Expr::Literal(Literal::Atom(
+            $nid.next(),
+            Ident::with_empty_span(Symbol::intern($sym)),
+        ))
     };
 }
 
@@ -140,7 +144,7 @@ macro_rules! var {
 macro_rules! remote {
     ($nid: expr, $module:ident, $function:ident) => {
         Expr::Remote(Remote {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             id: $nid.next(),
             module: Box::new(atom!($nid, $module)),
             function: Box::new(atom!($nid, $function)),
@@ -148,7 +152,7 @@ macro_rules! remote {
     };
     ($nid:expr, $module:expr, $function:expr) => {
         Expr::Remote(Remote {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             id: $nid.next(),
             module: Box::new($module),
             function: Box::new($function),
@@ -160,7 +164,7 @@ macro_rules! remote {
 macro_rules! apply {
     ($nid:expr, $callee:expr, $($args:expr),*) => {
         Expr::Apply(Apply {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             id: $nid.next(),
             callee: Box::new($callee),
             args: vec![$($args),*]
@@ -175,13 +179,13 @@ macro_rules! fun {
             let params = vec![$(var!($nid, $params)),*];
             let arity = params.len();
             NamedFunction {
-                span: ByteSpan::default(),
+                span: SourceSpan::UNKNOWN,
                 id: $nid.next(),
                 name: ident!($name),
                 arity,
                 clauses: vec![
                     FunctionClause{
-                        span: ByteSpan::default(),
+                        span: SourceSpan::UNKNOWN,
                         name: Some(ident!($name)),
                         params,
                         guard: None,
@@ -197,7 +201,7 @@ macro_rules! fun {
             let mut clauses = Vec::new();
             $(
                 clauses.push(FunctionClause {
-                    span: ByteSpan::default(),
+                    span: SourceSpan::UNKNOWN,
                     name: Some(ident!($name)),
                     params: vec![$($params),*],
                     guard: None,
@@ -206,7 +210,7 @@ macro_rules! fun {
             )*
             let arity = clauses.first().as_ref().unwrap().params.len();
             NamedFunction {
-                span: ByteSpan::default(),
+                span: SourceSpan::UNKNOWN,
                 id: $nid.next(),
                 name: ident!($name),
                 arity,

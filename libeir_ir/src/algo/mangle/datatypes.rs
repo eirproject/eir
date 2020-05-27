@@ -1,16 +1,16 @@
 #![allow(dead_code)]
 use crate::Function;
-use crate::{Value, Block};
+use crate::{Block, Value};
 
 use super::MangleReceiver;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FromT<T>(pub T);
 impl<T> FromT<T> {
-
     pub(super) fn map_fun<'a, 'b, R, F, V>(self, recv: &'a R, mut f: F) -> FromT<V>
-    where R: MangleReceiver<'b>,
-          F: FnMut(&Function, T) -> V + 'a
+    where
+        R: MangleReceiver<'b>,
+        F: FnMut(&Function, T) -> V + 'a,
     {
         let fun = recv.from();
         let val = f(fun, self.inner());
@@ -20,14 +20,16 @@ impl<T> FromT<T> {
     pub fn inner(self) -> T {
         self.0
     }
-
 }
 impl<T> From<T> for FromT<T> {
     fn from(f: T) -> Self {
         FromT(f)
     }
 }
-impl<T> std::fmt::Display for FromT<T> where T: std::fmt::Display {
+impl<T> std::fmt::Display for FromT<T>
+where
+    T: std::fmt::Display,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "From({})", self.0)
     }
@@ -38,10 +40,10 @@ pub(super) type FromBlock = FromT<Block>;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ToT<T>(pub T);
 impl<T> ToT<T> {
-
     pub(super) fn map_fun<'a, 'b, R, F, V>(self, recv: &'a R, mut f: F) -> ToT<V>
-    where R: MangleReceiver<'b>,
-          F: FnMut(&Function, T) -> V + 'a
+    where
+        R: MangleReceiver<'b>,
+        F: FnMut(&Function, T) -> V + 'a,
     {
         let fun = recv.to_fun();
         let val = f(fun, self.inner());
@@ -51,14 +53,16 @@ impl<T> ToT<T> {
     pub fn inner(self) -> T {
         self.0
     }
-
 }
 impl<T> From<T> for ToT<T> {
     fn from(f: T) -> Self {
         ToT(f)
     }
 }
-impl<T> std::fmt::Display for ToT<T> where T: std::fmt::Display {
+impl<T> std::fmt::Display for ToT<T>
+where
+    T: std::fmt::Display,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "To({})", self.0)
     }
@@ -74,13 +78,15 @@ pub enum MangleTarget<T> {
     From(FromT<T>),
     To(ToT<T>),
 }
-impl<T> std::fmt::Display for MangleTarget<T> where T: std::fmt::Display {
+impl<T> std::fmt::Display for MangleTarget<T>
+where
+    T: std::fmt::Display,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "To({})", self.inner_ref())
     }
 }
 impl<T> MangleTarget<T> {
-
     pub fn inner(self) -> T {
         match self {
             MangleTarget::From(i) => i.0,
@@ -95,7 +101,8 @@ impl<T> MangleTarget<T> {
     }
 
     pub(super) fn fun<'a, 'b, R>(&self, recv: &'a R) -> &'a Function
-    where R: MangleReceiver<'b>,
+    where
+        R: MangleReceiver<'b>,
     {
         match self {
             MangleTarget::From(_) => recv.from(),
@@ -104,34 +111,36 @@ impl<T> MangleTarget<T> {
     }
 
     pub fn map<F, V>(self, mut f: F) -> MangleTarget<V>
-    where F: FnMut(T) -> V
+    where
+        F: FnMut(T) -> V,
     {
         match self {
             MangleTarget::From(i) => {
                 let val = f(i.inner());
                 MangleTarget::From(val.into())
-            },
+            }
             MangleTarget::To(i) => {
                 let val = f(i.inner());
                 MangleTarget::To(val.into())
-            },
+            }
         }
     }
 
     pub(super) fn map_fun<'a, 'b, R, F, V>(self, recv: &'a R, mut f: F) -> MangleTarget<V>
-    where R: MangleReceiver<'b>,
-          F: FnMut(&Function, T) -> V + 'a
+    where
+        R: MangleReceiver<'b>,
+        F: FnMut(&Function, T) -> V + 'a,
     {
         let fun = self.fun(recv);
         match self {
             MangleTarget::From(i) => {
                 let val = f(fun, i.inner());
                 MangleTarget::From(val.into())
-            },
+            }
             MangleTarget::To(i) => {
                 let val = f(fun, i.inner());
                 MangleTarget::To(val.into())
-            },
+            }
         }
     }
 
@@ -154,7 +163,6 @@ impl<T> MangleTarget<T> {
             MangleTarget::To(inner) => Some(inner),
         }
     }
-
 }
 impl<I> MangleTarget<Option<I>> {
     pub fn transpose_opt(self) -> Option<MangleTarget<I>> {
@@ -166,12 +174,18 @@ impl<I> MangleTarget<Option<I>> {
         }
     }
 }
-impl<T> MangleTarget<&T> where T: Clone {
+impl<T> MangleTarget<&T>
+where
+    T: Clone,
+{
     pub fn cloned(&self) -> MangleTarget<T> {
         self.map(|v| v.clone())
     }
 }
-impl<I, V> MangleTarget<I> where I: IntoIterator<Item = V> {
+impl<I, V> MangleTarget<I>
+where
+    I: IntoIterator<Item = V>,
+{
     pub fn transpose_iter(self) -> impl Iterator<Item = MangleTarget<V>> {
         let constructor = match self {
             MangleTarget::From(_) => {
@@ -179,13 +193,13 @@ impl<I, V> MangleTarget<I> where I: IntoIterator<Item = V> {
                     MangleTarget::From(FromT(v))
                 }
                 a
-            },
+            }
             MangleTarget::To(_) => {
                 fn a<V>(v: V) -> MangleTarget<V> {
                     MangleTarget::To(ToT(v))
                 }
                 a
-            },
+            }
         };
         self.inner().into_iter().map(constructor)
     }

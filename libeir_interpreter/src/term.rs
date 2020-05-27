@@ -1,14 +1,13 @@
 use ::std::rc::Rc;
-use std::hash::{ Hash, Hasher };
-use std::cmp::{ Ord, Ordering };
+use std::cmp::{Ord, Ordering};
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
-use libeir_intern::{ Symbol, LocalInternedString };
+use libeir_intern::{LocalInternedString, Symbol};
 
-use libeir_ir::{ FunctionIdent, Block };
+use libeir_ir::{Block, FunctionIdent};
 
-use libeir_util_binary::{ BitRead };
-use libeir_util_binary::{ BitVec, BitSlice, copy as bit_copy };
+use libeir_util_binary::{BitSlice, BitVec};
 
 use ::num_bigint::BigInt;
 use ::num_traits::cast::ToPrimitive;
@@ -72,7 +71,6 @@ pub struct MapTerm {
     sorted: Vec<(Rc<Term>, Rc<Term>)>,
 }
 impl MapTerm {
-
     pub fn new() -> MapTerm {
         MapTerm {
             map: HashMap::new(),
@@ -86,11 +84,11 @@ impl MapTerm {
             Ok(idx) => {
                 self.sorted[idx] = (key, val);
                 true
-            },
+            }
             Err(idx) => {
                 self.sorted.insert(idx, (key, val));
                 false
-            },
+            }
         }
     }
 
@@ -101,7 +99,6 @@ impl MapTerm {
     pub fn len(&self) -> usize {
         self.map.len()
     }
-
 }
 impl PartialEq for MapTerm {
     fn eq(&self, other: &MapTerm) -> bool {
@@ -196,30 +193,57 @@ impl PartialEq for Term {
             (Pid(l), Pid(r)) => l == r,
             (Reference(l), Reference(r)) => l == r,
             (Binary(l), Binary(r)) => l == r,
-            (Binary(l), BinarySlice { buf, bit_offset, bit_length }) => {
-                let rs = BitSlice::with_offset_length(
-                    &**buf, *bit_offset, *bit_length);
+            (
+                Binary(l),
+                BinarySlice {
+                    buf,
+                    bit_offset,
+                    bit_length,
+                },
+            ) => {
+                let rs = BitSlice::with_offset_length(&**buf, *bit_offset, *bit_length);
                 &**l == &rs
-            },
-            (BinarySlice { buf, bit_offset, bit_length }, Binary(r)) => {
-                let ls = BitSlice::with_offset_length(
-                    &**buf, *bit_offset, *bit_length);
+            }
+            (
+                BinarySlice {
+                    buf,
+                    bit_offset,
+                    bit_length,
+                },
+                Binary(r),
+            ) => {
+                let ls = BitSlice::with_offset_length(&**buf, *bit_offset, *bit_length);
                 &ls == &**r
-            },
-            (BinarySlice { buf: lb, bit_offset: lo, bit_length: ll },
-             BinarySlice { buf: rb, bit_offset: ro, bit_length: rl }) => {
-                let ls = BitSlice::with_offset_length(
-                    &**lb, *lo, *ll);
-                let rs = BitSlice::with_offset_length(
-                    &**rb, *ro, *rl);
+            }
+            (
+                BinarySlice {
+                    buf: lb,
+                    bit_offset: lo,
+                    bit_length: ll,
+                },
+                BinarySlice {
+                    buf: rb,
+                    bit_offset: ro,
+                    bit_length: rl,
+                },
+            ) => {
+                let ls = BitSlice::with_offset_length(&**lb, *lo, *ll);
+                let rs = BitSlice::with_offset_length(&**rb, *ro, *rl);
                 &ls == &rs
-            },
-            (BoundLambda { ident: li, block: lb, environment: le },
-             BoundLambda { ident: ri, block: rb, environment: re }) =>
-                li == ri && lb == rb && le == re,
-            (CapturedFunction { ident: li },
-             CapturedFunction { ident: ri }) =>
-                li == ri,
+            }
+            (
+                BoundLambda {
+                    ident: li,
+                    block: lb,
+                    environment: le,
+                },
+                BoundLambda {
+                    ident: ri,
+                    block: rb,
+                    environment: re,
+                },
+            ) => li == ri && lb == rb && le == re,
+            (CapturedFunction { ident: li }, CapturedFunction { ident: ri }) => li == ri,
             (ValueList(l), ValueList(r)) => l == r,
             (ReturnOk, ReturnOk) => true,
             (ReturnThrow, ReturnThrow) => true,
@@ -250,37 +274,64 @@ impl PartialOrd for Term {
             (Pid(l), Pid(r)) => l.partial_cmp(r),
             (Reference(l), Reference(r)) => l.partial_cmp(r),
             (Binary(l), Binary(r)) => l.partial_cmp(r),
-            (Binary(l), BinarySlice { buf, bit_offset, bit_length }) => {
-                let rs = BitSlice::with_offset_length(
-                    &**buf, *bit_offset, *bit_length);
+            (
+                Binary(l),
+                BinarySlice {
+                    buf,
+                    bit_offset,
+                    bit_length,
+                },
+            ) => {
+                let rs = BitSlice::with_offset_length(&**buf, *bit_offset, *bit_length);
                 (&**l).partial_cmp(&rs)
-            },
-            (BinarySlice { buf, bit_offset, bit_length }, Binary(r)) => {
-                let ls = BitSlice::with_offset_length(
-                    &**buf, *bit_offset, *bit_length);
+            }
+            (
+                BinarySlice {
+                    buf,
+                    bit_offset,
+                    bit_length,
+                },
+                Binary(r),
+            ) => {
+                let ls = BitSlice::with_offset_length(&**buf, *bit_offset, *bit_length);
 
                 ls.partial_cmp(&**r)
-            },
-            (BinarySlice { buf: lb, bit_offset: lo, bit_length: ll },
-             BinarySlice { buf: rb, bit_offset: ro, bit_length: rl }) => {
-                let ls = BitSlice::with_offset_length(
-                    &**lb, *lo, *ll);
-                let rs = BitSlice::with_offset_length(
-                    &**rb, *ro, *rl);
+            }
+            (
+                BinarySlice {
+                    buf: lb,
+                    bit_offset: lo,
+                    bit_length: ll,
+                },
+                BinarySlice {
+                    buf: rb,
+                    bit_offset: ro,
+                    bit_length: rl,
+                },
+            ) => {
+                let ls = BitSlice::with_offset_length(&**lb, *lo, *ll);
+                let rs = BitSlice::with_offset_length(&**rb, *ro, *rl);
                 ls.partial_cmp(&rs)
-            },
-            (BoundLambda { ident: li, block: lb, environment: le },
-             BoundLambda { ident: ri, block: rb, environment: re }) =>
-                match li.partial_cmp(ri) {
-                    Some(Ordering::Equal) | None => match lb.partial_cmp(rb) {
-                        Some(Ordering::Equal) | None => le.partial_cmp(re),
-                        non_eq => non_eq,
-                    }
+            }
+            (
+                BoundLambda {
+                    ident: li,
+                    block: lb,
+                    environment: le,
+                },
+                BoundLambda {
+                    ident: ri,
+                    block: rb,
+                    environment: re,
+                },
+            ) => match li.partial_cmp(ri) {
+                Some(Ordering::Equal) | None => match lb.partial_cmp(rb) {
+                    Some(Ordering::Equal) | None => le.partial_cmp(re),
                     non_eq => non_eq,
-                }
-            (CapturedFunction { ident: li },
-             CapturedFunction { ident: ri }) =>
-                li.partial_cmp(ri),
+                },
+                non_eq => non_eq,
+            },
+            (CapturedFunction { ident: li }, CapturedFunction { ident: ri }) => li.partial_cmp(ri),
             (ValueList(l), ValueList(r)) => l.partial_cmp(r),
             (ReturnOk, ReturnOk) => Some(Ordering::Equal),
             (ReturnThrow, ReturnThrow) => Some(Ordering::Equal),
@@ -303,21 +354,28 @@ impl Hash for Term {
             ListCell(h, t) => {
                 h.hash(state);
                 t.hash(state);
-            },
+            }
             Map(t) => t.hash(state),
             Pid(t) => t.hash(state),
             Reference(t) => t.hash(state),
             Binary(t) => t.hash(state),
-            BinarySlice { buf, bit_offset, bit_length } => {
-                let ls = BitSlice::with_offset_length(
-                    &**buf, *bit_offset, *bit_length);
+            BinarySlice {
+                buf,
+                bit_offset,
+                bit_length,
+            } => {
+                let ls = BitSlice::with_offset_length(&**buf, *bit_offset, *bit_length);
                 ls.hash(state);
-            },
-            BoundLambda { ident, block, environment } => {
+            }
+            BoundLambda {
+                ident,
+                block,
+                environment,
+            } => {
                 ident.hash(state);
                 block.hash(state);
                 environment.hash(state);
-            },
+            }
             CapturedFunction { ident } => ident.hash(state),
             ValueList(i) => i.hash(state),
             ReturnOk => (),
@@ -361,7 +419,6 @@ impl Iterator for ListTermIterator {
 }
 
 impl Term {
-
     pub fn new_i64(num: i64) -> Self {
         Term::Integer(num.into())
     }
@@ -560,7 +617,7 @@ impl Term {
         }
     }
 
-    pub fn to_doc(term: Rc<Term>) -> pretty::Doc<'static, pretty::BoxDoc<'static>> {
+    pub fn to_doc(_term: Rc<Term>) -> pretty::Doc<'static, pretty::BoxDoc<'static>> {
         unimplemented!()
         //use pretty::{ Doc };
         //match &*term {
@@ -677,9 +734,7 @@ impl Term {
         //    }
         //}
     }
-
 }
-
 
 pub trait ErlEq<Rhs = Self> {
     fn erl_eq(&self, other: &Rhs) -> bool;
@@ -702,16 +757,13 @@ impl ErlEq for f64 {
 impl ErlEq for Term {
     fn erl_eq(&self, other: &Term) -> bool {
         match (self, other) {
-
             (Term::BoundLambda { .. }, _) => unreachable!(),
             (_, Term::BoundLambda { .. }) => unreachable!(),
             (Term::ValueList(_), _) => unimplemented!(),
             (_, Term::ValueList(_)) => unimplemented!(),
 
             (Term::Nil, Term::Nil) => true,
-            (Term::ListCell(h1, t1), Term::ListCell(h2, t2)) => {
-                h1.erl_eq(h2) && t1.erl_eq(t2)
-            }
+            (Term::ListCell(h1, t1), Term::ListCell(h2, t2)) => h1.erl_eq(h2) && t1.erl_eq(t2),
             //(Term::List(h1, t1), Term::Nil) if h1.len() == 0 =>
             //    if let Term::Nil = **t1 { true } else { false },
             //(Term::Nil, Term::List(h2, t2)) if h2.len() == 0 =>
@@ -742,11 +794,13 @@ impl ErlEq for Term {
             (Term::Integer(_), Term::Float(_)) => unimplemented!(),
             (Term::Float(_), Term::Integer(_)) => unimplemented!(),
             (Term::Atom(ref a1), Term::Atom(ref a2)) => a1 == a2,
-            (Term::Tuple(ref v1), Term::Tuple(ref v2)) =>
-                v1.iter().zip(v2).all(|(e1, e2)| e1.erl_eq(e2)),
-            (Term::CapturedFunction { ident: ref ident1 },
-             Term::CapturedFunction { ident: ref ident2 }) =>
-                ident1 == ident2,
+            (Term::Tuple(ref v1), Term::Tuple(ref v2)) => {
+                v1.iter().zip(v2).all(|(e1, e2)| e1.erl_eq(e2))
+            }
+            (
+                Term::CapturedFunction { ident: ref ident1 },
+                Term::CapturedFunction { ident: ref ident2 },
+            ) => ident1 == ident2,
             _ => {
                 //crate::trace::warning_args(
                 //    "WARNING: ErlEq might be unimplemented".to_string(),
@@ -780,8 +834,7 @@ impl ErlExactEq for Term {
 impl ErlOrd for Term {
     fn erl_ord(&self, other: &Term) -> ::std::cmp::Ordering {
         match (self, other) {
-            (Term::Integer(val1), Term::Integer(val2)) =>
-                val1.cmp(val2),
+            (Term::Integer(val1), Term::Integer(val2)) => val1.cmp(val2),
             //(Term::Float(val1), Term::Float(val2)) =>
             //    val1.cmp(val2),
             (_, _) => unimplemented!(),

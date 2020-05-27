@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use std::ops::{ Index, IndexMut };
+use std::ops::{Index, IndexMut};
 
-use cranelift_entity::{ PrimaryMap, entity_impl };
-use cranelift_entity::packed_option::ReservedValue;
+use super::{Block, Const, Location, PrimOp};
 use cranelift_bforest::Set;
-use libeir_util_datastructures::pooled_entity_set::EntitySet;
+use cranelift_entity::packed_option::ReservedValue;
+use cranelift_entity::{entity_impl, PrimaryMap};
 use libeir_util_datastructures::aux_traits::AuxDebug;
-use super::{ Block, Const, PrimOp, Location };
+use libeir_util_datastructures::pooled_entity_set::EntitySet;
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Value(u32);
@@ -46,14 +46,12 @@ pub enum ValueKind {
 }
 
 impl ValueKind {
-
     pub fn is_arg(&self) -> bool {
         match self {
             ValueKind::Argument(_, _) => true,
             _ => false,
         }
     }
-
 }
 
 #[derive(Clone)]
@@ -63,7 +61,6 @@ pub struct ValueMap {
 }
 
 impl ValueMap {
-
     pub fn new() -> Self {
         ValueMap {
             primary: PrimaryMap::new(),
@@ -72,12 +69,16 @@ impl ValueMap {
     }
 
     pub fn push(&mut self, kind: ValueKind) -> Value {
+        self.push_with_location(kind, None)
+    }
+
+    pub fn push_with_location(&mut self, kind: ValueKind, location: Option<Location>) -> Value {
         if let Some(key) = self.back.get(&kind) {
             *key
         } else {
             let val = self.primary.push(ValueData {
                 kind,
-                location: None,
+                location,
                 usages: Set::new(),
             });
             self.back.insert(kind, val);
@@ -88,7 +89,6 @@ impl ValueMap {
     pub fn get(&self, kind: ValueKind) -> Option<Value> {
         self.back.get(&kind).cloned()
     }
-
 }
 
 impl Index<Value> for ValueMap {

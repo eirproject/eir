@@ -1,2 +1,1 @@
-pub trait OpParser: Send + Sync {
-}
+pub trait OpParser: Send + Sync {}

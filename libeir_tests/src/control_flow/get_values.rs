@@ -1,11 +1,7 @@
 use crate::lower;
 
-use libeir_ir::{ FunctionIdent };
-use libeir_syntax_erl::{ ParseConfig };
-use libeir_intern::Ident;
 use libeir_passes::PassManager;
-
-use libeir_interpreter::{ VMState, Term };
+use libeir_syntax_erl::ParseConfig;
 
 //-module('Elixir.Keyword').
 //
@@ -35,8 +31,9 @@ get_values(_key@1) ->
     end,
     A.
 ",
-        ParseConfig::default()
-    ).unwrap();
+        ParseConfig::default(),
+    )
+    .unwrap();
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);

@@ -1,13 +1,7 @@
-
-
-
-
-
-use super::{ SimplePatternProvider, NodeKind };
+use super::{NodeKind, SimplePatternProvider};
 
 #[test]
 fn list_merge_pattern() {
-
     // fn ([], _)
     // fn (_, [])
     // fn ([_, _], [_, _])
@@ -53,5 +47,4 @@ fn list_merge_pattern() {
 
     println!("{:?}", res);
     //println!("{:#?}", res.leaf_bindings);
-
 }

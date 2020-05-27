@@ -1,15 +1,22 @@
-#![allow(dead_code, unreachable_code, unused_mut, unused_variables, unused_macros)]
+#![allow(
+    dead_code,
+    unreachable_code,
+    unused_mut,
+    unused_variables,
+    unused_macros
+)]
 
 use std::collections::HashMap;
+use std::ops::Range;
 
 use lazy_static::lazy_static;
 
-use libeir_intern::{Symbol, Ident};
-use libeir_diagnostics::{ByteIndex, ByteOffset, ByteSpan};
-use libeir_util_parse::{Source, Scanner};
+use libeir_diagnostics::{ByteOffset, SourceIndex, SourceSpan};
+use libeir_intern::{Ident, Symbol};
+use libeir_util_parse::{Scanner, Source};
 
-use crate::constant::Integer;
 use super::errors::ParserError;
+use crate::constant::Integer;
 
 macro_rules! pop {
     ($lex:ident) => {{
@@ -48,17 +55,17 @@ macro_rules! pop3 {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum LexicalError {
-}
+pub struct LexicalError;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LexicalToken(pub ByteIndex, pub Token, pub ByteIndex);
+pub struct LexicalToken(pub SourceIndex, pub Token, pub SourceIndex);
 impl LexicalToken {
     pub fn token(&self) -> Token {
         self.1.clone()
     }
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self.0, self.2)
+
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self.0, self.2)
     }
 }
 
@@ -116,7 +123,6 @@ pub enum Token {
     Case,
     Guard,
     Except,
-
 }
 
 lazy_static! {
@@ -141,10 +147,18 @@ lazy_static! {
 }
 
 fn is_escapechar(c: char) -> bool {
-    c == 'b' || c == 'd' || c == 'e'
-        || c == 'f' || c == 'n' || c == 'r'
-        || c == 's' || c == 't' || c == 'v'
-        || c == '"' || c == '\'' || c == '\\'
+    c == 'b'
+        || c == 'd'
+        || c == 'e'
+        || c == 'f'
+        || c == 'n'
+        || c == 'r'
+        || c == 's'
+        || c == 't'
+        || c == 'v'
+        || c == '"'
+        || c == '\''
+        || c == '\\'
 }
 fn is_control(c: char) -> bool {
     c >= '\u{0000}' && c <= '\u{001f}'
@@ -169,15 +183,14 @@ fn is_lowercase(c: char) -> bool {
         || (c >= '\u{00f8}' && c <= '\u{00ff}')
 }
 fn is_namechar(c: char) -> bool {
-    is_uppercase(c) || is_lowercase(c) || is_digit(c)
-        || (c == '@') || (c == '_')
+    is_uppercase(c) || is_lowercase(c) || is_digit(c) || (c == '@') || (c == '_')
 }
 
 pub struct Lexer<S> {
     scanner: Scanner<S>,
     token: Token,
-    token_start: ByteIndex,
-    token_end: ByteIndex,
+    token_start: SourceIndex,
+    token_end: SourceIndex,
     eof: bool,
 }
 
@@ -185,7 +198,6 @@ impl<S> Lexer<S>
 where
     S: Source,
 {
-
     pub fn new(scanner: Scanner<S>) -> Self {
         let start = scanner.start();
         let mut lexer = Lexer {
@@ -226,7 +238,7 @@ where
     }
 
     fn advance_start(&mut self) {
-        let mut position: ByteIndex;
+        let mut position: SourceIndex;
         loop {
             let (pos, c) = self.scanner.read();
             position = pos;
@@ -267,7 +279,7 @@ where
 
     fn pop(&mut self) -> char {
         let (pos, c) = self.scanner.pop();
-        self.token_end = pos + ByteOffset::from_char_utf8(c);
+        self.token_end = pos + ByteOffset::from_char_len(c);
         c
     }
     fn peek(&mut self) -> char {
@@ -282,13 +294,13 @@ where
     fn skip(&mut self) {
         self.pop();
     }
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self.token_start, self.token_end)
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self.token_start, self.token_end)
     }
     fn slice(&self) -> &str {
         self.scanner.slice(self.span())
     }
-    fn slice_span(&self, span: ByteSpan) -> &str {
+    fn slice_span(&self, span: impl Into<Range<usize>>) -> &str {
         self.scanner.slice(span)
     }
     fn ident(&self) -> Ident {
@@ -340,16 +352,12 @@ where
             },
             '_' => pop!(self, Token::Underscore),
             '@' => pop!(self, Token::At),
-            c if c == 'a' => {
-                match self.peek() {
-                    '\'' => self.lex_atom(),
-                    _ => self.lex_ident(),
-                }
+            c if c == 'a' => match self.peek() {
+                '\'' => self.lex_atom(),
+                _ => self.lex_ident(),
             },
-            c if c.is_alphabetic() =>
-                self.lex_ident(),
-            c if c.is_numeric() =>
-                self.lex_integer(),
+            c if c.is_alphabetic() => self.lex_ident(),
+            c if c.is_numeric() => self.lex_integer(),
             c => unimplemented!("{}", c),
         }
     }
@@ -418,15 +426,15 @@ where
             match self.read() {
                 '\'' => {
                     self.skip();
-                    break
-                },
+                    break;
+                }
                 '\\' => {
                     self.skip();
                     self.skip();
                 }
                 c => {
                     self.skip();
-                },
+                }
             }
         }
 
@@ -437,14 +445,13 @@ where
 
         Token::Atom(ident)
     }
-
 }
 
 impl<S> Iterator for Lexer<S>
 where
     S: Source,
 {
-    type Item = Result<(ByteIndex, Token, ByteIndex), ParserError>;
+    type Item = Result<(SourceIndex, Token, SourceIndex), ParserError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let t = self.lex();

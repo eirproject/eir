@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
-use libeir_ir::Integer;
+use libeir_diagnostics::*;
 use libeir_intern::Symbol;
-use libeir_diagnostics::{ByteSpan, ByteIndex, ByteOffset};
-use libeir_util_parse::{Source, Scanner};
+use libeir_ir::Integer;
+use libeir_util_parse::{Scanner, Source};
 
 macro_rules! pop {
     ($lex:ident) => {{
@@ -40,8 +40,8 @@ impl Eq for Float {}
 pub struct Lexer<S> {
     scanner: Scanner<S>,
     token: Token,
-    token_start: ByteIndex,
-    token_end: ByteIndex,
+    token_start: SourceIndex,
+    token_end: SourceIndex,
     eof: bool,
 
     str_buf: String,
@@ -51,10 +51,9 @@ impl<S> Lexer<S>
 where
     S: Source,
 {
-
     pub fn new(scanner: Scanner<S>) -> Self {
         let start = scanner.start();
-        let mut lexer = Lexer {
+        let mut lexer = Self {
             scanner,
             token: Token::EOF,
             token_start: start,
@@ -90,7 +89,7 @@ where
     }
 
     fn advance_start(&mut self) {
-        let mut position: ByteIndex;
+        let mut position: SourceIndex;
         loop {
             let (pos, c) = self.scanner.read();
             position = pos;
@@ -113,34 +112,30 @@ where
 
     fn pop(&mut self) -> char {
         let (pos, c) = self.scanner.pop();
-        self.token_end = pos + ByteOffset::from_char_utf8(c);
+        self.token_end = pos + ByteOffset::from_char_len(c);
         c
     }
+
     fn peek(&mut self) -> char {
         self.scanner.peek().1
     }
-    //fn peek_next(&mut self) -> char {
-    //    self.scanner.peek_next().1
-    //}
+
     fn read(&mut self) -> char {
         self.scanner.read().1
     }
+
     fn skip(&mut self) {
         self.pop();
     }
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self.token_start, self.token_end)
+
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self.token_start, self.token_end)
     }
+
     fn slice(&self) -> &str {
         self.scanner.slice(self.span())
     }
-    //fn slice_span(&self, span: ByteSpan) -> &str {
-    //    self.scanner.slice(span)
-    //}
-    //fn ident(&self) -> Ident {
-    //    let symbol = Symbol::intern(self.slice());
-    //    Ident::new(symbol, self.span())
-    //}
+
     fn skip_whitespace(&mut self) {
         while self.read().is_whitespace() {
             self.skip();
@@ -172,9 +167,7 @@ where
 
         loop {
             match self.read() {
-                '\\' => {
-                    unimplemented!()
-                },
+                '\\' => unimplemented!(),
                 '\'' => {
                     self.skip();
                     break;
@@ -182,7 +175,7 @@ where
                 c => {
                     self.skip();
                     self.str_buf.push(c);
-                },
+                }
             }
         }
 
@@ -197,17 +190,15 @@ where
 
         loop {
             match self.read() {
-                '\\' => {
-                    unimplemented!()
-                },
+                '\\' => unimplemented!(),
                 '"' => {
                     self.skip();
                     break;
-                },
+                }
                 c => {
                     self.skip();
                     self.str_buf.push(c);
-                },
+                }
             }
         }
 
@@ -229,16 +220,12 @@ where
                 self.skip();
                 return self.lex_float();
             }
-            return Token::Integer(
-                Integer::from_string_radix(self.slice(), 10).unwrap()
-            );
+            return Token::Integer(Integer::from_string_radix(self.slice(), 10).unwrap());
         }
 
         // TODO Float
 
-        return Token::Integer(
-            Integer::from_string_radix(self.slice(), 10).unwrap()
-        );
+        return Token::Integer(Integer::from_string_radix(self.slice(), 10).unwrap());
     }
 
     fn lex_float(&mut self) -> Token {
@@ -276,25 +263,20 @@ where
             ',' => pop!(self, Token::Comma),
             '.' => pop!(self, Token::Dot),
             '|' => pop!(self, Token::Pipe),
-            'a'..='z' | 'A'..='Z' =>
-                self.lex_unquoted_atom(),
-            '0'..='9' =>
-                self.lex_number(),
-            '\'' =>
-                self.lex_quoted_atom(),
-            '"' =>
-                self.lex_string(),
+            'a'..='z' | 'A'..='Z' => self.lex_unquoted_atom(),
+            '0'..='9' => self.lex_number(),
+            '\'' => self.lex_quoted_atom(),
+            '"' => self.lex_string(),
             c => unimplemented!("{}", c),
         }
     }
-
 }
 
 impl<S> Iterator for Lexer<S>
 where
     S: Source,
 {
-    type Item = Result<(ByteIndex, Token, ByteIndex), ()>;
+    type Item = Result<(SourceIndex, Token, SourceIndex), ()>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.lex()

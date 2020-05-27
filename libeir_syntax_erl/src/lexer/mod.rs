@@ -9,8 +9,8 @@ mod token;
 
 pub use self::errors::{LexicalError, TokenConvertError};
 pub use self::lexer::Lexer;
-pub use self::token::{AtomToken, IdentToken, StringToken, SymbolToken, IntegerToken, TokenType};
-pub use self::token::{LexicalToken, Token, DelayedSubstitution};
+pub use self::token::{AtomToken, IdentToken, IntegerToken, StringToken, SymbolToken, TokenType};
+pub use self::token::{DelayedSubstitution, LexicalToken, Token};
 
 /// The type that serves as an `Item` for the lexer iterator.
 pub type Lexed = Result<LexicalToken, LexicalError>;

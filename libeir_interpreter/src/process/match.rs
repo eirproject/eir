@@ -1,31 +1,28 @@
-use libeir_ir::{ Block, MatchKind, BasicType, BinaryEntrySpecifier, Endianness };
+use libeir_ir::{BasicType, BinaryEntrySpecifier, Block, Endianness, MatchKind};
 
-use libeir_util_binary::{ BitCarrier };
-use libeir_util_binary::{ BitVec, BitSlice, carrier_to_integer, Endian };
+use libeir_util_binary::BitCarrier;
+use libeir_util_binary::{carrier_to_integer, BitSlice, BitVec, Endian};
 
-use crate::{ Term };
 use crate::module::ErlangFunction;
 use crate::term::ErlExactEq;
+use crate::Term;
 
-use super::{ CallExecutor, TermCall };
+use super::{CallExecutor, TermCall};
 
 pub fn match_op(
     exec: &mut CallExecutor,
     fun: &ErlangFunction,
     branches: &[MatchKind],
-    block: Block
-) -> TermCall
-{
+    block: Block,
+) -> TermCall {
     let reads = fun.fun.block_reads(block);
 
-    let branches_elems = Term::as_value_list(
-        &exec.make_term(fun, reads[0]));
+    let branches_elems = Term::as_value_list(&exec.make_term(fun, reads[0]));
 
     let unpack_term = exec.make_term(fun, reads[1]);
 
     for (idx, kind) in branches.iter().enumerate() {
-        let branch_args = Term::as_value_list(
-            &exec.make_term(fun, reads[idx + 2]));
+        let branch_args = Term::as_value_list(&exec.make_term(fun, reads[idx + 2]));
 
         match kind {
             MatchKind::Value => {
@@ -89,17 +86,20 @@ pub fn match_op(
                 }
             }
             MatchKind::Binary(BinaryEntrySpecifier::Integer {
-                unit, endianness, signed
+                unit,
+                endianness,
+                signed,
             }) => {
                 let size = branch_args[0].as_usize().unwrap();
                 let bit_len = (*unit as usize) * size;
 
                 let ret = match &*unpack_term {
                     Term::Binary(bin) => {
-                        if (bin.len() * 8) < bit_len { continue; }
+                        if (bin.len() * 8) < bit_len {
+                            continue;
+                        }
 
-                        let int_slice = BitSlice::with_offset_length(
-                            &**bin, 0, bit_len);
+                        let int_slice = BitSlice::with_offset_length(&**bin, 0, bit_len);
                         let endian = match *endianness {
                             Endianness::Big => Endian::Big,
                             Endianness::Little => Endian::Little,
@@ -115,15 +115,21 @@ pub fn match_op(
                                     buf: bin.clone(),
                                     bit_offset: bit_len,
                                     bit_length: bin.bit_len() - bit_len,
-                                }.into(),
+                                }
+                                .into(),
                             ],
                         }
-                    },
-                    Term::BinarySlice { buf, bit_offset, bit_length } => {
-                        if *bit_length < bit_len { continue; }
+                    }
+                    Term::BinarySlice {
+                        buf,
+                        bit_offset,
+                        bit_length,
+                    } => {
+                        if *bit_length < bit_len {
+                            continue;
+                        }
 
-                        let int_slice = BitSlice::with_offset_length(
-                            &**buf, *bit_offset, bit_len);
+                        let int_slice = BitSlice::with_offset_length(&**buf, *bit_offset, bit_len);
                         let endian = match *endianness {
                             Endianness::Big => Endian::Big,
                             Endianness::Little => Endian::Little,
@@ -139,41 +145,44 @@ pub fn match_op(
                                     buf: buf.clone(),
                                     bit_offset: *bit_offset + bit_len,
                                     bit_length: *bit_length - bit_len,
-                                }.into(),
+                                }
+                                .into(),
                             ],
                         }
-                    },
+                    }
                     _ => continue,
                 };
                 return ret;
             }
-            MatchKind::Binary(BinaryEntrySpecifier::Bytes { unit: 8 }) => {
-                match &*unpack_term {
-                    Term::Binary(bin) => {
-                        if bin.bit_len() % 8 != 0 { continue; }
-
-                        return TermCall {
-                            fun: branches_elems[idx].clone(),
-                            args: vec![
-                                unpack_term.clone(),
-                                Term::Binary(BitVec::new().into()).into(),
-                            ],
-                        };
+            MatchKind::Binary(BinaryEntrySpecifier::Bytes { unit: 8 }) => match &*unpack_term {
+                Term::Binary(bin) => {
+                    if bin.bit_len() % 8 != 0 {
+                        continue;
                     }
-                    Term::BinarySlice { bit_length, .. } => {
-                        if *bit_length % 8 != 0 { continue; }
 
-                        return TermCall {
-                            fun: branches_elems[idx].clone(),
-                            args: vec![
-                                unpack_term.clone(),
-                                Term::Binary(BitVec::new().into()).into(),
-                            ],
-                        };
-                    }
-                    _ => (),
+                    return TermCall {
+                        fun: branches_elems[idx].clone(),
+                        args: vec![
+                            unpack_term.clone(),
+                            Term::Binary(BitVec::new().into()).into(),
+                        ],
+                    };
                 }
-            }
+                Term::BinarySlice { bit_length, .. } => {
+                    if *bit_length % 8 != 0 {
+                        continue;
+                    }
+
+                    return TermCall {
+                        fun: branches_elems[idx].clone(),
+                        args: vec![
+                            unpack_term.clone(),
+                            Term::Binary(BitVec::new().into()).into(),
+                        ],
+                    };
+                }
+                _ => (),
+            },
             MatchKind::Wildcard => {
                 assert!(branch_args.len() == 0);
                 return TermCall {

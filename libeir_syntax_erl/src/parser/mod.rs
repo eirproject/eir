@@ -1,10 +1,10 @@
 /// Used in the grammar for easy span creation
 macro_rules! span {
     ($l:expr, $r:expr) => {
-        ByteSpan::new($l, $r)
+        SourceSpan::new($l, $r)
     };
     ($i:expr) => {
-        ByteSpan::new($i, $i)
+        SourceSpan::new($i, $i)
     };
 }
 
@@ -37,14 +37,12 @@ mod macros;
 
 pub mod ast;
 mod errors;
-/// Contains the visitor trait needed to traverse the AST and helper walk functions.
-pub mod visitor;
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
 
-use libeir_util_parse::{Scanner, Source, SourceError, ErrorReceiver, ArcCodemap, error_tee};
-use libeir_util_parse::{Parser as GParser, Parse as GParse};
+use libeir_util_parse::{error_tee, ErrorReceiver, Scanner, Source, SourceError};
+use libeir_util_parse::{Parse as GParse, Parser as GParser};
 
 pub type Parser = GParser<ParseConfig>;
 pub trait Parse<T> = GParse<T, Config = ParseConfig, Error = ParserError>;
@@ -94,8 +92,7 @@ impl GParse for ast::Module {
     }
 
     fn parse<'a, S>(
-        config: &ParseConfig,
-        codemap: &ArcCodemap,
+        parser: &Parser,
         err: &'a mut ParserErrorReceiver<'a>,
         source: S,
     ) -> Result<Self, ()>
@@ -106,7 +103,7 @@ impl GParse for ast::Module {
             let scanner = Scanner::new(source);
             let lexer = Lexer::new(scanner);
             error_tee(&mut errors.clone().make_into_adapter(), |preproc_errors| {
-                let tokens = Preprocessor::new(config, codemap.clone(), lexer, preproc_errors);
+                let tokens = Preprocessor::new(parser, lexer, preproc_errors);
                 Self::parse_tokens(&mut errors, tokens)
             })
         })
@@ -115,11 +112,9 @@ impl GParse for ast::Module {
     fn parse_tokens<'a, S: IntoIterator<Item = Preprocessed>>(
         err: &'a mut ParserErrorReceiver<'a>,
         tokens: S,
-    ) -> Result<Self, ()>
-    {
+    ) -> Result<Self, ()> {
         let mut nid = NodeIdGenerator::new();
-        let result = Self::Parser::new()
-            .parse(err, &mut nid, tokens);
+        let result = Self::Parser::new().parse(err, &mut nid, tokens);
         to_parse_result(err, result)
     }
 }
@@ -134,12 +129,7 @@ impl GParse for ast::Expr {
         err.into()
     }
 
-    fn parse<S>(
-        config: &ParseConfig,
-        codemap: &ArcCodemap,
-        err: &mut ParserErrorReceiver,
-        source: S,
-    ) -> Result<Self, ()>
+    fn parse<S>(parser: &Parser, err: &mut ParserErrorReceiver, source: S) -> Result<Self, ()>
     where
         S: Source,
     {
@@ -147,7 +137,7 @@ impl GParse for ast::Expr {
             let scanner = Scanner::new(source);
             let lexer = Lexer::new(scanner);
             error_tee(&mut errors.clone().make_into_adapter(), |preproc_errors| {
-                let tokens = Preprocessor::new(config, codemap.clone(), lexer, preproc_errors);
+                let tokens = Preprocessor::new(parser, lexer, preproc_errors);
                 Self::parse_tokens(&mut errors, tokens)
             })
         })
@@ -156,16 +146,17 @@ impl GParse for ast::Expr {
     fn parse_tokens<S: IntoIterator<Item = Preprocessed>>(
         err: &mut ParserErrorReceiver,
         tokens: S,
-    ) -> Result<Self, ()>
-    {
+    ) -> Result<Self, ()> {
         let mut nid = NodeIdGenerator::new();
-        let result = Self::Parser::new()
-            .parse(err, &mut nid, tokens);
+        let result = Self::Parser::new().parse(err, &mut nid, tokens);
         to_parse_result(err, result)
     }
 }
 
-fn to_parse_result<T>(errs: &mut ParserErrorReceiver, result: Result<T, ParseError>) -> Result<T, ()> {
+fn to_parse_result<T>(
+    errs: &mut ParserErrorReceiver,
+    result: Result<T, ParseError>,
+) -> Result<T, ()> {
     match result {
         Ok(ast) => {
             if (*errs).is_failed() {
@@ -183,39 +174,59 @@ fn to_parse_result<T>(errs: &mut ParserErrorReceiver, result: Result<T, ParseErr
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
+
     use pretty_assertions::assert_eq;
 
     use super::ast::*;
     use super::*;
 
-    use libeir_diagnostics::ByteSpan;
-    use libeir_util_parse::{Errors, ErrorOrWarning, ArcCodemap};
+    use libeir_diagnostics::*;
+    use libeir_util_parse::{ErrorOrWarning, Errors};
 
     use crate::lexer::{Ident, Symbol};
     use crate::preprocessor::PreprocessorError;
 
-    fn parse<'a, T>(config: ParseConfig, codemap: &ArcCodemap, input: &'a str) -> T
+    fn fail_with<E, W>(errors: &Errors<E, W>, codemap: &CodeMap, message: &'static str) -> !
     where
-        T: Parse<T, Config = ParseConfig, Error = ParserError>,
+        E: ToDiagnostic,
+        W: ToDiagnostic,
     {
-        let mut errors = Errors::new();
-        let parser = Parser::new(config);
-        match parser.parse_string::<&'a str, T>(&mut errors, codemap, input) {
-            Ok(ast) => return ast,
-            Err(errs) => errs,
-        };
+        use term::termcolor::{ColorChoice, StandardStream};
 
-        errors.print(codemap);
-        panic!("parse failed");
+        let config = term::Config::default();
+        let mut out = StandardStream::stderr(ColorChoice::Always);
+        for diagnostic in errors.iter_diagnostics() {
+            term::emit(&mut out, &config, codemap, &diagnostic).unwrap();
+        }
+        panic!(message);
     }
 
-    fn parse_fail<T>(config: ParseConfig, codemap: &ArcCodemap, input: &'static str) -> Errors<ParserError, ParserError>
+    fn parse<T, S>(config: ParseConfig, codemap: Arc<CodeMap>, input: S) -> T
     where
         T: Parse<T, Config = ParseConfig, Error = ParserError>,
+        S: AsRef<str>,
     {
         let mut errors = Errors::new();
-        let parser = Parser::new(config);
-        match parser.parse_string::<&'static str, T>(&mut errors, codemap, input) {
+        let parser = Parser::new(config, codemap);
+        match parser.parse_string::<T, S>(&mut errors, input) {
+            Ok(ast) => return ast,
+            Err(_errs) => fail_with(&errors, &parser.codemap, "parse failed"),
+        }
+    }
+
+    fn parse_fail<T, S>(
+        config: ParseConfig,
+        codemap: Arc<CodeMap>,
+        input: S,
+    ) -> Errors<ParserError, ParserError>
+    where
+        T: Parse<T, Config = ParseConfig, Error = ParserError>,
+        S: AsRef<str>,
+    {
+        let mut errors = Errors::new();
+        let parser = Parser::new(config, codemap);
+        match parser.parse_string::<T, S>(&mut errors, input) {
             Err(()) => errors,
             _ => panic!("expected parse to fail, but it succeeded!"),
         }
@@ -224,10 +235,9 @@ mod test {
     macro_rules! module {
         ($codemap:expr, $nid:expr, $name:expr, $body:expr) => {{
             let mut errs = Errors::new();
-            let module = Module::new(&mut errs, ByteSpan::default(), $nid, $name, $body);
+            let module = Module::new(&mut errs, SourceSpan::UNKNOWN, $nid, $name, $body);
             if errs.is_failed() {
-                errs.print($codemap);
-                panic!("failed to create expected module!");
+                fail_with(&errs, $codemap, "failed to create expected module!");
             }
             module
         }};
@@ -235,9 +245,9 @@ mod test {
 
     #[test]
     fn parse_empty_module() {
-        let codemap = ArcCodemap::default();
+        let codemap = Arc::new(CodeMap::new());
         let config = ParseConfig::default();
-        let result: Module = parse(config, &codemap, "-module(foo).");
+        let result: Module = parse(config, codemap.clone(), "-module(foo).");
         let mut nid = NodeIdGenerator::new();
         let expected = module!(&codemap, &mut nid, ident!("foo"), vec![]);
         assert_eq!(result, expected);
@@ -245,10 +255,11 @@ mod test {
 
     #[test]
     fn parse_module_with_multi_clause_function() {
-        let codemap = ArcCodemap::default();
+        let codemap = Arc::new(CodeMap::new());
         let config = ParseConfig::default();
         let result: Module = parse(
-            config, &codemap,
+            config,
+            codemap.clone(),
             "-module(foo).
 
 foo([], Acc) -> Acc;
@@ -261,22 +272,27 @@ foo([H|T], Acc) -> foo(T, [H|Acc]).
 
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             name: ident_opt!(foo),
             params: vec![nil!(nid), var!(nid, Acc)],
             guard: None,
             body: vec![var!(nid, Acc)],
         });
         clauses.push(FunctionClause {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             name: ident_opt!(foo),
             params: vec![cons!(nid, var!(nid, H), var!(nid, T)), var!(nid, Acc)],
             guard: None,
-            body: vec![apply!(nid, atom!(nid, foo), var!(nid, T), cons!(nid, var!(nid, H), var!(nid, Acc)))],
+            body: vec![apply!(
+                nid,
+                atom!(nid, foo),
+                var!(nid, T),
+                cons!(nid, var!(nid, H), var!(nid, Acc))
+            )],
         });
         let mut body = Vec::new();
         body.push(TopLevel::Function(NamedFunction {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             id: nid.next(),
             name: ident!("foo"),
             arity: 2,
@@ -289,10 +305,11 @@ foo([H|T], Acc) -> foo(T, [H|Acc]).
 
     #[test]
     fn parse_if_expressions() {
-        let codemap = ArcCodemap::default();
+        let codemap = Arc::new(CodeMap::new());
         let config = ParseConfig::default();
         let result: Module = parse(
-            config, &codemap,
+            config,
+            codemap.clone(),
             "-module(foo).
 
 unless(false) ->
@@ -314,65 +331,59 @@ unless(Value) ->
 
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             name: ident_opt!(unless),
             params: vec![atom!(nid, false)],
             guard: None,
             body: vec![atom!(nid, true)],
         });
         clauses.push(FunctionClause {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             name: ident_opt!(unless),
             params: vec![atom!(nid, true)],
             guard: None,
             body: vec![atom!(nid, false)],
         });
         clauses.push(FunctionClause {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             name: ident_opt!(unless),
             params: vec![var!(nid, Value)],
             guard: None,
             body: vec![Expr::If(If {
-                span: ByteSpan::default(),
+                span: SourceSpan::UNKNOWN,
                 id: nid.next(),
                 clauses: vec![
                     IfClause {
-                        span: ByteSpan::default(),
+                        span: SourceSpan::UNKNOWN,
                         id: nid.next(),
-                        guards: vec![
-                            Guard {
-                                span: ByteSpan::default(),
-                                conditions: vec![Expr::BinaryExpr(BinaryExpr {
-                                    span: ByteSpan::default(),
-                                    id: nid.next(),
-                                    lhs: Box::new(var!(nid, Value)),
-                                    op: BinaryOp::Equal,
-                                    rhs: Box::new(int!(nid, 0.into())),
-                                })],
-                            },
-                        ],
+                        guards: vec![Guard {
+                            span: SourceSpan::UNKNOWN,
+                            conditions: vec![Expr::BinaryExpr(BinaryExpr {
+                                span: SourceSpan::UNKNOWN,
+                                id: nid.next(),
+                                lhs: Box::new(var!(nid, Value)),
+                                op: BinaryOp::Equal,
+                                rhs: Box::new(int!(nid, 0.into())),
+                            })],
+                        }],
                         body: vec![atom!(nid, true)],
                     },
                     IfClause {
-                        span: ByteSpan::default(),
+                        span: SourceSpan::UNKNOWN,
                         id: nid.next(),
-                        guards: vec![
-                            Guard {
-                                span: ByteSpan::default(),
-                                conditions: vec![var!(nid, Value)],
-                            },
-                        ],
+                        guards: vec![Guard {
+                            span: SourceSpan::UNKNOWN,
+                            conditions: vec![var!(nid, Value)],
+                        }],
                         body: vec![atom!(nid, false)],
                     },
                     IfClause {
-                        span: ByteSpan::default(),
+                        span: SourceSpan::UNKNOWN,
                         id: nid.next(),
-                        guards: vec![
-                            Guard {
-                                span: ByteSpan::default(),
-                                conditions: vec![atom!(nid, else)],
-                            },
-                        ],
+                        guards: vec![Guard {
+                            span: SourceSpan::UNKNOWN,
+                            conditions: vec![atom!(nid, else)],
+                        }],
                         body: vec![atom!(nid, true)],
                     },
                 ],
@@ -380,7 +391,7 @@ unless(Value) ->
         });
         let mut body = Vec::new();
         body.push(TopLevel::Function(NamedFunction {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             id: nid.next(),
             name: ident!(unless),
             arity: 1,
@@ -393,10 +404,11 @@ unless(Value) ->
 
     #[test]
     fn parse_case_expressions() {
-        let codemap = ArcCodemap::default();
+        let codemap = Arc::new(CodeMap::new());
         let config = ParseConfig::default();
         let result: Module = parse(
-            config, &codemap,
+            config,
+            codemap.clone(),
             "-module(foo).
 
 typeof(Value) ->
@@ -415,41 +427,41 @@ typeof(Value) ->
 
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             name: ident_opt!(typeof),
             params: vec![var!(nid, Value)],
             guard: None,
             body: vec![Expr::Case(Case {
-                span: ByteSpan::default(),
+                span: SourceSpan::UNKNOWN,
                 id: nid.next(),
                 expr: Box::new(var!(nid, Value)),
                 clauses: vec![
                     Clause {
-                        span: ByteSpan::default(),
+                        span: SourceSpan::UNKNOWN,
                         id: nid.next(),
                         pattern: nil!(nid),
                         guard: None,
                         body: vec![atom!(nid, nil)],
                     },
                     Clause {
-                        span: ByteSpan::default(),
+                        span: SourceSpan::UNKNOWN,
                         id: nid.next(),
                         pattern: cons!(nid, var!(nid, _), var!(nid, _)),
                         guard: None,
                         body: vec![atom!(nid, list)],
                     },
                     Clause {
-                        span: ByteSpan::default(),
+                        span: SourceSpan::UNKNOWN,
                         id: nid.next(),
                         pattern: var!(nid, N),
                         guard: Some(vec![Guard {
-                            span: ByteSpan::default(),
+                            span: SourceSpan::UNKNOWN,
                             conditions: vec![apply!(nid, atom!(nid, is_number), var!(nid, N))],
                         }]),
                         body: vec![var!(nid, N)],
                     },
                     Clause {
-                        span: ByteSpan::default(),
+                        span: SourceSpan::UNKNOWN,
                         id: nid.next(),
                         pattern: var!(nid, _),
                         guard: None,
@@ -460,7 +472,7 @@ typeof(Value) ->
         });
         let mut body = Vec::new();
         body.push(TopLevel::Function(NamedFunction {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             id: nid.next(),
             name: ident!(typeof),
             arity: 1,
@@ -473,10 +485,11 @@ typeof(Value) ->
 
     #[test]
     fn parse_receive_expressions() {
-        let codemap = ArcCodemap::default();
+        let codemap = Arc::new(CodeMap::new());
         let config = ParseConfig::default();
         let result: Module = parse(
-            config, &codemap,
+            config,
+            codemap.clone(),
             "-module(foo).
 
 loop(State, Timeout) ->
@@ -498,32 +511,41 @@ loop(State, Timeout) ->
 
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             name: ident_opt!(loop),
             params: vec![var!(nid, State), var!(nid, Timeout)],
             guard: None,
             body: vec![Expr::Receive(Receive {
-                span: ByteSpan::default(),
+                span: SourceSpan::UNKNOWN,
                 id: nid.next(),
                 clauses: Some(vec![
                     Clause {
-                        span: ByteSpan::default(),
+                        span: SourceSpan::UNKNOWN,
                         id: nid.next(),
-                        pattern: tuple!(nid, var!(nid, From), tuple!(nid, var!(nid, Ref), var!(nid, Msg))),
+                        pattern: tuple!(
+                            nid,
+                            var!(nid, From),
+                            tuple!(nid, var!(nid, Ref), var!(nid, Msg))
+                        ),
                         guard: None,
                         body: vec![
                             Expr::BinaryExpr(BinaryExpr {
-                                span: ByteSpan::default(),
+                                span: SourceSpan::UNKNOWN,
                                 id: nid.next(),
                                 lhs: Box::new(var!(nid, From)),
                                 op: BinaryOp::Send,
                                 rhs: Box::new(tuple!(nid, var!(nid, Ref), atom!(nid, ok))),
                             }),
-                            apply!(nid, atom!(nid, handle_info), var!(nid, Msg), var!(nid, State)),
+                            apply!(
+                                nid,
+                                atom!(nid, handle_info),
+                                var!(nid, Msg),
+                                var!(nid, State)
+                            ),
                         ],
                     },
                     Clause {
-                        span: ByteSpan::default(),
+                        span: SourceSpan::UNKNOWN,
                         id: nid.next(),
                         pattern: var!(nid, _),
                         guard: None,
@@ -533,14 +555,17 @@ loop(State, Timeout) ->
                             apply!(
                                 nid,
                                 remote!(nid, io_lib, format),
-                                Expr::Literal(Literal::String(nid.next(), ident!("unexpected message: ~p~n"))),
+                                Expr::Literal(Literal::String(
+                                    nid.next(),
+                                    ident!("unexpected message: ~p~n")
+                                )),
                                 cons!(nid, var!(nid, Msg), nil!(nid))
                             )
                         )],
                     },
                 ]),
                 after: Some(After {
-                    span: ByteSpan::default(),
+                    span: SourceSpan::UNKNOWN,
                     id: nid.next(),
                     timeout: Box::new(var!(nid, Timeout)),
                     body: vec![atom!(nid, timeout)],
@@ -549,7 +574,7 @@ loop(State, Timeout) ->
         });
         let mut body = Vec::new();
         body.push(TopLevel::Function(NamedFunction {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             id: nid.next(),
             name: ident!(loop),
             arity: 2,
@@ -562,10 +587,11 @@ loop(State, Timeout) ->
 
     #[test]
     fn parse_preprocessor_if() {
-        let codemap = ArcCodemap::default();
+        let codemap = Arc::new(CodeMap::new());
         let config = ParseConfig::default();
         let result: Module = parse(
-            config, &codemap,
+            config,
+            codemap.clone(),
             "-module(foo).
 -define(TEST, true).
 -define(OTP_VERSION, 21).
@@ -597,14 +623,14 @@ system_version() ->
         let mut body = Vec::new();
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             name: ident_opt!(env),
             params: vec![],
             guard: None,
             body: vec![atom!(nid, test)],
         });
         let env_fun = NamedFunction {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             id: nid.next(),
             name: ident!(env),
             arity: 0,
@@ -615,14 +641,14 @@ system_version() ->
 
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             name: ident_opt!(system_version),
             params: vec![],
             guard: None,
             body: vec![int!(nid, 21.into())],
         });
         let system_version_fun = NamedFunction {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             id: nid.next(),
             name: ident!(system_version),
             arity: 0,
@@ -641,10 +667,11 @@ system_version() ->
         // a writer everywhere. You can change this for testing by
         // going to the Preprocessor and finding the line where we handle
         // the warning directive and toggle the config flag
-        let codemap = ArcCodemap::default();
+        let codemap = Arc::new(CodeMap::default());
         let config = ParseConfig::default();
-        let mut errs = parse_fail::<Module>(
-            config, &codemap,
+        let mut errs = parse_fail::<Module, &str>(
+            config,
+            codemap.clone(),
             "-module(foo).
 -warning(\"this is a compiler warning\").
 -error(\"this is a compiler error\").
@@ -664,10 +691,11 @@ system_version() ->
 
     #[test]
     fn parse_try() {
-        let codemap = ArcCodemap::default();
+        let codemap = Arc::new(CodeMap::default());
         let config = ParseConfig::default();
         let result: Module = parse(
-            config, &codemap,
+            config,
+            codemap.clone(),
             "-module(foo).
 
 example(File) ->
@@ -690,16 +718,16 @@ example(File) ->
 
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             name: ident_opt!(example),
             params: vec![var!(nid, File)],
             guard: None,
             body: vec![Expr::Try(Try {
-                span: ByteSpan::default(),
+                span: SourceSpan::UNKNOWN,
                 id: nid.next(),
                 exprs: vec![apply!(nid, atom!(nid, read), var!(nid, File))],
                 clauses: Some(vec![Clause {
-                    span: ByteSpan::default(),
+                    span: SourceSpan::UNKNOWN,
                     id: nid.next(),
                     pattern: tuple!(nid, atom!(nid, ok), var!(nid, Contents)),
                     guard: None,
@@ -707,7 +735,7 @@ example(File) ->
                 }]),
                 catch_clauses: Some(vec![
                     TryClause {
-                        span: ByteSpan::default(),
+                        span: SourceSpan::UNKNOWN,
                         id: nid.next(),
                         kind: Name::Atom(ident!(error)),
                         error: tuple!(nid, var!(nid, Mod), var!(nid, Code)),
@@ -716,11 +744,15 @@ example(File) ->
                         body: vec![tuple!(
                             nid,
                             atom!(nid, error),
-                            apply!(nid, remote!(nid, var!(nid, Mod), atom!(nid, format_error)), var!(nid, Code))
+                            apply!(
+                                nid,
+                                remote!(nid, var!(nid, Mod), atom!(nid, format_error)),
+                                var!(nid, Code)
+                            )
                         )],
                     },
                     TryClause {
-                        span: ByteSpan::default(),
+                        span: SourceSpan::UNKNOWN,
                         id: nid.next(),
                         kind: Name::Atom(ident!(throw)),
                         error: var!(nid, Reason),
@@ -734,7 +766,7 @@ example(File) ->
         });
         let mut body = Vec::new();
         body.push(TopLevel::Function(NamedFunction {
-            span: ByteSpan::default(),
+            span: SourceSpan::UNKNOWN,
             id: nid.next(),
             name: ident!(example),
             arity: 1,
@@ -747,10 +779,11 @@ example(File) ->
 
     #[test]
     fn parse_try2() {
-        let codemap = ArcCodemap::default();
+        let codemap = Arc::new(CodeMap::default());
         let config = ParseConfig::default();
         let _result: Module = parse(
-            config, &codemap,
+            config,
+            codemap.clone(),
             "-module(foo).
 
 example(File < 2) ->
@@ -778,7 +811,8 @@ exw(File) ->
     #[test]
     fn parse_numbers() {
         let _result: Module = parse(
-            ParseConfig::default(), &ArcCodemap::default(),
+            ParseConfig::default(),
+            Arc::new(CodeMap::new()),
             "-module(foo).
 
 foo(F) -> F-1+1/1*1.
@@ -791,7 +825,8 @@ bar() -> - 2.
     #[test]
     fn parse_spec() {
         let _result: Module = parse(
-            ParseConfig::default(), &ArcCodemap::default(),
+            ParseConfig::default(),
+            Arc::new(CodeMap::new()),
             "-module(foo).
 
 -spec bar() -> number.
@@ -803,7 +838,8 @@ bar() -> 2.
     #[test]
     fn parse_binary_spec_constant() {
         let _result: Module = parse(
-            ParseConfig::default(), &ArcCodemap::default(),
+            ParseConfig::default(),
+            Arc::new(CodeMap::new()),
             "-module(foo).
 
 -type txs_hash() :: <<_:(32 * 8)>>.
@@ -820,7 +856,7 @@ bar() -> 2.
         let mut string = String::new();
         file.unwrap().read_to_string(&mut string).unwrap();
 
-        let _result: Module = parse(ParseConfig::default(), &ArcCodemap::default(), &string);
+        let codemap = Arc::new(CodeMap::new());
+        let _result: Module = parse(ParseConfig::default(), codemap, &string);
     }
-
 }

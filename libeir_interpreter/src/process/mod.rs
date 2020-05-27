@@ -1,20 +1,22 @@
-use std::rc::Rc;
-use std::collections::HashMap;
 use std::any::TypeId;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 use num_traits::cast::ToPrimitive;
 
-use libeir_ir::{ FunctionIdent, Block, Value, OpKind, BinOp, ValueKind, PrimOpKind, LogicOp };
-use libeir_ir::{ MapPutUpdate };
-use libeir_ir::{ BinaryEntrySpecifier, Endianness };
-use libeir_ir::operation::binary_construct::{BinaryConstructStart, BinaryConstructPush, BinaryConstructFinish};
-use libeir_ir::constant::{ Const, ConstKind, AtomicTerm };
 use libeir_intern::Ident;
+use libeir_ir::constant::{AtomicTerm, Const, ConstKind};
+use libeir_ir::operation::binary_construct::{
+    BinaryConstructFinish, BinaryConstructPush, BinaryConstructStart,
+};
+use libeir_ir::MapPutUpdate;
+use libeir_ir::{BinOp, Block, FunctionIdent, LogicOp, OpKind, PrimOpKind, Value, ValueKind};
+use libeir_ir::{BinaryEntrySpecifier, Endianness};
 
-use libeir_util_binary::{ BitVec, BitSlice, integer_to_carrier, Endian };
+use libeir_util_binary::{integer_to_carrier, BitSlice, BitVec, Endian};
 
-use crate::term::{ Term, Pid, ErlEq, MapTerm };
-use crate::module::{ ModuleType, ErlangModule, ErlangFunction, NativeModule, NativeReturn };
+use crate::module::{ErlangFunction, ErlangModule, ModuleType, NativeModule, NativeReturn};
+use crate::term::{ErlEq, MapTerm, Pid, Term};
 use crate::vm::VMState;
 
 mod r#match;
@@ -36,7 +38,6 @@ pub struct CallExecutor {
 }
 
 impl CallExecutor {
-
     pub fn new() -> Self {
         CallExecutor {
             binds: HashMap::new(),
@@ -46,17 +47,18 @@ impl CallExecutor {
     pub fn run(&mut self, vm: &VMState, proc: &mut ProcessContext, call: TermCall) -> Continuation {
         self.binds.clear();
         match &*call.fun {
-            Term::BoundLambda { ident, block, environment } => {
+            Term::BoundLambda {
+                ident,
+                block,
+                environment,
+            } => {
                 let module = &vm.modules[&ident.module.name];
                 match module {
-                    ModuleType::Erlang(erl, _overlay) => {
-                        Continuation::Term(
-                            self.run_erlang(vm, erl, ident, Some((*block, &*environment)), &call.args).unwrap()
-                        )
-                    }
-                    ModuleType::Native(_native) => {
-                        unreachable!()
-                    }
+                    ModuleType::Erlang(erl, _overlay) => Continuation::Term(
+                        self.run_erlang(vm, erl, ident, Some((*block, &*environment)), &call.args)
+                            .unwrap(),
+                    ),
+                    ModuleType::Native(_native) => unreachable!(),
                 }
             }
             Term::CapturedFunction { ident } => {
@@ -64,24 +66,23 @@ impl CallExecutor {
                 match module {
                     ModuleType::Erlang(erl, overlay) => {
                         if let Some(native) = overlay {
-                            if let Some(res) = self.run_native(vm, proc, native, ident, &call.args) {
+                            if let Some(res) = self.run_native(vm, proc, native, ident, &call.args)
+                            {
                                 return Continuation::Term(res);
                             }
                         }
                         println!("{}", ident);
                         Continuation::Term(
-                            self.run_erlang(vm, erl, ident, None, &call.args).unwrap()
+                            self.run_erlang(vm, erl, ident, None, &call.args).unwrap(),
                         )
                     }
-                    ModuleType::Native(native) => {
-                        Continuation::Term(
-                            if let Some(res) = self.run_native(vm, proc, native, ident, &call.args) {
-                                res
-                            } else {
-                                panic!("Could not find native function {}", ident);
-                            }
-                        )
-                    }
+                    ModuleType::Native(native) => Continuation::Term(
+                        if let Some(res) = self.run_native(vm, proc, native, ident, &call.args) {
+                            res
+                        } else {
+                            panic!("Could not find native function {}", ident);
+                        },
+                    ),
                 }
             }
             Term::ReturnOk => {
@@ -90,37 +91,49 @@ impl CallExecutor {
             }
             Term::ReturnThrow => {
                 assert!(call.args.len() == 3);
-                Continuation::ReturnThrow(call.args[0].clone(), call.args[1].clone(), call.args[2].clone())
+                Continuation::ReturnThrow(
+                    call.args[0].clone(),
+                    call.args[1].clone(),
+                    call.args[2].clone(),
+                )
             }
             // TODO can't call term type, throw exception
             _ => unimplemented!(),
         }
     }
 
-    pub fn run_native(&mut self, vm: &VMState, proc: &mut ProcessContext, native: &NativeModule, ident: &FunctionIdent,
-                      args: &[Rc<Term>]) -> Option<TermCall> {
+    pub fn run_native(
+        &mut self,
+        vm: &VMState,
+        proc: &mut ProcessContext,
+        native: &NativeModule,
+        ident: &FunctionIdent,
+        args: &[Rc<Term>],
+    ) -> Option<TermCall> {
         if let Some(n_fun) = native.functions.get(&(ident.name.name, ident.arity)) {
             match n_fun(vm, proc, &args[2..]) {
-                NativeReturn::Return { term } => {
-                    Some(TermCall {
-                        fun: args[0].clone(),
-                        args: vec![term],
-                    })
-                }
-                NativeReturn::Throw { typ, reason } => {
-                    Some(TermCall {
-                        fun: args[1].clone(),
-                        args: vec![typ, reason, Term::Nil.into()],
-                    })
-                }
+                NativeReturn::Return { term } => Some(TermCall {
+                    fun: args[0].clone(),
+                    args: vec![term],
+                }),
+                NativeReturn::Throw { typ, reason } => Some(TermCall {
+                    fun: args[1].clone(),
+                    args: vec![typ, reason, Term::Nil.into()],
+                }),
             }
         } else {
             None
         }
     }
 
-    pub fn run_erlang(&mut self, vm: &VMState, module: &ErlangModule, ident: &FunctionIdent,
-                      state: Option<(Block, &[Rc<Term>])>, args: &[Rc<Term>]) -> Option<TermCall> {
+    pub fn run_erlang(
+        &mut self,
+        vm: &VMState,
+        module: &ErlangModule,
+        ident: &FunctionIdent,
+        state: Option<(Block, &[Rc<Term>])>,
+        args: &[Rc<Term>],
+    ) -> Option<TermCall> {
         if let Some(fun) = module.functions.get(&ident) {
             // Environment
             let block = if let Some((block, env)) = state {
@@ -152,43 +165,36 @@ impl CallExecutor {
 
     fn make_const_term(&self, fun: &ErlangFunction, const_val: Const) -> Rc<Term> {
         match fun.fun.cons().const_kind(const_val) {
-            ConstKind::Atomic(AtomicTerm::Atom(atom)) => {
-                Term::Atom(atom.0).into()
-            }
-            ConstKind::Atomic(AtomicTerm::Int(int)) => {
-                Term::Integer(int.0.into()).into()
-            }
-            ConstKind::Atomic(AtomicTerm::BigInt(int)) => {
-                Term::Integer(int.0.clone()).into()
-            }
-            ConstKind::Atomic(AtomicTerm::Float(flt)) => {
-                Term::Float(flt.0.into()).into()
-            }
+            ConstKind::Atomic(AtomicTerm::Atom(atom)) => Term::Atom(atom.0).into(),
+            ConstKind::Atomic(AtomicTerm::Int(int)) => Term::Integer(int.0.into()).into(),
+            ConstKind::Atomic(AtomicTerm::BigInt(int)) => Term::Integer(int.0.clone()).into(),
+            ConstKind::Atomic(AtomicTerm::Float(flt)) => Term::Float(flt.0.into()).into(),
             ConstKind::Atomic(AtomicTerm::Binary(bin)) => {
                 Term::Binary(Rc::new(bin.0.clone().into())).into()
             }
-            ConstKind::Atomic(AtomicTerm::Nil) => {
-                Term::Nil.into()
-            }
-            ConstKind::ListCell { head, tail } => {
-                Term::ListCell(
-                    self.make_const_term(fun, *head),
-                    self.make_const_term(fun, *tail),
-                ).into()
-            }
+            ConstKind::Atomic(AtomicTerm::Nil) => Term::Nil.into(),
+            ConstKind::ListCell { head, tail } => Term::ListCell(
+                self.make_const_term(fun, *head),
+                self.make_const_term(fun, *tail),
+            )
+            .into(),
             ConstKind::Tuple { entries } => {
-                let vec = entries.as_slice(&fun.fun.cons().const_pool)
+                let vec = entries
+                    .as_slice(&fun.fun.cons().const_pool)
                     .iter()
                     .map(|e| self.make_const_term(fun, *e))
                     .collect::<Vec<_>>();
                 Term::Tuple(vec).into()
             }
             ConstKind::Map { keys, values } => {
-                assert!(keys.len(&fun.fun.cons().const_pool)
-                        == values.len(&fun.fun.cons().const_pool));
+                assert!(
+                    keys.len(&fun.fun.cons().const_pool) == values.len(&fun.fun.cons().const_pool)
+                );
 
                 let mut map = MapTerm::new();
-                for (key, val) in keys.as_slice(&fun.fun.cons().const_pool).iter()
+                for (key, val) in keys
+                    .as_slice(&fun.fun.cons().const_pool)
+                    .iter()
                     .zip(values.as_slice(&fun.fun.cons().const_pool).iter())
                 {
                     let key_v = self.make_const_term(fun, *key);
@@ -210,25 +216,24 @@ impl CallExecutor {
                     assert!(fun.fun.value_argument(v).is_some());
                     env.push(self.make_term(fun, v));
                 }
-                Term::BoundLambda { ident: fun.fun.ident().clone(), block, environment: env }.into()
+                Term::BoundLambda {
+                    ident: fun.fun.ident().clone(),
+                    block,
+                    environment: env,
+                }
+                .into()
             }
-            ValueKind::Argument(_, _) => {
-                self.binds[&value].clone()
-            }
-            ValueKind::Const(cons) => {
-                self.make_const_term(fun, cons)
-            }
+            ValueKind::Argument(_, _) => self.binds[&value].clone(),
+            ValueKind::Const(cons) => self.make_const_term(fun, cons),
             ValueKind::PrimOp(prim) => {
                 let reads = fun.fun.primop_reads(prim);
                 match fun.fun.primop_kind(prim) {
                     PrimOpKind::ValueList => {
-                        let terms: Vec<_> = reads.iter()
-                            .map(|r| self.make_term(fun, *r)).collect();
+                        let terms: Vec<_> = reads.iter().map(|r| self.make_term(fun, *r)).collect();
                         Term::ValueList(terms).into()
                     }
                     PrimOpKind::Tuple => {
-                        let terms: Vec<_> = reads.iter()
-                            .map(|r| self.make_term(fun, *r)).collect();
+                        let terms: Vec<_> = reads.iter().map(|r| self.make_term(fun, *r)).collect();
                         Term::Tuple(terms).into()
                     }
                     PrimOpKind::ListCell => {
@@ -284,12 +289,14 @@ impl CallExecutor {
         let reads = fun.fun.block_reads(block);
         println!("OP: {:?}", fun.fun.block_kind(block).unwrap());
         match fun.fun.block_kind(block).unwrap() {
-            OpKind::Call(_) => {
-                TermCall {
-                    fun: self.make_term(fun, reads[0]),
-                    args: reads.iter().skip(1).map(|r| self.make_term(fun, *r)).collect(),
-                }
-            }
+            OpKind::Call(_) => TermCall {
+                fun: self.make_term(fun, reads[0]),
+                args: reads
+                    .iter()
+                    .skip(1)
+                    .map(|r| self.make_term(fun, *r))
+                    .collect(),
+            },
             OpKind::UnpackValueList(num) => {
                 assert!(reads.len() == 2);
                 let term = self.make_term(fun, reads[1]);
@@ -301,12 +308,10 @@ impl CallExecutor {
                             args: items.clone(),
                         }
                     }
-                    _ => {
-                        TermCall {
-                            fun: self.make_term(fun, reads[0]),
-                            args: vec![term],
-                        }
-                    }
+                    _ => TermCall {
+                        fun: self.make_term(fun, reads[0]),
+                        args: vec![term],
+                    },
                 }
             }
             OpKind::IfBool => {
@@ -333,24 +338,18 @@ impl CallExecutor {
                     args: vec![],
                 }
             }
-            OpKind::TraceCaptureRaw => {
-                TermCall {
-                    fun: self.make_term(fun, reads[0]),
-                    args: vec![Term::Nil.into()],
-                }
-            }
-            OpKind::Match { branches } => {
-                self::r#match::match_op(self, fun, branches, block)
-            }
+            OpKind::TraceCaptureRaw => TermCall {
+                fun: self.make_term(fun, reads[0]),
+                args: vec![Term::Nil.into()],
+            },
+            OpKind::Match { branches } => self::r#match::match_op(self, fun, branches, block),
             OpKind::Dyn(dyn_op) => {
                 let tid = dyn_op.type_id();
                 match () {
-                    _ if tid == TypeId::of::<BinaryConstructStart>() => {
-                        TermCall {
-                            fun: self.make_term(fun, reads[0]),
-                            args: vec![Term::Binary(Default::default()).into()],
-                        }
-                    }
+                    _ if tid == TypeId::of::<BinaryConstructStart>() => TermCall {
+                        fun: self.make_term(fun, reads[0]),
+                        args: vec![Term::Binary(Default::default()).into()],
+                    },
                     _ if tid == TypeId::of::<BinaryConstructPush>() => {
                         let ok_cont = reads[0];
                         let err_cont = reads[1];
@@ -364,9 +363,13 @@ impl CallExecutor {
                         let bin_term = self.make_term(fun, bin_ref);
                         let mut bin = match &*bin_term {
                             Term::Binary(bin) => (**bin).clone(),
-                            Term::BinarySlice { buf, bit_offset, bit_length } => {
-                                let slice = BitSlice::with_offset_length(
-                                    &**buf, *bit_offset, *bit_length);
+                            Term::BinarySlice {
+                                buf,
+                                bit_offset,
+                                bit_length,
+                            } => {
+                                let slice =
+                                    BitSlice::with_offset_length(&**buf, *bit_offset, *bit_length);
                                 let mut new = BitVec::new();
                                 new.push(slice);
                                 new
@@ -381,8 +384,10 @@ impl CallExecutor {
 
                         match specifier {
                             BinaryEntrySpecifier::Integer {
-                                signed: _, unit, endianness } =>
-                            {
+                                signed: _,
+                                unit,
+                                endianness,
+                            } => {
                                 let size = size_term.unwrap().as_usize().unwrap();
                                 let bit_size = unit as usize * size;
 
@@ -393,14 +398,14 @@ impl CallExecutor {
                                 };
 
                                 let val = val_term.as_integer().unwrap().clone();
-                                let carrier = integer_to_carrier(
-                                    val, bit_size, endian);
+                                let carrier = integer_to_carrier(val, bit_size, endian);
 
                                 bin.push(carrier);
                             }
                             BinaryEntrySpecifier::Float {
-                                endianness: Endianness::Big, unit } =>
-                            {
+                                endianness: Endianness::Big,
+                                unit,
+                            } => {
                                 let size = size_term.unwrap().as_usize().unwrap();
                                 let bit_size = unit as usize * size;
 
@@ -439,15 +444,11 @@ impl CallExecutor {
                             args: vec![Term::Binary(bin.into()).into()],
                         };
                     }
-                    _ if tid == TypeId::of::<BinaryConstructFinish>() => {
-                        TermCall {
-                            fun: self.make_term(fun, reads[0]),
-                            args: vec![self.make_term(fun, reads[1])],
-                        }
-                    }
-                    _ => {
-                        unimplemented!()
-                    }
+                    _ if tid == TypeId::of::<BinaryConstructFinish>() => TermCall {
+                        fun: self.make_term(fun, reads[0]),
+                        args: vec![self.make_term(fun, reads[1])],
+                    },
+                    _ => unimplemented!(),
                 }
             }
             //OpKind::BinaryPush { specifier } => {
@@ -536,7 +537,7 @@ impl CallExecutor {
                 let mut idx = 3;
                 for action in action.iter() {
                     let key = self.make_term(fun, reads[idx]);
-                    let val = self.make_term(fun, reads[idx+1]);
+                    let val = self.make_term(fun, reads[idx + 1]);
                     idx += 2;
 
                     let replaced = map.insert(key, val);
@@ -558,7 +559,6 @@ impl CallExecutor {
             kind => unimplemented!("{:?}", kind),
         }
     }
-
 }
 
 pub struct ProcessContext {
@@ -567,12 +567,10 @@ pub struct ProcessContext {
 }
 
 impl ProcessContext {
-
     pub fn new(pid: Pid) -> Self {
         ProcessContext {
             pid,
             dict: Vec::new(),
         }
     }
-
 }

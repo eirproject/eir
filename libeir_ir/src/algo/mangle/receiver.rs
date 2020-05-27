@@ -1,7 +1,7 @@
-use crate::{Function, FunctionBuilder};
 use crate::OpKind;
+use crate::{Function, FunctionBuilder};
 
-use super::{MangleValue, ToValue, MangleBlock};
+use super::{MangleBlock, MangleValue, ToValue};
 
 /// Trait used to generalize a single mangling implementation over
 /// both mangling within a single function container, and across
@@ -32,7 +32,6 @@ pub(super) trait MangleReceiver<'b> {
     /// Maps a block operation. This should return an OpKind that is
     /// usable in the destination function.
     fn map_block_op(&mut self, block: MangleBlock) -> OpKind;
-
 }
 
 /// This receiver performs a mangle within a single function container.

@@ -1,4 +1,4 @@
-use std::alloc::{Layout, alloc, dealloc};
+use std::alloc::{alloc, dealloc, Layout};
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 
@@ -21,9 +21,7 @@ pub struct ScopedCell<T: ?Sized> {
     //phantom: PhantomData<ScopedCellInner<T>>,
 }
 
-
 impl<T: ?Sized> ScopedCell<T> {
-
     pub fn borrow_mut<F, R>(&self, fun: F) -> R
     where
         F: FnOnce(&mut T) -> R,
@@ -83,7 +81,6 @@ impl<T: ?Sized> ScopedCell<T> {
     unsafe fn inner_mut(&self) -> &mut ScopedCellInner<T> {
         &mut *(self.ptr.as_ptr() as *mut _)
     }
-
 }
 
 impl<T: ?Sized> Clone for ScopedCell<T> {
@@ -112,7 +109,10 @@ impl<T: ?Sized> Drop for ScopedCell<T> {
 
             if is_zero {
                 debug_assert!(!active);
-                dealloc(self.ptr.as_ptr().cast(), Layout::for_value(self.ptr.as_ref()))
+                dealloc(
+                    self.ptr.as_ptr().cast(),
+                    Layout::for_value(self.ptr.as_ref()),
+                )
             }
         }
     }
@@ -136,7 +136,7 @@ pub struct ScopedCellInner<T: ?Sized> {
 
 /// The guard must not be dropped while a borrow of a related cell is in
 /// progress. If this happens, the whole process will be aborted.
-pub fn new<'a, T: ?Sized + 'a>(value: &'a mut T) -> ScopedCellCreatorGuard<'a, T>  {
+pub fn new<'a, T: ?Sized + 'a>(value: &'a mut T) -> ScopedCellCreatorGuard<'a, T> {
     // Because we are using the value reference in a `PhantomData`, the
     // reference will be concidered used, while not actually existing in a
     // usable form until this guard stuct is dropped.
@@ -151,11 +151,14 @@ pub fn new<'a, T: ?Sized + 'a>(value: &'a mut T) -> ScopedCellCreatorGuard<'a, T
         let inner_ptr_u8 = alloc(inner_layout);
 
         let inner_ptr = NonNull::new(inner_ptr_u8 as *mut _).unwrap();
-        std::ptr::write(inner_ptr.as_ptr(), ScopedCellInner {
-            references: 1,
-            active: false,
-            inner: Some(NonNull::new(value as *mut _).unwrap()),
-        });
+        std::ptr::write(
+            inner_ptr.as_ptr(),
+            ScopedCellInner {
+                references: 1,
+                active: false,
+                inner: Some(NonNull::new(value as *mut _).unwrap()),
+            },
+        );
 
         let cell = ScopedCell {
             ptr: inner_ptr,
@@ -178,7 +181,9 @@ impl<'a, T: ?Sized> Drop for ScopedCellCreatorGuard<'a, T> {
         unsafe {
             let inner = self.cell.inner_mut();
             if inner.active {
-                println!("FATAL: ScopedCell borrow active while ScopedCellCreatorGuard was dropped");
+                println!(
+                    "FATAL: ScopedCell borrow active while ScopedCellCreatorGuard was dropped"
+                );
                 std::process::abort();
             }
             inner.inner = None;
@@ -208,8 +213,7 @@ mod tests {
     #[test]
     fn creation() {
         let mut a: u32 = 0;
-        scoped_cell(&mut a, |_ac| {
-        });
+        scoped_cell(&mut a, |_ac| {});
     }
 
     #[test]
@@ -289,7 +293,5 @@ mod tests {
                 assert!(ac2.try_borrow_mut(|_i| ()).is_err());
             });
         });
-
     }
-
 }

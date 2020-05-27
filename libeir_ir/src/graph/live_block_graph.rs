@@ -1,26 +1,24 @@
 use std::collections::HashSet;
 
+use petgraph::visit::{Dfs, DfsPostOrder};
+use petgraph::visit::{GraphBase, IntoNeighbors, IntoNeighborsDirected, Visitable};
 use petgraph::Direction;
-use petgraph::visit::{ GraphBase, IntoNeighbors, IntoNeighborsDirected, Visitable };
-use petgraph::visit::{ Dfs, DfsPostOrder };
 
 use itertools::Either;
 
 use cranelift_bforest::SetIter;
 
+use crate::Block;
 use crate::Function;
-use crate::{ Block };
 
-use super::BlockGraph;
-use super::block_graph::{ BlockEdge, BlockSuccessors };
 use super::block_graph::EntityVisitMap;
+use super::block_graph::{BlockEdge, BlockSuccessors};
+use super::BlockGraph;
 
 impl Function {
-
     pub fn live_block_graph(&self) -> LiveBlockGraph<'_> {
         LiveBlockGraph::new(self)
     }
-
 }
 
 /// This is a newtype that contains implementations of petgraphs graph traits.
@@ -36,7 +34,6 @@ pub struct LiveBlockGraph<'a> {
 }
 
 impl<'a> LiveBlockGraph<'a> {
-
     pub fn new(fun: &'a Function) -> Self {
         let graph = fun.block_graph();
 
@@ -45,10 +42,7 @@ impl<'a> LiveBlockGraph<'a> {
             live.insert(block);
         }
 
-        LiveBlockGraph {
-            graph,
-            live,
-        }
+        LiveBlockGraph { graph, live }
     }
 
     pub fn dfs(&self) -> Dfs<Block, EntityVisitMap<Block>> {
@@ -70,11 +64,11 @@ impl<'a> LiveBlockGraph<'a> {
     }
 
     pub fn incoming(&'a self, block: Block) -> impl Iterator<Item = Block> + 'a {
-        self.graph.fun.blocks[block].predecessors
+        self.graph.fun.blocks[block]
+            .predecessors
             .iter(&self.graph.fun.pool.block_set)
             .filter(move |b| self.live.contains(b))
     }
-
 }
 
 pub struct LiveBlockPredecessors<'a> {
@@ -85,7 +79,8 @@ impl<'a> LiveBlockPredecessors<'a> {
     fn new(graph: &'a LiveBlockGraph, block: Block) -> Self {
         LiveBlockPredecessors {
             graph,
-            iter: graph.graph.fun.blocks[block].predecessors
+            iter: graph.graph.fun.blocks[block]
+                .predecessors
                 .iter(&graph.graph.fun.pool.block_set),
         }
     }
@@ -142,11 +137,12 @@ impl<'a> Visitable for &'a LiveBlockGraph<'a> {
 #[cfg(test)]
 mod tests {
 
-    use crate::{ FunctionIdent, Function, FunctionBuilder };
+    use crate::{Function, FunctionBuilder, FunctionIdent};
+    use libeir_diagnostics::SourceSpan;
     use libeir_intern::Ident;
 
-    use petgraph::Direction;
     use petgraph::visit::IntoNeighborsDirected;
+    use petgraph::Direction;
 
     #[test]
     fn test_back_edge() {
@@ -155,7 +151,7 @@ mod tests {
             name: Ident::from_str("woo"),
             arity: 1,
         };
-        let mut fun = Function::new(ident);
+        let mut fun = Function::new(SourceSpan::UNKNOWN, ident);
         let mut b = FunctionBuilder::new(&mut fun);
 
         let b1 = b.block_insert();
@@ -172,19 +168,41 @@ mod tests {
 
         let graph = b.fun().live_block_graph();
 
-        assert!(&graph.neighbors_directed(b1, Direction::Outgoing).collect::<Vec<_>>() == &[b2]);
-        assert!(&graph.neighbors_directed(b2, Direction::Outgoing).collect::<Vec<_>>() == &[]);
-        assert!(&graph.neighbors_directed(b3, Direction::Outgoing).collect::<Vec<_>>() == &[b2]);
-        assert!(&graph.neighbors_directed(b1, Direction::Incoming).collect::<Vec<_>>() == &[]);
-        assert!(&graph.neighbors_directed(b2, Direction::Incoming).collect::<Vec<_>>() == &[b1]);
-        assert!(&graph.neighbors_directed(b3, Direction::Incoming).collect::<Vec<_>>() == &[]);
-
+        assert!(
+            &graph
+                .neighbors_directed(b1, Direction::Outgoing)
+                .collect::<Vec<_>>()
+                == &[b2]
+        );
+        assert!(
+            &graph
+                .neighbors_directed(b2, Direction::Outgoing)
+                .collect::<Vec<_>>()
+                == &[]
+        );
+        assert!(
+            &graph
+                .neighbors_directed(b3, Direction::Outgoing)
+                .collect::<Vec<_>>()
+                == &[b2]
+        );
+        assert!(
+            &graph
+                .neighbors_directed(b1, Direction::Incoming)
+                .collect::<Vec<_>>()
+                == &[]
+        );
+        assert!(
+            &graph
+                .neighbors_directed(b2, Direction::Incoming)
+                .collect::<Vec<_>>()
+                == &[b1]
+        );
+        assert!(
+            &graph
+                .neighbors_directed(b3, Direction::Incoming)
+                .collect::<Vec<_>>()
+                == &[]
+        );
     }
-
 }
-
-
-
-
-
-

@@ -1,10 +1,10 @@
-use std::collections::{BTreeSet, BTreeMap};
+use std::collections::{BTreeMap, BTreeSet};
 
-use petgraph::visit::{GraphBase, IntoNeighbors, Visitable, Walker};
 use petgraph::visit::{Dfs, DfsPostOrder};
+use petgraph::visit::{GraphBase, IntoNeighbors, Visitable, Walker};
 
-use crate::{Function, Value, Block, OpKind, CallKind, LiveValues};
 use crate::graph::EntityVisitMap;
+use crate::{Block, CallKind, Function, LiveValues, OpKind, Value};
 
 #[derive(Debug, Clone)]
 pub struct FunctionTree {
@@ -58,7 +58,6 @@ enum Escape {
 }
 
 impl Function {
-
     pub fn func_tree(&self, live: &LiveValues, resolve_continuations: bool) -> FunctionTree {
         let graph = self.block_graph();
 
@@ -86,12 +85,12 @@ impl Function {
                         }
                     }
                     Ok(())
-                }).unwrap();
+                })
+                .unwrap();
             }
         }
 
         if resolve_continuations {
-
             // Find all escape continuations for all captures
             let mut escapes = BTreeMap::new();
             for block in captured_blocks.iter() {
@@ -127,7 +126,8 @@ impl Function {
                             self.value_walk_nested_values::<_, Result<(), ()>>(*read, &mut |v| {
                                 assert!(v != *value);
                                 Ok(())
-                            }).unwrap();
+                            })
+                            .unwrap();
                         }
                     };
 
@@ -155,7 +155,6 @@ impl Function {
                     }
                 }
             }
-
         }
 
         // Generate the scopes for all of the functions
@@ -200,16 +199,19 @@ impl Function {
                 thr = Some(args[1]);
             }
 
-            functions.insert(*block, FunctionEntry {
-                entry: *block,
+            functions.insert(
+                *block,
+                FunctionEntry {
+                    entry: *block,
 
-                ret,
-                thr,
+                    ret,
+                    thr,
 
-                children,
+                    children,
 
-                scope: function_scope,
-            });
+                    scope: function_scope,
+                },
+            );
         }
 
         let tree = FunctionTree {
@@ -217,15 +219,15 @@ impl Function {
             functions,
         };
 
-        assert!(tree.validate_no_cycles(tree.root_fun, 0, tree.functions.len()).is_some());
+        assert!(tree
+            .validate_no_cycles(tree.root_fun, 0, tree.functions.len())
+            .is_some());
 
         tree
     }
-
 }
 
 impl FunctionTree {
-
     fn validate_no_cycles(&self, entry: Block, mut curr: usize, limit: usize) -> Option<usize> {
         if curr > limit {
             return None;
@@ -249,7 +251,6 @@ impl FunctionTree {
     pub fn dfs_post_order_iter<'a>(&'a self) -> impl Iterator<Item = Block> + 'a {
         self.dfs_post_order().iter(self)
     }
-
 }
 
 impl GraphBase for FunctionTree {

@@ -5,12 +5,12 @@ use std::collections::BTreeMap;
 use log::{debug, trace};
 
 use bumpalo::Bump;
-use hashbrown::HashMap;
 use fnv::FnvBuildHasher;
+use hashbrown::HashMap;
 type BFnvHashMap<'bump, K, V> = HashMap<K, V, FnvBuildHasher, &'bump Bump>;
 
-use libeir_ir::{FunctionBuilder, Mangler, MangleTo, StandardFormatConfig};
 use libeir_ir::Value;
+use libeir_ir::{FunctionBuilder, MangleTo, Mangler, StandardFormatConfig};
 
 use super::FunctionPass;
 
@@ -94,7 +94,6 @@ pub struct SimplifyCfgPass {
 //           generate a call to the new target block
 
 impl SimplifyCfgPass {
-
     pub fn new() -> Self {
         SimplifyCfgPass {
             map: BTreeMap::new(),
@@ -102,7 +101,6 @@ impl SimplifyCfgPass {
             bump: Some(Bump::new()),
         }
     }
-
 }
 
 impl FunctionPass for SimplifyCfgPass {
@@ -115,7 +113,6 @@ impl FunctionPass for SimplifyCfgPass {
 }
 
 impl SimplifyCfgPass {
-
     fn simplify_cfg(&mut self, b: &mut FunctionBuilder) {
         let mut bump = self.bump.take().unwrap();
 
@@ -143,8 +140,8 @@ impl SimplifyCfgPass {
 
                     // Synthesize CFG for chain
                     let graph = b.fun().live_block_graph();
-                    let chain_graph = analyze::analyze_chain(
-                        &bump, *target, &b.fun(), &graph, &live, &analysis);
+                    let chain_graph =
+                        analyze::analyze_chain(&bump, *target, &b.fun(), &graph, &live, &analysis);
 
                     let synthesis_impl = chain_graph::synthesis::compound::CompoundStrategy;
                     let mut synthesis = synthesis_impl.try_run(&chain_graph, b.fun()).unwrap();
@@ -154,7 +151,6 @@ impl SimplifyCfgPass {
 
                     //// .. and apply it to the CFG.
                     rewrite::rewrite(b, &mut self.map, *target, &chain_graph, &synthesis);
-
 
                     trace!("{}", b.fun().to_text_standard());
 
@@ -180,7 +176,6 @@ impl SimplifyCfgPass {
                     //    b,
                     //);
                 }
-
             }
 
             trace!("rewrite done");
@@ -228,12 +223,10 @@ impl SimplifyCfgPass {
             //trace!("{}", std::str::from_utf8(&out_str).unwrap());
 
             //trace!("{}", b.fun().to_text());
-
         }
 
         self.map.clear();
         bump.reset();
         self.bump = Some(bump);
     }
-
 }

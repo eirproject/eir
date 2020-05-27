@@ -1,10 +1,10 @@
-use crate::pattern::PatternClause;
 use crate::binary::BinaryEntrySpecifier;
 use crate::operation::DynOp;
+use crate::pattern::PatternClause;
 
 use cranelift_entity::EntityList;
 
-use serde::{ Serialize, Deserialize };
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CallKind {
@@ -73,9 +73,7 @@ pub enum MapPutUpdate {
 
 #[derive(Debug, Clone)]
 pub enum OpKind {
-
     // Control flow/functions
-
     /// (call: fn(..), ..)
     /// This is the calling primitive,
     /// doing everything from returns to local calls,
@@ -150,7 +148,6 @@ pub enum OpKind {
     // },
     // /// (cont: fn(result), ref)
     // BinaryConstructFinish,
-
     /// Match on a single value.
     /// Branches are tested in order, first matched is branched to.
     /// ```ignore
@@ -174,12 +171,10 @@ pub enum OpKind {
 }
 
 impl OpKind {
-
     pub fn is_call(&self) -> bool {
         match self {
             OpKind::Call(_) => true,
             _ => false,
         }
     }
-
 }

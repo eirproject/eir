@@ -1,7 +1,7 @@
 //-*- mode: rust -*-
 use libeir_ir::Integer;
 use libeir_intern::{Symbol, Ident};
-use libeir_diagnostics::{ByteIndex, ByteSpan};
+use libeir_diagnostics::{SourceIndex, SourceSpan};
 
 use super::super::token::{Token, Float as FloatToken};
 use super::super::ast::*;
@@ -21,33 +21,33 @@ pub Item: Item = {
     <l:@L> "{" <entries: CommaOpt<Item>> "}" <r:@R> => {
         Item::Tuple(Tuple {
             entries,
-            span: ByteSpan::new(l, r),
+            span: SourceSpan::new(l, r),
         })
     },
     <l:@L> "[" <heads: CommaOpt<Item>> <tail: ("|" <Item>)?> "]" <r:@R> => {
         Item::List(List {
             heads,
             tail: tail.map(Box::new),
-            span: ByteSpan::new(l, r),
+            span: SourceSpan::new(l, r),
         })
     },
 
     <l:@L> <v: atom> <r:@R> => {
-        Item::Atom(Ident::new(v, ByteSpan::new(l, r)))
+        Item::Atom(Ident::new(v, SourceSpan::new(l, r)))
     },
     <l:@L> <v: integer> <r:@R> => {
         Item::Int(Int {
             integer: v,
-            span: ByteSpan::new(l, r),
+            span: SourceSpan::new(l, r),
         })
     },
     <l:@L> <v: string> <r:@R> => {
-        Item::String(Ident::new(v, ByteSpan::new(l, r)))
+        Item::String(Ident::new(v, SourceSpan::new(l, r)))
     },
     <l:@L> <f: float> <r:@R> => {
         Item::Float(Float {
             float: f.0,
-            span: ByteSpan::new(l, r),
+            span: SourceSpan::new(l, r),
         })
     },
 };
@@ -61,7 +61,7 @@ pub Root: Root = {
 };
 
 extern {
-    type Location = ByteIndex;
+    type Location = SourceIndex;
     type Error = ();
 
     enum Token {

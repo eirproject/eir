@@ -1,6 +1,6 @@
 use libeir_ir::FunctionBuilder;
-use libeir_ir::{Mangler, MangleTo};
 use libeir_ir::{Block, OpKind};
+use libeir_ir::{MangleTo, Mangler};
 
 use super::FunctionPass;
 
@@ -14,14 +14,12 @@ pub struct NaiveInlineClosuresPass {
 }
 
 impl NaiveInlineClosuresPass {
-
     pub fn new() -> Self {
         NaiveInlineClosuresPass {
             calls_buf: Vec::new(),
             mangler: Mangler::new(),
         }
     }
-
 }
 
 impl FunctionPass for NaiveInlineClosuresPass {
@@ -34,9 +32,7 @@ impl FunctionPass for NaiveInlineClosuresPass {
 }
 
 impl NaiveInlineClosuresPass {
-
     pub fn inline_closures(&mut self, b: &mut FunctionBuilder) {
-
         self.calls_buf.clear();
 
         for block in b.fun().block_graph().dfs_post_order_iter() {
@@ -58,8 +54,7 @@ impl NaiveInlineClosuresPass {
 
                 // Arguments must contain block
 
-                let contains_block = reads[1..].iter()
-                    .any(|a| b.fun().value_block(*a).is_some());
+                let contains_block = reads[1..].iter().any(|a| b.fun().value_block(*a).is_some());
                 if !contains_block {
                     continue;
                 }
@@ -84,7 +79,8 @@ impl NaiveInlineClosuresPass {
                 assert!(source_args.len() == target_args.len());
 
                 for (from, to) in target_args.iter().zip(source_args.iter()) {
-                    self.mangler.add_rename_nofollow(MangleTo(*from), MangleTo(*to));
+                    self.mangler
+                        .add_rename_nofollow(MangleTo(*from), MangleTo(*to));
                 }
             }
 

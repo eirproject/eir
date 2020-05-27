@@ -1,20 +1,22 @@
-use std::collections::{ HashMap, HashSet };
+use std::collections::{HashMap, HashSet};
 
 #[cfg(feature = "debug_table_print")]
 use prettytable::Table;
 
-
-#[cfg(feature = "debug_table_print")]
-use log::trace;
 #[cfg(feature = "debug_table_print")]
 use super::TARGET;
+#[cfg(feature = "debug_table_print")]
+use log::trace;
 
-use super::LeafId;
 use super::pattern::PatternProvider;
+use super::LeafId;
 
 #[derive(Debug, Derivative)]
-#[derivative(Clone(bound=""))]
-pub(crate) struct MatchMatrix<P> where P: PatternProvider {
+#[derivative(Clone(bound = ""))]
+pub(crate) struct MatchMatrix<P>
+where
+    P: PatternProvider,
+{
     pub data: Vec<MatchMatrixElement<P>>,
 
     pub variables: Vec<P::CfgVariable>,
@@ -24,8 +26,11 @@ pub(crate) struct MatchMatrix<P> where P: PatternProvider {
 }
 
 #[derive(Debug, Derivative)]
-#[derivative(Clone(bound=""))]
-pub struct MatchMatrixElement<P> where P: PatternProvider {
+#[derivative(Clone(bound = ""))]
+pub struct MatchMatrixElement<P>
+where
+    P: PatternProvider,
+{
     pub node: P::PatternNodeKey,
     pub variable_num: usize,
     pub clause_num: usize,
@@ -43,43 +48,45 @@ pub struct MatchMatrixElement<P> where P: PatternProvider {
 //    ret
 //}
 
-impl<P> MatchMatrix<P> where P: PatternProvider {
-
-    pub fn new(nodes: &[P::PatternNodeKey],
-               leaves: Vec<LeafId>,
-               vars: Vec<P::CfgVariable>,
-    ) -> Self
-    {
-        let binds = (0..leaves.len())
-            .map(|_| HashMap::new())
-            .collect();
-        MatchMatrix::with_bindings(
-            nodes, leaves, vars, binds,
-        )
+impl<P> MatchMatrix<P>
+where
+    P: PatternProvider,
+{
+    pub fn new(
+        nodes: &[P::PatternNodeKey],
+        leaves: Vec<LeafId>,
+        vars: Vec<P::CfgVariable>,
+    ) -> Self {
+        let binds = (0..leaves.len()).map(|_| HashMap::new()).collect();
+        MatchMatrix::with_bindings(nodes, leaves, vars, binds)
     }
 
-    fn with_bindings(nodes: &[P::PatternNodeKey],
-                     leaves: Vec<LeafId>,
-                     vars: Vec<P::CfgVariable>,
-                     mut leaf_bindings: Vec<HashMap<P::PatternNodeKey, P::CfgVariable>>,
-    ) -> Self
-    {
+    fn with_bindings(
+        nodes: &[P::PatternNodeKey],
+        leaves: Vec<LeafId>,
+        vars: Vec<P::CfgVariable>,
+        mut leaf_bindings: Vec<HashMap<P::PatternNodeKey, P::CfgVariable>>,
+    ) -> Self {
         assert!(vars.len() * leaves.len() == nodes.len());
         assert!(leaf_bindings.len() == leaves.len());
 
         let data = if vars.len() == 0 {
             vec![]
         } else {
-            nodes.chunks(vars.len()).enumerate()
+            nodes
+                .chunks(vars.len())
+                .enumerate()
                 .flat_map(|(clause_idx, clause)| {
-                    clause.iter().enumerate().map(move |(variable_idx, pat)| {
-                        MatchMatrixElement {
+                    clause
+                        .iter()
+                        .enumerate()
+                        .map(move |(variable_idx, pat)| MatchMatrixElement {
                             variable_num: variable_idx,
                             clause_num: clause_idx,
                             node: *pat,
-                        }
-                    })
-                }).collect()
+                        })
+                })
+                .collect()
         };
 
         // Insert all bindings
@@ -103,8 +110,7 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
     /// This will always select the variable which has the most consecutive
     /// wildcards from the top, as this will minimize the amount of
     /// comparisons we will have to perform.
-    pub fn select_specialize_variable(&self, pattern: &P) -> usize
-    {
+    pub fn select_specialize_variable(&self, pattern: &P) -> usize {
         let mut sums = vec![(0, true); self.variables.len()];
 
         let clauses = self.data.chunks(self.variables.len());
@@ -120,9 +126,11 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
             }
         }
 
-        sums.iter().enumerate()
+        sums.iter()
+            .enumerate()
             .max_by_key(|&(_, s)| s.0)
-            .map(|(i, _)| i).unwrap()
+            .map(|(i, _)| i)
+            .unwrap()
     }
 
     pub fn get_var(&self, var: usize) -> P::CfgVariable {
@@ -130,10 +138,11 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
     }
 
     /// Constructs a set of all node kinds in the given variable in the given pattern
-    pub fn collect_specialization_types<'a>(&self, pattern: &'a P,
-                                            variable: usize)
-                                            -> HashSet<P::PatternNodeKind>
-    {
+    pub fn collect_specialization_types<'a>(
+        &self,
+        pattern: &'a P,
+        variable: usize,
+    ) -> HashSet<P::PatternNodeKind> {
         let mut types = HashSet::new();
 
         let clauses = self.data.chunks(self.variables.len());
@@ -147,14 +156,20 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
         types
     }
 
-    pub fn specialize(&self, ctx: &mut super::MatchCompileContext<P>,
-                         variable: usize,
-                         on: P::PatternNodeKind)
-                         -> (Vec<P::CfgVariable>, MatchMatrix<P>)
-    {
+    pub fn specialize(
+        &self,
+        ctx: &mut super::MatchCompileContext<P>,
+        variable: usize,
+        on: P::PatternNodeKind,
+    ) -> (Vec<P::CfgVariable>, MatchMatrix<P>) {
         #[cfg(feature = "debug_table_print")]
         {
-            trace!(target: TARGET, "Specialize variable #{} on {:?}", variable, on);
+            trace!(
+                target: TARGET,
+                "Specialize variable #{} on {:?}",
+                variable,
+                on
+            );
             trace!(target: TARGET, "{}", self.to_table(&ctx.pattern));
             trace!(target: TARGET, "binds: {:#?}", self.leaf_bindings);
         }
@@ -169,7 +184,8 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
             /// Clause is not included
             Skip,
         }
-        let clause_modes: Vec<ClauseMode> = self.data
+        let clause_modes: Vec<ClauseMode> = self
+            .data
             .chunks(self.variables.len())
             .map(|nodes| {
                 let n = nodes[variable].node;
@@ -185,7 +201,9 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
 
         // 2. Expand nodes
         let expanded = {
-            let nodes: Vec<_> = clause_modes.iter().cloned()
+            let nodes: Vec<_> = clause_modes
+                .iter()
+                .cloned()
                 .zip(self.data.chunks(self.variables.len()))
                 .filter(|(mode, _)| *mode == ClauseMode::Expand)
                 .map(|(_, nodes)| nodes[variable].node)
@@ -209,17 +227,19 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
             // Because .chunks does not accept 0 as a chunk length,
             // we do this workaround
             let mut expanded_iter = if expanded.nodes.len() > 0 {
-                Some(expanded.nodes
-                     .chunks(expanded_var_num))
+                Some(expanded.nodes.chunks(expanded_var_num))
             } else {
                 None
             };
 
-            let mut residual_iter = clause_modes.iter().cloned()
+            let mut residual_iter = clause_modes
+                .iter()
+                .cloned()
                 .zip(self.data.chunks(self.variables.len()))
                 .filter(|(mode, _)| *mode != ClauseMode::Skip)
                 .map(|(_, elems)| {
-                    elems.iter()
+                    elems
+                        .iter()
                         .filter(|elem| elem.variable_num != variable)
                         .map(|elem| elem.node)
                 });
@@ -246,7 +266,6 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
                 // Append residual
                 let residuals = residual_iter.next().unwrap();
                 out.extend(residuals);
-
             }
 
             if let Some(ref mut inner) = expanded_iter {
@@ -258,31 +277,38 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
         };
 
         let new_variables: Vec<_> = {
-            let rest_variables = self.variables.iter()
+            let rest_variables = self
+                .variables
+                .iter()
                 .enumerate()
                 .filter(|&(var_num, _)| var_num != variable)
                 .map(|(_, var)| *var);
 
-            expanded.variables.iter()
+            expanded
+                .variables
+                .iter()
                 .map(|var| *var)
                 .chain(rest_variables)
                 .collect()
         };
 
-        let new_clause_leaves: Vec<_> = clause_modes.iter().cloned()
+        let new_clause_leaves: Vec<_> = clause_modes
+            .iter()
+            .cloned()
             .zip(self.clause_leaves.iter())
             .filter(|(mode, _)| *mode != ClauseMode::Skip)
             .map(|(_, clause)| *clause)
             .collect();
 
-        let new_leaf_bindings: Vec<_> = clause_modes.iter()
+        let new_leaf_bindings: Vec<_> = clause_modes
+            .iter()
             .zip(self.leaf_bindings.iter())
             .filter(|(mode, _)| **mode != ClauseMode::Skip)
             .map(|(_, binds)| binds.clone())
             .collect();
 
-
-        let matrix = Self::with_bindings(&merged, new_clause_leaves, new_variables, new_leaf_bindings);
+        let matrix =
+            Self::with_bindings(&merged, new_clause_leaves, new_variables, new_leaf_bindings);
 
         (expanded.variables, matrix)
     }
@@ -305,9 +331,13 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
         new
     }
 
-    pub(crate) fn binds_for<'a>(&'a self, leaf: LeafId) -> Option<&'a HashMap<P::PatternNodeKey, P::CfgVariable>> {
+    pub(crate) fn binds_for<'a>(
+        &'a self,
+        leaf: LeafId,
+    ) -> Option<&'a HashMap<P::PatternNodeKey, P::CfgVariable>> {
         self.clause_leaves
-            .iter().enumerate()
+            .iter()
+            .enumerate()
             .find(|(_, l)| **l == leaf)
             .map(|(idx, _)| &self.leaf_bindings[idx])
     }
@@ -323,10 +353,11 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
     //    Box::new(iter)
     //}
 
-    pub fn default(&self, ctx: &mut super::MatchCompileContext<P>,
-                   variable: usize)
-                   -> (Vec<P::CfgVariable>, MatchMatrix<P>)
-    {
+    pub fn default(
+        &self,
+        ctx: &mut super::MatchCompileContext<P>,
+        variable: usize,
+    ) -> (Vec<P::CfgVariable>, MatchMatrix<P>) {
         let wildcard = ctx.pattern.get_wildcard();
         self.specialize(ctx, variable, wildcard)
     }
@@ -335,20 +366,18 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
         self.clause_leaves.len() == 0
     }
 
-    pub(crate) fn has_wildcard_head(&self, pattern: &P)
-                             -> Option<LeafId>
-    {
-
+    pub(crate) fn has_wildcard_head(&self, pattern: &P) -> Option<LeafId> {
         assert!(self.clause_leaves.len() > 0);
         if self.variables.len() == 0 {
             Some(self.clause_leaves[0])
         } else {
-            let has_wildcard_head = self.data
+            let has_wildcard_head = self
+                .data
                 .chunks(self.variables.len())
-                .next().unwrap()
-                .iter().all(|p| {
-                    pattern.is_wildcard(pattern.get_kind(p.node))
-                });
+                .next()
+                .unwrap()
+                .iter()
+                .all(|p| pattern.is_wildcard(pattern.get_kind(p.node)));
             if has_wildcard_head {
                 Some(self.clause_leaves[0])
             } else {
@@ -369,7 +398,8 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
                 "{}*{}=={}",
                 self.variables.len(),
                 self.clause_leaves.len(),
-                self.data.len())));
+                self.data.len()
+            )));
             for variable in self.variables.iter() {
                 let var_str = format!("{:?}", variable);
                 head_row.add_cell(Cell::new(&var_str));
@@ -382,7 +412,7 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
             t_row.add_cell(Cell::new(&leaf_id));
 
             let row_start = row_idx * self.variables.len();
-            for col in &self.data[row_start..(row_start+self.variables.len())] {
+            for col in &self.data[row_start..(row_start + self.variables.len())] {
                 let node = pat.get_kind(col.node);
                 let cell_fmt = format!("{:?}", node);
                 let cell = Cell::new(&cell_fmt);
@@ -392,5 +422,4 @@ impl<P> MatchMatrix<P> where P: PatternProvider {
 
         table
     }
-
 }

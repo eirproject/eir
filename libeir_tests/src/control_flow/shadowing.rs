@@ -1,15 +1,14 @@
 use crate::lower;
 
-use libeir_ir::{ FunctionIdent };
-use libeir_syntax_erl::{ ParseConfig };
 use libeir_intern::Ident;
+use libeir_ir::FunctionIdent;
 use libeir_passes::PassManager;
+use libeir_syntax_erl::ParseConfig;
 
 use libeir_interpreter::VMState;
 
 #[test]
 fn pattern_variable_shadowing() {
-
     let mut eir_mod = lower(
         "-module(shadowing).
 
@@ -30,8 +29,9 @@ fun_shadowing(A, B) ->
     C(A).
 
 ",
-        ParseConfig::default()
-    ).unwrap();
+        ParseConfig::default(),
+    )
+    .unwrap();
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
@@ -50,7 +50,6 @@ fun_shadowing(A, B) ->
 
 #[test]
 fn pattern_variable_shadowing_a() {
-
     let mut eir_mod = lower(
         "-module(shadowinga).
 
@@ -59,8 +58,9 @@ fun_shadowing(A) ->
     C(A).
 
 ",
-        ParseConfig::default()
-    ).unwrap();
+        ParseConfig::default(),
+    )
+    .unwrap();
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
@@ -69,5 +69,4 @@ fun_shadowing(A) ->
         let fun = fun_def.function();
         fun.live_values();
     }
-
 }

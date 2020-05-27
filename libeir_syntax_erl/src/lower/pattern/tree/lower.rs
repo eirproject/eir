@@ -1,23 +1,15 @@
-use std::collections::{ HashMap, BTreeMap };
+use std::collections::{BTreeMap, HashMap};
 
 use either::Either;
 
-use libeir_ir::{
-    FunctionBuilder,
-    PatternNode,
-};
 use libeir_intern::Ident;
+use libeir_ir::{FunctionBuilder, PatternNode};
 
-use super::{ Tree, TreeNode, TreeNodeKind, ConstraintKind };
-use super::super::{ ClauseLowerCtx, EqGuard };
+use super::super::{ClauseLowerCtx, EqGuard};
+use super::{ConstraintKind, Tree, TreeNode, TreeNodeKind};
 
 impl Tree {
-
-    pub(in super::super) fn lower(
-        &self,
-        b: &mut FunctionBuilder,
-        cl_ctx: &mut ClauseLowerCtx,
-    ) {
+    pub(in super::super) fn lower(&self, b: &mut FunctionBuilder, cl_ctx: &mut ClauseLowerCtx) {
         let mut node_map = BTreeMap::new();
 
         for root in self.roots.iter() {
@@ -40,7 +32,9 @@ impl Tree {
         }
 
         for (node, constraints) in self.constraints.iter() {
-            if constraints.len() == 0 { continue; }
+            if constraints.len() == 0 {
+                continue;
+            }
             let pat_node = node_map[&node];
 
             let new_bind_idx = cl_ctx.binds.len();
@@ -62,7 +56,9 @@ impl Tree {
                     }
                     ConstraintKind::Node(node) => {
                         let bind_idx = node_binds_map[node];
-                        cl_ctx.eq_guards.push(EqGuard::EqBind(new_bind_idx, bind_idx));
+                        cl_ctx
+                            .eq_guards
+                            .push(EqGuard::EqBind(new_bind_idx, bind_idx));
                     }
                 }
             }
@@ -70,11 +66,14 @@ impl Tree {
     }
 
     pub fn pseudo_binds(&self) -> Vec<Ident> {
-        self.resolved_binds.as_ref().unwrap().keys().cloned().collect()
+        self.resolved_binds
+            .as_ref()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect()
     }
-
 }
-
 
 fn create_nodes(
     b: &mut FunctionBuilder,
@@ -84,13 +83,14 @@ fn create_nodes(
 ) {
     assert!(!map.contains_key(&node));
 
-    let p_node = b.pat_mut().node_empty();
+    let span = t.node_span(node);
+    let p_node = b.pat_mut().node_empty(Some(span));
     map.insert(node, p_node);
 
     match &t.nodes[node] {
         TreeNodeKind::Atomic(_, _) => (),
         TreeNodeKind::Value(_, _) => (),
-        TreeNodeKind::Wildcard => (),
+        TreeNodeKind::Wildcard(_) => (),
         TreeNodeKind::Tuple { elems, .. } => {
             for elem in elems.as_slice(&t.node_pool) {
                 create_nodes(b, t, map, *elem);
@@ -111,7 +111,6 @@ fn create_nodes(
         }
         _ => unreachable!(),
     }
-
 }
 
 fn lower_tree_node(
@@ -120,8 +119,7 @@ fn lower_tree_node(
     map: &BTreeMap<TreeNode, PatternNode>,
     t: &Tree,
     node: TreeNode,
-) -> PatternNode
-{
+) -> PatternNode {
     let p_node = map[&node];
 
     match &t.nodes[node] {
@@ -135,10 +133,8 @@ fn lower_tree_node(
             b.pat_mut().value(p_node, cl_val);
             b.pat_mut().node_set_span(p_node, *span);
         }
-        TreeNodeKind::Value(_, Either::Right(_node)) => {
-            unimplemented!()
-        }
-        TreeNodeKind::Wildcard => {
+        TreeNodeKind::Value(_, Either::Right(_node)) => unimplemented!(),
+        TreeNodeKind::Wildcard(_) => {
             b.pat_mut().wildcard(p_node);
         }
         TreeNodeKind::Tuple { span, elems } => {
@@ -156,7 +152,14 @@ fn lower_tree_node(
             b.pat_mut().list(p_node, head_n, tail_n);
             b.pat_mut().node_set_span(p_node, *span);
         }
-        TreeNodeKind::Binary { span, specifier, size_resolved, value, tail, .. } => {
+        TreeNodeKind::Binary {
+            span,
+            specifier,
+            size_resolved,
+            value,
+            tail,
+            ..
+        } => {
             let size = size_resolved.map(|s| match s {
                 Either::Left(node) => {
                     let pat_node = map[&node];
@@ -167,7 +170,8 @@ fn lower_tree_node(
 
             let value_n = lower_tree_node(b, cl_ctx, map, t, *value);
             let tail_n = lower_tree_node(b, cl_ctx, map, t, *tail);
-            b.pat_mut().binary(p_node, *specifier, value_n, size, tail_n);
+            b.pat_mut()
+                .binary(p_node, *specifier, value_n, size, tail_n);
             b.pat_mut().node_set_span(p_node, *span);
         }
         TreeNodeKind::Map { span, entries } => {

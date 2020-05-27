@@ -1,10 +1,10 @@
-use std::marker::PhantomData;
-use std::ops::{ Not, BitAnd, BitOr };
-use std::cmp::{ Ord };
-use std::hash::Hash;
+use std::cmp::Ord;
 use std::fmt::Debug;
+use std::hash::Hash;
+use std::marker::PhantomData;
+use std::ops::{BitAnd, BitOr, Not};
 
-use num_traits::{ CheckedShl, CheckedShr };
+use num_traits::{CheckedShl, CheckedShr};
 
 mod impls;
 
@@ -15,13 +15,13 @@ mod bitvec;
 pub use self::bitvec::BitVec;
 
 mod integer;
-pub use self::integer::{ Endian, carrier_to_integer, integer_to_carrier };
+pub use self::integer::{carrier_to_integer, integer_to_carrier, Endian};
 
 /// A primitive data type that can be used to store bits.
 /// Must be sized, copyable, and implement a set of
 /// elemental operations.
-pub trait BitTransport
-    : Sized
+pub trait BitTransport:
+    Sized
     + Ord
     + Copy
     + Not<Output = Self>
@@ -67,11 +67,9 @@ pub trait BitCarrier {
             rem
         }
     }
-
 }
 
 pub trait BitRead: BitCarrier {
-
     /// Reads the nth word from the data type.
     /// The last word may be padded with arbitrary bits at the
     /// least significant digit side.
@@ -87,11 +85,18 @@ pub trait BitRead: BitCarrier {
         (word & (Self::T::ONE << offset)) != Self::T::ZERO
     }
 
-    fn read<P>(&self, to: &mut P) where Self: Sized, P: BitWrite<T = Self::T> {
+    fn read<P>(&self, to: &mut P)
+    where
+        Self: Sized,
+        P: BitWrite<T = Self::T>,
+    {
         to.write(self)
     }
 
-    fn iter_words(&self) -> CarrierWordIter<Self, Self::T> where Self: Sized {
+    fn iter_words(&self) -> CarrierWordIter<Self, Self::T>
+    where
+        Self: Sized,
+    {
         CarrierWordIter {
             inner: self,
             _transport: PhantomData,
@@ -99,11 +104,9 @@ pub trait BitRead: BitCarrier {
             rem: self.bit_len() + 8,
         }
     }
-
 }
 
 pub trait BitWrite: BitCarrier {
-
     /// Sets the masked bits of element n to data.
     /// Writes outside of the container with a non zero mask
     /// not allowed.
@@ -111,21 +114,24 @@ pub trait BitWrite: BitCarrier {
 
     /// Writes one bit carrier into another bit carrier of the
     /// same length.
-    fn write<P>(&mut self, from: P) where P: BitRead<T = Self::T> {
+    fn write<P>(&mut self, from: P)
+    where
+        P: BitRead<T = Self::T>,
+    {
         assert!(self.bit_len() == from.bit_len());
 
         let mut len = self.bit_len() as isize;
         for n in 0..self.word_len() {
             let num_bits = std::cmp::min(len as usize, Self::T::BIT_SIZE) as u32;
-            let mask = !((!Self::T::ZERO).checked_shr(num_bits)
-                         .unwrap_or(Self::T::ZERO));
+            let mask = !((!Self::T::ZERO)
+                .checked_shr(num_bits)
+                .unwrap_or(Self::T::ZERO));
 
             let read = from.read_word(n);
             self.write_word(n, read, mask);
             len -= Self::T::BIT_SIZE as isize;
         }
     }
-
 }
 
 pub fn copy<S, D, T>(from: S, mut to: D)
@@ -150,7 +156,7 @@ where
 impl<'a, I, T> Iterator for CarrierWordIter<'a, I, T>
 where
     I: BitRead<T = T>,
-    T: BitTransport
+    T: BitTransport,
 {
     type Item = T;
     fn next(&mut self) -> Option<T> {

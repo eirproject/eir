@@ -1,10 +1,10 @@
 use libeir_intern::Symbol;
 
-use crate::vm::VMState;
 use crate::module::{NativeModule, NativeReturn};
 use crate::process::ProcessContext;
+use crate::vm::VMState;
 
-use crate::term::{Term, MapTerm};
+use crate::term::{MapTerm, Term};
 
 use std::rc::Rc;
 

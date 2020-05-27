@@ -13,35 +13,30 @@ pub trait Print {
 }
 
 impl<R, E> ParseResult<R, E> {
-
     pub fn unwrap(self) -> R {
         match self {
             ParseResult::Fail(_err) => {
                 panic!();
-            },
-            ParseResult::Warn(_err, res) => {
-                res
-            },
-            ParseResult::Ok(res) => {
-                res
-            },
+            }
+            ParseResult::Warn(_err, res) => res,
+            ParseResult::Ok(res) => res,
         }
     }
 
-    pub fn unwrap_print(self) -> R where E: Print {
+    pub fn unwrap_print(self) -> R
+    where
+        E: Print,
+    {
         match self {
             ParseResult::Fail(err) => {
                 err.print();
                 panic!();
-            },
+            }
             ParseResult::Warn(err, res) => {
                 err.print();
                 res
-            },
-            ParseResult::Ok(res) => {
-                res
-            },
+            }
+            ParseResult::Ok(res) => res,
         }
     }
-
 }

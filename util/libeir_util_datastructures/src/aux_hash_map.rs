@@ -1,15 +1,15 @@
-use std::collections::hash_map::RandomState;
-use std::hash::{Hasher, BuildHasher};
-use std::marker::PhantomData;
 use std::borrow::Borrow;
+use std::collections::hash_map::RandomState;
 use std::fmt::Debug;
+use std::hash::{BuildHasher, Hasher};
+use std::marker::PhantomData;
 
-use crate::aux_traits::{AuxHash, AuxEq};
+use crate::aux_traits::{AuxEq, AuxHash};
 
 //use cranelift_entity::{ListPool, EntityList, EntityRef};
 //use cranelift_entity::packed_option::ReservedValue;
 
-use hashbrown::raw::{RawTable, RawIter, Global, AllocRef};
+use hashbrown::raw::{AllocRef, Global, RawIter, RawTable};
 
 //impl<C, T> AuxHash<C> for T where T: Hash {
 //    fn aux_hash<H: Hasher>(&self, state: &mut H, _container: &C) {
@@ -45,23 +45,23 @@ use hashbrown::raw::{RawTable, RawIter, Global, AllocRef};
 /// Implementation of a HashMap where the hash/equality functions
 /// requires additional information.
 #[derive(Clone)]
-pub struct AuxHashMap<K, V, C, S = RandomState, A = Global> where A: Clone + AllocRef {
+pub struct AuxHashMap<K, V, C, S = RandomState, A = Global>
+where
+    A: Clone + AllocRef,
+{
     hash_builder: S,
     table: RawTable<(K, V), A>,
     aux: PhantomData<C>,
 }
 
 impl<K, V, C> AuxHashMap<K, V, C, RandomState> {
-
     #[inline]
     pub fn new() -> Self {
         Self::default()
     }
-
 }
 
 impl<K, V, C, S> AuxHashMap<K, V, C, S> {
-
     #[inline]
     pub fn with_hasher(hash_builder: S) -> Self {
         Self {
@@ -80,11 +80,14 @@ impl<K, V, C, S> AuxHashMap<K, V, C, S> {
             }
         }
     }
-
 }
 
 #[inline]
-fn make_hash<C, K: AuxHash<C> + ?Sized>(hash_builder: &impl BuildHasher, container: &C, val: &K) -> u64 {
+fn make_hash<C, K: AuxHash<C> + ?Sized>(
+    hash_builder: &impl BuildHasher,
+    container: &C,
+    val: &K,
+) -> u64 {
     let mut state = hash_builder.build_hasher();
     val.aux_hash(&mut state, container);
     state.finish()
@@ -93,13 +96,15 @@ fn make_hash<C, K: AuxHash<C> + ?Sized>(hash_builder: &impl BuildHasher, contain
 impl<K, V, C, S> AuxHashMap<K, V, C, S>
 where
     K: AuxEq<C> + AuxHash<C>,
-    S: BuildHasher
+    S: BuildHasher,
 {
-
     #[inline]
     pub fn try_insert(&mut self, k: K, v: V, container: &C) -> Result<(), ()> {
         let hash = make_hash(&self.hash_builder, container, &k);
-        if let Some(_item) = self.table.find(hash, |x| k.aux_eq(&x.0, container, container)) {
+        if let Some(_item) = self
+            .table
+            .find(hash, |x| k.aux_eq(&x.0, container, container))
+        {
             Err(())
         } else {
             let hash_builder = &self.hash_builder;
@@ -132,12 +137,11 @@ where
                 (key, value)
             })
     }
-
 }
 
 impl<K, V, C, S> Default for AuxHashMap<K, V, C, S>
 where
-    S: BuildHasher + Default
+    S: BuildHasher + Default,
 {
     #[inline]
     fn default() -> Self {
@@ -212,5 +216,4 @@ mod tests {
     //    assert!(map.get(&Key(2), &aux) == Some(&2));
 
     //}
-
 }

@@ -23,7 +23,7 @@ impl FunctionPass for ValidatePass {
     fn run_function_pass(&mut self, b: &mut FunctionBuilder) {
         self.err_buf.clear();
         b.fun().validate(&mut self.err_buf);
-        
+
         for err in self.err_buf.iter() {
             error!("Validation pass error: {:?}", err);
         }

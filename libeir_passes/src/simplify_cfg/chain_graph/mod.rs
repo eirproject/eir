@@ -2,14 +2,14 @@ use log::trace;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use libeir_ir::{Value, Block, PrimOp};
-use cranelift_entity::{PrimaryMap, entity_impl};
-use libeir_util_datastructures::pooled_entity_set::{EntitySetPool, EntitySet};
+use cranelift_entity::{entity_impl, PrimaryMap};
+use libeir_ir::{Block, PrimOp, Value};
+use libeir_util_datastructures::pooled_entity_set::{EntitySet, EntitySetPool};
 
-use libeir_util_dot_graph::{GraphPrinter, DisplayNid, PrefixedNid, NodeId};
+use libeir_util_dot_graph::{DisplayNid, GraphPrinter, NodeId, PrefixedNid};
 
-use crate::util::Walker;
 use super::analyze::PhiSource;
+use crate::util::Walker;
 
 pub mod synthesis;
 
@@ -112,11 +112,10 @@ pub struct ChainData {
 
 /// Public API
 impl ChainGraph {
-
     pub fn new(target_block: Block) -> Self {
         ChainGraph {
             target_block,
-           
+
             active_nodes: BTreeSet::new(),
 
             values: BTreeMap::new(),
@@ -136,7 +135,6 @@ impl ChainGraph {
             node_pool: EntitySetPool::new(),
         }
     }
-
 
     pub fn propagate_alias(&self, mut node: Node) -> Node {
         loop {
@@ -247,7 +245,7 @@ impl ChainGraph {
         match &mut self.nodes[node] {
             NodeKind::Phi(phi) => {
                 phi.entries.insert(chain, dep);
-            },
+            }
             _ => panic!(),
         }
     }
@@ -287,10 +285,10 @@ impl ChainGraph {
         match &mut self.nodes[node] {
             NodeKind::Prim(prim) => {
                 prim.dependencies.insert(value, dep);
-            },
+            }
             NodeKind::BlockCapture(cap) => {
                 cap.dependencies.insert(value, dep);
-            },
+            }
             _ => panic!(),
         }
     }
@@ -299,28 +297,30 @@ impl ChainGraph {
         let mut g = GraphPrinter::new();
 
         for (node, node_data) in self.nodes.iter() {
-            if !self.active_nodes.contains(&node) { continue; }
+            if !self.active_nodes.contains(&node) {
+                continue;
+            }
 
             g.node(node, &format!("{}: {:#?}", node, node_data));
 
             match node_data {
-                NodeKind::Scope(_) => {},
-                NodeKind::EntryArg(_) => {},
+                NodeKind::Scope(_) => {}
+                NodeKind::EntryArg(_) => {}
                 NodeKind::Phi(phi) => {
                     for (block, from_node) in phi.entries.iter() {
                         g.edge(node, *from_node, &format!("{:#?}", (block, from_node)));
                     }
-                },
+                }
                 NodeKind::Prim(prim) => {
                     for (dep_value, dep_node) in prim.dependencies.iter() {
                         g.edge(node, *dep_node, &format!("{:#?}", (dep_value, dep_node)));
                     }
-                },
+                }
                 NodeKind::BlockCapture(cap) => {
                     for (dep_value, dep_node) in cap.dependencies.iter() {
                         g.edge(node, *dep_node, &format!("{:#?}", (dep_value, dep_node)));
                     }
-                },
+                }
             }
         }
 
@@ -338,10 +338,18 @@ impl ChainGraph {
                     g.node(DisplayNid(*block), &format!("{}", block));
                 }
             }
-            for (from, to) in chain_data.blocks.iter().zip(chain_data.blocks.iter().skip(1)) {
+            for (from, to) in chain_data
+                .blocks
+                .iter()
+                .zip(chain_data.blocks.iter().skip(1))
+            {
                 g.edge(DisplayNid(from), DisplayNid(to), "");
             }
-            g.edge(DisplayNid(chain), DisplayNid(chain_data.blocks[0]), &format!("{:?}", chain_data.args));
+            g.edge(
+                DisplayNid(chain),
+                DisplayNid(chain_data.blocks[0]),
+                &format!("{:?}", chain_data.args),
+            );
         }
 
         g.finish_run_dot(out);
@@ -372,7 +380,7 @@ impl ChainGraph {
             match &self.nodes[node] {
                 NodeKind::Phi(phi) => {
                     node = phi.entries[&chain];
-                },
+                }
                 _ => break,
             }
         }
@@ -388,7 +396,7 @@ impl ChainGraph {
                     } else {
                         return None;
                     }
-                },
+                }
                 _ => break,
             }
         }
@@ -417,12 +425,10 @@ impl ChainGraph {
         //chain_graph.remove_uniform();
         //chain_graph.reduce_phis();
     }
-
 }
 
 /// Private API
 impl ChainGraph {
-
     fn propagate_graph_aliases(&mut self) {
         let mut tmp = Vec::new();
 
@@ -442,7 +448,7 @@ impl ChainGraph {
                             *entry_node = *to;
                         }
                     }
-                },
+                }
                 NodeKind::Prim(prim) => {
                     tmp.clear();
                     tmp.extend(prim.dependencies.iter().map(|(k, v)| (*k, *v)));
@@ -455,7 +461,7 @@ impl ChainGraph {
                             prim.dependencies.insert(*dep_value, *dep_node);
                         }
                     }
-                },
+                }
                 NodeKind::BlockCapture(bc) => {
                     tmp.clear();
                     tmp.extend(bc.dependencies.iter().map(|(k, v)| (*k, *v)));
@@ -468,7 +474,7 @@ impl ChainGraph {
                             bc.dependencies.insert(*dep_value, *dep_node);
                         }
                     }
-                },
+                }
             }
         }
     }
@@ -482,11 +488,9 @@ impl ChainGraph {
         self.active_nodes.insert(node);
         node
     }
-
 }
 
 impl ChainGraph {
-
     pub fn remove_uniform(&mut self) {
         'outer: for (entry_value, entry_node) in self.entry_edges.iter() {
             let mut terminal = None;
@@ -512,9 +516,9 @@ impl ChainGraph {
                 } else {
                     terminal = Some(end);
                 }
-
             }
-            self.uniform_mappings.insert(*entry_value, terminal.unwrap());
+            self.uniform_mappings
+                .insert(*entry_value, terminal.unwrap());
         }
 
         for entry in self.uniform_mappings.keys() {
@@ -533,14 +537,13 @@ impl ChainGraph {
                             phi.entries.insert(chain, scoped_node);
                         }
                     }
-                },
+                }
                 _ => (),
             }
         }
     }
 
     pub fn reduce_phis2(&mut self) {
-
         fn collect_relevant_phis(
             graph: &ChainGraph,
             relevant: &mut BTreeSet<Node>,
@@ -554,14 +557,12 @@ impl ChainGraph {
                     }
 
                     for dep_node in phi.entries.values() {
-                        collect_relevant_phis(
-                            graph, relevant, *dep_node, false);
+                        collect_relevant_phis(graph, relevant, *dep_node, false);
                     }
                 }
                 kind => {
                     for dep_node in kind.dependencies() {
-                        collect_relevant_phis(
-                            graph, relevant, dep_node, true);
+                        collect_relevant_phis(graph, relevant, dep_node, true);
                     }
                 }
             }
@@ -601,7 +602,6 @@ impl ChainGraph {
 
         self.propagate_graph_aliases();
     }
-
 }
 
 /// Graph decycle
@@ -747,14 +747,12 @@ impl ChainGraph {
 
 /// Graph reduction
 impl ChainGraph {
-
     /// This will reduce complex chains of phis into either:
     /// * A single phi block. This is done when selection between several
     ///   incoming paths is required.
     /// * No phi blocks. This is done when there is only one value selected
     ///   reducing the phis.
     pub fn reduce_phis(&mut self) {
-
         #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         pub struct Group(u32);
         entity_impl!(Group, "group");
@@ -802,8 +800,7 @@ impl ChainGraph {
                             let s_group = phi_groups[group].clone();
 
                             // Union into `other_group`
-                            phi_groups[other_group].union(
-                                &s_group, &mut node_pool);
+                            phi_groups[other_group].union(&s_group, &mut node_pool);
 
                             // Update back mappings for all entries in `group`
                             for s_node in s_group.iter(&node_pool) {
@@ -829,7 +826,6 @@ impl ChainGraph {
 
             let group_set = &phi_groups[*group];
             for node in group_set.iter(&node_pool) {
-
                 match &self.nodes[node] {
                     NodeKind::Phi(phi) => {
                         // For each entry in the phi..
@@ -840,7 +836,7 @@ impl ChainGraph {
                                 final_entries.push((*block, *block_node));
                             }
                         }
-                    },
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -853,21 +849,16 @@ impl ChainGraph {
             assert!(final_entries.len() > 0);
             let first_node = final_entries[0].1;
             if final_entries.iter().all(|(_b, n)| *n == first_node) {
-
                 new_target = first_node;
-
             } else {
-
                 // The new phi node that encompasses the entire group
                 let new_phi = self.insert_anon_phi();
 
                 // Add entries to new phi
                 for (chain, from_node) in final_entries.iter() {
-
                     // If the from node is not a phi itself, then it's always
                     // from outside the group.
                     if !self.nodes[*from_node].is_phi() {
-
                         //self.phi_add_entry(new_phi, *entry_block, *block_node);
                         match &mut self.nodes[new_phi] {
                             NodeKind::Phi(phi) => {
@@ -875,15 +866,13 @@ impl ChainGraph {
                                 // than once.
                                 assert!(!phi.entries.contains_key(chain));
                                 phi.entries.insert(*chain, *from_node);
-                            },
+                            }
                             _ => panic!(),
                         }
-
                     }
                 }
 
                 new_target = new_phi;
-
             }
 
             for node in group_set.iter(&node_pool) {
@@ -892,16 +881,11 @@ impl ChainGraph {
                 self.aliases.insert(node, new_target);
                 self.active_nodes.remove(&node);
             }
-
         }
-
 
         // Propagate all aliases, this will update the graph with our changes.
         self.propagate_graph_aliases();
-
-
     }
-
 }
 
 #[derive(Debug)]
@@ -965,7 +949,6 @@ impl NodeKind {
     }
 
     pub fn dependencies<'a>(&'a self) -> impl Iterator<Item = Node> + 'a {
-
         enum EIter<T, A, B, C>
         where
             A: Iterator<Item = T>,
@@ -1002,7 +985,6 @@ impl NodeKind {
             NodeKind::EntryArg(_) => EIter::None,
         }
     }
-
 }
 
 /// A value on the entry point on a chain.

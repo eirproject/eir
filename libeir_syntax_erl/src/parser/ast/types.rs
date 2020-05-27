@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use lazy_static::lazy_static;
 
-use libeir_diagnostics::ByteSpan;
+use libeir_diagnostics::SourceSpan;
 use libeir_util_number::Integer;
 
 use super::{BinaryOp, UnaryOp};
@@ -62,61 +62,61 @@ lazy_static! {
 pub enum Type {
     Name(Name),
     Annotated {
-        span: ByteSpan,
+        span: SourceSpan,
         name: Name,
         ty: Box<Type>,
     },
     Union {
-        span: ByteSpan,
+        span: SourceSpan,
         types: Vec<Type>,
     },
     Range {
-        span: ByteSpan,
+        span: SourceSpan,
         start: Box<Type>,
         end: Box<Type>,
     },
     BinaryOp {
-        span: ByteSpan,
+        span: SourceSpan,
         lhs: Box<Type>,
         op: BinaryOp,
         rhs: Box<Type>,
     },
     UnaryOp {
-        span: ByteSpan,
+        span: SourceSpan,
         op: UnaryOp,
         rhs: Box<Type>,
     },
     Generic {
-        span: ByteSpan,
+        span: SourceSpan,
         fun: Ident,
         params: Vec<Type>,
     },
     Remote {
-        span: ByteSpan,
+        span: SourceSpan,
         module: Ident,
         fun: Ident,
         args: Vec<Type>,
     },
-    Nil(ByteSpan),
-    List(ByteSpan, Box<Type>),
-    NonEmptyList(ByteSpan, Box<Type>),
-    Map(ByteSpan, Vec<Type>),
-    Tuple(ByteSpan, Vec<Type>),
-    Record(ByteSpan, Ident, Vec<Type>),
-    Binary(ByteSpan, Box<Type>, Box<Type>),
-    Integer(ByteSpan, Integer),
-    Char(ByteSpan, char),
-    AnyFun(ByteSpan),
+    Nil(SourceSpan),
+    List(SourceSpan, Box<Type>),
+    NonEmptyList(SourceSpan, Box<Type>),
+    Map(SourceSpan, Vec<Type>),
+    Tuple(SourceSpan, Vec<Type>),
+    Record(SourceSpan, Ident, Vec<Type>),
+    Binary(SourceSpan, Box<Type>, Box<Type>),
+    Integer(SourceSpan, Integer),
+    Char(SourceSpan, char),
+    AnyFun(SourceSpan),
     Fun {
-        span: ByteSpan,
+        span: SourceSpan,
         params: Vec<Type>,
         ret: Box<Type>,
     },
-    KeyValuePair(ByteSpan, Box<Type>, Box<Type>),
-    Field(ByteSpan, Ident, Box<Type>),
+    KeyValuePair(SourceSpan, Box<Type>, Box<Type>),
+    Field(SourceSpan, Ident, Box<Type>),
 }
 impl Type {
-    pub fn union(span: ByteSpan, lhs: Type, rhs: Type) -> Self {
+    pub fn union(span: SourceSpan, lhs: Type, rhs: Type) -> Self {
         let mut types = match lhs {
             Type::Union { types, .. } => types,
             ty => vec![ty],
@@ -259,7 +259,9 @@ impl PartialEq for Type {
             (Type::Record(_, ref x1, ref x2), Type::Record(_, ref y1, ref y2)) => {
                 (x1 == y1) && (x2 == y2)
             }
-            (Type::Binary(_, ref m1, ref n1), Type::Binary(_, ref m2, ref n2)) => (m1 == m2) && (n1 == n2),
+            (Type::Binary(_, ref m1, ref n1), Type::Binary(_, ref m2, ref n2)) => {
+                (m1 == m2) && (n1 == n2)
+            }
             (Type::Integer(_, x), Type::Integer(_, y)) => x == y,
             (Type::Char(_, x), Type::Char(_, y)) => x == y,
             (Type::AnyFun(_), Type::AnyFun(_)) => true,

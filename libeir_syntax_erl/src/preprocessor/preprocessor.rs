@@ -1,52 +1,48 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::convert::TryFrom;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
-
-use termcolor::ColorChoice;
+use std::sync::Arc;
 
 use snafu::ResultExt;
 
-use libeir_diagnostics::{ByteIndex, ByteSpan, CodeMap, Diagnostic, Label};
-use libeir_diagnostics::{Emitter, StandardStreamEmitter};
-use libeir_util_parse::{Source, ErrorReceiver, ErrorReceiverTee};
+use libeir_diagnostics::*;
+use libeir_util_parse::{ErrorReceiver, ErrorReceiverTee, Source};
 
-use crate::lexer::{symbols, IdentToken, Lexed, LexicalToken, Symbol, Token,
-                   DelayedSubstitution};
 use crate::lexer::Lexer;
-use crate::parser::ParseConfig;
+use crate::lexer::{symbols, DelayedSubstitution, IdentToken, Lexed, LexicalToken, Symbol, Token};
+use crate::parser::Parser;
 
+use super::errors;
 use super::macros::Stringify;
 use super::token_reader::{TokenBufferReader, TokenReader, TokenStreamReader};
-use super::{Directive, MacroContainer, MacroIdent, MacroCall, MacroDef};
+use super::{Directive, MacroCall, MacroContainer, MacroDef, MacroIdent};
 use super::{Preprocessed, PreprocessorError, Result as PResult};
-use super::errors;
 
 type Errors<'a> = ErrorReceiverTee<'a, PreprocessorError, PreprocessorError>;
 
 macro_rules! error_into {
-	($errors:expr, $result:expr) => {
-		match $result {
+    ($errors:expr, $result:expr) => {
+        match $result {
             Ok(inner) => Ok(inner),
             Err(error) => {
                 $errors.error(error.into());
                 Err(())
-            },
+            }
         }
-	};
+    };
 }
 
 pub struct Preprocessor<'a, Reader: TokenReader> {
     errors: Errors<'a>,
-    codemap: Arc<RwLock<CodeMap>>,
+    codemap: Arc<CodeMap>,
     reader: Reader,
     can_directive_start: bool,
-    directives: BTreeMap<ByteIndex, Directive>,
+    directives: BTreeMap<SourceIndex, Directive>,
     code_paths: VecDeque<PathBuf>,
     include_paths: VecDeque<PathBuf>,
     branches: Vec<Branch>,
     macros: MacroContainer,
-    macro_calls: BTreeMap<ByteIndex, MacroCall>,
+    macro_calls: BTreeMap<SourceIndex, MacroCall>,
     expanded_tokens: VecDeque<LexicalToken>,
     warnings_as_errors: bool,
     no_warn: bool,
@@ -55,12 +51,12 @@ impl<'a, S> Preprocessor<'a, TokenStreamReader<S>>
 where
     S: Source,
 {
-    pub fn new(config: &ParseConfig, codemap: Arc<RwLock<CodeMap>>, tokens: Lexer<S>, errors: Errors<'a>) -> Self {
-        let reader = TokenStreamReader::new(codemap.clone(), tokens);
-        let code_paths = config.code_paths.clone();
-        let include_paths = config.include_paths.clone();
+    pub fn new(parser: &Parser, tokens: Lexer<S>, errors: Errors<'a>) -> Self {
+        let reader = TokenStreamReader::new(parser.codemap.clone(), tokens);
+        let code_paths = parser.config.code_paths.clone();
+        let include_paths = parser.config.include_paths.clone();
 
-        let mut macros = match config.macros {
+        let mut macros = match parser.config.macros {
             None => MacroContainer::new(),
             Some(ref macros) => macros.clone(),
         };
@@ -75,7 +71,7 @@ where
 
         Preprocessor {
             errors,
-            codemap,
+            codemap: parser.codemap.clone(),
             reader,
             can_directive_start: true,
             directives: BTreeMap::new(),
@@ -85,8 +81,8 @@ where
             macros,
             macro_calls: BTreeMap::new(),
             expanded_tokens: VecDeque::new(),
-            warnings_as_errors: config.warnings_as_errors,
-            no_warn: config.no_warn,
+            warnings_as_errors: parser.config.warnings_as_errors,
+            no_warn: parser.config.no_warn,
         }
     }
 }
@@ -141,7 +137,9 @@ where
                 }
             }
             if !self.ignore() {
-                if let Some(m) = error_into!(self.errors, self.reader.try_read_macro_call(&self.macros))? {
+                if let Some(m) =
+                    error_into!(self.errors, self.reader.try_read_macro_call(&self.macros))?
+                {
                     self.macro_calls.insert(m.span().start(), m.clone());
                     self.expanded_tokens = error_into!(self.errors, self.expand_macro(m))?;
                     continue;
@@ -176,35 +174,22 @@ where
         let expanded = match call.name().as_str().get() {
             "FILE" => {
                 let span = call.span();
+                let source_id = span.source_id();
                 let current = span.start();
-                let filename = {
-                    self.codemap
-                        .read()
-                        .unwrap()
-                        .find_file(current)
-                        .unwrap()
-                        .name()
-                        .clone()
-                };
+                let file = self.codemap.get(source_id).unwrap();
+                let filename = file.name().to_string();
                 LexicalToken(
                     current,
-                    Token::String(Symbol::intern(&filename.to_string())),
+                    Token::String(Symbol::intern(&filename)),
                     span.end(),
                 )
             }
             "LINE" => {
                 let span = call.span();
+                let source_id = span.source_id();
                 let current = span.start();
-                let line = {
-                    self.codemap
-                        .read()
-                        .unwrap()
-                        .find_file(current)
-                        .unwrap()
-                        .find_line(current)
-                        .unwrap()
-                };
-                let line = line.to_usize() as i64;
+                let file = self.codemap.get(source_id).unwrap();
+                let line = file.line_index(current.index()).to_usize() as i64;
                 LexicalToken(current, Token::Integer(line.into()), span.end())
             }
             "MACHINE" => {
@@ -225,15 +210,15 @@ where
         match *definition {
             MacroDef::Dynamic(ref replacement) => Ok(replacement.clone().into()),
             MacroDef::String(ref s) => Ok(vec![LexicalToken(
-                ByteIndex(0),
+                SourceIndex::UNKNOWN,
                 Token::String(s.clone()),
-                ByteIndex(0),
+                SourceIndex::UNKNOWN,
             )]
             .into()),
             MacroDef::Boolean(true) => Ok(vec![LexicalToken(
-                ByteIndex(0),
+                SourceIndex::UNKNOWN,
                 Token::Atom(symbols::True),
-                ByteIndex(0),
+                SourceIndex::UNKNOWN,
             )]
             .into()),
             MacroDef::Boolean(false) => Ok(VecDeque::new()),
@@ -265,13 +250,12 @@ where
                 let expanded = self.expand_replacement(bindings, &def.replacement)?;
                 Ok(expanded)
             }
-            MacroDef::DelayedSubstitution(subst) => Ok(vec![
-                LexicalToken(
-                    call.span().start(),
-                    Token::DelayedSubstitution(subst),
-                    call.span().end(),
-                ),
-            ].into()),
+            MacroDef::DelayedSubstitution(subst) => Ok(vec![LexicalToken(
+                call.span().start(),
+                Token::DelayedSubstitution(subst),
+                call.span().end(),
+            )]
+            .into()),
         }
     }
 
@@ -292,7 +276,9 @@ where
                 }
             } else if let Some(stringify) = reader.try_read::<Stringify>()? {
                 let tokens = match bindings.get(&stringify.name.symbol()) {
-                    None => return Err(PreprocessorError::UndefinedStringifyMacro { call: stringify }),
+                    None => {
+                        return Err(PreprocessorError::UndefinedStringifyMacro { call: stringify })
+                    }
                     Some(tokens) => tokens,
                 };
                 let string = tokens.iter().map(|t| t.to_string()).collect::<String>();
@@ -322,35 +308,42 @@ where
     }
 
     fn try_read_directive(&mut self) -> Result<Option<Directive>, ()> {
-        let directive: Directive = if let Some(directive) = error_into!(self.errors, self.reader.try_read())? {
-            directive
-        } else {
-            return Ok(None);
-        };
+        let directive: Directive =
+            if let Some(directive) = error_into!(self.errors, self.reader.try_read())? {
+                directive
+            } else {
+                return Ok(None);
+            };
 
         let ignore = self.ignore();
         match directive {
             Directive::Module(ref d) => {
-                self.macros
-                    .insert(MacroIdent::Const(symbols::ModuleCapital),
-                            MacroDef::String(d.name.symbol()));
-                self.macros
-                    .insert(MacroIdent::Const(symbols::ModuleStringCapital),
-                            MacroDef::String(d.name.symbol()));
+                self.macros.insert(
+                    MacroIdent::Const(symbols::ModuleCapital),
+                    MacroDef::String(d.name.symbol()),
+                );
+                self.macros.insert(
+                    MacroIdent::Const(symbols::ModuleStringCapital),
+                    MacroDef::String(d.name.symbol()),
+                );
             }
             Directive::Include(ref d) if !ignore => {
-                let path = error_into!(self.errors, d.include(&self.include_paths)
-                    .context(errors::BadDirective))?;
+                let path = error_into!(
+                    self.errors,
+                    d.include(&self.include_paths).context(errors::BadDirective)
+                )?;
                 error_into!(self.errors, self.reader.inject_include(path))?;
             }
             Directive::IncludeLib(ref d) if !ignore => {
-                let path = error_into!(self.errors, d.include_lib(&self.code_paths)
-                    .context(errors::BadDirective))?;
+                let path = error_into!(
+                    self.errors,
+                    d.include_lib(&self.code_paths)
+                        .context(errors::BadDirective)
+                )?;
                 error_into!(self.errors, self.reader.inject_include(path))?;
             }
             Directive::Define(ref d) if !ignore => {
-                self.macros
-                    .insert(d, MacroDef::Static(d.clone()));
+                self.macros.insert(d, MacroDef::Static(d.clone()));
             }
             Directive::Undef(ref d) if !ignore => {
                 self.macros.undef(&d.name());
@@ -368,10 +361,20 @@ where
                 self.branches.push(Branch::new(entered));
             }
             Directive::Else(_) => match self.branches.last_mut() {
-                None => return error_into!(self.errors, Err(PreprocessorError::OrphanedElse { directive })),
+                None => {
+                    return error_into!(
+                        self.errors,
+                        Err(PreprocessorError::OrphanedElse { directive })
+                    )
+                }
                 Some(branch) => {
                     match branch.switch_to_else_branch() {
-                        Err(_) => return error_into!(self.errors, Err(PreprocessorError::OrphanedElse { directive })),
+                        Err(_) => {
+                            return error_into!(
+                                self.errors,
+                                Err(PreprocessorError::OrphanedElse { directive })
+                            )
+                        }
                         Ok(_) => (),
                     };
                 }
@@ -379,7 +382,12 @@ where
             Directive::Elif(ref d) => {
                 // Treat this like -endif followed by -if(Cond)
                 match self.branches.pop() {
-                    None => return error_into!(self.errors, Err(PreprocessorError::OrphanedElse { directive })),
+                    None => {
+                        return error_into!(
+                            self.errors,
+                            Err(PreprocessorError::OrphanedElse { directive })
+                        )
+                    }
                     Some(_) => {
                         let entered = self.eval_conditional(d.span(), d.condition.clone())?;
                         self.branches.push(Branch::new(entered));
@@ -387,13 +395,24 @@ where
                 }
             }
             Directive::Endif(_) => match self.branches.pop() {
-                None => return error_into!(self.errors, Err(PreprocessorError::OrphanedEnd { directive })),
+                None => {
+                    return error_into!(
+                        self.errors,
+                        Err(PreprocessorError::OrphanedEnd { directive })
+                    )
+                }
                 Some(_) => (),
             },
             Directive::Error(ref d) if !ignore => {
                 let span = d.span();
                 let err = d.message.symbol().as_str().get().to_string();
-                return error_into!(self.errors, Err(PreprocessorError::CompilerError { span: Some(span), reason: err }));
+                return error_into!(
+                    self.errors,
+                    Err(PreprocessorError::CompilerError {
+                        span: Some(span),
+                        reason: err
+                    })
+                );
             }
             Directive::Warning(ref d) if !ignore => {
                 if self.no_warn {
@@ -402,15 +421,22 @@ where
                 if self.warnings_as_errors {
                     let span = d.span();
                     let err = d.message.symbol().as_str().get().to_string();
-                    return error_into!(self.errors, Err(PreprocessorError::CompilerError { span: Some(span), reason: err }));
+                    return error_into!(
+                        self.errors,
+                        Err(PreprocessorError::CompilerError {
+                            span: Some(span),
+                            reason: err
+                        })
+                    );
                 }
                 let span = d.span();
                 let warn = d.message.symbol().as_str().get();
-                let diag = Diagnostic::new_warning("found warning directive")
-                    .with_label(Label::new_primary(span).with_message(warn));
-                let emitter =
-                    StandardStreamEmitter::new(ColorChoice::Auto).set_codemap(self.codemap.clone());
-                emitter.diagnostic(&diag).unwrap();
+                let diag = Diagnostic::warning()
+                    .with_message("found warning directive")
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), span).with_message(warn)
+                    ]);
+                self.warning_diagnostic(diag);
             }
             Directive::File(ref f) if !ignore => {
                 // TODO
@@ -421,12 +447,20 @@ where
         Ok(Some(directive))
     }
 
+    fn warning_diagnostic(&self, diagnostic: Diagnostic) {
+        use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+        use codespan_reporting::term::*;
+
+        let config = Config::default();
+        let mut out = StandardStream::stderr(ColorChoice::Always);
+        term::emit(&mut out, &config, &*self.codemap, &diagnostic).unwrap();
+    }
+
     fn eval_conditional(
         &mut self,
-        span: ByteSpan,
-        condition: VecDeque<Lexed>
-    ) -> Result<bool, ()>
-    {
+        span: SourceSpan,
+        condition: VecDeque<Lexed>,
+    ) -> Result<bool, ()> {
         use crate::lexer::Ident;
         use crate::parser::ast::{Expr, Literal};
         use crate::parser::Parse;
@@ -451,10 +485,14 @@ where
             Expr::parse_tokens(&mut adapter, pp)
         };
         match evaluator::eval(result?) {
-            Ok(Expr::Literal(Literal::Atom(_, Ident { ref name, .. }))) if *name == symbols::True => {
+            Ok(Expr::Literal(Literal::Atom(_, Ident { ref name, .. })))
+                if *name == symbols::True =>
+            {
                 Ok(true)
             }
-            Ok(Expr::Literal(Literal::Atom(_, Ident { ref name, .. }))) if *name == symbols::False => {
+            Ok(Expr::Literal(Literal::Atom(_, Ident { ref name, .. })))
+                if *name == symbols::False =>
+            {
                 Ok(false)
             }
             Err(err) => {
@@ -462,9 +500,10 @@ where
                 return Err(());
             }
             _other => {
-                self.errors.error(PreprocessorError::InvalidConditional { span }.into());
+                self.errors
+                    .error(PreprocessorError::InvalidConditional { span }.into());
                 return Err(());
-            },
+            }
         }
     }
 }
@@ -496,9 +535,9 @@ impl Branch {
             entered,
         }
     }
-    pub fn switch_to_else_branch(&mut self) -> PResult<()> {
+    pub fn switch_to_else_branch(&mut self) -> Result<(), ()> {
         if !self.then_branch {
-            return Err(PreprocessorError::OrphanedBranchElse);
+            return Err(());
         }
         self.then_branch = false;
         self.entered = !self.entered;

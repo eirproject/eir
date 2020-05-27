@@ -27,12 +27,12 @@
 
 use std::any::TypeId;
 
-use meta_table::{MetaEntry, impl_meta_entry};
+use meta_table::{impl_meta_entry, MetaEntry};
 
-use crate::{Function, FunctionBuilder, Block, Value};
+use super::{DynOp, Op, OpBuild};
 use crate::dialect::Dialect;
 use crate::traits::OpBranches;
-use super::{Op, DynOp, OpBuild};
+use crate::{Block, Function, FunctionBuilder, Value};
 
 pub struct ReceiveToken(());
 
@@ -83,7 +83,6 @@ impl OpBranches for ReceiveStart {
 }
 
 impl ReceiveStart {
-
     pub fn build(builder: &mut FunctionBuilder, block: Block, timeout: Value) -> Block {
         let target = builder.block_insert();
         let _arg = builder.block_arg_insert(target);
@@ -91,11 +90,20 @@ impl ReceiveStart {
         target
     }
 
-    pub fn build_target(builder: &mut FunctionBuilder, block: Block, timeout: Value, target: Block) {
+    pub fn build_target(
+        builder: &mut FunctionBuilder,
+        block: Block,
+        timeout: Value,
+        target: Block,
+    ) {
         let target_val = builder.value(target);
-        builder.op_intrinsic(block, ReceiveStart, &[target_val, timeout], ReceiveToken(()));
+        builder.op_intrinsic(
+            block,
+            ReceiveStart,
+            &[target_val, timeout],
+            ReceiveToken(()),
+        );
     }
-
 }
 impl OpBuild for ReceiveStart {
     type Token = ReceiveToken;
@@ -152,7 +160,6 @@ impl OpBranches for ReceiveWait {
 }
 
 impl ReceiveWait {
-
     pub fn build(builder: &mut FunctionBuilder, block: Block, recv_ref: Value) -> (Block, Block) {
         let timeout = builder.block_insert();
 
@@ -164,12 +171,22 @@ impl ReceiveWait {
         (timeout, check_message)
     }
 
-    pub fn build_target(builder: &mut FunctionBuilder, block: Block, recv_ref: Value, timeout: Block, check_message: Block) {
+    pub fn build_target(
+        builder: &mut FunctionBuilder,
+        block: Block,
+        recv_ref: Value,
+        timeout: Block,
+        check_message: Block,
+    ) {
         let timeout_val = builder.value(timeout);
         let check_message_val = builder.value(check_message);
-        builder.op_intrinsic(block, ReceiveWait, &[timeout_val, check_message_val, recv_ref], ReceiveToken(()));
+        builder.op_intrinsic(
+            block,
+            ReceiveWait,
+            &[timeout_val, check_message_val, recv_ref],
+            ReceiveToken(()),
+        );
     }
-
 }
 impl OpBuild for ReceiveWait {
     type Token = ReceiveToken;
@@ -226,8 +243,12 @@ impl OpBranches for ReceiveDone {
 }
 
 impl ReceiveDone {
-
-    pub fn build(builder: &mut FunctionBuilder, block: Block, recv_ref: Value, values: &[Value]) -> Block {
+    pub fn build(
+        builder: &mut FunctionBuilder,
+        block: Block,
+        recv_ref: Value,
+        values: &[Value],
+    ) -> Block {
         let next = builder.block_insert();
         for _ in values.iter() {
             builder.block_arg_insert(next);
@@ -238,7 +259,13 @@ impl ReceiveDone {
         next
     }
 
-    pub fn build_target(builder: &mut FunctionBuilder, block: Block, recv_ref: Value, values: &[Value], next: Block) {
+    pub fn build_target(
+        builder: &mut FunctionBuilder,
+        block: Block,
+        recv_ref: Value,
+        values: &[Value],
+        next: Block,
+    ) {
         let next_val = builder.value(next);
 
         let mut tmp = Vec::with_capacity(values.len() + 1);
@@ -248,7 +275,6 @@ impl ReceiveDone {
 
         builder.op_intrinsic(block, ReceiveDone, &tmp, ReceiveToken(()));
     }
-
 }
 impl OpBuild for ReceiveDone {
     type Token = ReceiveToken;

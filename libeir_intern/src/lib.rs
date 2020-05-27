@@ -11,7 +11,7 @@ extern crate test;
 pub mod arena;
 
 pub mod symbol;
-pub use symbol::{ Ident, Symbol, InternedString, LocalInternedString };
+pub use symbol::{Ident, InternedString, LocalInternedString, Symbol};
 
 #[cfg(test)]
 mod tests {

@@ -3,15 +3,15 @@
 
 mod abstr;
 mod lexer;
+mod lower;
 mod parser;
 mod preprocessor;
-mod lower;
 
+pub use self::abstr::lower as lower_abstr;
 pub use self::lexer::*;
+pub use self::lower::{lower_module, LowerError};
 pub use self::parser::*;
 pub use self::preprocessor::*;
-pub use self::lower::{lower_module, LowerError};
-pub use self::abstr::lower as lower_abstr;
 
 pub enum ErlangError {
     Parser(ParserError),
@@ -27,7 +27,7 @@ impl From<LowerError> for ErlangError {
         ErlangError::Lower(e)
     }
 }
-impl libeir_util_parse::ToDiagnostic for ErlangError {
+impl libeir_diagnostics::ToDiagnostic for ErlangError {
     fn to_diagnostic(&self) -> libeir_diagnostics::Diagnostic {
         match self {
             ErlangError::Parser(err) => err.to_diagnostic(),

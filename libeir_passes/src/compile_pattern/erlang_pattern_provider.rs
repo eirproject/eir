@@ -1,13 +1,13 @@
-use cranelift_entity::{ PrimaryMap, EntityList, ListPool, entity_impl };
-use libeir_util_pattern_compiler::{ PatternProvider, ExpandedClauseNodes };
+use cranelift_entity::{entity_impl, EntityList, ListPool, PrimaryMap};
+use libeir_util_pattern_compiler::{ExpandedClauseNodes, PatternProvider};
 
 use hashbrown::HashMap;
 use std::collections::BTreeMap;
 
-use libeir_ir::{ Function, FunctionBuilder, Value, ValueKind, PrimOp };
+use libeir_ir::constant::Const;
+use libeir_ir::pattern::{PatternClause, PatternNode, PatternNodeKind, PatternValue};
 use libeir_ir::BinaryEntrySpecifier;
-use libeir_ir::pattern::{ PatternClause, PatternNode, PatternNodeKind, PatternValue };
-use libeir_ir::constant::{ Const };
+use libeir_ir::{Function, FunctionBuilder, PrimOp, Value, ValueKind};
 
 use super::ValueBind;
 
@@ -22,17 +22,11 @@ impl ValueOrConst {
     fn from_value(val_bind: ValueBind, b: &FunctionBuilder) -> Self {
         match val_bind {
             ValueBind::Value(val) => match b.fun().value_kind(val) {
-                ValueKind::Const(cons) => {
-                    ValueOrConst::Const(cons)
-                }
-                ValueKind::Argument(_, _) => {
-                    ValueOrConst::Value(val)
-                }
-                ValueKind::PrimOp(prim) => {
-                    ValueOrConst::PrimOp(prim)
-                }
+                ValueKind::Const(cons) => ValueOrConst::Const(cons),
+                ValueKind::Argument(_, _) => ValueOrConst::Value(val),
+                ValueKind::PrimOp(prim) => ValueOrConst::PrimOp(prim),
                 kind => panic!("{:?}", kind),
-            }
+            },
             ValueBind::Node(node) => ValueOrConst::Node(node),
         }
     }
@@ -68,7 +62,6 @@ pub enum NodeKind {
 }
 
 impl NodeKind {
-
     pub fn num_children(self) -> usize {
         match self {
             NodeKind::Value(_) => 0,
@@ -81,7 +74,6 @@ impl NodeKind {
             NodeKind::Binary { .. } => 2,
         }
     }
-
 }
 
 #[derive(Debug, Clone)]
@@ -118,7 +110,6 @@ pub struct Var(u32);
 entity_impl!(Var, "var");
 
 impl<'a> ErlangPatternProvider<'a> {
-
     pub fn new() -> Self {
         let mut nodes = PrimaryMap::new();
         let wildcard = nodes.push(NodeData {
@@ -146,8 +137,7 @@ impl<'a> ErlangPatternProvider<'a> {
         }
     }
 
-    pub fn add_child(&mut self, node: Node, kind: NodeKind,
-                     pat_node: PatternNode) -> Node {
+    pub fn add_child(&mut self, node: Node, kind: NodeKind, pat_node: PatternNode) -> Node {
         let next = self.nodes.push(NodeData {
             kind: kind,
             children: EntityList::new(),
@@ -173,11 +163,9 @@ impl<'a> ErlangPatternProvider<'a> {
     pub fn pattern_node_to_cfg_node(&self, pat: PatternNode) -> Node {
         *self.node_map.get(&pat).unwrap()
     }
-
 }
 
 impl<'a> PatternProvider for ErlangPatternProvider<'a> {
-
     type PatternNodeKey = Node;
     type PatternNodeKind = NodeKind;
     type CfgVariable = Var;
@@ -194,7 +182,9 @@ impl<'a> PatternProvider for ErlangPatternProvider<'a> {
 
     fn kind_includes(&self, kind: NodeKind, key: Node) -> bool {
         let node_kind = self.nodes[key].kind;
-        if node_kind == kind { return true; }
+        if node_kind == kind {
+            return true;
+        }
 
         //match (kind, node_kind) {
         //    (NodeKind::Value(l), NodeKind::Value(r)) =>
@@ -212,9 +202,11 @@ impl<'a> PatternProvider for ErlangPatternProvider<'a> {
         self.wildcard
     }
 
-    fn expand_clause_nodes(&mut self, clause_nodes: Vec<Node>, kind: NodeKind)
-                           -> ExpandedClauseNodes<Var, Node> {
-
+    fn expand_clause_nodes(
+        &mut self,
+        clause_nodes: Vec<Node>,
+        kind: NodeKind,
+    ) -> ExpandedClauseNodes<Var, Node> {
         if clause_nodes.len() == 0 {
             return ExpandedClauseNodes {
                 clauses: 0,
@@ -297,7 +289,8 @@ impl<'a> PatternProvider for ErlangPatternProvider<'a> {
                 let value_map = self.vars.push(());
                 let mut exp = ExpandedClauseNodes {
                     clauses: clause_nodes.len(),
-                    variables: values.values()
+                    variables: values
+                        .values()
                         .flat_map(|num| 0..*num)
                         .map(|_| value_map)
                         .collect(),
@@ -326,8 +319,7 @@ impl<'a> PatternProvider for ErlangPatternProvider<'a> {
                     clauses: clause_nodes.len(),
                     variables: {
                         let vars = &mut self.vars;
-                        (0..expected_children)
-                            .map(|_| vars.push(())).collect()
+                        (0..expected_children).map(|_| vars.push(())).collect()
                     },
                     nodes: vec![],
                 };
@@ -345,9 +337,7 @@ impl<'a> PatternProvider for ErlangPatternProvider<'a> {
                 exp
             }
         }
-
     }
-
 }
 
 fn pattern_node_to_provider(
@@ -358,16 +348,12 @@ fn pattern_node_to_provider(
     node: PatternNode,
     parent: Node,
     n: usize,
-) -> Node
-{
-
+) -> Node {
     // Cheap and safe since we don't modify any patterns
     let kind = b.pat().node_kind(node).clone();
 
     match &kind {
-        PatternNodeKind::Wildcard => {
-            provider.add_child(parent, NodeKind::Wildcard, node)
-        }
+        PatternNodeKind::Wildcard => provider.add_child(parent, NodeKind::Wildcard, node),
         PatternNodeKind::Tuple(entries) => {
             let tuple = provider.add_child(
                 parent,
@@ -376,17 +362,14 @@ fn pattern_node_to_provider(
             );
             for entry_num in 0..(entries.len(&b.pat().node_pool)) {
                 let entry = entries.get(entry_num, &b.pat().node_pool).unwrap();
-                pattern_node_to_provider(b, value_map,
-                                         provider, entry, tuple, n+1);
+                pattern_node_to_provider(b, value_map, provider, entry, tuple, n + 1);
             }
             tuple
         }
-        PatternNodeKind::List{ head, tail } => {
+        PatternNodeKind::List { head, tail } => {
             let node = provider.add_child(parent, NodeKind::ListCell, node);
-            pattern_node_to_provider(b, value_map,
-                                     provider, *head, node, n+1);
-            pattern_node_to_provider(b, value_map,
-                                     provider, *tail, node, n+1);
+            pattern_node_to_provider(b, value_map, provider, *head, node, n + 1);
+            pattern_node_to_provider(b, value_map, provider, *tail, node, n + 1);
             node
         }
         PatternNodeKind::Map { keys, values } => {
@@ -414,11 +397,9 @@ fn pattern_node_to_provider(
             // match compilation.
             for (key, values) in dedup.iter() {
                 for value in values {
-                    let entry_parent = provider.add_child(
-                        map_parent, NodeKind::MapItem(*key), node);
-                    pattern_node_to_provider(
-                        b, value_map,
-                        provider, *value, entry_parent, n+1);
+                    let entry_parent =
+                        provider.add_child(map_parent, NodeKind::MapItem(*key), node);
+                    pattern_node_to_provider(b, value_map, provider, *value, entry_parent, n + 1);
                 }
             }
 
@@ -433,19 +414,25 @@ fn pattern_node_to_provider(
             let val_or_const = ValueOrConst::from_value(val, b);
             provider.add_child(parent, NodeKind::Value(val_or_const), node)
         }
-        PatternNodeKind::Binary { specifier, value, size, remaining } => {
-            let size_val = size.map(
-                |v| ValueOrConst::from_value(value_map[&v], b));
+        PatternNodeKind::Binary {
+            specifier,
+            value,
+            size,
+            remaining,
+        } => {
+            let size_val = size.map(|v| ValueOrConst::from_value(value_map[&v], b));
 
-            let binary_entry = provider.add_child(parent, NodeKind::Binary {
-                specifier: *specifier,
-                size: size_val,
-            }, node);
+            let binary_entry = provider.add_child(
+                parent,
+                NodeKind::Binary {
+                    specifier: *specifier,
+                    size: size_val,
+                },
+                node,
+            );
 
-            pattern_node_to_provider(b, value_map,
-                                     provider, *value, binary_entry, n+1);
-            pattern_node_to_provider(b, value_map,
-                                     provider, *remaining, binary_entry, n+1);
+            pattern_node_to_provider(b, value_map, provider, *value, binary_entry, n + 1);
+            pattern_node_to_provider(b, value_map, provider, *remaining, binary_entry, n + 1);
 
             binary_entry
         }
@@ -453,11 +440,11 @@ fn pattern_node_to_provider(
 }
 
 pub(super) fn pattern_to_provider<'a>(
-    b: &mut FunctionBuilder, clauses: &[PatternClause],
+    b: &mut FunctionBuilder,
+    clauses: &[PatternClause],
     //node_map: &mut HashMap<PatternNode, Node>,
     value_map: &HashMap<PatternValue, ValueBind>,
-) -> ErlangPatternProvider<'a>
-{
+) -> ErlangPatternProvider<'a> {
     let mut provider = ErlangPatternProvider::new();
     let mut roots = Vec::new();
     for clause in clauses {
@@ -466,18 +453,8 @@ pub(super) fn pattern_to_provider<'a>(
 
         for value_num in 0..b.pat().clause_root_nodes(*clause).len() {
             let value = b.pat().clause_root_nodes(*clause)[value_num];
-            pattern_node_to_provider(b, value_map,
-                                     &mut provider, value, node, 0);
+            pattern_node_to_provider(b, value_map, &mut provider, value, node, 0);
         }
     }
     provider
 }
-
-
-
-
-
-
-
-
-

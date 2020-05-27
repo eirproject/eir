@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
-use std::hash::{ Hash, Hasher };
+use std::hash::{Hash, Hasher};
 
-use super::{ BitCarrier, BitRead, BitWrite };
 use super::BitSlice;
+use super::{BitCarrier, BitRead, BitWrite};
 
 #[derive(Debug, Clone)]
 pub struct BitVec {
@@ -11,7 +11,6 @@ pub struct BitVec {
 }
 
 impl BitVec {
-
     pub fn new() -> Self {
         BitVec {
             buf: vec![],
@@ -48,9 +47,12 @@ impl BitVec {
         self.buf.get(n).cloned()
     }
 
-    pub fn push<R>(&mut self, from: R) where R: BitRead<T = u8> {
+    pub fn push<R>(&mut self, from: R)
+    where
+        R: BitRead<T = u8>,
+    {
         let needed = from.bit_len();
-        let availible = self.buf.len()*8 - self.bit_size;
+        let availible = self.buf.len() * 8 - self.bit_size;
 
         if needed > availible {
             let needed_bytes = ((needed - availible) + 7) / 8;
@@ -59,19 +61,27 @@ impl BitVec {
             }
         }
 
-        let mut slice = BitSlice::<&mut [u8]>::with_offset_length(
-            &mut self.buf[..], self.bit_size, needed);
+        let mut slice =
+            BitSlice::<&mut [u8]>::with_offset_length(&mut self.buf[..], self.bit_size, needed);
         slice.write(from);
 
         self.bit_size += needed;
     }
-    pub fn pop<R>(&mut self, to: &mut R) -> Option<()> where R: BitWrite<T = u8> {
+    pub fn pop<R>(&mut self, to: &mut R) -> Option<()>
+    where
+        R: BitWrite<T = u8>,
+    {
         let to_size = to.bit_len();
         let self_size = self.bit_size;
-        if self_size < to_size { return None; }
+        if self_size < to_size {
+            return None;
+        }
 
         let slice = BitSlice::<&mut [u8]>::with_offset_length(
-            &mut self.buf[..], self.bit_size - to_size, to_size);
+            &mut self.buf[..],
+            self.bit_size - to_size,
+            to_size,
+        );
         to.write(&slice);
 
         let unneeded = to_size / 8;
@@ -81,7 +91,7 @@ impl BitVec {
 
         self.bit_size -= to_size;
 
-        debug_assert!(self.bit_size <= self.buf.len()*8);
+        debug_assert!(self.bit_size <= self.buf.len() * 8);
 
         Some(())
     }
@@ -93,7 +103,6 @@ impl BitVec {
             rem: self.bit_size + 8,
         }
     }
-
 }
 
 impl Default for BitVec {
@@ -179,7 +188,9 @@ impl BitRead for BitVec {
 }
 impl BitWrite for BitVec {
     fn write_word(&mut self, n: usize, data: u8, mask: u8) {
-        self.buf.get_mut(n).map(|d| *d = (*d & !mask) | (data & mask));
+        self.buf
+            .get_mut(n)
+            .map(|d| *d = (*d & !mask) | (data & mask));
     }
 }
 
@@ -189,7 +200,9 @@ where
     O: BitRead<T = u8>,
 {
     fn eq(&self, other: &O) -> bool {
-        if self.bit_len() != other.bit_len() { return false; }
+        if self.bit_len() != other.bit_len() {
+            return false;
+        }
         self.iter_words().eq(other.iter_words())
     }
 }
@@ -213,7 +226,10 @@ impl Ord for BitVec {
 }
 
 impl Hash for BitVec {
-    fn hash<H>(&self, state: &mut H) where H: Hasher {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
         self.bit_len().hash(state);
         for elem in self.iter_words() {
             elem.hash(state);
@@ -260,7 +276,5 @@ mod test {
         let mut ret: u32 = 0;
         vec.pop(&mut ret);
         assert!(ret == 0b10000000_00000000_00000000_00000000);
-
     }
-
 }

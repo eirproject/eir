@@ -1,5 +1,5 @@
+use crate::{Block, Function, Value};
 use meta_table::impl_cast_from;
-use crate::{Function, Block, Value};
 
 /// When an operation implements this trait, it has knowledge about some/all of
 /// its outgoing control flow branches.

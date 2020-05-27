@@ -2,12 +2,12 @@ use std::hash::{Hash, Hasher};
 
 use libeir_util_datastructures::dedup_aux_primary_map::DedupPrimaryMap;
 use libeir_util_datastructures::{
+    aux_traits::{AuxEq, AuxHash},
     dedup_aux_primary_map::DedupAuxPrimaryMap,
-    aux_traits::{AuxHash, AuxEq},
 };
 
-use libeir_diagnostics::{CodeMap, ByteSpan, DUMMY_SPAN};
-use cranelift_entity::{EntityList, ListPool, entity_impl};
+use cranelift_entity::{entity_impl, EntityList, ListPool};
+use libeir_diagnostics::{CodeMap, SourceSpan};
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Location(u32);
@@ -31,7 +31,7 @@ struct LocationTerminalData {
     /// meant to be preserved when reading/writing
     /// to textual Eir, this span is meant to be the
     /// direct file it was read from.
-    span: ByteSpan,
+    span: SourceSpan,
 }
 
 impl AuxHash<()> for LocationTerminalData {
@@ -55,9 +55,13 @@ impl AuxHash<ListPool<LocationTerminal>> for LocationData {
     }
 }
 impl AuxEq<ListPool<LocationTerminal>> for LocationData {
-    fn aux_eq(&self, other: &Self, self_aux: &ListPool<LocationTerminal>, other_aux: &ListPool<LocationTerminal>) -> bool {
-        self.terminals.as_slice(self_aux)
-            == other.terminals.as_slice(other_aux)
+    fn aux_eq(
+        &self,
+        other: &Self,
+        self_aux: &ListPool<LocationTerminal>,
+        other_aux: &ListPool<LocationTerminal>,
+    ) -> bool {
+        self.terminals.as_slice(self_aux) == other.terminals.as_slice(other_aux)
     }
 }
 
@@ -70,7 +74,6 @@ pub struct LocationContainer {
 }
 
 impl LocationContainer {
-
     pub fn new() -> Self {
         let locations = DedupAuxPrimaryMap::new();
         let terminals = DedupPrimaryMap::new();
@@ -83,8 +86,9 @@ impl LocationContainer {
         }
     }
 
-    pub fn lookup(&self, location: &Location) -> Vec<ByteSpan> {
-        let terminals = self.locations[*location].terminals
+    pub fn lookup(&self, location: &Location) -> Vec<SourceSpan> {
+        let terminals = self.locations[*location]
+            .terminals
             .as_slice(&self.terminal_pool);
         let mut locs = Vec::with_capacity(terminals.len());
         for terminal in terminals.iter().cloned() {
@@ -95,25 +99,34 @@ impl LocationContainer {
     }
 
     pub fn location_empty(&mut self) -> Location {
-        self.locations.push(LocationData {
-            terminals: EntityList::new(),
-        }, &mut self.terminal_pool)
+        self.locations.push(
+            LocationData {
+                terminals: EntityList::new(),
+            },
+            &mut self.terminal_pool,
+        )
     }
 
     pub fn location_unknown(&mut self) -> Location {
-        let terminal = self.terminals.push(LocationTerminalData {
-            file: None,
-            line: None,
-            names: None,
-            span: DUMMY_SPAN,
-        }, &mut ());
+        let terminal = self.terminals.push(
+            LocationTerminalData {
+                file: None,
+                line: None,
+                names: None,
+                span: SourceSpan::UNKNOWN,
+            },
+            &mut (),
+        );
 
         let mut terminals = EntityList::new();
         terminals.push(terminal, &mut self.terminal_pool);
 
-        self.locations.push(LocationData {
-            terminals: EntityList::new(),
-        }, &mut self.terminal_pool)
+        self.locations.push(
+            LocationData {
+                terminals: EntityList::new(),
+            },
+            &mut self.terminal_pool,
+        )
     }
 
     pub fn location(
@@ -121,33 +134,39 @@ impl LocationContainer {
         file: Option<String>,
         line: Option<u32>,
         names: Option<(String, String)>,
-        span: ByteSpan,
+        span: SourceSpan,
     ) -> Location {
-        let terminal = self.terminals.push(LocationTerminalData {
-            file,
-            line,
-            names,
-            span,
-        }, &mut ());
+        let terminal = self.terminals.push(
+            LocationTerminalData {
+                file,
+                line,
+                names,
+                span,
+            },
+            &mut (),
+        );
 
         let mut terminals = EntityList::new();
         terminals.push(terminal, &mut self.terminal_pool);
 
-        self.locations.push(LocationData {
-            terminals,
-        }, &mut self.terminal_pool)
+        self.locations
+            .push(LocationData { terminals }, &mut self.terminal_pool)
     }
 
-    pub fn from_bytespan(&mut self, codemap: &CodeMap, span: ByteSpan, names: Option<(String, String)>) -> Location {
+    pub fn from_bytespan(
+        &mut self,
+        codemap: &CodeMap,
+        span: SourceSpan,
+        names: Option<(String, String)>,
+    ) -> Location {
         let mut file = None;
         let mut line = None;
 
-        let start_idx = span.start();
-        if let Some(filemap) = codemap.find_file(start_idx) {
+        let start_idx = span.start_index();
+        if let Some(filemap) = codemap.get(span.source_id()) {
             file = Some(filemap.name().to_string());
-            if let Ok(line_idx) = filemap.find_line(start_idx) {
-                line = Some(line_idx.0);
-            }
+            let line_idx = filemap.line_index(start_idx);
+            line = Some(line_idx.0);
         }
 
         self.location(file, line, names, span)
@@ -156,24 +175,28 @@ impl LocationContainer {
     pub fn concat_locations(&mut self, bottom: Location, top: Location) -> Location {
         let mut terminals = Vec::new();
         terminals.extend(
-            self.locations[bottom].terminals
+            self.locations[bottom]
+                .terminals
                 .as_slice(&self.terminal_pool)
                 .iter()
-                .cloned()
+                .cloned(),
         );
         terminals.extend(
-            self.locations[top].terminals
+            self.locations[top]
+                .terminals
                 .as_slice(&self.terminal_pool)
                 .iter()
-                .cloned()
+                .cloned(),
         );
 
         let mut new_terminals = EntityList::new();
         new_terminals.extend(terminals.iter().cloned(), &mut self.terminal_pool);
 
-        self.locations.push(LocationData {
-            terminals: new_terminals,
-        }, &mut self.terminal_pool)
+        self.locations.push(
+            LocationData {
+                terminals: new_terminals,
+            },
+            &mut self.terminal_pool,
+        )
     }
-
 }

@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
-use crate::term::{ Term, ErlEq };
-use crate::process::{ ProcessContext };
+use crate::module::{NativeModule, NativeReturn};
+use crate::process::ProcessContext;
+use crate::term::{ErlEq, Term};
 use crate::vm::VMState;
-use crate::module::{ NativeModule, NativeReturn };
 
 use libeir_intern::Symbol;
 
@@ -34,7 +34,9 @@ fn reverse_2(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> Na
     assert!(tail.erl_eq(&Term::Nil));
 
     head.reverse();
-    NativeReturn::Return { term: Term::slice_to_list(&head, args[1].clone()) }
+    NativeReturn::Return {
+        term: Term::slice_to_list(&head, args[1].clone()),
+    }
 }
 
 fn reverse_1(vm: &VMState, proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {

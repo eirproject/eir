@@ -1,23 +1,23 @@
 use crate::lower;
 
-use libeir_ir::{ FunctionIdent };
-use libeir_syntax_erl::{ ParseConfig };
 use libeir_intern::Ident;
+use libeir_ir::FunctionIdent;
 use libeir_passes::PassManager;
+use libeir_syntax_erl::ParseConfig;
 
-use libeir_interpreter::{ VMState, Term };
+use libeir_interpreter::{Term, VMState};
 
 #[test]
 fn test_fib() {
-
     let mut eir_mod = lower(
         "-module(fib).
 
 fib(X) when X < 2 -> 1;
 fib(X) -> fib(X - 1) + fib(X-2).
 ",
-        ParseConfig::default()
-    ).unwrap();
+        ParseConfig::default(),
+    )
+    .unwrap();
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
@@ -53,5 +53,4 @@ fib(X) -> fib(X - 1) + fib(X-2).
     assert!(call_fib(6).unwrap().as_i64().unwrap() == rust_fib(6));
     assert!(call_fib(7).unwrap().as_i64().unwrap() == rust_fib(7));
     assert!(call_fib(8).unwrap().as_i64().unwrap() == rust_fib(8));
-
 }

@@ -6,11 +6,13 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-termcolor = "0.3"
 anyhow = "1.0"
 thiserror = "1.0"
 itertools = "0.8"
 unicode-width = "0.1"
+codespan = "0.9"
+codespan-reporting = "0.9"
+dashmap = "3.11"
 
 [dev-dependencies]
 pretty_assertions = "0.5"

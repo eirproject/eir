@@ -1,16 +1,12 @@
-use std::collections::{ HashMap, HashSet };
+use std::collections::{HashMap, HashSet};
 
 use libeir_util_datastructures::hashmap_stack::HashMapStack;
 
-use libeir_ir::{
-    Value as IrValue,
-    Block as IrBlock,
-    FunctionBuilder,
-};
+use libeir_ir::{Block as IrBlock, FunctionBuilder, Value as IrValue};
 
-use libeir_intern::{ Ident };
+use libeir_intern::Ident;
 
-use super::{ LowerError, LowerCtx };
+use super::{LowerCtx, LowerError};
 
 pub fn is_wildcard(ident: Ident) -> bool {
     ident.name.as_str() == "_"
@@ -29,7 +25,6 @@ pub struct ScopeTracker {
 }
 
 impl ScopeTracker {
-
     pub fn new() -> Self {
         ScopeTracker {
             stack: HashMapStack::new(),
@@ -83,7 +78,10 @@ impl ScopeTracker {
             Ok(())
         } else {
             if let Some(prev_val) = self.stack.get(&ident) {
-                Err(LowerError::AlreadyBound { new: ident.span, old: prev_val.0.span })
+                Err(LowerError::AlreadyBound {
+                    new: ident.span,
+                    old: prev_val.0.span,
+                })
             } else {
                 self.stack.insert(ident, (ident, val));
                 Ok(())
@@ -97,7 +95,9 @@ impl ScopeTracker {
         } else {
             let ret = if let Some(prev_val) = self.stack.get(&ident) {
                 Err(LowerError::ShadowingBind {
-                    new: ident.span, old: prev_val.0.span })
+                    new: ident.span,
+                    old: prev_val.0.span,
+                })
             } else {
                 Ok(())
             };
@@ -109,7 +109,6 @@ impl ScopeTracker {
     pub fn height(&self) -> usize {
         self.stack.height()
     }
-
 }
 
 #[derive(Debug)]
@@ -129,15 +128,13 @@ pub(super) struct ScopeMerge {
 }
 
 impl ScopeMerge {
-
     pub fn new() -> Self {
         ScopeMerge {
             branches: Vec::new(),
         }
     }
 
-    pub fn branch(&mut self, cont: IrBlock, ret: IrValue,
-                  binds: HashMap<Ident, IrValue>) {
+    pub fn branch(&mut self, cont: IrBlock, ret: IrValue, binds: HashMap<Ident, IrValue>) {
         self.branches.push(Branch {
             cont_block: cont,
             ret,
@@ -145,17 +142,15 @@ impl ScopeMerge {
         });
     }
 
-    pub fn finish(&mut self, ctx: &mut LowerCtx,
-                  b: &mut FunctionBuilder) -> (IrBlock, IrValue) {
-
+    pub fn finish(&mut self, ctx: &mut LowerCtx, b: &mut FunctionBuilder) -> (IrBlock, IrValue) {
         // Find all bindings that are common to all branches
         let common_vars = if self.branches.len() > 0 {
-            let mut common_set: HashSet<_> =
-                self.branches[0].binds.keys()
-                .cloned().collect();
-            common_set.retain(
-                |ident| self.branches.iter().all(
-                    |res| res.binds.contains_key(ident)));
+            let mut common_set: HashSet<_> = self.branches[0].binds.keys().cloned().collect();
+            common_set.retain(|ident| {
+                self.branches
+                    .iter()
+                    .all(|res| res.binds.contains_key(ident))
+            });
             common_set.drain().collect()
         } else {
             Vec::new()
@@ -184,5 +179,4 @@ impl ScopeMerge {
 
         (join_block, ret)
     }
-
 }

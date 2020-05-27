@@ -1,5 +1,5 @@
 use std::{
-    any::{Any, TypeId}, 
+    any::{Any, TypeId},
     marker::PhantomData,
 };
 
@@ -241,7 +241,6 @@ impl<T: ?Sized> MetaTable<T> {
             })
         }
     }
-
 }
 
 impl<T> Default for MetaTable<T>
@@ -406,21 +405,7 @@ mod tests {
         let t2 = ImplementorD;
         let t2d: &dyn MetaEntry = &t2;
 
-        assert_eq!(
-            table
-                .get(t1d)
-                .unwrap()
-                .method1(),
-            33
-        );
-        assert_eq!(
-            table
-                .get(t2d)
-                .unwrap()
-                .method1(),
-            42
-        );
-
+        assert_eq!(table.get(t1d).unwrap().method1(), 33);
+        assert_eq!(table.get(t2d).unwrap().method1(), 42);
     }
 }
-

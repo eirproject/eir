@@ -1,6 +1,5 @@
 use crate::Function;
-use crate::{Block, Value, OpKind, CallKind};
-use crate::traits::OpBranches;
+use crate::{Block, CallKind, OpKind, Value};
 
 pub struct BranchIter<'a> {
     fun: &'a Function,
@@ -36,7 +35,6 @@ impl<'a> Iterator for BranchIter<'a> {
 /// * The block graph gives no information about the expected arity of the
 ///   destination, and has no information about what those arguments are.
 impl Function {
-
     pub fn op_branch_iter<'a>(&'a self, block: Block) -> BranchIter<'a> {
         BranchIter {
             fun: self,
@@ -47,7 +45,6 @@ impl Function {
     }
 
     pub fn op_branch_len(&self, block: Block) -> Option<usize> {
-
         let res = match self.block_kind(block)? {
             OpKind::Call(CallKind::ControlFlow) => 1,
             OpKind::Call(CallKind::Function) => 2,
@@ -59,7 +56,7 @@ impl Function {
                     4 => 3,
                     _ => unreachable!(),
                 }
-            },
+            }
             OpKind::Match { branches } => branches.len(),
             OpKind::TraceCaptureRaw => 1,
             OpKind::TraceConstruct => 1,
@@ -69,15 +66,14 @@ impl Function {
             OpKind::Dyn(dyn_op) => {
                 let op_branches = self.dialect().get_op_branches(&**dyn_op).unwrap();
                 op_branches.branches_len()
-            },
-            //OpKind::Intrinsic(name) => {
-            //    match name.as_str().get() {
-            //        "receive_start" => 1,
-            //        "receive_wait" => 2,
-            //        "receive_done" => 1,
-            //        _ => unimplemented!(),
-            //    }
-            //}
+            } //OpKind::Intrinsic(name) => {
+              //    match name.as_str().get() {
+              //        "receive_start" => 1,
+              //        "receive_wait" => 2,
+              //        "receive_done" => 1,
+              //        _ => unimplemented!(),
+              //    }
+              //}
         };
 
         Some(res)
@@ -86,7 +82,6 @@ impl Function {
     pub fn op_branch_target(&self, block: Block, n: usize) -> Value {
         let reads = self.block_reads(block);
         match (self.block_kind(block).unwrap(), reads.len(), n) {
-
             // For a control flow call, the only control flow branch
             // is the target.
             (OpKind::Call(CallKind::ControlFlow), _, 0) => reads[0],
@@ -103,9 +98,9 @@ impl Function {
             (OpKind::Case { .. }, _, n) => {
                 let n = n - 1;
                 if n % 2 == 0 {
-                    self.value_list_get_n(reads[2], n/2).unwrap()
+                    self.value_list_get_n(reads[2], n / 2).unwrap()
                 } else {
-                    self.value_list_get_n(reads[1], n/2).unwrap()
+                    self.value_list_get_n(reads[1], n / 2).unwrap()
                 }
             }
 
@@ -114,8 +109,7 @@ impl Function {
             (OpKind::UnpackValueList(_), _, 0) => reads[0],
             (OpKind::MapPut { .. }, _, n) if n < 2 => reads[n],
 
-            (OpKind::Match { .. }, _, n) =>
-                self.value_list_get_n(reads[0], n).unwrap(),
+            (OpKind::Match { .. }, _, n) => self.value_list_get_n(reads[0], n).unwrap(),
 
             (OpKind::Dyn(_dyn), _, _) => unimplemented!(),
             //(OpKind::Intrinsic(name), _, n) => {

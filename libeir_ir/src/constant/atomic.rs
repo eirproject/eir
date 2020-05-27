@@ -1,7 +1,7 @@
-use std::fmt::{ Display, Formatter, Result as FmtResult };
-use std::hash::{ Hash, Hasher };
+use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::hash::{Hash, Hasher};
 
-use libeir_util_number::{BigInt, NumCast, cast};
+use libeir_util_number::{cast, BigInt, NumCast};
 
 use libeir_intern::Symbol;
 
@@ -72,7 +72,10 @@ impl Display for IntTerm {
     }
 }
 
-fn from_num<N>(n: N) -> AtomicTerm where N: NumCast {
+fn from_num<N>(n: N) -> AtomicTerm
+where
+    N: NumCast,
+{
     if let Some(int) = cast(n) {
         AtomicTerm::Int(IntTerm(int))
     } else {
@@ -87,7 +90,7 @@ macro_rules! impl_from_num {
                 from_num(data)
             }
         }
-    }
+    };
 }
 impl_from_num!(usize);
 impl_from_num!(i32);
@@ -112,7 +115,10 @@ impl FloatTerm {
 impl Eq for FloatTerm {}
 #[allow(clippy::derive_hash_xor_eq)]
 impl Hash for FloatTerm {
-    fn hash<H>(&self, state: &mut H) where H: Hasher {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
         raw_double_bits(&self.0).hash(state)
     }
 }

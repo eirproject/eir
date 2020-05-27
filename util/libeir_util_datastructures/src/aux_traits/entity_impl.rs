@@ -1,7 +1,7 @@
-use std::fmt::{Debug, Formatter, Result as FmtResult};
-use cranelift_entity::{EntityRef, EntityList, ListPool, PrimaryMap, SecondaryMap};
+use super::{AuxDebug, AuxImpl, HasAux};
 use cranelift_entity::packed_option::ReservedValue;
-use super::{HasAux, AuxDebug, AuxImpl};
+use cranelift_entity::{EntityList, EntityRef, ListPool, PrimaryMap, SecondaryMap};
+use std::fmt::{Debug, Formatter, Result as FmtResult};
 
 impl<C: HasAux<ListPool<E>>, E: EntityRef + ReservedValue + Debug> AuxDebug<C> for EntityList<E> {
     fn aux_fmt(&self, f: &mut Formatter<'_>, aux: &C) -> FmtResult {

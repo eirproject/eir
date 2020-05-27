@@ -4,8 +4,8 @@ use crate::FunctionPass;
 
 #[test]
 fn inline_basic_function() {
-
-    let mut fun = parse_function_unwrap("
+    let mut fun = parse_function_unwrap(
+        "
 a'foo':a'fun_shadowing'/1 {
     entry(%ret, %thr, %A):
         b1();
@@ -20,13 +20,15 @@ a'foo':a'fun_shadowing'/1 {
         %thr(%rt1, %rt2, %rt3);
 
 }
-");
+",
+    );
     let mut b = fun.builder();
 
     let mut pass = super::NaiveInlineClosuresPass::new();
     pass.run_function_pass(&mut b);
 
-    let after = parse_function_unwrap("
+    let after = parse_function_unwrap(
+        "
 a'foo':a'fun_shadowing'/1 {
     entry(%ret, %thr, %A):
         b1();
@@ -37,16 +39,19 @@ a'foo':a'fun_shadowing'/1 {
     ret(%rv):
         %ret(%rv);
 }
-");
+",
+    );
 
-    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
-
+    assert!(b
+        .fun()
+        .graph_eq(b.fun().block_entry(), &after, after.block_entry())
+        .is_ok());
 }
 
 #[test]
 fn inline_nested_functions() {
-
-    let mut fun = parse_function_unwrap("
+    let mut fun = parse_function_unwrap(
+        "
 a'foo':a'fun_shadowing'/1 {
     entry(%ret, %thr, %A):
         b1();
@@ -73,7 +78,8 @@ a'foo':a'fun_shadowing'/1 {
         %thr(%rt1, %rt2, %rt3);
 
 }
-");
+",
+    );
     let mut b = fun.builder();
 
     let mut pass = super::NaiveInlineClosuresPass::new();
@@ -81,7 +87,8 @@ a'foo':a'fun_shadowing'/1 {
 
     println!("{}", b.fun().to_text(&mut StandardFormatConfig::default()));
 
-    let after = parse_function_unwrap("
+    let after = parse_function_unwrap(
+        "
 a'foo':a'fun_shadowing'/1 {
     entry(%ret, %thr, %A):
         b1();
@@ -100,8 +107,11 @@ a'foo':a'fun_shadowing'/1 {
     ret(%rv):
         %ret(%rv);
 }
-");
+",
+    );
 
-    assert!(b.fun().graph_eq(b.fun().block_entry(), &after, after.block_entry()).is_ok());
-
+    assert!(b
+        .fun()
+        .graph_eq(b.fun().block_entry(), &after, after.block_entry())
+        .is_ok());
 }

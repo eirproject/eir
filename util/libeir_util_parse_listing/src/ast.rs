@@ -1,10 +1,18 @@
-use libeir_ir::Integer;
+use libeir_diagnostics::SourceSpan;
 use libeir_intern::Ident;
-use libeir_diagnostics::ByteSpan;
+use libeir_ir::Integer;
 
 #[derive(Debug)]
 pub struct Root {
     pub items: Vec<Item>,
+}
+impl Root {
+    pub fn span(&self) -> SourceSpan {
+        self.items
+            .first()
+            .map(|i| i.span())
+            .unwrap_or(SourceSpan::UNKNOWN)
+    }
 }
 
 #[derive(Debug)]
@@ -19,7 +27,6 @@ pub enum Item {
 }
 
 impl Item {
-
     pub fn tuple(&self) -> Option<&Tuple> {
         match self {
             Item::Tuple(inner) => Some(inner),
@@ -69,7 +76,7 @@ impl Item {
         })
     }
 
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
             Item::Atom(ident) => ident.span,
             Item::String(ident) => ident.span,
@@ -79,7 +86,6 @@ impl Item {
             Item::Float(float) => float.span,
         }
     }
-
 }
 
 pub struct ListIterator<'a> {
@@ -116,24 +122,24 @@ impl<'a> Iterator for ListIterator<'a> {
 #[derive(Debug)]
 pub struct Int {
     pub integer: Integer,
-    pub span: ByteSpan,
+    pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct Float {
     pub float: f64,
-    pub span: ByteSpan,
+    pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct Tuple {
     pub entries: Vec<Item>,
-    pub span: ByteSpan,
+    pub span: SourceSpan,
 }
 
 #[derive(Debug)]
 pub struct List {
     pub heads: Vec<Item>,
     pub tail: Option<Box<Item>>,
-    pub span: ByteSpan,
+    pub span: SourceSpan,
 }

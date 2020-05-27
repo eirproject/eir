@@ -1,18 +1,18 @@
 use ::std::collections::HashMap;
+use ::std::fmt::Debug;
 use ::std::hash::Hash;
 use ::std::ops::Index;
-use ::std::fmt::Debug;
 
 pub struct HashMapStack<K, V> {
     stack: Vec<HashMap<K, V>>,
 }
 
-impl<K, V> HashMapStack<K, V> where K: Hash + Eq {
-
+impl<K, V> HashMapStack<K, V>
+where
+    K: Hash + Eq,
+{
     pub fn new() -> Self {
-        HashMapStack {
-            stack: vec![],
-        }
+        HashMapStack { stack: vec![] }
     }
 
     pub fn push(&mut self) {
@@ -32,7 +32,8 @@ impl<K, V> HashMapStack<K, V> where K: Hash + Eq {
     }
 
     pub fn insert(&mut self, key: K, value: V) {
-        self.stack.last_mut()
+        self.stack
+            .last_mut()
             .expect("attempt to insert into empty HashMapStack")
             .insert(key, value);
     }
@@ -42,11 +43,9 @@ impl<K, V> HashMapStack<K, V> where K: Hash + Eq {
     }
 
     pub fn contains_key(&self, key: &K) -> bool {
-        let resolved = self.resolve_first(|l| {
-            match l.contains_key(key) {
-                true => Some(()),
-                false => None,
-            }
+        let resolved = self.resolve_first(|l| match l.contains_key(key) {
+            true => Some(()),
+            false => None,
         });
         resolved == Some(())
     }
@@ -56,8 +55,10 @@ impl<K, V> HashMapStack<K, V> where K: Hash + Eq {
     }
 
     pub fn resolve_first<'a, F, T>(&'a self, resolver: F) -> Option<T>
-        where F: Fn(&'a HashMap<K, V>) -> Option<T>, T: 'a {
-
+    where
+        F: Fn(&'a HashMap<K, V>) -> Option<T>,
+        T: 'a,
+    {
         for level in self.stack.iter().rev() {
             if let Some(inner) = resolver(level) {
                 return Some(inner);
@@ -77,11 +78,13 @@ impl<K, V> HashMapStack<K, V> where K: Hash + Eq {
 
         out
     }
-
 }
 
-impl<K, V> HashMapStack<K, V> where K: Hash + Eq + Clone, V: Copy {
-
+impl<K, V> HashMapStack<K, V>
+where
+    K: Hash + Eq + Clone,
+    V: Copy,
+{
     pub fn flatten_clone(&self) -> HashMap<K, V> {
         let mut out = HashMap::new();
 
@@ -93,11 +96,12 @@ impl<K, V> HashMapStack<K, V> where K: Hash + Eq + Clone, V: Copy {
 
         out
     }
-
 }
 
 impl<'a, K, V> Index<&'a K> for HashMapStack<K, V>
-    where K: Eq + Hash {
+where
+    K: Eq + Hash,
+{
     type Output = V;
 
     fn index(&self, index: &K) -> &V {
@@ -105,7 +109,11 @@ impl<'a, K, V> Index<&'a K> for HashMapStack<K, V>
     }
 }
 
-impl<K, V> Debug for HashMapStack<K, V> where K: Debug + Hash + Eq, V: Debug {
+impl<K, V> Debug for HashMapStack<K, V>
+where
+    K: Debug + Hash + Eq,
+    V: Debug,
+{
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         let flat = self.flatten();
         write!(f, "{:?}", flat)
@@ -163,5 +171,4 @@ mod test {
         assert!(flat.contains_key(&0));
         assert!(flat.contains_key(&1));
     }
-
 }

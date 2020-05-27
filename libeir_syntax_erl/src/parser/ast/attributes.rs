@@ -1,9 +1,9 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use libeir_diagnostics::ByteSpan;
+use libeir_diagnostics::SourceSpan;
 
-use super::{Expr, Ident, PartiallyResolvedFunctionName, Type, Name};
+use super::{Expr, Ident, Name, PartiallyResolvedFunctionName, Type};
 
 /// Type definitions
 ///
@@ -20,7 +20,7 @@ use super::{Expr, Ident, PartiallyResolvedFunctionName, Type, Name};
 /// ```
 #[derive(Debug, Clone)]
 pub struct TypeDef {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub opaque: bool,
     pub name: Ident,
     pub params: Vec<Name>,
@@ -65,7 +65,7 @@ impl PartialEq for TypeDef {
 /// ```
 #[derive(Debug, Clone)]
 pub struct TypeSpec {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub module: Option<Ident>,
     pub function: Ident,
     pub sigs: Vec<TypeSig>,
@@ -81,7 +81,7 @@ impl PartialEq for TypeSpec {
 /// as well as provide an expected type specification for that function.
 #[derive(Debug, Clone)]
 pub struct Callback {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub optional: bool,
     pub module: Option<Ident>,
     pub function: Ident,
@@ -99,7 +99,7 @@ impl PartialEq for Callback {
 /// Contains type information for a single clause of a function type specification
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeSig {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub params: Vec<Type>,
     pub ret: Box<Type>,
     pub guards: Option<Vec<TypeGuard>>,
@@ -108,7 +108,7 @@ pub struct TypeSig {
 /// Contains a single subtype constraint to be applied to a type specification
 #[derive(Debug, Clone)]
 pub struct TypeGuard {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub var: Name,
     pub ty: Type,
 }
@@ -127,7 +127,7 @@ impl PartialEq for TypeGuard {
 /// ```
 #[derive(Debug, Clone)]
 pub struct UserAttribute {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub name: Ident,
     pub value: Expr,
 }
@@ -141,17 +141,17 @@ impl PartialEq for UserAttribute {
 #[derive(Debug, Clone)]
 pub enum Deprecation {
     Module {
-        span: ByteSpan,
+        span: SourceSpan,
         flag: DeprecatedFlag,
     },
     Function {
-        span: ByteSpan,
+        span: SourceSpan,
         function: PartiallyResolvedFunctionName,
         flag: DeprecatedFlag,
     },
 }
 impl Deprecation {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
             &Deprecation::Module { ref span, .. } => span.clone(),
             &Deprecation::Function { ref span, .. } => span.clone(),
@@ -211,14 +211,14 @@ pub enum Attribute {
     Spec(TypeSpec),
     Callback(Callback),
     Custom(UserAttribute),
-    ExportType(ByteSpan, Vec<PartiallyResolvedFunctionName>),
-    Export(ByteSpan, Vec<PartiallyResolvedFunctionName>),
-    Import(ByteSpan, Ident, Vec<PartiallyResolvedFunctionName>),
-    Compile(ByteSpan, Expr),
-    Vsn(ByteSpan, Expr),
-    Author(ByteSpan, Expr),
-    OnLoad(ByteSpan, PartiallyResolvedFunctionName),
-    Behaviour(ByteSpan, Ident),
+    ExportType(SourceSpan, Vec<PartiallyResolvedFunctionName>),
+    Export(SourceSpan, Vec<PartiallyResolvedFunctionName>),
+    Import(SourceSpan, Ident, Vec<PartiallyResolvedFunctionName>),
+    Compile(SourceSpan, Expr),
+    Vsn(SourceSpan, Expr),
+    Author(SourceSpan, Expr),
+    OnLoad(SourceSpan, PartiallyResolvedFunctionName),
+    Behaviour(SourceSpan, Ident),
     Deprecation(Vec<Deprecation>),
 }
 impl PartialEq for Attribute {

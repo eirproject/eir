@@ -1,19 +1,18 @@
 use std::collections::HashSet;
 
-use hashbrown::HashMap;
 use fnv::FnvBuildHasher;
+use hashbrown::HashMap;
 type FnvHashMap<K, V> = HashMap<K, V, FnvBuildHasher>;
 
 use petgraph::algo::dominators::Dominators;
 
-use cranelift_bforest::{SetForest, Set};
+use cranelift_bforest::{Set, SetForest};
 
-use crate::{ Function, OpKind, MatchKind, CallKind };
-use crate::{ Block, Value };
+use crate::{Block, Value};
+use crate::{CallKind, Function, MatchKind, OpKind};
 
 #[derive(Debug)]
 pub enum ValidationError {
-
     /// There was an empty block in the function, this is illegal
     EmptyBlock {
         block: Block,
@@ -45,15 +44,13 @@ pub enum ValidationError {
 
     UnfinishedBlock {
         block: Block,
-    }
-
+    },
 }
 
 fn get_value_list<'a>(fun: &'a Function, value: Value) -> Option<&'a [Value]> {
     if let Some(prim) = fun.value_primop(value) {
         match fun.primop_kind(prim) {
-            crate::PrimOpKind::ValueList =>
-                return Some(fun.primop_reads(prim)),
+            crate::PrimOpKind::ValueList => return Some(fun.primop_reads(prim)),
             _ => (),
         }
     }
@@ -61,7 +58,6 @@ fn get_value_list<'a>(fun: &'a Function, value: Value) -> Option<&'a [Value]> {
 }
 
 impl Function {
-
     pub fn validate(&self, errors: &mut Vec<ValidationError>) {
         let block_graph = self.block_graph();
         let doms = petgraph::algo::dominators::simple_fast(&block_graph, self.block_entry());
@@ -74,7 +70,13 @@ impl Function {
         self.validate_ssa_visibility(&doms, errors);
     }
 
-    fn validate_call_to(&self, errors: &mut Vec<ValidationError>, caller: Block, val: Value, arity: usize) {
+    fn validate_call_to(
+        &self,
+        errors: &mut Vec<ValidationError>,
+        caller: Block,
+        val: Value,
+        arity: usize,
+    ) {
         if let Some(block) = self.value_block(val) {
             let actual = self.block_args(block).len();
             if actual != arity {
@@ -98,21 +100,16 @@ impl Function {
         let mut dfs = block_graph.dfs();
         while let Some(block) = dfs.next(&block_graph) {
             if let Some(kind) = self.block_kind(block) {
-
                 let reads = self.block_reads(block);
 
                 match kind {
                     OpKind::Call(CallKind::ControlFlow) => {
-                        self.validate_call_to(
-                            errors, block, reads[0], reads.len() - 1);
-                    },
+                        self.validate_call_to(errors, block, reads[0], reads.len() - 1);
+                    }
                     OpKind::Call(CallKind::Function) => {
-                        self.validate_call_to(
-                            errors, block, reads[0], reads.len() - 1);
-                        self.validate_call_to(
-                            errors, block, reads[1], 1);
-                        self.validate_call_to(
-                            errors, block, reads[2], 3);
+                        self.validate_call_to(errors, block, reads[0], reads.len() - 1);
+                        self.validate_call_to(errors, block, reads[1], 1);
+                        self.validate_call_to(errors, block, reads[2], 3);
                         if reads[0] == ret_val {
                             if reads.len() != 2 {
                                 errors.push(ValidationError::ValueCallArity {
@@ -135,20 +132,16 @@ impl Function {
                         }
                     }
                     OpKind::IfBool => {
-                        self.validate_call_to(
-                            errors, block, reads[0], 0);
-                        self.validate_call_to(
-                            errors, block, reads[1], 0);
+                        self.validate_call_to(errors, block, reads[0], 0);
+                        self.validate_call_to(errors, block, reads[1], 0);
                         if reads.len() == 4 {
-                            self.validate_call_to(
-                                errors, block, reads[2], 0);
+                            self.validate_call_to(errors, block, reads[2], 0);
                         } else {
                             assert!(reads.len() == 3);
                         }
                     }
                     OpKind::UnpackValueList(n) => {
-                        self.validate_call_to(
-                            errors, block, reads[0], *n);
+                        self.validate_call_to(errors, block, reads[0], *n);
                     }
                     OpKind::Match { branches } => {
                         let targets_opt = get_value_list(self, reads[0]);
@@ -159,29 +152,23 @@ impl Function {
                         for (branch, target) in branches.iter().zip(targets.iter()) {
                             match branch {
                                 MatchKind::ListCell => {
-                                    self.validate_call_to(
-                                        errors, block, *target, 2);
-                                },
+                                    self.validate_call_to(errors, block, *target, 2);
+                                }
                                 MatchKind::MapItem => {
-                                    self.validate_call_to(
-                                        errors, block, *target, 1);
-                                },
+                                    self.validate_call_to(errors, block, *target, 1);
+                                }
                                 MatchKind::Tuple(n) => {
-                                    self.validate_call_to(
-                                        errors, block, *target, *n);
-                                },
+                                    self.validate_call_to(errors, block, *target, *n);
+                                }
                                 MatchKind::Type(_) => {
-                                    self.validate_call_to(
-                                        errors, block, *target, 0);
-                                },
+                                    self.validate_call_to(errors, block, *target, 0);
+                                }
                                 MatchKind::Value => {
-                                    self.validate_call_to(
-                                        errors, block, *target, 0);
-                                },
+                                    self.validate_call_to(errors, block, *target, 0);
+                                }
                                 MatchKind::Wildcard => {
-                                    self.validate_call_to(
-                                        errors, block, *target, 0);
-                                },
+                                    self.validate_call_to(errors, block, *target, 0);
+                                }
                                 _ => (),
                             }
                         }
@@ -191,7 +178,6 @@ impl Function {
             } else {
                 errors.push(ValidationError::EmptyBlock { block });
             }
-
         }
     }
 
@@ -204,11 +190,9 @@ impl Function {
             errors.push(ValidationError::EntryArityMismatch);
         }
     }
-
 }
 
 impl Function {
-
     /// Strictly validate SSA visibility
     ///
     /// It operates on the following principle:
@@ -231,14 +215,12 @@ impl Function {
         let mut pool = SetForest::new();
 
         // Live variables on block entry and exit
-        let mut live_variables: FnvHashMap<Block, Set<Value>>
-            = FnvHashMap::with_hasher(Default::default());
+        let mut live_variables: FnvHashMap<Block, Set<Value>> =
+            FnvHashMap::with_hasher(Default::default());
 
         // Seed entry node
         let entry_vals = Set::new();
-        self.insert_live_for_node(entry_block, entry_vals,
-                                  &mut pool,
-                                  &mut live_variables);
+        self.insert_live_for_node(entry_block, entry_vals, &mut pool, &mut live_variables);
 
         // Iterate until all calculated
         let mut missing_nodes: HashSet<_> = self.block_graph().dfs_iter().collect();
@@ -246,15 +228,12 @@ impl Function {
         let mut processed = Vec::new();
 
         while !missing_nodes.is_empty() {
-
             for node in missing_nodes.iter() {
-
-                if let Some(idom) = doms.immediate_dominator(*node){
+                if let Some(idom) = doms.immediate_dominator(*node) {
                     // If the immediate dominator is already processed, process this block.
                     if let Some(idom_live) = live_variables.get(&idom) {
                         let live = idom_live.make_copy(&mut pool);
-                        self.insert_live_for_node(*node, live, &mut pool,
-                                                  &mut live_variables);
+                        self.insert_live_for_node(*node, live, &mut pool, &mut live_variables);
                         processed.push(*node);
                     }
                 } else {
@@ -263,7 +242,6 @@ impl Function {
                     // have an idom
                     unreachable!()
                 }
-
             }
 
             // Remove processed
@@ -274,7 +252,6 @@ impl Function {
                 missing_nodes.remove(proc);
             }
             processed.clear();
-
         }
 
         // Go through all blocks and validate visibility
@@ -282,28 +259,26 @@ impl Function {
             let visible = &live_variables[&block];
             for read in self.block_reads(block) {
                 self.value_walk_nested_values::<_, ()>(*read, &mut |val| {
-                    if self.value_argument(val).is_some()
-                        && !visible.contains(val, &pool, &())
-                    {
-                        errors.push(ValidationError::InvalidRead {
-                            value: val,
-                            block,
-                        });
+                    if self.value_argument(val).is_some() && !visible.contains(val, &pool, &()) {
+                        errors.push(ValidationError::InvalidRead { value: val, block });
                     }
                     Ok(())
-                }).unwrap();
+                })
+                .unwrap();
             }
         }
-
     }
 
-    fn insert_live_for_node(&self, block: Block, mut base_set: Set<Value>,
-                            pool: &mut SetForest<Value>,
-                            live: &mut FnvHashMap<Block, Set<Value>>) {
+    fn insert_live_for_node(
+        &self,
+        block: Block,
+        mut base_set: Set<Value>,
+        pool: &mut SetForest<Value>,
+        live: &mut FnvHashMap<Block, Set<Value>>,
+    ) {
         for arg in self.block_args(block) {
             base_set.insert(*arg, pool, &());
         }
         live.insert(block, base_set);
     }
-
 }

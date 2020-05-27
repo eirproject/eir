@@ -1,4 +1,4 @@
-use serde::{ Serialize, Deserialize };
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BinOp {
@@ -20,7 +20,6 @@ pub enum BinOp {
     ExactNotEqual,
 }
 impl BinOp {
-
     pub fn symmetric(self) -> bool {
         match self {
             BinOp::Equal => true,
@@ -30,7 +29,6 @@ impl BinOp {
             _ => false,
         }
     }
-
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -43,7 +41,6 @@ pub enum LogicOp {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PrimOpKind {
-
     /// Corresponds the eir_intrinsics:type_tag.
     /// Required to be eliminated before lowering.
     /// TODO: Document returns
@@ -78,5 +75,4 @@ pub enum PrimOpKind {
     /// used instead. This will throw badarg at capture time.
     /// `(m, f, a)`
     CaptureFunction,
-
 }

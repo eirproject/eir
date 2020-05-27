@@ -1,14 +1,17 @@
-use libeir_diagnostics::{ByteIndex, ByteSpan};
+use std::convert::Into;
+use std::ops::Range;
+
+use libeir_diagnostics::*;
 
 use super::source::Source;
 
 /// An implementation of `Scanner` for general use
 pub struct Scanner<S> {
     source: S,
-    current: (ByteIndex, char),
-    pending: (ByteIndex, char),
-    start: ByteIndex,
-    end: ByteIndex,
+    current: (SourceIndex, char),
+    pending: (SourceIndex, char),
+    start: SourceIndex,
+    end: SourceIndex,
 }
 impl<S> Scanner<S>
 where
@@ -18,8 +21,8 @@ where
         let span = source.span();
         let start = span.start();
         let end = span.end();
-        let current = source.read().unwrap_or((ByteIndex(0), '\0'));
-        let pending = source.read().unwrap_or((ByteIndex(0), '\0'));
+        let current = source.read().unwrap_or((SourceIndex::UNKNOWN, '\0'));
+        let pending = source.read().unwrap_or((SourceIndex::UNKNOWN, '\0'));
         Scanner {
             source,
             current,
@@ -29,7 +32,7 @@ where
         }
     }
 
-    pub fn start(&self) -> ByteIndex {
+    pub fn start(&self) -> SourceIndex {
         self.start
     }
 
@@ -43,19 +46,19 @@ where
     }
 
     #[inline]
-    pub fn pop(&mut self) -> (ByteIndex, char) {
+    pub fn pop(&mut self) -> (SourceIndex, char) {
         let current = self.current;
         self.advance();
         current
     }
 
     #[inline]
-    pub fn peek(&self) -> (ByteIndex, char) {
+    pub fn peek(&self) -> (SourceIndex, char) {
         self.pending
     }
 
     #[inline]
-    pub fn peek_next(&mut self) -> (ByteIndex, char) {
+    pub fn peek_next(&mut self) -> (SourceIndex, char) {
         match self.source.peek() {
             None => (self.end, '\0'),
             Some((pos, c)) => (pos, c),
@@ -63,12 +66,12 @@ where
     }
 
     #[inline]
-    pub fn read(&self) -> (ByteIndex, char) {
+    pub fn read(&self) -> (SourceIndex, char) {
         self.current
     }
 
     #[inline]
-    pub fn slice(&self, span: ByteSpan) -> &str {
+    pub fn slice(&self, span: impl Into<Range<usize>>) -> &str {
         self.source.slice(span)
     }
 }

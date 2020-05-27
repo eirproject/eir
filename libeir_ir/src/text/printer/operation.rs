@@ -1,13 +1,12 @@
-use pretty::{RefDoc, DocAllocator};
+use pretty::{DocAllocator, RefDoc};
 
-use crate::{Block, Value, DynValue, OpKind, CallKind, MatchKind, BasicType};
-use crate::traits::FormatOpCtx;
 use crate::binary::{BinaryEntrySpecifier, Endianness};
+use crate::traits::FormatOpCtx;
+use crate::{BasicType, Block, CallKind, DynValue, MatchKind, OpKind, Value};
 
 use super::{
-    FunctionFormatData, FormatConfig, FormatState,
-    BlockIteratorConfig, ValueFormatter, BlockValueLayout,
-    get_value_list,
+    get_value_list, BlockIteratorConfig, BlockValueLayout, FormatConfig, FormatState,
+    FunctionFormatData, ValueFormatter,
 };
 
 pub struct FormatOpCtxImpl<'a, 'b, 'doc, B, V, L>
@@ -27,68 +26,79 @@ where
     V: ValueFormatter,
     L: BlockValueLayout,
 {
-
     fn arena(&self) -> &'doc pretty::Arena<'doc> {
         self.format_data.arena
     }
 
     fn value_use_to_doc(&mut self, value: DynValue) -> RefDoc<'doc, ()> {
         let val = self.state.function.value_get(value).unwrap();
-        self.format_data.value_use(self.config, self.state, val, None)
+        self.format_data
+            .value_use(self.config, self.state, val, None)
     }
-
 }
 
-fn binary_specifier_to_doc<'a>(arena: &'a pretty::Arena<'a>, spec: &BinaryEntrySpecifier) -> RefDoc<'a, ()> {
-    let f_endianness = |end| {
-        match end {
-            &Endianness::Big => arena.text("big"),
-            &Endianness::Little => arena.text("little"),
-            &Endianness::Native => arena.text("native"),
-        }
+fn binary_specifier_to_doc<'a>(
+    arena: &'a pretty::Arena<'a>,
+    spec: &BinaryEntrySpecifier,
+) -> RefDoc<'a, ()> {
+    let f_endianness = |end| match end {
+        &Endianness::Big => arena.text("big"),
+        &Endianness::Little => arena.text("little"),
+        &Endianness::Native => arena.text("native"),
     };
-    let f_signed = |signed| {
-        match signed {
-            true => arena.text("signed"),
-            false => arena.text("unsigned"),
-        }
+    let f_signed = |signed| match signed {
+        true => arena.text("signed"),
+        false => arena.text("unsigned"),
     };
 
     match spec {
-        BinaryEntrySpecifier::Integer { signed, endianness, unit } => {
+        BinaryEntrySpecifier::Integer {
+            signed,
+            endianness,
+            unit,
+        } => {
             let items = [
                 f_signed(*signed),
                 f_endianness(endianness),
                 arena.as_string(unit),
             ];
-            arena.text("integer").append(
-                arena.intersperse(items.iter().cloned(), arena.text(",")).parens()
-            ).into_doc()
-        },
+            arena
+                .text("integer")
+                .append(
+                    arena
+                        .intersperse(items.iter().cloned(), arena.text(","))
+                        .parens(),
+                )
+                .into_doc()
+        }
         BinaryEntrySpecifier::Float { endianness, unit } => {
-            let items = [
-                f_endianness(endianness),
-                arena.as_string(unit),
-            ];
-            arena.text("float").append(
-                arena.intersperse(items.iter().cloned(), arena.text(",")).parens()
-            ).into_doc()
-        },
-        BinaryEntrySpecifier::Bytes { unit } => {
-            arena.text("bytes").append(arena.as_string(unit).parens()).into_doc()
-        },
-        BinaryEntrySpecifier::Bits { unit } => {
-            arena.text("bits").append(arena.as_string(unit).parens()).into_doc()
-        },
-        BinaryEntrySpecifier::Utf8 => {
-            arena.text("utf8").append(arena.nil().parens()).into_doc()
-        },
-        BinaryEntrySpecifier::Utf16 { endianness } => {
-            arena.text("utf16").append(f_endianness(endianness)).into_doc()
-        },
-        BinaryEntrySpecifier::Utf32 { endianness } => {
-            arena.text("utf32").append(f_endianness(endianness)).into_doc()
-        },
+            let items = [f_endianness(endianness), arena.as_string(unit)];
+            arena
+                .text("float")
+                .append(
+                    arena
+                        .intersperse(items.iter().cloned(), arena.text(","))
+                        .parens(),
+                )
+                .into_doc()
+        }
+        BinaryEntrySpecifier::Bytes { unit } => arena
+            .text("bytes")
+            .append(arena.as_string(unit).parens())
+            .into_doc(),
+        BinaryEntrySpecifier::Bits { unit } => arena
+            .text("bits")
+            .append(arena.as_string(unit).parens())
+            .into_doc(),
+        BinaryEntrySpecifier::Utf8 => arena.text("utf8").append(arena.nil().parens()).into_doc(),
+        BinaryEntrySpecifier::Utf16 { endianness } => arena
+            .text("utf16")
+            .append(f_endianness(endianness))
+            .into_doc(),
+        BinaryEntrySpecifier::Utf32 { endianness } => arena
+            .text("utf32")
+            .append(f_endianness(endianness))
+            .into_doc(),
     }
 }
 
@@ -98,14 +108,12 @@ where
     V: ValueFormatter,
     L: BlockValueLayout,
 {
-
     pub fn block_op_to_doc(
         &mut self,
         config: &FormatConfig<B, V, L>,
         state: &mut FormatState,
         block: Block,
-    ) -> RefDoc<'a, ()>
-    {
+    ) -> RefDoc<'a, ()> {
         let arena = self.arena;
 
         let op_opt = state.function.block_kind(block);
@@ -120,11 +128,12 @@ where
             OpKind::Case { clauses, .. } => {
                 let block = arena.nil();
 
-                arena.nil()
-                  .append(arena.text("case"))
-                  .append(arena.space())
-                  .append(block.nest(1).braces())
-            },
+                arena
+                    .nil()
+                    .append(arena.text("case"))
+                    .append(arena.space())
+                    .append(block.nest(1).braces())
+            }
             OpKind::Match { branches } => {
                 let dests = reads[0];
                 let num_dests = state.function.value_list_length(dests);
@@ -142,14 +151,18 @@ where
                     let formatted = match kind {
                         MatchKind::Value => {
                             let val = self.value_use(config, state, args[0], None);
-                            let block_args = arena.intersperse(
-                                args.iter().skip(1).map(|v| self.value_use(config, state, *v, None)),
-                                arena.text(",").append(arena.softline())
-                            ).nest(1).parens();
-                            let body = arena.nil()
-                                .append(block_val)
-                                .append(block_args);
-                            arena.nil()
+                            let block_args = arena
+                                .intersperse(
+                                    args.iter()
+                                        .skip(1)
+                                        .map(|v| self.value_use(config, state, *v, None)),
+                                    arena.text(",").append(arena.softline()),
+                                )
+                                .nest(1)
+                                .parens();
+                            let body = arena.nil().append(block_val).append(block_args);
+                            arena
+                                .nil()
                                 .append(arena.text("value"))
                                 .append(arena.space())
                                 .append(val)
@@ -159,14 +172,16 @@ where
                                 .append(arena.nil().append(body))
                         }
                         MatchKind::Type(ty) => {
-                            let block_args = arena.intersperse(
-                                args.iter().map(|v| self.value_use(config, state, *v, None)),
-                                arena.text(",").append(arena.softline())
-                            ).nest(1).parens();
-                            let body = arena.nil()
-                                .append(block_val)
-                                .append(block_args);
-                            arena.nil()
+                            let block_args = arena
+                                .intersperse(
+                                    args.iter().map(|v| self.value_use(config, state, *v, None)),
+                                    arena.text(",").append(arena.softline()),
+                                )
+                                .nest(1)
+                                .parens();
+                            let body = arena.nil().append(block_val).append(block_args);
+                            arena
+                                .nil()
                                 .append(arena.text("is_type"))
                                 .append(arena.space())
                                 .append(arena.text(type_to_text(ty)))
@@ -180,14 +195,16 @@ where
                             arena.nil().append(doc)
                         }
                         MatchKind::Tuple(arity) => {
-                            let block_args = arena.intersperse(
-                                args.iter().map(|v| self.value_use(config, state, *v, None)),
-                                arena.text(",").append(arena.softline())
-                            ).nest(1).parens();
-                            let body = arena.nil()
-                                .append(block_val)
-                                .append(block_args);
-                            arena.nil()
+                            let block_args = arena
+                                .intersperse(
+                                    args.iter().map(|v| self.value_use(config, state, *v, None)),
+                                    arena.text(",").append(arena.softline()),
+                                )
+                                .nest(1)
+                                .parens();
+                            let body = arena.nil().append(block_val).append(block_args);
+                            arena
+                                .nil()
                                 .append(arena.text("{}"))
                                 .append(arena.space())
                                 .append(arena.text(format!("arity {}", arity)))
@@ -195,17 +212,18 @@ where
                                 .append(arena.text("=>"))
                                 .append(arena.space())
                                 .append(arena.nil().append(body))
-
                         }
                         MatchKind::ListCell => {
-                            let block_args = arena.intersperse(
-                                args.iter().map(|v| self.value_use(config, state, *v, None)),
-                                arena.text(",").append(arena.softline())
-                            ).nest(1).parens();
-                            let body = arena.nil()
-                                .append(block_val)
-                                .append(block_args);
-                            arena.nil()
+                            let block_args = arena
+                                .intersperse(
+                                    args.iter().map(|v| self.value_use(config, state, *v, None)),
+                                    arena.text(",").append(arena.softline()),
+                                )
+                                .nest(1)
+                                .parens();
+                            let body = arena.nil().append(block_val).append(block_args);
+                            arena
+                                .nil()
                                 .append(arena.text("[]"))
                                 .append(arena.space())
                                 .append(arena.text("=>"))
@@ -214,14 +232,18 @@ where
                         }
                         MatchKind::MapItem => {
                             let val = self.value_use(config, state, args[0], None);
-                            let block_args = arena.intersperse(
-                                args.iter().skip(1).map(|v| self.value_use(config, state, *v, None)),
-                                arena.text(",").append(arena.softline())
-                            ).nest(1).parens();
-                            let body = arena.nil()
-                                .append(block_val)
-                                .append(block_args);
-                            arena.nil()
+                            let block_args = arena
+                                .intersperse(
+                                    args.iter()
+                                        .skip(1)
+                                        .map(|v| self.value_use(config, state, *v, None)),
+                                    arena.text(",").append(arena.softline()),
+                                )
+                                .nest(1)
+                                .parens();
+                            let body = arena.nil().append(block_val).append(block_args);
+                            arena
+                                .nil()
                                 .append(val)
                                 .append(arena.space())
                                 .append(arena.text("=>"))
@@ -229,14 +251,16 @@ where
                                 .append(arena.nil().append(body))
                         }
                         MatchKind::Wildcard => {
-                            let block_args = arena.intersperse(
-                                args.iter().map(|v| self.value_use(config, state, *v, None)),
-                                arena.text(",").append(arena.softline())
-                            ).nest(1).parens();
-                            let body = arena.nil()
-                                .append(block_val)
-                                .append(block_args);
-                            arena.nil()
+                            let block_args = arena
+                                .intersperse(
+                                    args.iter().map(|v| self.value_use(config, state, *v, None)),
+                                    arena.text(",").append(arena.softline()),
+                                )
+                                .nest(1)
+                                .parens();
+                            let body = arena.nil().append(block_val).append(block_args);
+                            arena
+                                .nil()
                                 .append(arena.text("_"))
                                 .append(arena.space())
                                 .append(arena.text("=>"))
@@ -249,27 +273,36 @@ where
 
                 let selector = self.value_use(config, state, reads[1], None);
 
-                arena.nil()
+                arena
+                    .nil()
                     .append(arena.text("match"))
                     .append(arena.space())
                     .append(selector)
                     .append(arena.space())
-                    .append(arena
+                    .append(
+                        arena
                             .hardline()
                             .append(arena.intersperse(branches_formatted, arena.hardline()))
                             .append(arena.hardline())
-                            .braces())
-            },
+                            .braces(),
+                    )
+            }
             OpKind::Call(CallKind::Function) => {
                 let callee_val = self.value_use(config, state, reads[0], None);
-                let call_args = arena.intersperse(
-                    reads.iter().skip(3)
-                        .map(|v| self.value_use(config, state, *v, None)),
-                    arena.text(",").append(arena.softline()),
-                ).nest(1).parens();
+                let call_args = arena
+                    .intersperse(
+                        reads
+                            .iter()
+                            .skip(3)
+                            .map(|v| self.value_use(config, state, *v, None)),
+                        arena.text(",").append(arena.softline()),
+                    )
+                    .nest(1)
+                    .parens();
                 let flow_val = self.value_use(config, state, reads[1], None);
                 let exc_val = self.value_use(config, state, reads[2], None);
-                arena.nil()
+                arena
+                    .nil()
                     .append(callee_val)
                     .append(call_args)
                     .append(arena.space())
@@ -280,31 +313,36 @@ where
                     .append(arena.text("except"))
                     .append(arena.space())
                     .append(exc_val)
-            },
+            }
             OpKind::Call(CallKind::ControlFlow) => {
                 let fun_val = self.value_use(config, state, reads[0], None);
-                let call_args = arena.intersperse(
-                    reads.iter().skip(1)
-                        .map(|v| self.value_use(config, state, *v, None)),
-                    arena.text(",").append(arena.softline()),
-                ).nest(1).parens();
-                arena.nil()
-                    .append(fun_val)
-                    .append(call_args)
-            },
+                let call_args = arena
+                    .intersperse(
+                        reads
+                            .iter()
+                            .skip(1)
+                            .map(|v| self.value_use(config, state, *v, None)),
+                        arena.text(",").append(arena.softline()),
+                    )
+                    .nest(1)
+                    .parens();
+                arena.nil().append(fun_val).append(call_args)
+            }
             OpKind::TraceCaptureRaw => {
                 assert!(reads.len() == 1);
                 let arg = self.value_use(config, state, reads[0], None);
-                arena.nil()
+                arena
+                    .nil()
                     .append(arena.text("trace_capture_raw"))
                     .append(arena.space())
                     .append(arg)
-            },
+            }
             OpKind::UnpackValueList(n) => {
                 assert!(reads.len() == 2);
                 let block = self.value_use(config, state, reads[0], None);
                 let val = self.value_use(config, state, reads[1], None);
-                arena.nil()
+                arena
+                    .nil()
                     .append(arena.text("unpack"))
                     .append(arena.space())
                     .append(val)
@@ -316,33 +354,29 @@ where
                     .append(arena.text("=>"))
                     .append(arena.space())
                     .append(block)
-            },
-            OpKind::IfBool => {
-                match reads.len() {
-                    3 => {
-                        arena.nil()
-                            .append(arena.text("if_bool"))
-                            .append(arena.space())
-                            .append(self.value_use(config, state, reads[2], None))
-                            .append(arena.space())
-                            .append(self.value_use(config, state, reads[0], None))
-                            .append(arena.space())
-                            .append(self.value_use(config, state, reads[1], None))
-                    },
-                    4 => {
-                        arena.nil()
-                            .append(arena.text("if_bool"))
-                            .append(arena.space())
-                            .append(self.value_use(config, state, reads[3], None))
-                            .append(arena.space())
-                            .append(self.value_use(config, state, reads[0], None))
-                            .append(arena.space())
-                            .append(self.value_use(config, state, reads[1], None))
-                            .append(arena.space())
-                            .append(self.value_use(config, state, reads[2], None))
-                    },
-                    _ => panic!(),
-                }
+            }
+            OpKind::IfBool => match reads.len() {
+                3 => arena
+                    .nil()
+                    .append(arena.text("if_bool"))
+                    .append(arena.space())
+                    .append(self.value_use(config, state, reads[2], None))
+                    .append(arena.space())
+                    .append(self.value_use(config, state, reads[0], None))
+                    .append(arena.space())
+                    .append(self.value_use(config, state, reads[1], None)),
+                4 => arena
+                    .nil()
+                    .append(arena.text("if_bool"))
+                    .append(arena.space())
+                    .append(self.value_use(config, state, reads[3], None))
+                    .append(arena.space())
+                    .append(self.value_use(config, state, reads[0], None))
+                    .append(arena.space())
+                    .append(self.value_use(config, state, reads[1], None))
+                    .append(arena.space())
+                    .append(self.value_use(config, state, reads[2], None)),
+                _ => panic!(),
             },
             OpKind::Unreachable => arena.text("unreachable"),
             OpKind::Dyn(op) => {
@@ -355,19 +389,23 @@ where
 
                     let doc = printer.to_doc(&mut ctx_impl, block);
                     arena.nil().append(doc)
-
                 } else {
-                    let call_args = arena.intersperse(
-                        reads.iter().map(|v| self.value_use(config, state, *v, None)),
-                        arena.text(",").append(arena.softline()),
-                    ).nest(1).parens();
+                    let call_args = arena
+                        .intersperse(
+                            reads
+                                .iter()
+                                .map(|v| self.value_use(config, state, *v, None)),
+                            arena.text(",").append(arena.softline()),
+                        )
+                        .nest(1)
+                        .parens();
                     arena.as_string(op.name()).append(call_args)
                 }
-            },
+            }
             _ => {
                 println!("UNIMPL: {:?}", op);
                 arena.text("unknown")
-            },
+            }
         };
 
         op_doc.append(arena.text(";")).into_doc()

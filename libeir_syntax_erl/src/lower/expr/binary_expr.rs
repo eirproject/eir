@@ -1,22 +1,27 @@
-use libeir_ir::{
-    FunctionBuilder,
-    Value as IrValue,
-    Block as IrBlock,
-};
+use libeir_ir::{Block as IrBlock, FunctionBuilder, Value as IrValue};
 
+use libeir_intern::{Ident, Symbol};
 
-use libeir_intern::{ Symbol, Ident };
+use crate::parser::ast::BinaryExpr;
+use crate::parser::ast::BinaryOp;
 
-use crate::parser::ast::{ BinaryExpr };
-use crate::parser::ast::{ BinaryOp };
-
+use crate::lower::expr::{lower_single, lower_single_same_scope};
 use crate::lower::LowerCtx;
-use crate::lower::expr::{ lower_single, lower_single_same_scope };
 
-pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
-                                expr: &BinaryExpr) -> (IrBlock, IrValue)
-{
-    let BinaryExpr { lhs, rhs, op, id: _, span } = expr;
+pub(super) fn lower_binary_expr(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    mut block: IrBlock,
+    expr: &BinaryExpr,
+) -> (IrBlock, IrValue) {
+    let BinaryExpr {
+        lhs,
+        rhs,
+        op,
+        id: _,
+        span,
+    } = expr;
+    let span = *span;
 
     match op {
         BinaryOp::AndAlso => {
@@ -25,7 +30,7 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
             let ret_block = b.block_insert();
             let ret_val = b.block_arg_insert(ret_block);
 
-            let (true1_block, false1_block, non1_block) = b.op_if_bool(l1_block, lhs_val);
+            let (true1_block, false1_block, non1_block) = b.op_if_bool(span, l1_block, lhs_val);
 
             // True branch
             let (l2_block, rhs_val) = lower_single(ctx, b, true1_block, rhs);
@@ -38,8 +43,9 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
             // Nonbool branch
             let typ_val = b.value(Symbol::intern("error"));
             let err_atom = b.value(Symbol::intern("badarg"));
-            let err_val = b.prim_tuple(&[err_atom, lhs_val]);
-            ctx.exc_stack.make_error_jump(b, non1_block, typ_val, err_val);
+            let err_val = b.prim_tuple(span, &[err_atom, lhs_val]);
+            ctx.exc_stack
+                .make_error_jump(b, span, non1_block, typ_val, err_val);
 
             (ret_block, ret_val)
         }
@@ -49,7 +55,7 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
             let ret_block = b.block_insert();
             let ret_val = b.block_arg_insert(ret_block);
 
-            let (true1_block, false1_block, non1_block) = b.op_if_bool(l1_block, lhs_val);
+            let (true1_block, false1_block, non1_block) = b.op_if_bool(span, l1_block, lhs_val);
 
             // True branch
             let true_val = b.value(true);
@@ -65,18 +71,17 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
 
                 let typ_val = b.value(Symbol::intern("error"));
                 let err_atom = b.value(Symbol::intern("badarg"));
-                let err_val = b.prim_tuple(&[err_atom, lhs_val]);
+                let err_val = b.prim_tuple(span, &[err_atom, lhs_val]);
 
-                ctx.exc_stack.make_error_jump(b, block, typ_val, err_val);
+                ctx.exc_stack
+                    .make_error_jump(b, span, block, typ_val, err_val);
             }
 
             (ret_block, ret_val)
         }
         _ => {
-            let lhs_val = map_block!(block, lower_single_same_scope(
-                ctx, b, block, lhs));
-            let rhs_val = map_block!(block, lower_single_same_scope(
-                ctx, b, block, rhs));
+            let lhs_val = map_block!(block, lower_single_same_scope(ctx, b, block, lhs));
+            let rhs_val = map_block!(block, lower_single_same_scope(ctx, b, block, rhs));
 
             let (m, f) = match op {
                 BinaryOp::Lt => (Ident::from_str("erlang"), Ident::from_str("<")),
@@ -105,8 +110,7 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
                 _ => unimplemented!("{:?}", op),
             };
 
-            ctx.call_function(b, block, *span, m, f, &[lhs_val, rhs_val])
+            ctx.call_function(b, block, span, m, f, &[lhs_val, rhs_val])
         }
     }
-
 }

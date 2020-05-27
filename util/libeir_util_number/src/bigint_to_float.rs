@@ -1,4 +1,4 @@
-use num_bigint::{ BigInt, Sign };
+use num_bigint::{BigInt, Sign};
 
 /// https://github.com/erlang/otp/blob/0de9ecd561bdc964f1c6436d240729b3952cdf3a/erts/emulator/beam/big.c#L1642-L1667
 pub fn bigint_to_double(big: &BigInt) -> f64 {
@@ -20,8 +20,8 @@ pub fn bigint_to_double(big: &BigInt) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::BigInt;
     use super::bigint_to_double;
+    use num_bigint::BigInt;
 
     #[test]
     fn test_bigint_to_double() {
@@ -34,5 +34,4 @@ mod tests {
         let bi = BigInt::from(1000000000000000000i64);
         assert!(bigint_to_double(&bi) == 1000000000000000000.0);
     }
-
 }

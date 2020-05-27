@@ -2,16 +2,16 @@
 
 use std::collections::BTreeMap;
 
+use super::{Chain, ChainGraph, Node};
+use cranelift_entity::{entity_impl, EntityList, ListPool, PrimaryMap, SecondaryMap};
 use libeir_ir::{Function, Value};
-use cranelift_entity::{ListPool, EntityList, PrimaryMap, SecondaryMap, entity_impl};
-use libeir_util_datastructures::pooled_entity_set::{EntitySet, EntitySetPool};
 use libeir_util_datastructures::aux_traits::{AuxDebug, AuxImpl};
-use super::{ChainGraph, Node, Chain};
+use libeir_util_datastructures::pooled_entity_set::{EntitySet, EntitySetPool};
 
+pub mod compound;
 pub mod simple;
 pub mod single;
 pub mod terminating_target;
-pub mod compound;
 
 pub struct Synthesis {
     pub segments: PrimaryMap<Segment, SegmentData>,
@@ -40,19 +40,17 @@ impl std::fmt::Debug for Synthesis {
             None => {
                 let none: Option<()> = None;
                 b.field("segments_back", &none)
-            },
-            Some(inner) =>
-                b.field("segments_back", &AuxImpl(
-                    inner,
-                    self.segment_set_pool.as_ref().unwrap()
-                )),
+            }
+            Some(inner) => b.field(
+                "segments_back",
+                &AuxImpl(inner, self.segment_set_pool.as_ref().unwrap()),
+            ),
         };
         b.finish()
     }
 }
 
 impl Synthesis {
-
     pub fn new() -> Self {
         Synthesis {
             segments: PrimaryMap::new(),
@@ -85,9 +83,7 @@ impl Synthesis {
     }
 
     pub fn create_entry_segment(&mut self, chain: Chain, graph: &ChainGraph) -> Segment {
-        let segment = self.create_segment(SegmentHeadKind::Entry {
-            chain,
-        });
+        let segment = self.create_segment(SegmentHeadKind::Entry { chain });
 
         let mut in_args = EntityList::new();
         for arg in graph.chains[chain].args.iter() {
@@ -144,7 +140,7 @@ impl Synthesis {
                 SegmentBodyKind::None => panic!(),
                 SegmentBodyKind::Terminal { .. } => {
                     walker.put(*segment_id);
-                },
+                }
                 SegmentBodyKind::ToIntermediate { to, .. } => {
                     back[to].insert(*segment_id, &mut pool);
                 }
@@ -167,15 +163,12 @@ impl Synthesis {
             match &segment.head {
                 SegmentHeadKind::Entry { chain } => {
                     chains.insert(*chain, &mut self.chain_set_pool);
-                },
+                }
                 _ => (),
             }
 
             for pred in back[*segment_id].iter(&pool) {
-                chains.union(
-                    &self.segments[pred].chains,
-                    &mut self.chain_set_pool
-                );
+                chains.union(&self.segments[pred].chains, &mut self.chain_set_pool);
             }
 
             self.segments[*segment_id].chains = chains;
@@ -184,7 +177,6 @@ impl Synthesis {
         self.segment_set_pool = Some(pool);
         self.segments_back = Some(back);
     }
-
 }
 
 pub struct SegmentBuilder<'a> {
@@ -193,7 +185,6 @@ pub struct SegmentBuilder<'a> {
     out_args: EntityList<Instance>,
 }
 impl<'a> SegmentBuilder<'a> {
-
     fn create_arg_instance(&mut self, node: Node) -> Instance {
         self.synthesis.instances.push(InstanceKind::Arg {
             node,
@@ -215,7 +206,8 @@ impl<'a> SegmentBuilder<'a> {
         assert!(seg.head.is_intermediate());
         assert!(seg.body.is_none());
 
-        seg.in_args.push(instance, &mut self.synthesis.instance_pool);
+        seg.in_args
+            .push(instance, &mut self.synthesis.instance_pool);
 
         instance
     }
@@ -224,7 +216,8 @@ impl<'a> SegmentBuilder<'a> {
         let seg = &mut self.synthesis.segments[self.segment];
         assert!(seg.body.is_none());
 
-        seg.externals.push(instance, &mut self.synthesis.instance_pool);
+        seg.externals
+            .push(instance, &mut self.synthesis.instance_pool);
     }
 
     pub fn push_instance(&mut self, node: Node) -> Instance {
@@ -233,14 +226,16 @@ impl<'a> SegmentBuilder<'a> {
         let seg = &mut self.synthesis.segments[self.segment];
         assert!(seg.body.is_none());
 
-        seg.instances.push(instance, &mut self.synthesis.instance_pool);
+        seg.instances
+            .push(instance, &mut self.synthesis.instance_pool);
 
         instance
     }
 
     pub fn push_out_arg(&mut self, instance: Instance) {
         // TODO validate instance in scope?
-        self.out_args.push(instance, &mut self.synthesis.instance_pool);
+        self.out_args
+            .push(instance, &mut self.synthesis.instance_pool);
     }
 
     pub fn finish_to(&mut self, segment: Segment) {
@@ -255,11 +250,8 @@ impl<'a> SegmentBuilder<'a> {
     pub fn finish_target(&mut self, single: bool) {
         let seg = &mut self.synthesis.segments[self.segment];
         assert!(seg.body.is_none());
-        seg.body = SegmentBodyKind::Terminal {
-            single,
-        };
+        seg.body = SegmentBodyKind::Terminal { single };
     }
-
 }
 
 /// An instance of a node in the syntheized CFG.
@@ -367,9 +359,7 @@ pub enum SegmentHeadKind {
     /// 1. Create a new block
     /// 2. Add arguments matching arity of orignal entry
     /// 3. Insert mapping "old entry => this (new entry)"
-    Entry {
-        chain: Chain,
-    },
+    Entry { chain: Chain },
 
     /// An intermediate block in the synthesized CFG.
     /// This can be reached from any number of chains.
@@ -381,21 +371,19 @@ pub enum SegmentHeadKind {
 }
 
 impl SegmentHeadKind {
-
     pub fn is_intermediate(&self) -> bool {
         match self {
             SegmentHeadKind::Intermediate => true,
             _ => false,
         }
     }
-
 }
 
 #[derive(Debug)]
 pub enum SegmentBodyKind {
     /// Not populated
     None,
-   
+
     /// This will call an intermediate block in the synthesized CFG.
     ///
     /// This will:
@@ -445,7 +433,7 @@ impl AuxDebug<Synthesis> for SegmentBodyKind {
                 b.field("to", to);
                 b.field("out_args", &AuxImpl(out_args, &aux.instance_pool));
                 b.finish()
-            },
+            }
             SegmentBodyKind::Terminal { single } => {
                 let mut b = f.debug_struct("Terminal");
                 b.field("single", single);

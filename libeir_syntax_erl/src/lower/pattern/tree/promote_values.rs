@@ -1,21 +1,16 @@
 //! Resolves values, promotes nodes to values, applies constraints
 
-use std::collections::{ HashMap, BTreeSet };
 use either::Either;
+use std::collections::{BTreeSet, HashMap};
 
-use libeir_ir::{
-    FunctionBuilder,
-    Value as IrValue,
-    ValueKind,
-};
+use libeir_ir::{FunctionBuilder, Value as IrValue, ValueKind};
 
 use libeir_intern::Ident;
-use libeir_diagnostics::DUMMY_SPAN;
 
 use libeir_util_datastructures::hashmap_stack::HashMapStack;
 
-use crate::lower::{ LowerCtx, LowerError };
-use super::{ Tree, TreeNode, TreeNodeKind, ConstraintKind };
+use super::{ConstraintKind, Tree, TreeNode, TreeNodeKind};
+use crate::lower::{LowerCtx, LowerError};
 
 struct PromoteCtx<'a, 'b> {
     ctx: &'a mut LowerCtx<'b>,
@@ -24,10 +19,12 @@ struct PromoteCtx<'a, 'b> {
     shadow: bool,
 }
 impl<'a, 'b> PromoteCtx<'a, 'b> {
-
-    fn resolve_or_bind(&mut self, hier: bool, ident: Ident, node: TreeNode
-    ) -> Option<Either<TreeNode, IrValue>>
-    {
+    fn resolve_or_bind(
+        &mut self,
+        hier: bool,
+        ident: Ident,
+        node: TreeNode,
+    ) -> Option<Either<TreeNode, IrValue>> {
         if hier {
             self.binds_scope.insert(ident, node);
         }
@@ -77,7 +74,6 @@ impl<'a, 'b> PromoteCtx<'a, 'b> {
         };
         res
     }
-
 }
 
 pub(crate) fn promote_values(
@@ -114,20 +110,16 @@ fn process_constants_node(
     node: TreeNode,
     hier_bind: bool,
 ) {
-    let constraints: BTreeSet<_> =
-        t.binds[node].iter()
+    let constraints: BTreeSet<_> = t.binds[node]
+        .iter()
         .flat_map(|ident| prom.resolve_or_bind(hier_bind, *ident, node))
-        .map(|v| {
-            match v {
-                Either::Left(node) => ConstraintKind::Node(node),
-                Either::Right(val) => {
-                    match b.fun().value_kind(val) {
-                        ValueKind::Const(cons) => ConstraintKind::Const(cons),
-                        ValueKind::PrimOp(prim) => ConstraintKind::PrimOp(prim),
-                        _ => ConstraintKind::Value(val),
-                    }
-                }
-            }
+        .map(|v| match v {
+            Either::Left(node) => ConstraintKind::Node(node),
+            Either::Right(val) => match b.fun().value_kind(val) {
+                ValueKind::Const(cons) => ConstraintKind::Const(cons),
+                ValueKind::PrimOp(prim) => ConstraintKind::PrimOp(prim),
+                _ => ConstraintKind::Value(val),
+            },
         })
         .collect();
 
@@ -143,8 +135,7 @@ fn promote_values_node(
     let kind = t.nodes[node].clone();
 
     let constraints = &t.constraints[node];
-    let mut const_iter = constraints.iter()
-        .flat_map(|v| v.constant());
+    let mut const_iter = constraints.iter().flat_map(|v| v.constant());
 
     // Get first constant constraint
     let const_constraint = const_iter.next();
@@ -155,7 +146,7 @@ fn promote_values_node(
         for other in const_iter {
             if first != other {
                 prom.ctx.warn(LowerError::UnmatchablePatternWarning {
-                    pat: t.node_span(node),
+                    pat: Some(t.node_span(node)),
                     reason: None,
                 });
                 t.unmatchable = true;
@@ -186,29 +177,23 @@ fn promote_values_node(
                 }
             }
         }
-        TreeNodeKind::Wildcard => {
+        TreeNodeKind::Wildcard(span) => {
             // Prefer to promote to constants, here we have
             // the most information.
             if let Some(cons) = const_constraint {
-                t.nodes[node] = TreeNodeKind::Atomic(DUMMY_SPAN, cons);
+                t.nodes[node] = TreeNodeKind::Atomic(span, cons);
                 return;
             }
             // Second choice is PrimOps. Here we have a certain
             // amount of information.
-            if let Some(prim) = constraints.iter()
-                .flat_map(|c| c.primop())
-                .nth(0)
-            {
+            if let Some(prim) = constraints.iter().flat_map(|c| c.primop()).nth(0) {
                 let val = b.value(prim);
-                t.nodes[node] = TreeNodeKind::Value(DUMMY_SPAN, Either::Left(val));
+                t.nodes[node] = TreeNodeKind::Value(span, Either::Left(val));
                 return;
             }
             // Third choice is any other value
-            if let Some(val) = constraints.iter()
-                .flat_map(|c| c.value())
-                .nth(0)
-            {
-                t.nodes[node] = TreeNodeKind::Value(DUMMY_SPAN, Either::Left(val));
+            if let Some(val) = constraints.iter().flat_map(|c| c.value()).nth(0) {
+                t.nodes[node] = TreeNodeKind::Value(span, Either::Left(val));
                 return;
             }
         }
@@ -230,7 +215,9 @@ fn promote_values_node(
             promote_values_node(b, prom, t, head);
             promote_values_node(b, prom, t, tail);
         }
-        TreeNodeKind::Binary { value, tail, size, .. } => {
+        TreeNodeKind::Binary {
+            value, tail, size, ..
+        } => {
             let size_res = size.map(|v| match v {
                 // The size references another node
                 Either::Left(ident) => {
@@ -240,9 +227,8 @@ fn promote_values_node(
                         Some(inner) => inner,
                         // No value found, error and return sentinel
                         None => {
-                            prom.ctx.error(LowerError::UnresolvedVariable {
-                                span: ident.span,
-                            });
+                            prom.ctx
+                                .error(LowerError::UnresolvedVariable { span: ident.span });
                             Either::Right(prom.ctx.sentinel())
                         }
                     }
@@ -282,7 +268,7 @@ fn promote_values_node(
 
             promote_values_node(b, prom, t, left);
             promote_values_node(b, prom, t, right);
-        },
+        }
 
         TreeNodeKind::Value(_, _) => unreachable!(),
     }

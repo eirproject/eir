@@ -3,7 +3,6 @@ use libeir_ir::{Block, PrimOpKind};
 use super::AnalysisContext;
 
 pub(super) fn propagate(ctx: &mut AnalysisContext, block: Block, n: usize) -> bool {
-
     let reads = ctx.fun.block_reads(block);
 
     assert!(reads.len() == 2);

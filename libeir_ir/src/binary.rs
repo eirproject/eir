@@ -1,5 +1,5 @@
+use serde::{Deserialize, Serialize};
 use std::default::Default;
-use serde::{ Serialize, Deserialize };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Endianness {
@@ -35,7 +35,6 @@ pub enum BinaryEntrySpecifier {
 }
 
 impl BinaryEntrySpecifier {
-
     pub fn has_size(&self) -> bool {
         match self {
             BinaryEntrySpecifier::Utf8 => false,
@@ -44,7 +43,6 @@ impl BinaryEntrySpecifier {
             _ => true,
         }
     }
-
 }
 
 impl Default for BinaryEntrySpecifier {

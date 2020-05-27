@@ -1,9 +1,9 @@
 use std::ops::Index;
 
-use cranelift_entity::{ PrimaryMap, EntityRef };
+use cranelift_entity::{EntityRef, PrimaryMap};
 
-use crate::aux_traits::{AuxHash, AuxEq};
 use crate::aux_hash_map::AuxHashMap;
+use crate::aux_traits::{AuxEq, AuxHash};
 
 pub type DedupPrimaryMap<K, V> = DedupAuxPrimaryMap<K, V, ()>;
 
@@ -22,7 +22,6 @@ where
     K: EntityRef,
     V: AuxHash<C> + AuxEq<C>,
 {
-
     pub fn new() -> Self {
         DedupAuxPrimaryMap {
             forward: PrimaryMap::new(),
@@ -30,7 +29,10 @@ where
         }
     }
 
-    pub fn push(&mut self, v: V, c: &C) -> K where V: Clone {
+    pub fn push(&mut self, v: V, c: &C) -> K
+    where
+        V: Clone,
+    {
         if let Some(k) = self.backward.get(&v, c) {
             *k
         } else {
@@ -39,7 +41,6 @@ where
             k
         }
     }
-
 }
 
 impl<K, V, C> Index<K> for DedupAuxPrimaryMap<K, V, C>

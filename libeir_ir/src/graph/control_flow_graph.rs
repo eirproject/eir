@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 
+use petgraph::visit::{GraphBase, IntoNeighbors, IntoNeighborsDirected};
 use petgraph::Direction;
-use petgraph::visit::{GraphBase, IntoNeighbors, IntoNeighborsDirected,};
 
-use cranelift_entity::{SecondaryMap, ListPool, EntityList};
+use cranelift_entity::{EntityList, ListPool, SecondaryMap};
 
 use itertools::Either;
 
@@ -31,7 +31,6 @@ pub struct ControlFlowGraph {
 }
 
 impl ControlFlowGraph {
-
     pub fn new() -> Self {
         ControlFlowGraph {
             forward: SecondaryMap::new(),
@@ -62,7 +61,6 @@ impl ControlFlowGraph {
             }
         }
     }
-
 }
 
 impl GraphBase for ControlFlowGraph {
@@ -78,9 +76,7 @@ pub struct ControlFlowSuccessors<'a> {
 impl<'a> Iterator for ControlFlowSuccessors<'a> {
     type Item = Value;
     fn next(&mut self) -> Option<Value> {
-        if let Some(val) = self.graph.forward[self.value]
-            .get(self.curr, &self.graph.pool)
-        {
+        if let Some(val) = self.graph.forward[self.value].get(self.curr, &self.graph.pool) {
             self.curr += 1;
             Some(val)
         } else {
@@ -95,7 +91,6 @@ pub struct ControlFlowPredecessors<'a> {
     curr: usize,
 }
 impl<'a> ControlFlowPredecessors<'a> {
-
     pub fn new(graph: &'a ControlFlowGraph, value: Value) -> Self {
         ControlFlowPredecessors {
             graph,
@@ -103,14 +98,11 @@ impl<'a> ControlFlowPredecessors<'a> {
             curr: 0,
         }
     }
-
 }
 impl<'a> Iterator for ControlFlowPredecessors<'a> {
     type Item = Value;
     fn next(&mut self) -> Option<Value> {
-        if let Some(val) = self.graph.back[self.value]
-            .get(self.curr, &self.graph.pool)
-        {
+        if let Some(val) = self.graph.back[self.value].get(self.curr, &self.graph.pool) {
             self.curr += 1;
             Some(val)
         } else {

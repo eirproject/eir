@@ -1,11 +1,11 @@
-use std::str::FromStr;
-use std::fmt::{Display, Formatter};
-use std::convert::TryInto;
 use std::cmp::Ordering;
-use std::ops::{Neg, Mul, Not, Div, Rem, Add, Sub};
+use std::convert::TryInto;
+use std::fmt::{Display, Formatter};
+use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
+use std::str::FromStr;
 
-pub use num_traits::{ToPrimitive, FromPrimitive};
 use num_bigint::{BigInt, ParseBigIntError};
+pub use num_traits::{FromPrimitive, ToPrimitive};
 
 #[derive(Debug, Clone)]
 pub enum Integer {
@@ -14,7 +14,6 @@ pub enum Integer {
 }
 
 impl Integer {
-
     pub fn to_float(&self) -> f64 {
         match self {
             Integer::Small(int) => *int as f64,
@@ -38,7 +37,7 @@ impl Integer {
                 } else {
                     Integer::Big(int)
                 }
-            },
+            }
         }
     }
 
@@ -49,7 +48,6 @@ impl Integer {
         let bi = BigInt::parse_bytes(string.as_bytes(), radix)?;
         Some(Integer::Big(bi))
     }
-
 }
 
 impl Display for Integer {
@@ -66,11 +64,9 @@ impl FromStr for Integer {
     fn from_str(s: &str) -> Result<Self, ParseBigIntError> {
         match s.parse::<i64>() {
             Ok(int) => Ok(Integer::Small(int)),
-            Err(_) => {
-                match s.parse::<BigInt>() {
-                    Ok(int) => Ok(Integer::Big(int)),
-                    Err(err) => Err(err),
-                }
+            Err(_) => match s.parse::<BigInt>() {
+                Ok(int) => Ok(Integer::Big(int)),
+                Err(err) => Err(err),
             },
         }
     }
@@ -193,7 +189,7 @@ impl Mul<i64> for Integer {
                 let mut int: BigInt = lhs.into();
                 int = int * rhs;
                 Integer::Big(int).shrink()
-            },
+            }
             Integer::Big(lhs) => Integer::Big(lhs * rhs),
         }
     }

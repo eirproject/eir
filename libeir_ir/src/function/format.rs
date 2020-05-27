@@ -5,11 +5,11 @@ macro_rules! function_format {
     };
 }
 
-use std::fmt::{Formatter, Result, Debug};
+use std::fmt::{Debug, Formatter, Result};
 use std::hash::Hash;
 
-use std::collections::{HashMap, BTreeMap};
-use std::collections::{HashSet, BTreeSet};
+use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeSet, HashSet};
 
 use super::{Function, Value, ValueKind};
 
@@ -22,7 +22,8 @@ pub struct ContainerDebugAdapter<'a, C, V> {
     pub value: &'a V,
 }
 impl<C, V> Debug for ContainerDebugAdapter<'_, C, V>
-where V: ContainerDebug<C>,
+where
+    V: ContainerDebug<C>,
 {
     fn fmt(&self, f: &mut Formatter) -> Result {
         ContainerDebug::fmt(self.value, self.container, f)
@@ -38,14 +39,10 @@ default impl<C, V> ContainerDebug<C> for V {
 impl ContainerDebug<Function> for Value {
     fn fmt(&self, fun: &Function, f: &mut Formatter) -> Result {
         match fun.value_kind(*self) {
-            ValueKind::PrimOp(prim) =>
-                write!(f, "{}#{}", self, prim),
-            ValueKind::Block(block) =>
-                write!(f, "{}#{}", self, block),
-            ValueKind::Argument(block, num) =>
-                write!(f, "{}#{}[{}]", self, block, num),
-            ValueKind::Const(cons) =>
-                write!(f, "{}#{}", self, cons),
+            ValueKind::PrimOp(prim) => write!(f, "{}#{}", self, prim),
+            ValueKind::Block(block) => write!(f, "{}#{}", self, block),
+            ValueKind::Argument(block, num) => write!(f, "{}#{}[{}]", self, block, num),
+            ValueKind::Const(cons) => write!(f, "{}#{}", self, cons),
         }
     }
 }
@@ -55,12 +52,12 @@ impl ContainerDebug<Function> for &[Value] {
         let values = self.as_ref();
         let mut builder = f.debug_list();
 
-        builder.entries(values.iter().map(|v| {
-            ContainerDebugAdapter {
+        builder
+            .entries(values.iter().map(|v| ContainerDebugAdapter {
                 container: fun,
                 value: v,
-            }
-        })).finish()
+            }))
+            .finish()
     }
 }
 
@@ -71,12 +68,20 @@ where
 {
     fn fmt(&self, con: &C, f: &mut Formatter) -> Result {
         let mut builder = f.debug_map();
-        builder.entries(self.iter().map(|(k, v)| {
-            (
-                ContainerDebugAdapter { container: con, value: k },
-                ContainerDebugAdapter { container: con, value: v },
-            )
-        })).finish()
+        builder
+            .entries(self.iter().map(|(k, v)| {
+                (
+                    ContainerDebugAdapter {
+                        container: con,
+                        value: k,
+                    },
+                    ContainerDebugAdapter {
+                        container: con,
+                        value: v,
+                    },
+                )
+            }))
+            .finish()
     }
 }
 impl<C, K, V> ContainerDebug<C> for BTreeMap<K, V>
@@ -86,12 +91,20 @@ where
 {
     fn fmt(&self, con: &C, f: &mut Formatter) -> Result {
         let mut builder = f.debug_map();
-        builder.entries(self.iter().map(|(k, v)| {
-            (
-                ContainerDebugAdapter { container: con, value: k },
-                ContainerDebugAdapter { container: con, value: v },
-            )
-        })).finish()
+        builder
+            .entries(self.iter().map(|(k, v)| {
+                (
+                    ContainerDebugAdapter {
+                        container: con,
+                        value: k,
+                    },
+                    ContainerDebugAdapter {
+                        container: con,
+                        value: v,
+                    },
+                )
+            }))
+            .finish()
     }
 }
 
@@ -101,9 +114,12 @@ where
 {
     fn fmt(&self, con: &C, f: &mut Formatter) -> Result {
         let mut builder = f.debug_set();
-        builder.entries(self.iter().map(|v| {
-            ContainerDebugAdapter { container: con, value: v }
-        })).finish()
+        builder
+            .entries(self.iter().map(|v| ContainerDebugAdapter {
+                container: con,
+                value: v,
+            }))
+            .finish()
     }
 }
 impl<C, V> ContainerDebug<C> for BTreeSet<V>
@@ -112,9 +128,12 @@ where
 {
     fn fmt(&self, con: &C, f: &mut Formatter) -> Result {
         let mut builder = f.debug_set();
-        builder.entries(self.iter().map(|v| {
-            ContainerDebugAdapter { container: con, value: v }
-        })).finish()
+        builder
+            .entries(self.iter().map(|v| ContainerDebugAdapter {
+                container: con,
+                value: v,
+            }))
+            .finish()
     }
 }
 
@@ -150,4 +169,13 @@ impl_tuple!((A, 0), (B, 1), (C, 2), (D, 3));
 impl_tuple!((A, 0), (B, 1), (C, 2), (D, 3), (E, 4));
 impl_tuple!((A, 0), (B, 1), (C, 2), (D, 3), (E, 4), (F, 5));
 impl_tuple!((A, 0), (B, 1), (C, 2), (D, 3), (E, 4), (F, 5), (G, 6));
-impl_tuple!((A, 0), (B, 1), (C, 2), (D, 3), (E, 4), (F, 5), (G, 6), (H, 7));
+impl_tuple!(
+    (A, 0),
+    (B, 1),
+    (C, 2),
+    (D, 3),
+    (E, 4),
+    (F, 5),
+    (G, 6),
+    (H, 7)
+);

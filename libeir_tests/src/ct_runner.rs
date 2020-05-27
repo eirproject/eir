@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
+use libeir_intern::{Ident, Symbol};
 use libeir_ir::FunctionIdent;
-use libeir_intern::{ Ident, Symbol };
 
-use libeir_interpreter::{ VMState, Term };
+use libeir_interpreter::{Term, VMState};
 
 #[derive(Debug, Clone)]
 struct SuiteSpec {
@@ -13,10 +13,7 @@ struct SuiteSpec {
 #[derive(Debug, Clone)]
 enum SuiteEntrySpec {
     Test(Symbol),
-    Group {
-        name: Symbol,
-        tests: Vec<Symbol>,
-    }
+    Group { name: Symbol, tests: Vec<Symbol> },
 }
 
 fn get_suite_spec(vm: &mut VMState, module: Ident) -> SuiteSpec {
@@ -36,14 +33,12 @@ fn get_suite_spec(vm: &mut VMState, module: Ident) -> SuiteSpec {
             let name = tup[0].as_atom().unwrap();
 
             let tests = Term::as_list(&tup[2])
-                .unwrap().iter()
+                .unwrap()
+                .iter()
                 .map(|v| v.as_atom().unwrap())
                 .collect();
 
-            let group = SuiteEntrySpec::Group {
-                name,
-                tests,
-            };
+            let group = SuiteEntrySpec::Group { name, tests };
             groups.insert(name, group);
         }
 
@@ -64,8 +59,8 @@ fn get_suite_spec(vm: &mut VMState, module: Ident) -> SuiteSpec {
                 entries.push(SuiteEntrySpec::Test(name));
             } else if let Some(tup) = elem.as_tuple() {
                 match &tup {
-                    &[group_atom, group] if group_atom.as_atom() ==
-                        Some(Symbol::intern("group")) =>
+                    &[group_atom, group]
+                        if group_atom.as_atom() == Some(Symbol::intern("group")) =>
                     {
                         let group_name = group.as_atom().unwrap();
                         entries.push(groups[&group_name].clone());
@@ -80,9 +75,7 @@ fn get_suite_spec(vm: &mut VMState, module: Ident) -> SuiteSpec {
         entries
     };
 
-    SuiteSpec {
-        entries: all,
-    }
+    SuiteSpec { entries: all }
 }
 
 pub fn run_ct_suite(vm: &mut VMState, module: Ident) {

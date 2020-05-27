@@ -1,25 +1,23 @@
-use std::collections::{ BTreeSet, BTreeMap };
+use std::collections::{BTreeMap, BTreeSet};
 
-use bumpalo::{Bump, collections::Vec as BVec};
+use bumpalo::{collections::Vec as BVec, Bump};
 
-use crate::{ Function, FunctionBuilder };
-use crate::{ Block };
-use crate::{ ValueKind };
+use libeir_diagnostics::SourceSpan;
+
+use crate::Block;
+use crate::ValueKind;
+use crate::{Function, FunctionBuilder};
 
 mod receiver;
 use receiver::MangleReceiver;
 
 mod datatypes;
 #[allow(unused_imports)]
-use datatypes::{
-    FromT, ToT,
-    MangleValue, FromValue, ToValue,
-    MangleBlock, FromBlock, ToBlock,
-};
+use datatypes::{FromBlock, FromT, FromValue, MangleBlock, MangleValue, ToBlock, ToT, ToValue};
 
+pub use datatypes::FromT as MangleFrom;
 pub use datatypes::MangleTarget;
 pub use datatypes::ToT as MangleTo;
-pub use datatypes::FromT as MangleFrom;
 
 #[cfg(test)]
 mod tests;
@@ -48,7 +46,6 @@ pub struct Mangler {
 }
 
 impl Mangler {
-
     pub fn new() -> Self {
         Mangler {
             entry: None,
@@ -93,10 +90,7 @@ impl Mangler {
 
     /// Clears the mangler of all existing data, and starts a new transaction
     /// for the given entry block.
-    pub fn start<F>(
-        &mut self,
-        from_block: F,
-    )
+    pub fn start<F>(&mut self, from_block: F)
     where
         F: Into<MangleBlock>,
     {
@@ -104,11 +98,8 @@ impl Mangler {
         self.entry = Some(from_block.into());
     }
 
-    pub fn add_rename<O, N>(
-        &mut self,
-        old: O,
-        new: N,
-    ) where
+    pub fn add_rename<O, N>(&mut self, old: O, new: N)
+    where
         O: Into<MangleValue>,
         N: Into<MangleValue>,
     {
@@ -120,11 +111,8 @@ impl Mangler {
     /// mangle.
     /// An example would be allowing you to only mangle the relevant parts when
     /// inlining a closure.
-    pub fn add_rename_nofollow<O, N>(
-        &mut self,
-        old: O,
-        new: N,
-    ) where
+    pub fn add_rename_nofollow<O, N>(&mut self, old: O, new: N)
+    where
         O: Into<MangleValue>,
         N: Into<MangleValue>,
     {
@@ -133,18 +121,13 @@ impl Mangler {
 
     /// Runs lambda mangling on a single function container
     pub fn run(&mut self, fun: &mut FunctionBuilder) -> Block {
-        let mut recv = receiver::SingleMangleReceiver {
-            fun,
-        };
+        let mut recv = receiver::SingleMangleReceiver { fun };
         self.run_inner(&mut recv)
     }
 
     // Runs lambda mangling while copying across function containers
     pub fn run_across(&mut self, from: &Function, to: &mut FunctionBuilder) -> Block {
-        let mut recv = receiver::CopyMangleReceiver {
-            from,
-            to,
-        };
+        let mut recv = receiver::CopyMangleReceiver { from, to };
         self.run_inner(&mut recv)
     }
 
@@ -155,7 +138,9 @@ impl Mangler {
             let mut acc = *key;
             let mut follow = true;
             while let Some((target, n_follow)) = self.values_map.get(&acc) {
-                if acc == *target { break; }
+                if acc == *target {
+                    break;
+                }
                 acc = *target;
                 follow = follow && *n_follow;
             }
@@ -167,7 +152,10 @@ impl Mangler {
         }
     }
 
-    fn run_inner<'a, 'b, R>(&mut self, recv: &'a mut R) -> Block where R: MangleReceiver<'b> {
+    fn run_inner<'a, 'b, R>(&mut self, recv: &'a mut R) -> Block
+    where
+        R: MangleReceiver<'b>,
+    {
         let bump = self.bump.take().unwrap();
 
         let mut scope = self.scope.take().unwrap();
@@ -178,16 +166,15 @@ impl Mangler {
 
         // Get the mapped entry block
         let mut entry = self.entry.unwrap();
-        if let Some((value, follow)) = self.values_map.get(
-            &entry.map_fun(recv, |f, v| f.block_value(v)))
+        if let Some((value, follow)) = self
+            .values_map
+            .get(&entry.map_fun(recv, |f, v| f.block_value(v)))
         {
             if !follow {
                 panic!("WARNING: Mangle mapped to entry block due to no-follow");
                 //return entry;
             }
-            if let Some(b) = value.map_fun(recv, |f, v| f.value_block(v))
-                .transpose_opt()
-            {
+            if let Some(b) = value.map_fun(recv, |f, v| f.value_block(v)).transpose_opt() {
                 entry = b;
             } else {
                 // TODO: In this case, we need to directly return the value the
@@ -201,25 +188,36 @@ impl Mangler {
             self.to_walk.push(entry);
 
             while let Some(start_block) = self.to_walk.pop() {
-                if scope.contains(&start_block) { continue; }
+                if scope.contains(&start_block) {
+                    continue;
+                }
 
                 let block_value = start_block.map_fun(recv, |f, v| f.block_value(v));
-                let block_value_mapped = self.values_map.get(&block_value)
-                    .map(|(v, _)| *v).unwrap_or(block_value);
+                let block_value_mapped = self
+                    .values_map
+                    .get(&block_value)
+                    .map(|(v, _)| *v)
+                    .unwrap_or(block_value);
 
                 let block_mapped_opt = block_value_mapped
                     .map_fun(recv, |f, v| f.value_block(v))
                     .transpose_opt();
-                if block_mapped_opt.is_none() { continue; }
+                if block_mapped_opt.is_none() {
+                    continue;
+                }
 
                 let block = block_mapped_opt.unwrap();
-                if scope.contains(&block) { continue; }
+                if scope.contains(&block) {
+                    continue;
+                }
 
                 scope.insert(block);
 
                 let block_fun = block.fun(recv);
-                for read in block_fun.block_reads(block.inner())
-                    .iter().map(|b| block.new_with(b))
+                for read in block_fun
+                    .block_reads(block.inner())
+                    .iter()
+                    .map(|b| block.new_with(b))
                 {
                     let fun = read.fun(recv);
                     fun.value_walk_nested_values::<_, ()>(*read.inner(), &mut |val| {
@@ -237,7 +235,8 @@ impl Mangler {
 
                         to_map_values.insert(val);
                         Ok(())
-                    }).unwrap();
+                    })
+                    .unwrap();
                 }
 
                 let block_fun = block.fun(recv);
@@ -255,13 +254,16 @@ impl Mangler {
 
                 let new_block = recv.to().block_insert();
                 let new_block_val = ToT(recv.to().fun().block_value(new_block));
-                self.values_map.insert(block_val, (new_block_val.into(), true));
+                self.values_map
+                    .insert(block_val, (new_block_val.into(), true));
 
                 self.value_buf.clear();
                 let block_fun = block.fun(recv);
                 self.value_buf.extend(
-                    block_fun.block_args(block.inner())
-                        .iter().map(|v| block.new_with(*v))
+                    block_fun
+                        .block_args(block.inner())
+                        .iter()
+                        .map(|v| block.new_with(*v)),
                 );
 
                 // Insert new arguments
@@ -287,61 +289,64 @@ impl Mangler {
         // Propagate values
         self.propagate_values();
 
-        let copy_body = |mang: &mut Mangler, recv: &mut R, from_block: MangleBlock, to_block: ToBlock| {
-            let to_op = recv.map_block_op(from_block);
-            let loc = from_block.map_fun(recv, |f, b| f.block_location(b)).inner();
+        let copy_body =
+            |mang: &mut Mangler, recv: &mut R, from_block: MangleBlock, to_block: ToBlock| {
+                let to_op = recv.map_block_op(from_block);
+                let loc = from_block.map_fun(recv, |f, b| f.block_location(b)).inner();
 
-            // Get and map reads to new values
-            mang.value_buf.clear();
-            let from_block_fun = from_block.fun(recv);
-            mang.value_buf.extend(
-                from_block_fun.block_reads(from_block.inner())
-                    .iter().map(|v| from_block.new_with(*v))
-            );
-            for n in 0..mang.value_buf.len() {
-                let v = mang.value_buf[n];
-                let mapped = mang.values_map
-                    .get(&v)
-                    .map(|v| v.0)
-                    .unwrap_or(v);
-                mang.value_buf[n] = mapped;
-            }
+                // Get and map reads to new values
+                mang.value_buf.clear();
+                let from_block_fun = from_block.fun(recv);
+                mang.value_buf.extend(
+                    from_block_fun
+                        .block_reads(from_block.inner())
+                        .iter()
+                        .map(|v| from_block.new_with(*v)),
+                );
+                for n in 0..mang.value_buf.len() {
+                    let v = mang.value_buf[n];
+                    let mapped = mang.values_map.get(&v).map(|v| v.0).unwrap_or(v);
+                    mang.value_buf[n] = mapped;
+                }
 
-            // Update the new block with kind, span and reads
-            let to = recv.to();
-            let to_fun = to.fun_mut();
-            let data = &mut to_fun.blocks[to_block.inner()];
+                // Update the new block with kind, span and reads
+                let to = recv.to();
+                let to_fun = to.fun_mut();
+                let data = &mut to_fun.blocks[to_block.inner()];
 
-            data.op = Some(to_op);
-            data.location = loc;
+                data.op = Some(to_op);
+                data.location = loc;
 
-            for read in mang.value_buf.iter() {
-                data.reads.push(read.to().unwrap().inner(), &mut to_fun.pool.value);
-            }
+                for read in mang.value_buf.iter() {
+                    data.reads
+                        .push(read.to().unwrap().inner(), &mut to_fun.pool.value);
+                }
 
-            recv.to().graph_update_block(to_block.inner());
-        };
+                recv.to().graph_update_block(to_block.inner());
+            };
 
         // Set new bodies
         for block in scope.iter().cloned() {
             let block_val = block.map_fun(recv, |f, b| f.block_value(b));
             let new_block_val_either = self.values_map.get(&block_val).unwrap().0;
-            let new_block_val = new_block_val_either.to()
+            let new_block_val = new_block_val_either
+                .to()
                 .expect("attempted to set body on from block");
-            let new_block = new_block_val
-                .map_fun(recv, |f, b| f.value_block(b).unwrap());
+            let new_block = new_block_val.map_fun(recv, |f, b| f.value_block(b).unwrap());
 
             copy_body(self, recv, block, new_block);
         }
 
         let entry = self.entry.unwrap();
         let entry_val = entry.map_fun(recv, |f, v| f.block_value(v));
-        let new_entry_val = self.values_map.get(&entry_val)
+        let new_entry_val = self
+            .values_map
+            .get(&entry_val)
             .map(|v| v.0)
             .unwrap_or(entry_val)
-            .to().unwrap();
-        let new_entry = new_entry_val
-            .map_fun(recv, |f, v| f.value_block(v).unwrap());
+            .to()
+            .unwrap();
+        let new_entry = new_entry_val.map_fun(recv, |f, v| f.value_block(v).unwrap());
 
         self.values = Some(to_map_values);
         self.scope = Some(scope);
@@ -351,7 +356,10 @@ impl Mangler {
         new_entry.inner()
     }
 
-    fn map<'a, 'b, R>(&mut self, bump: &Bump, recv: &'a mut R, mut val: MangleValue) -> ToValue where R: MangleReceiver<'b> {
+    fn map<'a, 'b, R>(&mut self, bump: &Bump, recv: &'a mut R, mut val: MangleValue) -> ToValue
+    where
+        R: MangleReceiver<'b>,
+    {
         if let Some(to) = self.actually_mapped.get(&val) {
             return *to;
         }
@@ -360,15 +368,19 @@ impl Mangler {
         }
 
         let kind = val.map_fun(recv, |f, v| f.value_kind(v));
+        let locs = val.map_fun(recv, |f, v| f.value_locations(v));
         let dest: ToValue = match kind.inner() {
-            ValueKind::Const(_) => {
-                recv.map_const(val)
-            },
+            ValueKind::Const(_) => recv.map_const(val),
             ValueKind::PrimOp(prim) => {
                 let prim = val.new_with(prim);
                 let kind = prim
                     .map_fun(recv, |f, _v| *f.primop_kind(prim.inner()))
                     .inner();
+
+                let span = locs
+                    .inner()
+                    .map(|spans| spans.first().copied().unwrap_or(SourceSpan::UNKNOWN))
+                    .unwrap_or(SourceSpan::UNKNOWN);
 
                 let mut buf = BVec::new_in(bump);
                 {
@@ -381,13 +393,12 @@ impl Mangler {
                     *value = self.map(bump, recv, value_m).inner();
                 }
 
-                recv.to().prim_from_kind(kind, &buf).into()
-            },
+                recv.to().prim_from_kind(span, kind, &buf).into()
+            }
             ValueKind::Block(block) => {
                 let block = val.new_with(block);
                 let block_val = block.map_fun(recv, |f, b| f.block_value(b));
-                let new = if let Some((new_block_val, _)) = self.values_map
-                    .get(&block_val).cloned()
+                let new = if let Some((new_block_val, _)) = self.values_map.get(&block_val).cloned()
                 {
                     new_block_val
                 } else {
@@ -396,14 +407,11 @@ impl Mangler {
 
                 new.to()
                     .expect("mangle reached block in target with nofollow and no replacement")
-            },
-            ValueKind::Argument(_block, _num) => {
-                recv.map_free_value(val).into()
-            },
+            }
+            ValueKind::Argument(_block, _num) => recv.map_free_value(val).into(),
         };
         self.values_map.insert(val, (dest.into(), true));
         self.actually_mapped.insert(val, dest);
         dest
     }
-
 }

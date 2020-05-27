@@ -1,15 +1,14 @@
-use libeir_ir::Function;
+use super::super::{Chain, ChainGraph};
+use super::{Synthesis, SynthesisStrategy};
 use crate::util::Walker;
-use super::{SynthesisStrategy, Synthesis};
-use super::super::{ChainGraph, Chain};
+use libeir_ir::Function;
 
 pub fn can_subsitute(graph: &ChainGraph, fun: &Function, chain: Chain) -> bool {
     let target = graph.target_block;
     let target_reads = fun.block_reads(target);
     let chain_data = &graph.chains[chain];
 
-    if fun.block_kind(target).unwrap().is_call()
-        && chain_data.args.len() == target_reads.len() - 1
+    if fun.block_kind(target).unwrap().is_call() && chain_data.args.len() == target_reads.len() - 1
     {
         chain_data
             .args
@@ -23,8 +22,7 @@ pub fn can_subsitute(graph: &ChainGraph, fun: &Function, chain: Chain) -> bool {
                     node = to;
                 } else {
                     let start_node = graph.get_root(*val)?;
-                    node = graph.follow_chain(
-                        start_node, chain);
+                    node = graph.follow_chain(start_node, chain);
                 }
 
                 if node == ch {
@@ -48,7 +46,6 @@ pub fn can_subsitute(graph: &ChainGraph, fun: &Function, chain: Chain) -> bool {
 pub struct SingleStrategy;
 
 impl SynthesisStrategy for SingleStrategy {
-
     fn try_run(&self, graph: &ChainGraph, fun: &Function) -> Option<Synthesis> {
         if graph.chains.len() != 1 {
             return None;
@@ -79,8 +76,6 @@ impl SynthesisStrategy for SingleStrategy {
             synthesis.visit_segment(segment);
         }
 
-
         Some(synthesis)
     }
-
 }

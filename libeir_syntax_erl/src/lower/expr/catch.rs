@@ -1,24 +1,23 @@
-use libeir_ir::{
-    FunctionBuilder,
-    CaseBuilder,
-    Value as IrValue,
-    Block as IrBlock,
-};
+use libeir_ir::{Block as IrBlock, CaseBuilder, FunctionBuilder, Value as IrValue};
 
 use libeir_intern::Symbol;
 
-use crate::parser::ast::{ NodeId };
-use crate::parser::ast::{ Try, Catch };
-use crate::parser::ast::{ Expr, Var, Literal };
-use crate::parser::ast::{ Name };
+use crate::parser::ast::Name;
+use crate::parser::ast::NodeId;
+use crate::parser::ast::{Catch, Try};
+use crate::parser::ast::{Expr, Literal, Var};
 
-use crate::lower::LowerCtx;
-use crate::lower::expr::{ lower_block, lower_single };
+use crate::lower::expr::{lower_block, lower_single};
 use crate::lower::pattern::lower_clause;
+use crate::lower::LowerCtx;
 
-pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
-                             try_expr: &Try) -> (IrBlock, IrValue) {
-
+pub(super) fn lower_try_expr(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    mut block: IrBlock,
+    try_expr: &Try,
+) -> (IrBlock, IrValue) {
+    let span = try_expr.span;
     let exc_block = b.block_insert();
 
     let exc_type = b.block_arg_insert(exc_block);
@@ -42,19 +41,25 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
             let block = no_match;
             let typ_val = b.value(Symbol::intern("error"));
             let try_clause_val = b.value(Symbol::intern("try_clause"));
-            let err_val = b.prim_tuple(&[try_clause_val, body_ret]);
-            ctx.exc_stack.make_error_jump(b, block, typ_val, err_val);
+            let err_val = b.prim_tuple(span, &[try_clause_val, body_ret]);
+            ctx.exc_stack
+                .make_error_jump(b, span, block, typ_val, err_val);
         }
 
-        let mut case_b = b.op_case_build();
+        let mut case_b = b.op_case_build(span);
         case_b.match_on = Some(body_ret);
         case_b.no_match = Some(b.value(no_match));
 
         for clause in clauses {
-            match lower_clause(ctx, b, &mut block, false,
-                               [&clause.pattern].iter().map(|i| *i),
-                               clause.guard.as_ref())
-            {
+            match lower_clause(
+                ctx,
+                b,
+                &mut block,
+                false,
+                clause.span,
+                [&clause.pattern].iter().map(|i| *i),
+                clause.guard.as_ref(),
+            ) {
                 Ok(lowered) => {
                     let (scope_token, body) = lowered.make_body(ctx, b);
 
@@ -65,8 +70,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                         case_b.push_value(*value, b);
                     }
 
-                    let (body_ret_block, body_ret) = lower_block(
-                        ctx, b, body, &clause.body);
+                    let (body_ret_block, body_ret) = lower_block(ctx, b, body, &clause.body);
 
                     // Call to join block
                     b.op_call_flow(body_ret_block, join_block, &[body_ret]);
@@ -74,7 +78,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                     // Pop scope pushed in lower_clause
                     ctx.scope.pop(scope_token);
                 }
-                Err(_lowered) => {},
+                Err(_lowered) => {}
             }
             assert!(ctx.exc_stack.len() == entry_exc_height)
         }
@@ -92,14 +96,13 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
 
         let match_val = b.prim_value_list(&[exc_type, exc_error]);
 
-        let mut case_b = b.op_case_build();
+        let mut case_b = b.op_case_build(span);
         case_b.match_on = Some(match_val);
         case_b.no_match = Some(b.value(catch_no_match_block));
 
         let entry_exc_height = ctx.exc_stack.len();
 
         for clause in catch_clauses {
-
             // Convert the kind expression into a pattern expression so
             // that we can use existing pattern matching infrastructure.
             let kind_expr = match clause.kind {
@@ -108,11 +111,12 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
             };
 
             match lower_clause(
-                ctx, b, &mut block, false,
-                [
-                    &kind_expr,
-                    &clause.error,
-                ].iter().map(|i| *i),
+                ctx,
+                b,
+                &mut block,
+                false,
+                clause.span,
+                [&kind_expr, &clause.error].iter().map(|i| *i),
                 clause.guard.as_ref(),
             ) {
                 Ok(lowered) => {
@@ -128,8 +132,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                     // Bind stack trace in scope
                     ctx.bind(clause.trace, exc_trace);
 
-                    let (body_ret_block, body_ret) = lower_block(
-                        ctx, b, body, &clause.body);
+                    let (body_ret_block, body_ret) = lower_block(ctx, b, body, &clause.body);
 
                     // Call to join block
                     b.op_call_flow(body_ret_block, join_block, &[body_ret]);
@@ -137,7 +140,7 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
                     // Pop scope pushed in lower_clause
                     ctx.scope.pop(scope_token);
                 }
-                Err(_lowered) => {},
+                Err(_lowered) => {}
             }
 
             assert!(ctx.exc_stack.len() == entry_exc_height)
@@ -150,7 +153,6 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
 
     // After
     if let Some(after) = try_expr.after.as_ref() {
-
         // Make after lambda
         let after_lambda = b.block_insert();
         let cont = b.block_arg_insert(after_lambda);
@@ -164,8 +166,8 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
         let ret_exc_block = b.block_insert();
         let ret_exc_block_val = b.value(ret_exc_block);
         b.op_call_flow(catch_no_match_block, after_lambda, &[ret_exc_block_val]);
-        ctx.exc_stack.make_error_jump_trace(
-            b, ret_exc_block, exc_type, exc_error, exc_trace);
+        ctx.exc_stack
+            .make_error_jump_trace(b, ret_exc_block, exc_type, exc_error, exc_trace);
 
         // Return regular
         let ret_regular_block = b.block_insert();
@@ -176,32 +178,42 @@ pub(super) fn lower_try_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut bl
         (ret_block, ret_val)
     } else {
         ctx.exc_stack.make_error_jump_trace(
-            b, catch_no_match_block, exc_type, exc_error, exc_trace);
+            b,
+            catch_no_match_block,
+            exc_type,
+            exc_error,
+            exc_trace,
+        );
         (join_block, join_val)
     }
 }
 
-pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock,
-                               catch_expr: &Catch) -> (IrBlock, IrValue) {
+pub(super) fn lower_catch_expr(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    mut block: IrBlock,
+    catch_expr: &Catch,
+) -> (IrBlock, IrValue) {
+    let span = catch_expr.span;
     let exc_block = b.block_insert();
 
     let exc_type = b.block_arg_insert(exc_block);
     let exc_error = b.block_arg_insert(exc_block);
     let exc_trace = b.block_arg_insert(exc_block);
 
-    let mut case_b = b.op_case_build();
+    let mut case_b = b.op_case_build(span);
 
     // Atoms
     let big_exit_atom = b.value(Symbol::intern("EXIT"));
 
     let make_value_clause = |b: &mut FunctionBuilder, case_b: &mut CaseBuilder, val: IrValue| {
-        let clause = b.pat_mut().clause_start();
+        let clause = b.pat_mut().clause_start(span);
 
         // Value
         case_b.push_value(val, b);
         let pat_val = b.pat_mut().clause_value(clause);
 
-        let pat = b.pat_mut().node_empty();
+        let pat = b.pat_mut().node_empty(Some(span));
         b.pat_mut().value(pat, pat_val);
 
         b.pat_mut().clause_node_push(clause, pat);
@@ -230,7 +242,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
 
     // no_match is unreachable
     let no_match = b.block_insert();
-    b.op_unreachable(no_match);
+    b.op_unreachable(span, no_match);
 
     // Guard lambda returning true
     let guard = b.block_insert();
@@ -250,8 +262,8 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
         let error_block_val = b.value(error_block);
         case_b.push_clause(error_clause, guard_val, error_block_val, b);
 
-        let inner_tup = b.prim_tuple(&[exc_error, exc_trace]);
-        let ret_tup = b.prim_tuple(&[big_exit_atom, inner_tup]);
+        let inner_tup = b.prim_tuple(span, &[exc_error, exc_trace]);
+        let ret_tup = b.prim_tuple(span, &[big_exit_atom, inner_tup]);
 
         b.op_call_flow(error_block, join_block, &[ret_tup]);
     }
@@ -262,7 +274,7 @@ pub(super) fn lower_catch_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut 
         let exit_block_val = b.value(exit_block);
         case_b.push_clause(exit_clause, guard_val, exit_block_val, b);
 
-        let ret_tup = b.prim_tuple(&[big_exit_atom, exc_error]);
+        let ret_tup = b.prim_tuple(span, &[big_exit_atom, exc_error]);
 
         b.op_call_flow(exit_block, join_block, &[ret_tup]);
     }

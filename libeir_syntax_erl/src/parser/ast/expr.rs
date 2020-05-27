@@ -1,9 +1,9 @@
 use std::cmp::Ordering;
 
-use libeir_diagnostics::ByteSpan;
+use libeir_diagnostics::SourceSpan;
 use libeir_util_number::Integer;
 
-use super::{NodeId};
+use super::NodeId;
 use super::{BinaryOp, Ident, UnaryOp};
 use super::{Function, FunctionName, Guard, Name, Type};
 
@@ -17,7 +17,7 @@ pub enum Expr {
     Literal(Literal),
     FunctionName(FunctionName),
     // Delayed substitution of macro
-    DelayedSubstitution(ByteSpan, NodeId, DelayedSubstitution),
+    DelayedSubstitution(SourceSpan, NodeId, DelayedSubstitution),
     // The various list forms
     Nil(Nil),
     Cons(Cons),
@@ -51,7 +51,7 @@ pub enum Expr {
     Fun(Function),
 }
 impl Expr {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
             &Expr::Var(Var(_, Ident { ref span, .. })) => span.clone(),
             &Expr::Literal(ref lit) => lit.span(),
@@ -174,7 +174,7 @@ impl PartialEq for Var {
 impl Eq for Var {}
 
 #[derive(Debug, Clone)]
-pub struct Nil(pub ByteSpan, pub NodeId);
+pub struct Nil(pub SourceSpan, pub NodeId);
 impl PartialEq for Nil {
     fn eq(&self, _: &Self) -> bool {
         return true;
@@ -184,7 +184,7 @@ impl Eq for Nil {}
 
 #[derive(Debug, Clone)]
 pub struct Cons {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub head: Box<Expr>,
     pub tail: Box<Expr>,
@@ -205,7 +205,7 @@ impl PartialOrd for Cons {
 
 #[derive(Debug, Clone)]
 pub struct Tuple {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub elements: Vec<Expr>,
 }
@@ -222,7 +222,7 @@ impl PartialOrd for Tuple {
 
 #[derive(Debug, Clone)]
 pub struct Map {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub fields: Vec<MapField>,
 }
@@ -240,7 +240,7 @@ impl PartialOrd for Map {
 // Updating fields on an existing map, e.g. `Map#{field1 = value1}.`
 #[derive(Debug, Clone)]
 pub struct MapUpdate {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub map: Box<Expr>,
     pub updates: Vec<MapField>,
@@ -254,7 +254,7 @@ impl PartialEq for MapUpdate {
 // Pattern matching a map expression
 #[derive(Debug, Clone)]
 pub struct MapProjection {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub map: Box<Expr>,
     pub fields: Vec<MapField>,
@@ -276,12 +276,12 @@ pub enum Literal {
     Atom(NodeId, Ident),
     String(NodeId, Ident),
     Binary(NodeId, Ident),
-    Char(ByteSpan, NodeId, char),
-    Integer(ByteSpan, NodeId, Integer),
-    Float(ByteSpan, NodeId, f64),
+    Char(SourceSpan, NodeId, char),
+    Integer(SourceSpan, NodeId, Integer),
+    Float(SourceSpan, NodeId, f64),
 }
 impl Literal {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
             &Literal::Atom(_, Ident { ref span, .. }) => span.clone(),
             &Literal::String(_, Ident { ref span, .. }) => span.clone(),
@@ -336,10 +336,14 @@ impl PartialOrd for Literal {
             (Literal::Integer(_, _, x), Literal::Char(_, _, y)) => x.partial_cmp(y),
             (Literal::Float(_, _, x), Literal::Float(_, _, y)) => x.partial_cmp(y),
             (Literal::Float(_, _, x), Literal::Integer(_, _, y)) => x.partial_cmp(y),
-            (Literal::Float(_, _, x), Literal::Char(_, _, y)) => x.partial_cmp(&((*y as i64) as f64)),
+            (Literal::Float(_, _, x), Literal::Char(_, _, y)) => {
+                x.partial_cmp(&((*y as i64) as f64))
+            }
             (Literal::Char(_, _, x), Literal::Char(_, _, y)) => x.partial_cmp(y),
             (Literal::Char(_, _, x), Literal::Integer(_, _, y)) => x.partial_cmp(y),
-            (Literal::Char(_, _, x), Literal::Float(_, _, y)) => ((*x as i64) as f64).partial_cmp(y),
+            (Literal::Char(_, _, x), Literal::Float(_, _, y)) => {
+                ((*x as i64) as f64).partial_cmp(y)
+            }
         }
     }
 }
@@ -351,13 +355,13 @@ impl PartialOrd for Literal {
 #[derive(Debug, Clone)]
 pub enum MapField {
     Assoc {
-        span: ByteSpan,
+        span: SourceSpan,
         id: NodeId,
         key: Expr,
         value: Expr,
     },
     Exact {
-        span: ByteSpan,
+        span: SourceSpan,
         id: NodeId,
         key: Expr,
         value: Expr,
@@ -395,7 +399,7 @@ impl PartialOrd for MapField {
 
 #[derive(Debug, Clone)]
 pub struct Record {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub name: Ident,
     pub fields: Vec<RecordField>,
@@ -409,7 +413,7 @@ impl PartialEq for Record {
 // Accessing a record field value, e.g. Expr#myrec.field1
 #[derive(Debug, Clone)]
 pub struct RecordAccess {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub record: Box<Expr>,
     pub name: Ident,
@@ -424,7 +428,7 @@ impl PartialEq for RecordAccess {
 // Referencing a record fields index, e.g. #myrec.field1
 #[derive(Debug, Clone)]
 pub struct RecordIndex {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub name: Ident,
     pub field: Ident,
@@ -438,7 +442,7 @@ impl PartialEq for RecordIndex {
 // Update a record field value, e.g. Expr#myrec.field1
 #[derive(Debug, Clone)]
 pub struct RecordUpdate {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub record: Box<Expr>,
     pub name: Ident,
@@ -456,7 +460,7 @@ impl PartialEq for RecordUpdate {
 /// then `undefined` is the default.
 #[derive(Debug, Clone)]
 pub struct RecordField {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub name: Ident,
     pub value: Option<Expr>,
@@ -470,7 +474,7 @@ impl PartialEq for RecordField {
 
 #[derive(Debug, Clone)]
 pub struct Binary {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub elements: Vec<BinaryElement>,
 }
@@ -484,7 +488,7 @@ impl PartialEq for Binary {
 /// produce a binary, all segments must be evaluated, and then assembled
 #[derive(Debug, Clone)]
 pub struct BinaryElement {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub bit_expr: Expr,
     pub bit_size: Option<Expr>,
@@ -501,11 +505,11 @@ impl PartialEq for BinaryElement {
 /// A bit type can come in the form `Type` or `Type:Size`
 #[derive(Debug, Clone)]
 pub enum BitType {
-    Name(ByteSpan, NodeId, Ident),
-    Sized(ByteSpan, NodeId, Ident, i64),
+    Name(SourceSpan, NodeId, Ident),
+    Sized(SourceSpan, NodeId, Ident, i64),
 }
 impl BitType {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
             BitType::Name(span, _, _) => *span,
             BitType::Sized(span, _, _, _) => *span,
@@ -526,7 +530,7 @@ impl PartialEq for BitType {
 
 #[derive(Debug, Clone)]
 pub struct ListComprehension {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub body: Box<Expr>,
     pub qualifiers: Vec<Expr>,
@@ -539,7 +543,7 @@ impl PartialEq for ListComprehension {
 
 #[derive(Debug, Clone)]
 pub struct BinaryComprehension {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub body: Box<Expr>,
     pub qualifiers: Vec<Expr>,
@@ -553,7 +557,7 @@ impl PartialEq for BinaryComprehension {
 // A generator of the form `LHS <- RHS`
 #[derive(Debug, Clone)]
 pub struct Generator {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub pattern: Box<Expr>,
     pub expr: Box<Expr>,
@@ -567,7 +571,7 @@ impl PartialEq for Generator {
 // A generator of the form `LHS <= RHS`
 #[derive(Debug, Clone)]
 pub struct BinaryGenerator {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub pattern: Box<Expr>,
     pub expr: Box<Expr>,
@@ -581,7 +585,7 @@ impl PartialEq for BinaryGenerator {
 // A sequence of expressions, e.g. begin expr1, .., exprN end
 #[derive(Debug, Clone)]
 pub struct Begin {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub body: Vec<Expr>,
 }
@@ -594,7 +598,7 @@ impl PartialEq for Begin {
 // Function application, e.g. foo(expr1, .., exprN)
 #[derive(Debug, Clone)]
 pub struct Apply {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub callee: Box<Expr>,
     pub args: Vec<Expr>,
@@ -608,7 +612,7 @@ impl PartialEq for Apply {
 // Remote, e.g. Foo:Bar
 #[derive(Debug, Clone)]
 pub struct Remote {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub module: Box<Expr>,
     pub function: Box<Expr>,
@@ -621,7 +625,7 @@ impl PartialEq for Remote {
 
 #[derive(Debug, Clone)]
 pub struct BinaryExpr {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub lhs: Box<Expr>,
     pub op: BinaryOp,
@@ -635,7 +639,7 @@ impl PartialEq for BinaryExpr {
 
 #[derive(Debug, Clone)]
 pub struct UnaryExpr {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub op: UnaryOp,
     pub operand: Box<Expr>,
@@ -648,7 +652,7 @@ impl PartialEq for UnaryExpr {
 
 #[derive(Debug, Clone)]
 pub struct Match {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub pattern: Box<Expr>,
     pub expr: Box<Expr>,
@@ -661,7 +665,7 @@ impl PartialEq for Match {
 
 #[derive(Debug, Clone)]
 pub struct If {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub clauses: Vec<IfClause>,
 }
@@ -674,7 +678,7 @@ impl PartialEq for If {
 /// Represents a single clause in an `if` expression
 #[derive(Debug, Clone)]
 pub struct IfClause {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub guards: Vec<Guard>,
     pub body: Vec<Expr>,
@@ -687,7 +691,7 @@ impl PartialEq for IfClause {
 
 #[derive(Debug, Clone)]
 pub struct Catch {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub expr: Box<Expr>,
 }
@@ -699,7 +703,7 @@ impl PartialEq for Catch {
 
 #[derive(Debug, Clone)]
 pub struct Case {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub expr: Box<Expr>,
     pub clauses: Vec<Clause>,
@@ -712,7 +716,7 @@ impl PartialEq for Case {
 
 #[derive(Debug, Clone)]
 pub struct Receive {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub clauses: Option<Vec<Clause>>,
     pub after: Option<After>,
@@ -725,7 +729,7 @@ impl PartialEq for Receive {
 
 #[derive(Debug, Clone)]
 pub struct Try {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub exprs: Vec<Expr>,
     pub clauses: Option<Vec<Clause>>,
@@ -744,7 +748,7 @@ impl PartialEq for Try {
 /// Represents a single `catch` clause in a `try` expression
 #[derive(Debug, Clone)]
 pub struct TryClause {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub kind: Name,
     pub error: Expr,
@@ -765,7 +769,7 @@ impl PartialEq for TryClause {
 /// Represents the `after` clause of a `receive` expression
 #[derive(Debug, Clone)]
 pub struct After {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub timeout: Box<Expr>,
     pub body: Vec<Expr>,
@@ -779,7 +783,7 @@ impl PartialEq for After {
 /// Represents a single match clause in a `case`, `try`, or `receive` expression
 #[derive(Debug, Clone)]
 pub struct Clause {
-    pub span: ByteSpan,
+    pub span: SourceSpan,
     pub id: NodeId,
     pub pattern: Expr,
     pub guard: Option<Vec<Guard>>,

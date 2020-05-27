@@ -1,9 +1,9 @@
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::hash::{Hash, Hasher};
 
-mod std_impl;
-mod entity_impl;
 mod bforest_impl;
+mod entity_impl;
+mod std_impl;
 
 pub trait HasAux<Inner> {
     fn get_aux(&self) -> &Inner;

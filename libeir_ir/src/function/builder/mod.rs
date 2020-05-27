@@ -1,11 +1,13 @@
-use super::{ Block, Value, PrimOp, Const, Location };
-use super::ValueKind;
-use super::{ PrimOpData, PrimOpKind };
-use super::{ Function };
+use libeir_diagnostics::SourceSpan;
 
+use super::Function;
+use super::ValueKind;
+use super::{Block, Const, Location, PrimOp, Value};
+use super::{PrimOpData, PrimOpKind};
+
+use crate::constant::{ConstantContainer, IntoConst};
+use crate::pattern::PatternContainer;
 use crate::BinOp;
-use crate::constant::{ ConstantContainer, IntoConst };
-use crate::pattern::{ PatternContainer };
 
 use cranelift_entity::EntityList;
 
@@ -15,11 +17,9 @@ pub use op::CaseBuilder;
 mod primop;
 
 impl Function {
-
     pub fn builder(&mut self) -> FunctionBuilder<'_> {
         FunctionBuilder::new(self)
     }
-
 }
 
 pub trait IntoValue {
@@ -50,7 +50,10 @@ impl IntoValue for PrimOp {
         fun.values.get(ValueKind::PrimOp(self))
     }
 }
-impl<T> IntoValue for T where T: IntoConst {
+impl<T> IntoValue for T
+where
+    T: IntoConst,
+{
     fn into_value<'a>(self, b: &mut FunctionBuilder<'a>) -> Value {
         let constant = b.fun.constant_container.from(self);
         let value = b.fun.values.push(ValueKind::Const(constant));
@@ -115,12 +118,10 @@ pub struct FunctionBuilder<'a> {
     value_buf: Option<Vec<Value>>,
     const_pair_buf: Option<Vec<[Const; 2]>>,
     value_pair_buf: Option<Vec<[Value; 2]>>,
-
     //mangler: Mangler,
 }
 
 impl<'a> FunctionBuilder<'a> {
-
     pub fn new(fun: &'a mut Function) -> FunctionBuilder<'a> {
         // TODO separate allocated data structures into separate
         // reusable struct
@@ -154,17 +155,21 @@ impl<'a> FunctionBuilder<'a> {
     pub fn cons_mut(&mut self) -> &mut ConstantContainer {
         &mut self.fun.constant_container
     }
-
 }
 
 /// Values
 impl<'a> FunctionBuilder<'a> {
-
-    pub fn value<T>(&mut self, v: T) -> Value where T: IntoValue {
+    pub fn value<T>(&mut self, v: T) -> Value
+    where
+        T: IntoValue,
+    {
         v.into_value(self)
     }
 
-    pub fn value_map<F>(&mut self, mut value: Value, map: &mut F) -> Value where F: FnMut(Value) -> Option<Value> {
+    pub fn value_map<F>(&mut self, mut value: Value, map: &mut F) -> Value
+    where
+        F: FnMut(Value) -> Option<Value>,
+    {
         if let Some(new) = map(value) {
             value = new;
         }
@@ -179,18 +184,20 @@ impl<'a> FunctionBuilder<'a> {
                 }
 
                 let kind = self.fun().primop_kind(prim).clone();
-                self.prim_from_kind(kind, &values)
+                let span = self
+                    .fun()
+                    .value_locations(value)
+                    .map(|spans| spans.first().copied().unwrap_or(SourceSpan::UNKNOWN))
+                    .unwrap_or(SourceSpan::UNKNOWN);
+                self.prim_from_kind(span, kind, &values)
             }
             _ => value,
         }
     }
-
-
 }
 
 /// Graph
 impl<'a> FunctionBuilder<'a> {
-
     /// Updates the successors in the graph from the reads.
     /// Mainly used in the builder.
     pub(crate) fn graph_update_block(&mut self, block: Block) {
@@ -208,17 +215,20 @@ impl<'a> FunctionBuilder<'a> {
         }
         for successor in block_buf.iter() {
             let block_data = &mut self.fun.blocks[*successor];
-            block_data.predecessors.remove(
-                *successor, &mut self.fun.pool.block_set, &());
+            block_data
+                .predecessors
+                .remove(*successor, &mut self.fun.pool.block_set, &());
         }
 
         // 2. Add new successors to block
         block_buf.clear();
         {
-            self.fun.block_walk_nested_values::<_, ()>(block, &mut |val| {
-                value_buf.push(val);
-                Ok(())
-            }).unwrap();
+            self.fun
+                .block_walk_nested_values::<_, ()>(block, &mut |val| {
+                    value_buf.push(val);
+                    Ok(())
+                })
+                .unwrap();
 
             let block_data = &mut self.fun.blocks[block];
             block_data.successors.clear(&mut self.fun.pool.block_set);
@@ -226,23 +236,27 @@ impl<'a> FunctionBuilder<'a> {
             for value in value_buf.iter() {
                 let value_data = &mut self.fun.values[*value];
                 // Insert block as usage of value
-                value_data.usages.insert(block, &mut self.fun.pool.block_set, &());
+                value_data
+                    .usages
+                    .insert(block, &mut self.fun.pool.block_set, &());
 
                 // If the value is a block capture, insert into successors
                 // for current block
                 if let ValueKind::Block(dest_block) = &value_data.kind {
-                    block_data.successors.insert(
-                        *dest_block, &mut self.fun.pool.block_set, &());
+                    block_data
+                        .successors
+                        .insert(*dest_block, &mut self.fun.pool.block_set, &());
                     block_buf.push(*dest_block);
                 }
             }
         }
 
-
         // 3. Add block as predecessor to all successors
         for dest_block in block_buf.iter() {
             let block_data = &mut self.fun.blocks[*dest_block];
-            block_data.predecessors.insert(block, &mut self.fun.pool.block_set, &());
+            block_data
+                .predecessors
+                .insert(block, &mut self.fun.pool.block_set, &());
         }
 
         block_buf.clear();
@@ -250,14 +264,16 @@ impl<'a> FunctionBuilder<'a> {
         self.block_buf = Some(block_buf);
         self.value_buf = Some(value_buf);
     }
-
 }
 
 /// Block modifiers
 impl<'a> FunctionBuilder<'a> {
-
     pub fn block_insert(&mut self) -> Block {
         self.fun.block_insert()
+    }
+
+    pub fn block_insert_with_span(&mut self, span: Option<SourceSpan>) -> Block {
+        self.fun.block_insert_with_span(span)
     }
 
     /// Inserts a new block and get its value
@@ -308,7 +324,6 @@ impl<'a> FunctionBuilder<'a> {
             data.reads.clear(&mut self.fun.pool.value);
         }
 
-
         for value in value_buf.iter() {
             let data = &mut self.fun.values[*value];
             data.usages.remove(block, &mut self.fun.pool.block_set, &());
@@ -325,7 +340,8 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn block_value_map<F>(&mut self, block: Block, mut map: F)
-    where F: FnMut(Value) -> Value
+    where
+        F: FnMut(Value) -> Value,
     {
         let num_reads = self.fun.block_reads(block).len();
 
@@ -339,7 +355,10 @@ impl<'a> FunctionBuilder<'a> {
         self.fun.blocks[block].reads = new_reads;
     }
 
-    pub fn block_copy_body_map<F>(&mut self, from: Block, to: Block, mut map: F) where F: FnMut(Value) -> Option<Value> {
+    pub fn block_copy_body_map<F>(&mut self, from: Block, to: Block, mut map: F)
+    where
+        F: FnMut(Value) -> Option<Value>,
+    {
         let op;
         let loc;
         {
@@ -365,7 +384,6 @@ impl<'a> FunctionBuilder<'a> {
 
         self.graph_update_block(to);
     }
-
 }
 
 #[cfg(test)]
@@ -373,6 +391,7 @@ mod tests {
     use super::*;
     use crate::FunctionIdent;
 
+    use libeir_diagnostics::SourceSpan;
     use libeir_intern::Ident;
 
     #[test]
@@ -382,7 +401,7 @@ mod tests {
             name: Ident::from_str("test"),
             arity: 1,
         };
-        let mut fun = Function::new(ident);
+        let mut fun = Function::new(SourceSpan::UNKNOWN, ident);
         let mut b = fun.builder();
 
         {
@@ -399,6 +418,4 @@ mod tests {
             b.fun().graph_validate_global();
         }
     }
-
 }
-

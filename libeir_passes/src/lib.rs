@@ -2,7 +2,7 @@
 
 use log::{info, trace};
 
-use libeir_ir::{ Module, FunctionBuilder };
+use libeir_ir::{FunctionBuilder, Module};
 
 pub mod util;
 
@@ -32,14 +32,14 @@ pub struct PassManager {
 }
 
 impl PassManager {
-
     pub fn new() -> Self {
-        PassManager {
-            passes: Vec::new(),
-        }
+        PassManager { passes: Vec::new() }
     }
 
-    pub fn push_function_pass<P>(&mut self, pass: P) where P: FunctionPass + 'static {
+    pub fn push_function_pass<P>(&mut self, pass: P)
+    where
+        P: FunctionPass + 'static,
+    {
         self.passes.push(PassType::Function(Box::new(pass)));
     }
 
@@ -63,7 +63,6 @@ impl PassManager {
             }
         }
     }
-
 }
 
 impl Default for PassManager {

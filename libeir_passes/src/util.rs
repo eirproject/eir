@@ -22,7 +22,9 @@ impl<T: Copy + Ord> EdgeSet<T> {
                 }
             }
 
-            if !change { break; }
+            if !change {
+                break;
+            }
         }
     }
 }
@@ -55,7 +57,9 @@ where
     }
     pub fn next(&mut self) -> Option<T> {
         while let Some(t) = self.to_walk.pop() {
-            if self.walked.contains(&t) { continue; }
+            if self.walked.contains(&t) {
+                continue;
+            }
             return Some(t);
         }
         None

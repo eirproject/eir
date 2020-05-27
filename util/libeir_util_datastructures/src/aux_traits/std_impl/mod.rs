@@ -1,7 +1,7 @@
+use super::{AuxDebug, AuxEq, AuxHash, AuxImpl, HasAux};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::hash::{Hash, Hasher};
-use super::{HasAux, AuxImpl, AuxDebug, AuxHash, AuxEq};
 
 impl<T: AuxDebug<C>, C> AuxDebug<C> for Option<T> {
     fn aux_fmt(&self, f: &mut Formatter<'_>, aux: &C) -> FmtResult {
@@ -24,7 +24,10 @@ impl<T: AuxEq<Aux>, Aux> AuxEq<Aux> for Option<T> {
 impl<C, K: AuxDebug<C>, V: AuxDebug<C>> AuxDebug<C> for HashMap<K, V> {
     fn aux_fmt(&self, f: &mut Formatter<'_>, aux: &C) -> FmtResult {
         let mut b = f.debug_map();
-        b.entries(self.iter().map(|(k, v)| (AuxImpl(k, aux.get_aux()), AuxImpl(v, aux.get_aux()))));
+        b.entries(
+            self.iter()
+                .map(|(k, v)| (AuxImpl(k, aux.get_aux()), AuxImpl(v, aux.get_aux()))),
+        );
         b.finish()
     }
 }

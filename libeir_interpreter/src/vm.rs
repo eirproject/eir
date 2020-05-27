@@ -1,13 +1,13 @@
-use std::collections::HashMap;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::module::{ NativeModule, ModuleType, ErlangModule };
-use crate::process::{ ProcessContext, CallExecutor, Continuation, TermCall };
-use crate::term::{ Term, Pid, Reference };
+use crate::module::{ErlangModule, ModuleType, NativeModule};
+use crate::process::{CallExecutor, Continuation, ProcessContext, TermCall};
+use crate::term::{Pid, Reference, Term};
 
-use libeir_ir::{ Module, FunctionIdent };
 use libeir_intern::Symbol;
+use libeir_ir::{FunctionIdent, Module};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum WatchType {
@@ -18,7 +18,6 @@ pub enum WatchType {
 #[derive(Debug)]
 pub struct ReferenceGenerator(Reference);
 impl ReferenceGenerator {
-
     fn new() -> Self {
         ReferenceGenerator(Reference(0))
     }
@@ -28,7 +27,6 @@ impl ReferenceGenerator {
         (self.0).0 += 1;
         r
     }
-
 }
 
 pub struct VMState {
@@ -36,7 +34,6 @@ pub struct VMState {
     pub processes: RefCell<Vec<Rc<RefCell<ProcessContext>>>>,
 
     pub ref_gen: RefCell<ReferenceGenerator>,
-
     // Hashmap of all watches a process has placed on it.
     //pub watches: RefCell<HashMap<Pid, Vec<(Pid, WatchType)>>>,
 
@@ -44,7 +41,6 @@ pub struct VMState {
 }
 
 impl VMState {
-
     pub fn new() -> Self {
         VMState {
             modules: HashMap::new(),
@@ -59,11 +55,13 @@ impl VMState {
         let erl_mod = ErlangModule::from_eir(module);
         match self.modules.remove(&erl_mod.name) {
             None => {
-                self.modules.insert(erl_mod.name, ModuleType::Erlang(erl_mod, None));
-            },
+                self.modules
+                    .insert(erl_mod.name, ModuleType::Erlang(erl_mod, None));
+            }
             Some(ModuleType::Native(native)) => {
-                self.modules.insert(erl_mod.name, ModuleType::Erlang(erl_mod, Some(native)));
-            },
+                self.modules
+                    .insert(erl_mod.name, ModuleType::Erlang(erl_mod, Some(native)));
+            }
             _ => panic!(),
         }
     }
@@ -72,10 +70,11 @@ impl VMState {
         match self.modules.remove(&module.name) {
             None => {
                 self.modules.insert(module.name, ModuleType::Native(module));
-            },
+            }
             Some(ModuleType::Erlang(erl, None)) => {
-                self.modules.insert(module.name, ModuleType::Erlang(erl, Some(module)));
-            },
+                self.modules
+                    .insert(module.name, ModuleType::Erlang(erl, Some(module)));
+            }
             _ => panic!(),
         }
     }
@@ -97,7 +96,11 @@ impl VMState {
         self.add_native_module(crate::erl_lib::make_maps());
     }
 
-    pub fn call(&mut self, fun: &FunctionIdent, args: &[Term]) -> Result<Rc<Term>, (Rc<Term>, Rc<Term>, Rc<Term>)> {
+    pub fn call(
+        &mut self,
+        fun: &FunctionIdent,
+        args: &[Term],
+    ) -> Result<Rc<Term>, (Rc<Term>, Rc<Term>, Rc<Term>)> {
         let self_pid = {
             let processes = self.processes.borrow();
             Pid(processes.len())
@@ -105,9 +108,7 @@ impl VMState {
 
         let mut process = ProcessContext::new(self_pid);
 
-        let fun_term = Term::CapturedFunction {
-            ident: fun.clone(),
-        };
+        let fun_term = Term::CapturedFunction { ident: fun.clone() };
 
         let mut n_args = Vec::new();
         n_args.push(Term::ReturnOk.into());
@@ -127,7 +128,6 @@ impl VMState {
                 Continuation::ReturnThrow(r1, r2, r3) => return Err((r1, r2, r3)),
             }
         }
-
     }
 
     //pub fn call(&mut self, module_name: &str, fun_name: &str, args: Vec<Term>)
@@ -191,5 +191,4 @@ impl VMState {
     //    let mut process = processes_borrow[self_pid.0].borrow_mut();
     //    process.return_val.take().unwrap()
     //}
-
 }

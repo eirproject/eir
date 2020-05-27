@@ -3,15 +3,13 @@ use std::collections::HashMap;
 use crate::Function;
 use crate::{Block, Value};
 
-use libeir_util_datastructures::aux_traits::{HasAux, AuxDebug, AuxImpl};
-use cranelift_bforest::{Set, SetForest, BoundSet};
+use cranelift_bforest::{BoundSet, Set, SetForest};
+use libeir_util_datastructures::aux_traits::{AuxDebug, AuxImpl, HasAux};
 
 impl Function {
-
     pub fn live_values(&self) -> LiveValues {
         calculate_live_values(self)
     }
-
 }
 
 /// # Value liveness calculation
@@ -59,7 +57,6 @@ impl std::fmt::Debug for LiveValues {
 }
 
 impl LiveValues {
-
     pub fn live_at<'a>(&'a self, block: Block) -> BoundSet<'a, Value, ()> {
         self.live_at[&block].bind(&self.forest, &())
     }
@@ -73,7 +70,6 @@ impl LiveValues {
     pub fn is_live_in(&self, block: Block, value: Value) -> bool {
         self.live_in[&block].contains(value, &self.forest, &())
     }
-
 }
 
 fn dataflow_pass(
@@ -82,7 +78,6 @@ fn dataflow_pass(
     live: &mut HashMap<Block, Set<Value>>,
     live_in: &mut HashMap<Block, Set<Value>>,
 ) -> bool {
-
     let graph = fun.block_graph();
     let mut visitor = graph.dfs_post_order();
 
@@ -90,7 +85,6 @@ fn dataflow_pass(
 
     // For each Op node in the cfg
     while let Some(block) = visitor.next(&graph) {
-
         let mut set: Set<Value> = Set::new();
 
         // For each of the outgoing branches, add its live values to the current set
@@ -108,7 +102,8 @@ fn dataflow_pass(
                     set.insert(v, pool, &());
                 }
                 Ok(())
-            }).unwrap();
+            })
+            .unwrap();
         }
 
         // Update the live_after values
@@ -135,7 +130,6 @@ fn dataflow_pass(
 
         // Insert the new calculated live variables
         live.insert(block, set);
-
     }
 
     stable
@@ -149,19 +143,20 @@ pub fn calculate_live_values(fun: &Function) -> LiveValues {
 
     // Iterate dataflow until all dependencies have been resolved
     loop {
-        let res = dataflow_pass(
-            fun,
-            &mut forest,
-            &mut live_at,
-            &mut live_in,
-        );
-        if res { break; }
+        let res = dataflow_pass(fun, &mut forest, &mut live_at, &mut live_in);
+        if res {
+            break;
+        }
     }
 
     // Validate that the live set at entry is empty
     {
         let entry = fun.block_entry();
-        assert!(live_at[&entry].iter(&forest).count() == 0, "{:?}", live_at[&entry].bind(&forest, &()));
+        assert!(
+            live_at[&entry].iter(&forest).count() == 0,
+            "{:?}",
+            live_at[&entry].bind(&forest, &())
+        );
     }
 
     LiveValues {
@@ -176,8 +171,8 @@ mod tests {
 
     #[test]
     fn test_simple() {
-
-        let (ir, map) = crate::parse_function_map_unwrap("
+        let (ir, map) = crate::parse_function_map_unwrap(
+            "
 a'foo':a'bar'/1 {
     b1(%ret, %thr):
         b2();
@@ -186,7 +181,8 @@ a'foo':a'bar'/1 {
     b3():
         %ret([]);
 }
-");
+",
+        );
 
         let b1 = map.get_block("b1");
         let b2 = map.get_block("b2");
@@ -210,8 +206,8 @@ a'foo':a'bar'/1 {
 
     #[test]
     fn test_cycle() {
-
-        let (ir, map) = crate::parse_function_map_unwrap("
+        let (ir, map) = crate::parse_function_map_unwrap(
+            "
 a'foo':a'bar'/1 {
     b1(%ret, %thr, %a):
         b2(%a, []);
@@ -226,7 +222,8 @@ a'foo':a'bar'/1 {
     b6():
         %ret();
 }
-");
+",
+        );
 
         let b1 = map.get_block("b1");
         let b3 = map.get_block("b3");
@@ -254,16 +251,4 @@ a'foo':a'bar'/1 {
         assert!(b6_live.iter().count() == 1);
         assert!(b6_live.contains(b1_ret));
     }
-
 }
-
-
-
-
-
-
-
-
-
-
-

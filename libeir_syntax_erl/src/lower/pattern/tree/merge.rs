@@ -1,21 +1,15 @@
 //! Merges And nodes in the pattern tree
 
-use std::collections::{ BTreeMap, BTreeSet };
+use std::collections::{BTreeMap, BTreeSet};
 
-use libeir_ir::{
-    FunctionBuilder,
-};
+use libeir_ir::FunctionBuilder;
 
 use cranelift_entity::EntityList;
 
-use crate::lower::{ LowerCtx, LowerError };
-use super::{ Tree, TreeNode, TreeNodeKind };
+use super::{Tree, TreeNode, TreeNodeKind};
+use crate::lower::{LowerCtx, LowerError};
 
-pub(crate) fn merge_tree_nodes(
-    ctx: &mut LowerCtx,
-    b: &mut FunctionBuilder,
-    t: &mut Tree,
-) {
+pub(crate) fn merge_tree_nodes(ctx: &mut LowerCtx, b: &mut FunctionBuilder, t: &mut Tree) {
     let num_root = t.roots.len();
     for n in 0..num_root {
         let root = t.roots[n];
@@ -24,15 +18,10 @@ pub(crate) fn merge_tree_nodes(
     }
 }
 
-fn map_node(
-    ctx: &mut LowerCtx,
-    b: &mut FunctionBuilder,
-    t: &mut Tree,
-    node: TreeNode,
-) -> TreeNode {
+fn map_node(ctx: &mut LowerCtx, b: &mut FunctionBuilder, t: &mut Tree, node: TreeNode) -> TreeNode {
     let new = match t.nodes[node].clone() {
         TreeNodeKind::Atomic(_, _) => node,
-        TreeNodeKind::Wildcard => node,
+        TreeNodeKind::Wildcard(_) => node,
         TreeNodeKind::Tuple { span, elems } => {
             let mut new_elems = EntityList::new();
             for idx in 0..elems.len(&t.node_pool) {
@@ -54,7 +43,14 @@ fn map_node(
                 tail: new_tail,
             })
         }
-        TreeNodeKind::Binary { span, specifier, size, size_resolved, value, tail } => {
+        TreeNodeKind::Binary {
+            span,
+            specifier,
+            size,
+            size_resolved,
+            value,
+            tail,
+        } => {
             let n_value = map_node(ctx, b, t, value);
             let n_tail = map_node(ctx, b, t, tail);
             t.nodes.push(TreeNodeKind::Binary {
@@ -70,14 +66,17 @@ fn map_node(
             let mut dedup = BTreeMap::new();
             for (k, v) in entries.iter() {
                 if let Some(old) = dedup.get(k) {
-                    let new = t.nodes.push(
-                        TreeNodeKind::And { left: *old, right: *v });
+                    let new = t.nodes.push(TreeNodeKind::And {
+                        left: *old,
+                        right: *v,
+                    });
                     dedup.insert(*k, new);
                 } else {
                     dedup.insert(*k, *v);
                 }
             }
-            let new_entries: Vec<_> = dedup.iter()
+            let new_entries: Vec<_> = dedup
+                .iter()
                 .map(|(k, v)| (*k, map_node(ctx, b, t, *v)))
                 .collect();
             t.nodes.push(TreeNodeKind::Map {
@@ -85,9 +84,7 @@ fn map_node(
                 entries: new_entries,
             })
         }
-        TreeNodeKind::And { left, right } => {
-            merge_nodes(ctx, b, t, left, right)
-        }
+        TreeNodeKind::And { left, right } => merge_nodes(ctx, b, t, left, right),
         _ => unreachable!(),
     };
     t.rename(node, new);
@@ -108,8 +105,8 @@ fn merge_nodes(
     let r_kind = t.nodes[right].clone();
 
     let new = match (l_kind, r_kind) {
-        (TreeNodeKind::Wildcard, _) => right,
-        (_, TreeNodeKind::Wildcard) => left,
+        (TreeNodeKind::Wildcard(_), _) => right,
+        (_, TreeNodeKind::Wildcard(_)) => left,
         (TreeNodeKind::Atomic(s1, c1), TreeNodeKind::Atomic(s2, c2)) => {
             if c1 == c2 {
                 t.nodes.push(TreeNodeKind::Atomic(s1, c1))
@@ -119,11 +116,19 @@ fn merge_nodes(
                     right: Some(s2),
                 });
                 t.unmatchable = true;
-                t.nodes.push(TreeNodeKind::Wildcard)
+                t.nodes.push(TreeNodeKind::Wildcard(s1))
             }
         }
-        (TreeNodeKind::Tuple { span: s1, elems: e1 },
-         TreeNodeKind::Tuple { span: s2, elems: e2 }) => {
+        (
+            TreeNodeKind::Tuple {
+                span: s1,
+                elems: e1,
+            },
+            TreeNodeKind::Tuple {
+                span: s2,
+                elems: e2,
+            },
+        ) => {
             let len1 = e1.len(&t.node_pool);
             if len1 != e2.len(&t.node_pool) {
                 ctx.warn(LowerError::DisjointPatternUnionWarning {
@@ -131,7 +136,7 @@ fn merge_nodes(
                     right: Some(s2),
                 });
                 t.unmatchable = true;
-                t.nodes.push(TreeNodeKind::Wildcard)
+                t.nodes.push(TreeNodeKind::Wildcard(s1))
             } else {
                 let mut elems = EntityList::new();
                 for idx in 0..len1 {
@@ -140,14 +145,21 @@ fn merge_nodes(
                     let merged = merge_nodes(ctx, b, t, l, r);
                     elems.push(merged, &mut t.node_pool);
                 }
-                t.nodes.push(TreeNodeKind::Tuple {
-                    span: s1,
-                    elems,
-                })
+                t.nodes.push(TreeNodeKind::Tuple { span: s1, elems })
             }
         }
-        (TreeNodeKind::Cons { span: s1, head: h1, tail: t1 },
-         TreeNodeKind::Cons { span: _s2, head: h2, tail: t2 }) => {
+        (
+            TreeNodeKind::Cons {
+                span: s1,
+                head: h1,
+                tail: t1,
+            },
+            TreeNodeKind::Cons {
+                span: _s2,
+                head: h2,
+                tail: t2,
+            },
+        ) => {
             let h_m = merge_nodes(ctx, b, t, h1, h2);
             let t_m = merge_nodes(ctx, b, t, t1, t2);
             t.nodes.push(TreeNodeKind::Cons {
@@ -156,12 +168,8 @@ fn merge_nodes(
                 tail: t_m,
             })
         }
-        (TreeNodeKind::Binary { .. },
-         TreeNodeKind::Binary { .. }) => {
-            unimplemented!()
-        }
-        (TreeNodeKind::Map { entries: e_l, span },
-         TreeNodeKind::Map { entries: e_r, .. }) => {
+        (TreeNodeKind::Binary { .. }, TreeNodeKind::Binary { .. }) => unimplemented!(),
+        (TreeNodeKind::Map { entries: e_l, span }, TreeNodeKind::Map { entries: e_r, .. }) => {
             // Entries vectors should already be sorted
             debug_assert!(e_l.windows(2).all(|w| w[0].0 < w[1].0));
             debug_assert!(e_r.windows(2).all(|w| w[0].0 < w[1].0));
@@ -175,10 +183,8 @@ fn merge_nodes(
             let mut l_iter = e_l.iter();
             let mut r_iter = e_r.iter();
             for key in left.intersection(&right) {
-                let l_n = l_iter.find(|(k, _v)| k == key)
-                    .map(|(_k, v)| *v).unwrap();
-                let r_n = r_iter.find(|(k, _v)| k == key)
-                    .map(|(_k, v)| *v).unwrap();
+                let l_n = l_iter.find(|(k, _v)| k == key).map(|(_k, v)| *v).unwrap();
+                let r_n = r_iter.find(|(k, _v)| k == key).map(|(_k, v)| *v).unwrap();
 
                 let merged = merge_nodes(ctx, b, t, l_n, r_n);
                 new.push((*key, merged));
@@ -187,8 +193,7 @@ fn merge_nodes(
             // Map over the left and right differences
             let mut l_iter = e_l.iter();
             for key in left.difference(&right) {
-                let l_n = l_iter.find(|(k, _v)| k == key)
-                    .map(|(_k, v)| *v).unwrap();
+                let l_n = l_iter.find(|(k, _v)| k == key).map(|(_k, v)| *v).unwrap();
 
                 let node = map_node(ctx, b, t, l_n);
                 new.push((*key, node));
@@ -196,8 +201,7 @@ fn merge_nodes(
 
             let mut r_iter = e_r.iter();
             for key in right.difference(&left) {
-                let r_n = r_iter.find(|(k, _v)| k == key)
-                    .map(|(_k, v)| *v).unwrap();
+                let r_n = r_iter.find(|(k, _v)| k == key).map(|(_k, v)| *v).unwrap();
 
                 let node = map_node(ctx, b, t, r_n);
                 new.push((*key, node));
@@ -205,16 +209,13 @@ fn merge_nodes(
 
             new.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
 
-            t.nodes.push(TreeNodeKind::Map {
-                span,
-                entries: new,
-            })
+            t.nodes.push(TreeNodeKind::Map { span, entries: new })
         }
         (TreeNodeKind::And { .. }, TreeNodeKind::And { .. }) => unreachable!(),
         _ => {
             ctx.warn(LowerError::DisjointPatternUnionWarning {
-                left: t.node_span(left),
-                right: t.node_span(right),
+                left: Some(t.node_span(left)),
+                right: Some(t.node_span(right)),
             });
             t.unmatchable = true;
             t.nodes.push(TreeNodeKind::And { left, right })

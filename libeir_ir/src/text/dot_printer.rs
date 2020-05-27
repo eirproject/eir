@@ -1,13 +1,13 @@
 use std::marker::PhantomData;
 
+use super::printer as pr;
+use super::printer::{FormatState, FunctionFormatData};
 use crate::Function;
 use pretty::Arena;
-use super::printer as pr;
-use super::printer::{FunctionFormatData, BlockFormatSink, FormatConfig, FormatState};
 
 use libeir_util_dot_graph::GraphPrinter;
 
-use petgraph::visit::{ Dfs, IntoNeighbors };
+use petgraph::visit::{Dfs, IntoNeighbors};
 
 pub fn function_into_graph_printer<O>(fun: &Function, g: &mut GraphPrinter<O>)
 where

@@ -2,15 +2,15 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::path::{Component, PathBuf};
 
-use snafu::{Snafu, ResultExt};
+use snafu::{ResultExt, Snafu};
 
+use glob::glob;
+use libeir_diagnostics::{Diagnostic, Label, SourceSpan};
 use libeir_util_parse::substitute_path_variables;
 use libeir_util_parse::PathVariableSubstituteError;
-use libeir_diagnostics::{ ByteSpan, Diagnostic, Label, DUMMY_SPAN };
-use glob::glob;
 
 use crate::lexer::{symbols, Lexed, LexicalToken, Symbol, Token};
-use crate::lexer::{AtomToken, StringToken, SymbolToken, IntegerToken};
+use crate::lexer::{AtomToken, IntegerToken, StringToken, SymbolToken};
 
 use super::token_reader::{ReadFrom, TokenReader};
 use super::types::{MacroName, MacroVariables};
@@ -18,41 +18,36 @@ use super::{PreprocessorError, Result};
 
 #[derive(Debug, Snafu)]
 pub enum DirectiveError {
-
     #[snafu(display("{}", source))]
     PathSubstitute {
-        span: ByteSpan,
+        span: SourceSpan,
         source: PathVariableSubstituteError,
     },
 
     #[snafu(display("could not find file"))]
     FileNotFound {
-        span: ByteSpan,
+        span: SourceSpan,
         searched: Vec<String>,
     },
 
     #[snafu(display("glob pattern error: {}", source))]
     GlobPattern {
-        span: ByteSpan,
+        span: SourceSpan,
         source: glob::PatternError,
     },
     #[snafu(display("glob error: {}", source))]
     Glob {
-        span: ByteSpan,
+        span: SourceSpan,
         source: glob::GlobError,
-    }
-
+    },
 }
 impl DirectiveError {
     pub fn to_diagnostic(&self) -> Diagnostic {
         match self {
-            DirectiveError::PathSubstitute { span, source } => {
-                Diagnostic::new_error(source.to_string())
-                    .with_label(
-                        Label::new_primary(*span)
-                            .with_message("in expansion of this path")
-                    )
-            }
+            DirectiveError::PathSubstitute { span, source } => Diagnostic::error()
+                .with_message(source.to_string())
+                .with_labels(vec![Label::primary(span.source_id(), *span)
+                    .with_message("in expansion of this path")]),
             DirectiveError::FileNotFound { span, searched } => {
                 let mut aux_msg = format!("search paths:\n");
                 for path in searched.iter() {
@@ -60,30 +55,23 @@ impl DirectiveError {
                     aux_msg.push('\n');
                 }
 
-                Diagnostic::new_error("could not find file")
-                    .with_label(
-                        Label::new_primary(*span)
-                            .with_message("failed to find file")
-                    )
-                    .with_label(
-                        Label::new_secondary(DUMMY_SPAN)
-                            .with_message(aux_msg)
-                    )
+                Diagnostic::error()
+                    .with_message("could not find file")
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), *span).with_message("failed to find file")
+                    ])
+                    .with_notes(vec![aux_msg])
             }
-            DirectiveError::GlobPattern { span, source } => {
-                Diagnostic::new_error(format!("error in glob pattern: {}", source))
-                    .with_label(
-                        Label::new_primary(*span)
-                            .with_message("in this glob pattern")
-                    )
-            }
-            DirectiveError::Glob { span, source } => {
-                Diagnostic::new_error(format!("glob error: {}", source))
-                    .with_label(
-                        Label::new_primary(*span)
-                            .with_message("in this glob pattern")
-                    )
-            }
+            DirectiveError::GlobPattern { span, source } => Diagnostic::error()
+                .with_message(format!("error in glob pattern: {}", source))
+                .with_labels(vec![
+                    Label::primary(span.source_id(), *span).with_message("in this glob pattern")
+                ]),
+            DirectiveError::Glob { span, source } => Diagnostic::error()
+                .with_message(format!("glob error: {}", source))
+                .with_labels(vec![
+                    Label::primary(span.source_id(), *span).with_message("in this glob pattern")
+                ]),
         }
     }
 }
@@ -103,10 +91,10 @@ pub struct Module {
     pub _dot: SymbolToken,
 }
 impl Module {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 
     pub fn expand(&self) -> VecDeque<LexicalToken> {
@@ -165,8 +153,11 @@ pub struct Include {
 impl Include {
     /// Executes file inclusion.
     pub fn include(&self, include_paths: &VecDeque<PathBuf>) -> DirectiveResult<PathBuf> {
-        let path = substitute_path_variables(self.path.symbol().as_str().get())
-            .context(PathSubstitute { span: self.path.span() })?;
+        let path = substitute_path_variables(self.path.symbol().as_str().get()).context(
+            PathSubstitute {
+                span: self.path.span(),
+            },
+        )?;
 
         let mut tmp_path;
         for include_path in include_paths.iter() {
@@ -178,12 +169,12 @@ impl Include {
             }
         }
 
-        let searched: Vec<String> = include_paths.iter()
+        let searched: Vec<String> = include_paths
+            .iter()
             .map(|path| {
                 path.to_str()
                     .map(|v| v.to_owned())
-                    .unwrap_or_else(
-                        || path.to_string_lossy().chars().collect())
+                    .unwrap_or_else(|| path.to_string_lossy().chars().collect())
             })
             .collect();
 
@@ -193,10 +184,10 @@ impl Include {
         })
     }
 
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 }
 impl Eq for Include {}
@@ -243,8 +234,11 @@ pub struct IncludeLib {
 impl IncludeLib {
     /// Executes file inclusion.
     pub fn include_lib(&self, code_paths: &VecDeque<PathBuf>) -> DirectiveResult<PathBuf> {
-        let mut path = substitute_path_variables(self.path.symbol().as_str().get())
-            .context(PathSubstitute { span: self.path.span() })?;
+        let mut path = substitute_path_variables(self.path.symbol().as_str().get()).context(
+            PathSubstitute {
+                span: self.path.span(),
+            },
+        )?;
 
         let temp_path = path.clone();
         let mut components = temp_path.components();
@@ -257,10 +251,14 @@ impl IncludeLib {
                 let pattern = root.join(&pattern);
                 let pattern = pattern.to_str().unwrap();
                 if let Some(entry) = glob(pattern)
-                    .context(GlobPattern { span: self.path.span() })?
+                    .context(GlobPattern {
+                        span: self.path.span(),
+                    })?
                     .nth(0)
                 {
-                    path = entry.context(Glob { span: self.path.span() })?;
+                    path = entry.context(Glob {
+                        span: self.path.span(),
+                    })?;
                     for c in components {
                         path.push(c.as_os_str());
                     }
@@ -271,10 +269,10 @@ impl IncludeLib {
         Ok(path)
     }
 
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 }
 impl Eq for IncludeLib {}
@@ -320,10 +318,10 @@ pub struct Error {
     pub _dot: SymbolToken,
 }
 impl Error {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 }
 impl Eq for Error {}
@@ -369,10 +367,10 @@ pub struct Warning {
     pub _dot: SymbolToken,
 }
 impl Warning {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 }
 impl Eq for Warning {}
@@ -414,10 +412,10 @@ pub struct Endif {
     pub _dot: SymbolToken,
 }
 impl Endif {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 }
 impl Eq for Endif {}
@@ -456,10 +454,10 @@ pub struct Else {
     pub _dot: SymbolToken,
 }
 impl Else {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 }
 impl Eq for Else {}
@@ -501,10 +499,10 @@ pub struct Undef {
     pub _dot: SymbolToken,
 }
 impl Undef {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
     pub fn name(&self) -> Symbol {
         self.name.symbol()
@@ -552,10 +550,10 @@ pub struct If {
     pub _dot: SymbolToken,
 }
 impl If {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 }
 impl Eq for If {}
@@ -600,10 +598,10 @@ pub struct Elif {
     pub _dot: SymbolToken,
 }
 impl Elif {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 }
 impl Eq for Elif {}
@@ -681,10 +679,10 @@ pub struct Ifdef {
     pub _dot: SymbolToken,
 }
 impl Ifdef {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
     pub fn name(&self) -> Symbol {
         self.name.symbol()
@@ -732,10 +730,10 @@ pub struct Ifndef {
     pub _dot: SymbolToken,
 }
 impl Ifndef {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
     pub fn name(&self) -> Symbol {
         self.name.symbol()
@@ -786,18 +784,18 @@ pub struct Define {
     pub _dot: SymbolToken,
 }
 impl Define {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.0;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 }
 impl Eq for Define {}
 impl PartialEq for Define {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name &&
-        self.variables == other.variables &&
-        self.replacement == other.replacement
+        self.name == other.name
+            && self.variables == other.variables
+            && self.replacement == other.replacement
     }
 }
 impl fmt::Display for Define {
@@ -877,10 +875,10 @@ pub struct File {
     pub _dot: SymbolToken,
 }
 impl File {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._hyphen.0;
         let end = self._dot.0;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 }
 impl Eq for File {}
@@ -891,12 +889,7 @@ impl PartialEq for File {
 }
 impl fmt::Display for File {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "-file({}, {}).",
-            self.path,
-            self.line,
-        )
+        write!(f, "-file({}, {}).", self.path, self.line,)
     }
 }
 impl ReadFrom for File {

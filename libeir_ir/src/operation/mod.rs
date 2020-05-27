@@ -1,14 +1,14 @@
 use std::ops::Deref;
 
 use std::any::TypeId;
-use std::raw::TraitObject;
 use std::fmt::{Debug, Formatter, Result as FmtResult};
+use std::raw::TraitObject;
 
 use meta_table::MetaEntry;
 use stack_dst::Value;
 
-pub mod receive;
 pub mod binary_construct;
+pub mod receive;
 
 pub trait Op: MetaEntry {
     fn name(&self) -> &str;
@@ -32,7 +32,6 @@ pub trait Op: MetaEntry {
 }
 
 impl dyn Op {
-
     pub fn try_cast<T: Op>(&self) -> Option<&T> {
         unimplemented!()
     }
@@ -44,9 +43,7 @@ impl dyn Op {
         // TODO: `type_id` is implemented by the user, if the user returns the
         // wrong TypeId, this is unsafe.
         if self.type_id() == TypeId::of::<T>() {
-            unsafe {
-                Some(self.downcast_ref_unchecked())
-            }
+            unsafe { Some(self.downcast_ref_unchecked()) }
         } else {
             None
         }
@@ -59,7 +56,6 @@ impl dyn Op {
         let trait_object: TraitObject = ::std::mem::transmute(self);
         std::mem::transmute(trait_object.data)
     }
-
 }
 
 pub trait OpBuild: Op {
@@ -76,11 +72,9 @@ pub trait OpBuild: Op {
 pub struct DynOp(Value<dyn Op>);
 
 impl DynOp {
-
     pub fn new<T: Op>(value: T) -> Self {
         DynOp(Value::new_stable(value, |v| v as _).ok().unwrap())
     }
-
 }
 
 impl Deref for DynOp {

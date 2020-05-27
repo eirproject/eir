@@ -42,12 +42,12 @@
 use std::any::TypeId;
 use std::default::Default;
 
-use meta_table::{MetaEntry, impl_meta_entry};
+use meta_table::{impl_meta_entry, MetaEntry};
 
-use crate::{Function, FunctionBuilder, Block, Value, BinaryEntrySpecifier};
+use super::{DynOp, Op, OpBuild};
 use crate::dialect::Dialect;
 use crate::traits::OpBranches;
-use super::{Op, DynOp, OpBuild};
+use crate::{BinaryEntrySpecifier, Block, Function, FunctionBuilder, Value};
 
 pub struct BinaryConstructToken(());
 
@@ -85,7 +85,6 @@ impl OpBranches for BinaryConstructStart {
 }
 
 impl BinaryConstructStart {
-
     pub fn build(builder: &mut FunctionBuilder, block: Block) -> Block {
         let target = builder.block_insert();
         let _arg = builder.block_arg_insert(target);
@@ -95,9 +94,13 @@ impl BinaryConstructStart {
 
     pub fn build_target(builder: &mut FunctionBuilder, block: Block, target: Block) {
         let target_val = builder.value(target);
-        builder.op_intrinsic(block, BinaryConstructStart, &[target_val], BinaryConstructToken(()));
+        builder.op_intrinsic(
+            block,
+            BinaryConstructStart,
+            &[target_val],
+            BinaryConstructToken(()),
+        );
     }
-
 }
 impl OpBuild for BinaryConstructStart {
     type Token = BinaryConstructToken;
@@ -148,7 +151,6 @@ impl OpBranches for BinaryConstructPush {
 }
 
 impl BinaryConstructPush {
-
     pub fn build(
         builder: &mut FunctionBuilder,
         block: Block,
@@ -156,8 +158,7 @@ impl BinaryConstructPush {
         value: Value,
         spec: BinaryEntrySpecifier,
         size: Option<Value>,
-    ) -> (Block, Block)
-    {
+    ) -> (Block, Block) {
         let ok = builder.block_insert();
         let _bin_ref = builder.block_arg_insert(ok);
         let fail = builder.block_insert();
@@ -181,25 +182,19 @@ impl BinaryConstructPush {
         if let Some(size) = size {
             builder.op_intrinsic(
                 block,
-                BinaryConstructPush {
-                    specifier: spec,
-                },
+                BinaryConstructPush { specifier: spec },
                 &[ok_val, fail_val, bin_ref, value, size],
                 BinaryConstructToken(()),
             );
         } else {
             builder.op_intrinsic(
                 block,
-                BinaryConstructPush {
-                    specifier: spec,
-                },
+                BinaryConstructPush { specifier: spec },
                 &[ok_val, fail_val, bin_ref, value],
                 BinaryConstructToken(()),
             );
         };
-
     }
-
 }
 impl OpBuild for BinaryConstructPush {
     type Token = BinaryConstructToken;
@@ -239,7 +234,6 @@ impl OpBranches for BinaryConstructFinish {
 }
 
 impl BinaryConstructFinish {
-
     pub fn build(builder: &mut FunctionBuilder, block: Block, bin_ref: Value) -> Block {
         let target = builder.block_insert();
         let _arg = builder.block_arg_insert(target);
@@ -247,11 +241,20 @@ impl BinaryConstructFinish {
         target
     }
 
-    pub fn build_target(builder: &mut FunctionBuilder, block: Block, bin_ref: Value, target: Block) {
+    pub fn build_target(
+        builder: &mut FunctionBuilder,
+        block: Block,
+        bin_ref: Value,
+        target: Block,
+    ) {
         let target_val = builder.value(target);
-        builder.op_intrinsic(block, BinaryConstructFinish, &[target_val, bin_ref], BinaryConstructToken(()));
+        builder.op_intrinsic(
+            block,
+            BinaryConstructFinish,
+            &[target_val, bin_ref],
+            BinaryConstructToken(()),
+        );
     }
-
 }
 impl OpBuild for BinaryConstructFinish {
     type Token = BinaryConstructToken;

@@ -6,9 +6,9 @@ use cranelift_entity::EntityList;
 use libeir_ir::Function;
 use libeir_util_datastructures::pooled_entity_set::EntitySet;
 
-use crate::util::Walker;
-use super::{SynthesisStrategy, Synthesis, SegmentHeadKind};
 use super::super::{ChainGraph, NodeKind};
+use super::{SegmentHeadKind, Synthesis, SynthesisStrategy};
+use crate::util::Walker;
 
 /// A dead simple synthesis strategy. Works in every case.
 /// All nodes before the first phi will be specialized.
@@ -23,7 +23,6 @@ use super::super::{ChainGraph, NodeKind};
 pub struct SimpleStrategy;
 
 impl SynthesisStrategy for SimpleStrategy {
-
     fn try_run(&self, graph: &ChainGraph, _fun: &Function) -> Option<Synthesis> {
         trace!("SIMPLE STRATEGY");
 
@@ -86,5 +85,4 @@ impl SynthesisStrategy for SimpleStrategy {
 
         Some(synthesis)
     }
-
 }

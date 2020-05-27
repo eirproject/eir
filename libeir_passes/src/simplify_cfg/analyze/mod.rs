@@ -1,4 +1,3 @@
-
 // TODO
 // Something might be broken with what values become Scope vs EntryArg.
 // Revisit this and make sure things are correct.
@@ -7,20 +6,20 @@
 // Maybe not since then we would need to special case references from
 // primops/blocks?
 
-use std::collections::{BTreeSet, BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use bumpalo::{Bump, collections::Vec as BVec};
+use bumpalo::{collections::Vec as BVec, Bump};
 
-use libeir_util_datastructures::pooled_entity_set::{EntitySetPool, EntitySet};
+use libeir_util_datastructures::pooled_entity_set::{EntitySet, EntitySetPool};
 
 use super::BFnvHashMap;
 
-use libeir_ir::{Block, Value, OpKind, ValueKind, CallKind};
+use libeir_ir::{Block, CallKind, OpKind, Value, ValueKind};
 use libeir_ir::{Function, LiveBlockGraph, LiveValues};
 
 use log::trace;
 
-use super::chain_graph::{Node, Chain};
+use super::chain_graph::{Chain, Node};
 
 mod call;
 mod if_bool;
@@ -50,7 +49,6 @@ pub struct TreeData<'bump> {
 }
 
 impl<'bump> GraphAnalysis<'bump> {
-
     fn is_before(&self, lhs: Block, rhs: Block) -> bool {
         let mut curr = lhs;
 
@@ -81,7 +79,6 @@ impl<'bump> GraphAnalysis<'bump> {
             false
         }
     }
-
 }
 
 #[derive(Debug)]
@@ -139,7 +136,6 @@ pub struct EntryEdgeAnalysis<'bump> {
     // The arguments that should be used when calling the target block.
     // These need to be called with `map_value` in case the value is a primop.
     pub args: BVec<'bump, PhiSource>,
-
     //pub looping_vars: BTreeSet<Value>,
 }
 
@@ -156,7 +152,6 @@ struct AnalysisContext<'bump, 'a> {
     phis: &'a mut BFnvHashMap<'bump, Value, CondValue<'bump>>,
 }
 impl<'bump, 'a> AnalysisContext<'bump, 'a> {
-
     fn init_block(&mut self, block: Block) {
         self.current = Some(block);
     }
@@ -174,11 +169,7 @@ impl<'bump, 'a> AnalysisContext<'bump, 'a> {
         self.static_branches.insert(self.current.unwrap(), target);
     }
 
-    pub fn add_rename(
-        &mut self,
-        callee: Block,
-        caller_read: Value, callee_arg_num: usize,
-    ) {
+    pub fn add_rename(&mut self, callee: Block, caller_read: Value, callee_arg_num: usize) {
         let caller = self.current.unwrap();
         let callee_arg = self.fun.block_args(callee)[callee_arg_num];
 
@@ -216,18 +207,18 @@ impl<'bump, 'a> AnalysisContext<'bump, 'a> {
             arg: callee_arg,
         };
         self.phis
-            .get_mut(&callee_arg).unwrap()
-            .sources.insert(caller, phi_source);
+            .get_mut(&callee_arg)
+            .unwrap()
+            .sources
+            .insert(caller, phi_source);
     }
-
 }
 
 pub fn analyze_graph<'bump, 'fun>(
     bump: &'bump Bump,
     fun: &'fun Function,
     graph: &'fun LiveBlockGraph,
-) -> GraphAnalysis<'bump>
-{
+) -> GraphAnalysis<'bump> {
     let entry = fun.block_entry();
 
     let mut static_branches = BFnvHashMap::with_hasher_in(Default::default(), bump);
@@ -273,17 +264,18 @@ pub fn analyze_graph<'bump, 'fun>(
 
         for block in relevant_blocks.iter() {
             // If the block is already statically resolved, we can skip it.
-            if handled_blocks.contains(block) { continue; }
+            if handled_blocks.contains(block) {
+                continue;
+            }
 
             ctx.init_block(*block);
 
             let res = match fun.block_kind(*block).unwrap() {
-                OpKind::Call(CallKind::ControlFlow) =>
-                    self::call::propagate(&mut ctx, *block),
-                OpKind::IfBool =>
-                    self::if_bool::propagate(&mut ctx, *block),
-                OpKind::UnpackValueList(n) =>
-                    self::unpack_value_list::propagate(&mut ctx, *block, *n),
+                OpKind::Call(CallKind::ControlFlow) => self::call::propagate(&mut ctx, *block),
+                OpKind::IfBool => self::if_bool::propagate(&mut ctx, *block),
+                OpKind::UnpackValueList(n) => {
+                    self::unpack_value_list::propagate(&mut ctx, *block, *n)
+                }
                 _ => unreachable!(),
             };
 
@@ -296,7 +288,9 @@ pub fn analyze_graph<'bump, 'fun>(
         }
 
         // If this iteration contains no changes, then we are done.
-        if !changed { break; }
+        if !changed {
+            break;
+        }
     }
 
     trace!("======== Results after initial traversal:");
@@ -308,22 +302,24 @@ pub fn analyze_graph<'bump, 'fun>(
     for phi in ctx.phis.values_mut() {
         for incoming in graph.incoming(phi.block) {
             if !phi.sources.contains_key(&incoming) {
-                phi.sources.insert(incoming, PhiSource {
-                    // Not relevant since the edge is not part of the tree
-                    value: None,
-                    caller: None,
+                phi.sources.insert(
+                    incoming,
+                    PhiSource {
+                        // Not relevant since the edge is not part of the tree
+                        value: None,
+                        caller: None,
 
-                    called: phi.block,
-                    arg_index: phi.value_index,
-                    arg: phi.value,
-                });
+                        called: phi.block,
+                        arg_index: phi.value_index,
+                        arg: phi.value,
+                    },
+                );
             }
         }
     }
 
     // Generate `static_branches_blocks`
-    let mut static_branches_blocks = BFnvHashMap::with_hasher_in(
-        Default::default(), bump);
+    let mut static_branches_blocks = BFnvHashMap::with_hasher_in(Default::default(), bump);
     for (from, to) in static_branches.iter() {
         if let Some(to_block) = fun.value_block(*to) {
             static_branches_blocks.insert(*from, to_block);
@@ -332,8 +328,7 @@ pub fn analyze_graph<'bump, 'fun>(
 
     // Group chains
     // TODO: Handle cycles
-    let mut trees = BFnvHashMap::with_hasher_in(
-        Default::default(), bump);
+    let mut trees = BFnvHashMap::with_hasher_in(Default::default(), bump);
     for (from, to) in static_branches.iter() {
         let mut next_target_value = *to;
         let mut target_block = *from;
@@ -342,7 +337,6 @@ pub fn analyze_graph<'bump, 'fun>(
 
         // Walk chain of branches until target is reached
         loop {
-
             // If the next value is a block
             if let Some(to_block) = fun.value_block(next_target_value) {
                 // .. the target is that block
@@ -423,7 +417,6 @@ pub fn analyze_graph<'bump, 'fun>(
 pub struct ChainMapping {
     entry_to_chain: BTreeMap<Block, Chain>,
     block_to_entries: BTreeMap<Block, BTreeSet<Block>>,
-
 }
 impl ChainMapping {
     pub fn iter_entries_for<'a>(&'a self, block: Block) -> impl Iterator<Item = Block> + 'a {
@@ -446,8 +439,7 @@ pub fn build_node<'bump>(
     value: Value,
     chain_graph: &mut super::chain_graph::ChainGraph,
     existing_nodes: &mut BTreeMap<Value, Node>,
-) -> (bool, Node)
-{
+) -> (bool, Node) {
     trace!("{:?} {:?}", value, fun.value_kind(value));
 
     let tree = &analysis.trees[&target];
@@ -495,7 +487,7 @@ pub fn build_node<'bump>(
                             *from_block,
                             from_val,
                             chain_graph,
-                            existing_nodes
+                            existing_nodes,
                         );
                         for entry in block_graph.iter_entries_for(*from_block) {
                             let chain = block_graph.entry_to_chain(entry);
@@ -508,14 +500,13 @@ pub fn build_node<'bump>(
             // If current block is an entry, add that to the phi
             if tree.entry_edges.contains_key(&block) {
                 let chain = block_graph.entry_to_chain(block);
-                let node = chain_graph.insert_chain_entry_arg(
-                    chain, arg_index, value);
+                let node = chain_graph.insert_chain_entry_arg(chain, arg_index, value);
                 chain_graph.phi_add_entry(v_phi, chain, node);
             }
 
             existing_nodes.insert(value, v_phi);
             (true, v_phi)
-        },
+        }
         ValueKind::Block(block) => {
             // Look up existing node
             if let Some(existing) = existing_nodes.get(&value) {
@@ -537,14 +528,14 @@ pub fn build_node<'bump>(
                     last_loc,
                     dep_value,
                     chain_graph,
-                    existing_nodes
+                    existing_nodes,
                 );
                 chain_graph.add_dep(v_block, node, dep_value);
             }
 
             existing_nodes.insert(value, v_block);
             (true, v_block)
-        },
+        }
         ValueKind::PrimOp(prim) => {
             // Look up existing node
             if let Some(existing) = existing_nodes.get(&value) {
@@ -565,7 +556,7 @@ pub fn build_node<'bump>(
                     last_loc,
                     *p_read,
                     chain_graph,
-                    existing_nodes
+                    existing_nodes,
                 );
                 chain_graph.add_dep(v_prim, dep_node, *p_read);
                 if req {
@@ -575,10 +566,8 @@ pub fn build_node<'bump>(
 
             existing_nodes.insert(value, v_prim);
             (required, v_prim)
-        },
-        ValueKind::Const(_) => {
-            (false, chain_graph.insert_scoped(value))
-        },
+        }
+        ValueKind::Const(_) => (false, chain_graph.insert_scoped(value)),
     }
 }
 
@@ -638,7 +627,6 @@ pub fn analyze_chain<'bump>(
 
         assert!(!entry_to_chain.contains_key(entry_block));
         entry_to_chain.insert(*entry_block, chain);
-
     }
 
     let chain_mapping = ChainMapping {

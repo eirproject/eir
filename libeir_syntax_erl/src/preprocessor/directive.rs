@@ -1,6 +1,6 @@
 use std::fmt;
 
-use libeir_diagnostics::ByteSpan;
+use libeir_diagnostics::SourceSpan;
 
 use crate::lexer::{AtomToken, LexicalToken, SymbolToken, Token};
 
@@ -28,7 +28,7 @@ pub enum Directive {
     File(directives::File),
 }
 impl Directive {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         match *self {
             Directive::Module(ref t) => t.span(),
             Directive::Include(ref t) => t.span(),
@@ -72,6 +72,14 @@ impl ReadFrom for Directive {
     where
         R: TokenReader<Source = S>,
     {
+        macro_rules! unread_token {
+            ($reader:expr, $hyphen:expr, $source:expr, $tok:expr) => {{
+                $reader.unread_token(LexicalToken($source.0, $tok, $source.2));
+                $reader.unread_token($hyphen);
+                return Ok(None);
+            }};
+        }
+
         let _hyphen: SymbolToken = if let Some(_hyphen) = reader.try_read_expected(&Token::Minus)? {
             _hyphen
         } else {
@@ -89,81 +97,23 @@ impl ReadFrom for Directive {
         // Replace atoms with more concrete tokens for special attributes,
         // but otherwise do nothing else with them
         match name_sym {
-            "compile" => {
-                reader.unread_token(LexicalToken(name.0, Token::Compile, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
-            "record" => {
-                reader.unread_token(LexicalToken(name.0, Token::Record, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
-            "spec" => {
-                reader.unread_token(LexicalToken(name.0, Token::Spec, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
-            "callback" => {
-                reader.unread_token(LexicalToken(name.0, Token::Callback, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
+            "compile" => unread_token!(reader, _hyphen.into(), name, Token::Compile),
+            "record" => unread_token!(reader, _hyphen.into(), name, Token::Record),
+            "spec" => unread_token!(reader, _hyphen.into(), name, Token::Spec),
+            "callback" => unread_token!(reader, _hyphen.into(), name, Token::Callback),
             "optional_callback" => {
-                reader.unread_token(LexicalToken(name.0, Token::OptionalCallback, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
+                unread_token!(reader, _hyphen.into(), name, Token::OptionalCallback)
             }
-            "import" => {
-                reader.unread_token(LexicalToken(name.0, Token::Import, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
-            "export" => {
-                reader.unread_token(LexicalToken(name.0, Token::Export, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
-            "export_type" => {
-                reader.unread_token(LexicalToken(name.0, Token::ExportType, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
-            "vsn" => {
-                reader.unread_token(LexicalToken(name.0, Token::Vsn, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
-            "author" => {
-                reader.unread_token(LexicalToken(name.0, Token::Author, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
-            "on_load" => {
-                reader.unread_token(LexicalToken(name.0, Token::OnLoad, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
-            "behaviour" => {
-                reader.unread_token(LexicalToken(name.0, Token::Behaviour, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
-            "deprecated" => {
-                reader.unread_token(LexicalToken(name.0, Token::Deprecated, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
-            "type" => {
-                reader.unread_token(LexicalToken(name.0, Token::Type, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
-            "opaque" => {
-                reader.unread_token(LexicalToken(name.0, Token::Opaque, name.2));
-                reader.unread_token(_hyphen.into());
-                return Ok(None);
-            }
+            "import" => unread_token!(reader, _hyphen.into(), name, Token::Import),
+            "export" => unread_token!(reader, _hyphen.into(), name, Token::Export),
+            "export_type" => unread_token!(reader, _hyphen.into(), name, Token::ExportType),
+            "vsn" => unread_token!(reader, _hyphen.into(), name, Token::Vsn),
+            "author" => unread_token!(reader, _hyphen.into(), name, Token::Author),
+            "on_load" => unread_token!(reader, _hyphen.into(), name, Token::OnLoad),
+            "behaviour" => unread_token!(reader, _hyphen.into(), name, Token::Behaviour),
+            "deprecated" => unread_token!(reader, _hyphen.into(), name, Token::Deprecated),
+            "type" => unread_token!(reader, _hyphen.into(), name, Token::Type),
+            "opaque" => unread_token!(reader, _hyphen.into(), name, Token::Opaque),
             _ => {
                 reader.unread_token(name.clone().into());
                 reader.unread_token(_hyphen.into());

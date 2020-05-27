@@ -1,8 +1,8 @@
-use std::collections::{BTreeSet, BTreeMap};
+use std::collections::{BTreeMap, BTreeSet};
 
-use libeir_ir::{Function, Block, Value};
-use libeir_ir::{OpKind, CallKind};
-use libeir_ir::{LiveValues, FunctionTree};
+use libeir_ir::{Block, Function, Value};
+use libeir_ir::{CallKind, OpKind};
+use libeir_ir::{FunctionTree, LiveValues};
 
 use petgraph::visit::IntoNeighbors;
 
@@ -28,8 +28,5 @@ pub fn analyze(fun: &Function) -> LowerData {
     let live = fun.live_values();
     let func_tree = fun.func_tree(&live, true);
 
-    LowerData {
-        live,
-        func_tree,
-    }
+    LowerData { live, func_tree }
 }

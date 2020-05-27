@@ -1,8 +1,8 @@
 //use rug::Integer;
 //use rug::integer::Order;
-use num_bigint::{ BigInt, Sign };
+use num_bigint::{BigInt, Sign};
 
-use super::{ BitSlice, BitRead, BitWrite };
+use super::{BitRead, BitSlice, BitWrite};
 
 #[derive(Debug, Copy, Clone)]
 pub enum Endian {
@@ -19,7 +19,6 @@ pub enum Endian {
 //}
 
 pub fn integer_to_carrier(mut int: BigInt, bits: usize, endian: Endian) -> BitSlice<Vec<u8>> {
-
     let negative = int < 0;
     if negative {
         int += 1;
@@ -68,17 +67,16 @@ pub fn integer_to_carrier(mut int: BigInt, bits: usize, endian: Endian) -> BitSl
         }
         Endian::Little => {
             if aux_bits > 0 {
-                digits[keep_bytes-1] <<= 8 - aux_bits;
+                digits[keep_bytes - 1] <<= 8 - aux_bits;
             }
             BitSlice::with_offset_length(digits, 0, bits)
         }
     }
-
 }
 
 fn carrier_to_buf<C>(carrier: C, signed: bool, endian: Endian) -> (Vec<u8>, bool)
 where
-    C: BitRead<T = u8>
+    C: BitRead<T = u8>,
 {
     let bit_len = carrier.bit_len();
     let num_bytes = (bit_len + 7) / 8;
@@ -93,8 +91,7 @@ where
 
     let mut buf = vec![0; num_bytes];
     {
-        let mut slice = BitSlice::with_offset_length(
-            &mut buf, offset, bit_len);
+        let mut slice = BitSlice::with_offset_length(&mut buf, offset, bit_len);
         slice.write(carrier);
     }
 
@@ -122,7 +119,7 @@ where
 
 pub fn carrier_to_integer<C>(carrier: C, signed: bool, endian: Endian) -> BigInt
 where
-    C: BitRead<T = u8>
+    C: BitRead<T = u8>,
 {
     let (mut buf, sign) = carrier_to_buf(carrier, signed, endian);
 
@@ -147,9 +144,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::super::{BitSlice, BitWrite};
+    use super::{carrier_to_buf, carrier_to_integer, integer_to_carrier, Endian};
     use num_bigint::BigInt;
-    use super::{ integer_to_carrier, carrier_to_integer, carrier_to_buf, Endian };
-    use super::super::{ BitSlice, BitWrite };
 
     #[test]
     fn integer_adapter_basic() {
@@ -170,7 +167,6 @@ mod tests {
             assert!(out[0] == 0b00001111);
             assert!(out[1] == 0b00010000);
         }
-
     }
 
     #[test]
@@ -182,8 +178,7 @@ mod tests {
 
             let mut out: [u8; 2] = [0; 2];
             {
-                let mut slice = BitSlice::with_offset_length(
-                    &mut out as &mut [u8], 0, 12);
+                let mut slice = BitSlice::with_offset_length(&mut out as &mut [u8], 0, 12);
                 slice.write(conv);
             }
 
@@ -196,20 +191,17 @@ mod tests {
 
             let mut out: [u8; 2] = [0; 2];
             {
-                let mut slice = BitSlice::with_offset_length(
-                    &mut out as &mut [u8], 0, 12);
+                let mut slice = BitSlice::with_offset_length(&mut out as &mut [u8], 0, 12);
                 slice.write(conv);
             }
 
             assert!(out[0] == 0b11110001);
             assert!(out[1] == 0b00000000);
         }
-
     }
 
     #[test]
     fn integer_adapter_negative() {
-
         {
             let int = BigInt::from(-5);
             let conv = integer_to_carrier(int.clone(), 16, Endian::Big);
@@ -227,12 +219,10 @@ mod tests {
             dbg!(out);
             assert!(out == -10000);
         }
-
     }
 
     #[test]
     fn integer_carrier_to_buf() {
-
         {
             let int = BigInt::from(5);
             let conv = integer_to_carrier(int.clone(), 16, Endian::Big);
@@ -255,8 +245,7 @@ mod tests {
             let conv = integer_to_carrier(int.clone(), 12, Endian::Big);
 
             let mut buf: [u8; 2] = [0; 2];
-            let mut carrier = BitSlice::with_offset_length(
-                &mut buf as &mut [u8], 0, 12);
+            let mut carrier = BitSlice::with_offset_length(&mut buf as &mut [u8], 0, 12);
 
             carrier.write(&conv);
 
@@ -276,8 +265,7 @@ mod tests {
             let conv = integer_to_carrier(int.clone(), 12, Endian::Big);
 
             let mut buf: [u8; 2] = [0; 2];
-            let mut carrier = BitSlice::with_offset_length(
-                &mut buf as &mut [u8], 0, 12);
+            let mut carrier = BitSlice::with_offset_length(&mut buf as &mut [u8], 0, 12);
 
             carrier.write(&conv);
 
@@ -297,8 +285,7 @@ mod tests {
             let conv = integer_to_carrier(int.clone(), 12, Endian::Little);
 
             let mut buf: [u8; 2] = [0; 2];
-            let mut carrier = BitSlice::with_offset_length(
-                &mut buf as &mut [u8], 0, 12);
+            let mut carrier = BitSlice::with_offset_length(&mut buf as &mut [u8], 0, 12);
 
             carrier.write(&conv);
 
@@ -312,12 +299,10 @@ mod tests {
             assert!(out[1] == 0b11111010);
             assert!(sign == true);
         }
-
     }
 
     #[test]
     fn integer_round_trip_basic() {
-
         {
             let int = BigInt::from(5);
             let conv = integer_to_carrier(int.clone(), 16, Endian::Big);
@@ -353,19 +338,16 @@ mod tests {
             let back = carrier_to_integer(&buf as &[u8], true, Endian::Little);
             assert!(int == back);
         }
-
     }
 
     #[test]
     fn integer_round_trip_unaligned() {
-
         {
             let int = BigInt::from(5);
             let conv = integer_to_carrier(int.clone(), 12, Endian::Big);
 
             let mut buf: [u8; 2] = [0; 2];
-            let mut carrier = BitSlice::with_offset_length(
-                &mut buf as &mut [u8], 0, 12);
+            let mut carrier = BitSlice::with_offset_length(&mut buf as &mut [u8], 0, 12);
 
             carrier.write(&conv);
 
@@ -378,8 +360,7 @@ mod tests {
             let conv = integer_to_carrier(int.clone(), 12, Endian::Little);
 
             let mut buf: [u8; 2] = [0; 2];
-            let mut carrier = BitSlice::with_offset_length(
-                &mut buf as &mut [u8], 0, 12);
+            let mut carrier = BitSlice::with_offset_length(&mut buf as &mut [u8], 0, 12);
 
             carrier.write(&conv);
 
@@ -392,8 +373,7 @@ mod tests {
             let conv = integer_to_carrier(int.clone(), 12, Endian::Big);
 
             let mut buf: [u8; 2] = [0; 2];
-            let mut carrier = BitSlice::with_offset_length(
-                &mut buf as &mut [u8], 0, 12);
+            let mut carrier = BitSlice::with_offset_length(&mut buf as &mut [u8], 0, 12);
 
             carrier.write(&conv);
 
@@ -406,15 +386,12 @@ mod tests {
             let conv = integer_to_carrier(int.clone(), 12, Endian::Little);
 
             let mut buf: [u8; 2] = [0; 2];
-            let mut carrier = BitSlice::with_offset_length(
-                &mut buf as &mut [u8], 0, 12);
+            let mut carrier = BitSlice::with_offset_length(&mut buf as &mut [u8], 0, 12);
 
             carrier.write(&conv);
 
             let back = carrier_to_integer(&carrier, true, Endian::Little);
             assert!(int == back);
         }
-
     }
-
 }

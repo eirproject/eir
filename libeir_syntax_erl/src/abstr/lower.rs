@@ -1,6 +1,6 @@
-use libeir_ir::ToPrimitive;
+use libeir_diagnostics::SourceSpan;
 use libeir_intern::Ident;
-use libeir_diagnostics::{ByteSpan, DUMMY_SPAN};
+use libeir_ir::ToPrimitive;
 use libeir_util_parse::MessageIgnore;
 
 use std::convert::TryInto;
@@ -8,12 +8,16 @@ use std::convert::TryInto;
 use crate::parser::ast;
 use libeir_util_parse_listing::ast as aast;
 
-fn to_list_expr(id_gen: &mut ast::NodeIdGenerator, span: ByteSpan, mut list: Vec<ast::Expr>) -> ast::Expr {
+fn to_list_expr(
+    id_gen: &mut ast::NodeIdGenerator,
+    span: SourceSpan,
+    mut list: Vec<ast::Expr>,
+) -> ast::Expr {
     let mut acc = ast::Expr::Nil(ast::Nil(span, id_gen.next()));
     for elem in list.drain(..).rev() {
         acc = ast::Expr::Cons(ast::Cons {
             id: id_gen.next(),
-            span: span,
+            span,
             head: Box::new(elem),
             tail: Box::new(acc),
         });
@@ -26,6 +30,7 @@ pub fn lower(root: &aast::Root) -> ast::Module {
 
     let mut id_gen = ast::NodeIdGenerator::new();
 
+    let module_span = root.span();
     let mut module_name = None;
     let mut eof = false;
 
@@ -47,9 +52,11 @@ pub fn lower(root: &aast::Root) -> ast::Module {
                     "file" => (),
                     "module" => {
                         module_name = Some(tuple.entries[3].atom().unwrap());
-                    },
+                    }
                     "export" => {
-                        let exports = tuple.entries[3].list_iter().unwrap()
+                        let exports = tuple.entries[3]
+                            .list_iter()
+                            .unwrap()
                             .map(|item| {
                                 let item_tup = item.tuple().unwrap();
                                 let name = item_tup.entries[0].atom().unwrap();
@@ -62,38 +69,38 @@ pub fn lower(root: &aast::Root) -> ast::Module {
                                 }
                             })
                             .collect();
-                        toplevel.push(ast::TopLevel::Attribute(
-                            ast::Attribute::Export(tuple.span, exports)));
-                    },
+                        toplevel.push(ast::TopLevel::Attribute(ast::Attribute::Export(
+                            tuple.span, exports,
+                        )));
+                    }
                     "compile" => {
-                        let opts = tuple
-                            .entries[3]
+                        let opts = tuple.entries[3]
                             .list_iter()
                             .unwrap()
-                            .map(|item| {
-                                match item {
-                                    aast::Item::Atom(ident) =>
-                                        ast::Expr::Literal(ast::Literal::Atom(id_gen.next(), *ident)),
-                                    _ => unimplemented!("{:?}", item),
+                            .map(|item| match item {
+                                aast::Item::Atom(ident) => {
+                                    ast::Expr::Literal(ast::Literal::Atom(id_gen.next(), *ident))
                                 }
+                                _ => unimplemented!("{:?}", item),
                             })
                             .collect();
-                        toplevel.push(ast::TopLevel::Attribute(
-                            ast::Attribute::Compile(tuple.span, to_list_expr(&mut id_gen, tuple.span, opts))
-                        ))
+                        toplevel.push(ast::TopLevel::Attribute(ast::Attribute::Compile(
+                            tuple.span,
+                            to_list_expr(&mut id_gen, tuple.span, opts),
+                        )))
                     }
                     "spec" => {
                         continue;
-                    },
+                    }
                     "dialyzer" => {
                         continue;
-                    },
+                    }
                     "export_type" => {
                         continue;
-                    },
+                    }
                     "type" => {
                         continue;
-                    },
+                    }
                     "opaque" => {
                         continue;
                         //let inner_tup = tuple.entries[3].tuple().unwrap();
@@ -105,12 +112,14 @@ pub fn lower(root: &aast::Root) -> ast::Module {
                         //};
                         //toplevel.push(ast::TopLevel::Attribute(
                         //    ast::Attribute::Type(def)));
-                    },
+                    }
                     "record" => {
                         let rec_tup = tuple.entries[3].tuple().unwrap();
 
                         let name = rec_tup.entries[0].atom().unwrap();
-                        let fields = rec_tup.entries[1].list_iter().unwrap()
+                        let fields = rec_tup.entries[1]
+                            .list_iter()
+                            .unwrap()
                             .map(|v| lower_record_field(&mut id_gen, v))
                             .collect();
 
@@ -121,21 +130,25 @@ pub fn lower(root: &aast::Root) -> ast::Module {
                             fields,
                         };
                         toplevel.push(ast::TopLevel::Record(record));
-                    },
-                    "behaviour" => {
-                        toplevel.push(ast::TopLevel::Attribute(
-                            ast::Attribute::Behaviour(tuple.span, tuple.entries[3].atom().unwrap())
-                        ))
-                    },
+                    }
+                    "behaviour" => toplevel.push(ast::TopLevel::Attribute(
+                        ast::Attribute::Behaviour(tuple.span, tuple.entries[3].atom().unwrap()),
+                    )),
                     n => unimplemented!("attribute {} {:?}", n, tuple),
                 }
-            },
+            }
             "function" => {
                 let fun_name = tuple.entries[2].atom().unwrap();
-                let fun_arity = tuple.entries[3].integer().unwrap()
-                    .integer.to_usize().unwrap();
+                let fun_arity = tuple.entries[3]
+                    .integer()
+                    .unwrap()
+                    .integer
+                    .to_usize()
+                    .unwrap();
 
-                let clauses = tuple.entries[4].list_iter().unwrap()
+                let clauses = tuple.entries[4]
+                    .list_iter()
+                    .unwrap()
                     .map(|clause| lower_function_clause(&mut id_gen, clause))
                     .collect();
 
@@ -147,10 +160,10 @@ pub fn lower(root: &aast::Root) -> ast::Module {
                     clauses: clauses,
                     spec: None,
                 }));
-            },
+            }
             "eof" => {
                 eof = true;
-            },
+            }
             n => unimplemented!("{}", n),
         }
     }
@@ -158,7 +171,7 @@ pub fn lower(root: &aast::Root) -> ast::Module {
     let mut errors = MessageIgnore::new();
     let module = ast::Module::new(
         &mut errors,
-        DUMMY_SPAN,
+        module_span,
         &mut id_gen,
         module_name.unwrap(),
         toplevel,
@@ -167,11 +180,7 @@ pub fn lower(root: &aast::Root) -> ast::Module {
     module
 }
 
-fn lower_record_field(
-    gen: &mut ast::NodeIdGenerator,
-    tup_item: &aast::Item,
-) -> ast::RecordField
-{
+fn lower_record_field(gen: &mut ast::NodeIdGenerator, tup_item: &aast::Item) -> ast::RecordField {
     let tup = tup_item.tuple().unwrap();
 
     assert!(&*tup.entries[0].atom().unwrap().as_str() == "record_field");
@@ -179,8 +188,7 @@ fn lower_record_field(
 
     let name = atom(&tup.entries[2]);
 
-    let value = tup.entries.get(3)
-        .map(|v| lower_expr(gen, v));
+    let value = tup.entries.get(3).map(|v| lower_expr(gen, v));
 
     ast::RecordField {
         span: tup.span,
@@ -194,8 +202,7 @@ fn lower_record_field(
 fn lower_function_clause(
     gen: &mut ast::NodeIdGenerator,
     clause: &aast::Item,
-) -> ast::FunctionClause
-{
+) -> ast::FunctionClause {
     let tup = clause.tuple().unwrap();
 
     assert!(tup.entries[0].atom().unwrap().as_str() == "clause");
@@ -205,7 +212,9 @@ fn lower_function_clause(
     let guard = &tup.entries[3];
     let body = &tup.entries[4];
 
-    let params_n: Vec<_> = params.list_iter().unwrap()
+    let params_n: Vec<_> = params
+        .list_iter()
+        .unwrap()
         .map(|param| lower_expr(gen, param))
         .collect();
 
@@ -222,11 +231,7 @@ fn lower_function_clause(
     }
 }
 
-fn lower_clause(
-    gen: &mut ast::NodeIdGenerator,
-    clause: &aast::Item,
-) -> ast::Clause
-{
+fn lower_clause(gen: &mut ast::NodeIdGenerator, clause: &aast::Item) -> ast::Clause {
     let tup = clause.tuple().unwrap();
 
     assert!(tup.entries[0].atom().unwrap().as_str() == "clause");
@@ -253,11 +258,7 @@ fn lower_clause(
     }
 }
 
-fn lower_if_clause(
-    gen: &mut ast::NodeIdGenerator,
-    clause: &aast::Item,
-) -> ast::IfClause
-{
+fn lower_if_clause(gen: &mut ast::NodeIdGenerator, clause: &aast::Item) -> ast::IfClause {
     let tup = clause.tuple().unwrap();
 
     assert!(tup.entries[0].atom().unwrap().as_str() == "clause");
@@ -278,11 +279,7 @@ fn lower_if_clause(
     }
 }
 
-fn lower_try_clause(
-    gen: &mut ast::NodeIdGenerator,
-    clause: &aast::Item,
-) -> ast::TryClause
-{
+fn lower_try_clause(gen: &mut ast::NodeIdGenerator, clause: &aast::Item) -> ast::TryClause {
     println!("{:#?}", clause);
     let tup = clause.tuple().unwrap();
 
@@ -335,19 +332,17 @@ fn lower_try_clause(
     }
 }
 
-fn lower_guards(
-    gen: &mut ast::NodeIdGenerator,
-    guard: &aast::Item,
-) -> Option<Vec<ast::Guard>>
-{
-    let guard_n: Vec<_> = guard.list_iter().unwrap()
-        .map(|guard| {
-            ast::Guard {
-                span: guard.span(),
-                conditions: guard.list_iter().unwrap()
-                    .map(|v| lower_expr(gen, v))
-                    .collect(),
-            }
+fn lower_guards(gen: &mut ast::NodeIdGenerator, guard: &aast::Item) -> Option<Vec<ast::Guard>> {
+    let guard_n: Vec<_> = guard
+        .list_iter()
+        .unwrap()
+        .map(|guard| ast::Guard {
+            span: guard.span(),
+            conditions: guard
+                .list_iter()
+                .unwrap()
+                .map(|v| lower_expr(gen, v))
+                .collect(),
         })
         .collect();
     if guard_n.len() == 0 {
@@ -357,22 +352,16 @@ fn lower_guards(
     }
 }
 
-fn lower_body(
-    gen: &mut ast::NodeIdGenerator,
-    body: &aast::Item,
-) -> Vec<ast::Expr>
-{
-    let body_n: Vec<_> = body.list_iter().unwrap()
+fn lower_body(gen: &mut ast::NodeIdGenerator, body: &aast::Item) -> Vec<ast::Expr> {
+    let body_n: Vec<_> = body
+        .list_iter()
+        .unwrap()
         .map(|expr| lower_expr(gen, expr))
         .collect();
     body_n
 }
 
-fn lower_expr(
-    gen: &mut ast::NodeIdGenerator,
-    expr: &aast::Item,
-) -> ast::Expr
-{
+fn lower_expr(gen: &mut ast::NodeIdGenerator, expr: &aast::Item) -> ast::Expr {
     println!("{:#?}", expr);
     let tup = expr.tuple().unwrap();
 
@@ -382,9 +371,7 @@ fn lower_expr(
     let span = tup.span;
 
     match &*name {
-        "var" => {
-            ast::Expr::Var(ast::Var(gen.next(), tup.entries[2].atom().unwrap()))
-        },
+        "var" => ast::Expr::Var(ast::Var(gen.next(), tup.entries[2].atom().unwrap())),
         "op" => {
             let tup_len = tup.entries.len();
             let op = tup.entries[2].atom().unwrap().as_str();
@@ -416,38 +403,32 @@ fn lower_expr(
             };
 
             match expr_kind {
-                ExprKind::Unary(op) => {
-                    ast::Expr::UnaryExpr(ast::UnaryExpr {
-                        span,
-                        id: gen.next(),
-                        op: op,
-                        operand: Box::new(lower_expr(gen, &tup.entries[3])),
-                    })
-                },
-                ExprKind::Binary(op) => {
-                    ast::Expr::BinaryExpr(ast::BinaryExpr {
-                        span,
-                        id: gen.next(),
-                        op: op,
-                        lhs: Box::new(lower_expr(gen, &tup.entries[3])),
-                        rhs: Box::new(lower_expr(gen, &tup.entries[4])),
-                    })
-                },
+                ExprKind::Unary(op) => ast::Expr::UnaryExpr(ast::UnaryExpr {
+                    span,
+                    id: gen.next(),
+                    op: op,
+                    operand: Box::new(lower_expr(gen, &tup.entries[3])),
+                }),
+                ExprKind::Binary(op) => ast::Expr::BinaryExpr(ast::BinaryExpr {
+                    span,
+                    id: gen.next(),
+                    op: op,
+                    lhs: Box::new(lower_expr(gen, &tup.entries[3])),
+                    rhs: Box::new(lower_expr(gen, &tup.entries[4])),
+                }),
             }
-        },
+        }
         "integer" => {
             let int = tup.entries[2].integer().unwrap();
             let lit = ast::Literal::Integer(span, gen.next(), int.integer.clone());
             ast::Expr::Literal(lit)
-        },
+        }
         "string" => {
             if let Some(string) = tup.entries[2].string() {
                 ast::Expr::Literal(ast::Literal::String(gen.next(), string))
             } else {
-                let elems: Vec<_> = tup.entries[2].list_iter()
-                    .unwrap().collect();
-                let mut acc = ast::Expr::Nil(ast::Nil(
-                    tup.span, gen.next()));
+                let elems: Vec<_> = tup.entries[2].list_iter().unwrap().collect();
+                let mut acc = ast::Expr::Nil(ast::Nil(tup.span, gen.next()));
                 for elem in elems.iter().rev() {
                     acc = ast::Expr::Cons(ast::Cons {
                         span: elem.span(),
@@ -458,23 +439,21 @@ fn lower_expr(
                 }
                 acc
             }
-        },
+        }
         "atom" => {
             let atom = tup.entries[2].atom().unwrap();
             ast::Expr::Literal(ast::Literal::Atom(gen.next(), atom))
-        },
-        "nil" => {
-            ast::Expr::Nil(ast::Nil(span, gen.next()))
-        },
-        "tuple" => {
-            ast::Expr::Tuple(ast::Tuple {
-                span,
-                id: gen.next(),
-                elements: tup.entries[2].list_iter().unwrap()
-                    .map(|e| lower_expr(gen, e))
-                    .collect(),
-            })
-        },
+        }
+        "nil" => ast::Expr::Nil(ast::Nil(span, gen.next())),
+        "tuple" => ast::Expr::Tuple(ast::Tuple {
+            span,
+            id: gen.next(),
+            elements: tup.entries[2]
+                .list_iter()
+                .unwrap()
+                .map(|e| lower_expr(gen, e))
+                .collect(),
+        }),
         "cons" => {
             let head = lower_expr(gen, &tup.entries[2]);
             let tail = lower_expr(gen, &tup.entries[3]);
@@ -484,11 +463,13 @@ fn lower_expr(
                 head: Box::new(head),
                 tail: Box::new(tail),
             })
-        },
+        }
         "map" => {
             let tup_len = tup.entries.len();
 
-            let fields = tup.entries[tup_len - 1].list_iter().unwrap()
+            let fields = tup.entries[tup_len - 1]
+                .list_iter()
+                .unwrap()
                 .map(|field| {
                     let field_tup = field.tuple().unwrap();
                     let span = field_tup.span;
@@ -499,21 +480,17 @@ fn lower_expr(
                     let value = lower_expr(gen, &field_tup.entries[3]);
 
                     match &*op_name {
-                        "map_field_exact" => {
-                            ast::MapField::Exact {
-                                span,
-                                id: gen.next(),
-                                key,
-                                value,
-                            }
+                        "map_field_exact" => ast::MapField::Exact {
+                            span,
+                            id: gen.next(),
+                            key,
+                            value,
                         },
-                        "map_field_assoc" => {
-                            ast::MapField::Assoc {
-                                span,
-                                id: gen.next(),
-                                key,
-                                value,
-                            }
+                        "map_field_assoc" => ast::MapField::Assoc {
+                            span,
+                            id: gen.next(),
+                            key,
+                            value,
                         },
                         r => panic!("{}", r),
                     }
@@ -521,28 +498,25 @@ fn lower_expr(
                 .collect();
 
             match tup_len {
-                3 => {
-                    ast::Expr::Map(ast::Map {
-                        span,
-                        id: gen.next(),
-                        fields,
-                    })
-                },
-                4 => {
-                    ast::Expr::MapUpdate(ast::MapUpdate {
-                        span,
-                        id: gen.next(),
-                        map: Box::new(lower_expr(gen, &tup.entries[2])),
-                        updates: fields,
-                    })
-                },
+                3 => ast::Expr::Map(ast::Map {
+                    span,
+                    id: gen.next(),
+                    fields,
+                }),
+                4 => ast::Expr::MapUpdate(ast::MapUpdate {
+                    span,
+                    id: gen.next(),
+                    map: Box::new(lower_expr(gen, &tup.entries[2])),
+                    updates: fields,
+                }),
                 _ => panic!(),
             }
-        },
+        }
         "case" => {
             let expr = lower_expr(gen, &tup.entries[2]);
             let clauses = tup.entries[3]
-                .list_iter().unwrap()
+                .list_iter()
+                .unwrap()
                 .map(|c| lower_clause(gen, c))
                 .collect();
             ast::Expr::Case(ast::Case {
@@ -551,11 +525,13 @@ fn lower_expr(
                 expr: Box::new(expr),
                 clauses,
             })
-        },
+        }
         "call" => {
             let target = lower_expr(gen, &tup.entries[2]);
 
-            let args = tup.entries[3].list_iter().unwrap()
+            let args = tup.entries[3]
+                .list_iter()
+                .unwrap()
                 .map(|v| lower_expr(gen, v))
                 .collect();
 
@@ -565,17 +541,17 @@ fn lower_expr(
                 callee: Box::new(target),
                 args,
             })
-        },
-        "remote" => {
-            ast::Expr::Remote(ast::Remote {
-                span,
-                id: gen.next(),
-                module: Box::new(lower_expr(gen, &tup.entries[2])),
-                function: Box::new(lower_expr(gen, &tup.entries[3])),
-            })
-        },
+        }
+        "remote" => ast::Expr::Remote(ast::Remote {
+            span,
+            id: gen.next(),
+            module: Box::new(lower_expr(gen, &tup.entries[2])),
+            function: Box::new(lower_expr(gen, &tup.entries[3])),
+        }),
         "bin" => {
-            let elements = tup.entries[2].list_iter().unwrap()
+            let elements = tup.entries[2]
+                .list_iter()
+                .unwrap()
                 .map(|elem| {
                     let tup = elem.tuple().unwrap();
                     assert!(tup.entries[0].atom().unwrap().as_str() == "bin_element");
@@ -595,14 +571,12 @@ fn lower_expr(
                         assert!(&*atom.as_str() == "default");
                         None
                     } else {
-                        let list = bit_type_v.list_iter().unwrap()
+                        let list = bit_type_v
+                            .list_iter()
+                            .unwrap()
                             .map(|item| {
                                 if let Some(atom) = item.atom() {
-                                    ast::BitType::Name(
-                                        span,
-                                        gen.next(),
-                                        atom,
-                                    )
+                                    ast::BitType::Name(span, gen.next(), atom)
                                 } else {
                                     unimplemented!()
                                 }
@@ -625,7 +599,7 @@ fn lower_expr(
                 id: gen.next(),
                 elements,
             })
-        },
+        }
         "fun" => {
             // We expect either a M:F/A or a function definition.
             let inner = tup.entries[2].tuple().unwrap();
@@ -642,11 +616,13 @@ fn lower_expr(
                             module,
                             function,
                             arity: arity.integer.to_usize().unwrap(),
-                        }
+                        },
                     ))
-                },
+                }
                 "clauses" => {
-                    let clauses: Vec<_> = inner.entries[1].list_iter().unwrap()
+                    let clauses: Vec<_> = inner.entries[1]
+                        .list_iter()
+                        .unwrap()
                         .map(|v| lower_function_clause(gen, v))
                         .collect();
                     let arity = clauses[0].params.len();
@@ -659,10 +635,10 @@ fn lower_expr(
                         arity: arity,
                         clauses,
                     }))
-                },
+                }
                 v => unimplemented!("{}", v),
             }
-        },
+        }
         "match" => {
             let pattern = lower_expr(gen, &tup.entries[2]);
             let expr = lower_expr(gen, &tup.entries[3]);
@@ -672,7 +648,7 @@ fn lower_expr(
                 pattern: Box::new(pattern),
                 expr: Box::new(expr),
             })
-        },
+        }
         "char" => {
             let int = tup.entries[2].integer().unwrap();
             ast::Expr::Literal(ast::Literal::Char(
@@ -680,40 +656,32 @@ fn lower_expr(
                 gen.next(),
                 int.integer.to_u32().unwrap().try_into().unwrap(),
             ))
-        },
+        }
         "float" => {
             let float = tup.entries[2].float().unwrap();
-            ast::Expr::Literal(ast::Literal::Float(
-                span,
-                gen.next(),
-                float.float,
-            ))
-        },
-        "catch" => {
-            ast::Expr::Catch(ast::Catch {
-                span,
-                id: gen.next(),
-                expr: Box::new(lower_expr(gen, &tup.entries[2])),
-            })
-        },
-        "generate" => {
-            ast::Expr::Generator(ast::Generator {
-                span,
-                id: gen.next(),
-                pattern: Box::new(lower_expr(gen, &tup.entries[2])),
-                expr: Box::new(lower_expr(gen, &tup.entries[3])),
-            })
-        },
-        "lc" => {
-            ast::Expr::ListComprehension(ast::ListComprehension {
-                span,
-                id: gen.next(),
-                body: Box::new(lower_expr(gen, &tup.entries[2])),
-                qualifiers: tup.entries[3].list_iter().unwrap()
-                    .map(|v| lower_expr(gen, v))
-                    .collect(),
-            })
-        },
+            ast::Expr::Literal(ast::Literal::Float(span, gen.next(), float.float))
+        }
+        "catch" => ast::Expr::Catch(ast::Catch {
+            span,
+            id: gen.next(),
+            expr: Box::new(lower_expr(gen, &tup.entries[2])),
+        }),
+        "generate" => ast::Expr::Generator(ast::Generator {
+            span,
+            id: gen.next(),
+            pattern: Box::new(lower_expr(gen, &tup.entries[2])),
+            expr: Box::new(lower_expr(gen, &tup.entries[3])),
+        }),
+        "lc" => ast::Expr::ListComprehension(ast::ListComprehension {
+            span,
+            id: gen.next(),
+            body: Box::new(lower_expr(gen, &tup.entries[2])),
+            qualifiers: tup.entries[3]
+                .list_iter()
+                .unwrap()
+                .map(|v| lower_expr(gen, v))
+                .collect(),
+        }),
         "receive" => {
             let mut clauses = Vec::new();
             let after = None;
@@ -721,8 +689,7 @@ fn lower_expr(
                 let clause_tup = clause.tuple().unwrap();
                 match &*clause_tup.entries[0].atom().unwrap().as_str() {
                     "clause" => {
-                        let mut arg_iter = clause_tup.entries[2]
-                            .list_iter().unwrap();
+                        let mut arg_iter = clause_tup.entries[2].list_iter().unwrap();
                         let arg = arg_iter.next().unwrap();
                         assert!(arg_iter.next().is_none());
 
@@ -737,17 +704,21 @@ fn lower_expr(
                             guard: guard,
                             body,
                         });
-                    },
+                    }
                     _ => unimplemented!(),
                 }
             }
             ast::Expr::Receive(ast::Receive {
                 span,
                 id: gen.next(),
-                clauses: if clauses.len() == 0 { None } else { Some(clauses) },
+                clauses: if clauses.len() == 0 {
+                    None
+                } else {
+                    Some(clauses)
+                },
                 after: after,
             })
-        },
+        }
         "block" => {
             let body = lower_body(gen, &tup.entries[2]);
             ast::Expr::Begin(ast::Begin {
@@ -755,9 +726,11 @@ fn lower_expr(
                 id: gen.next(),
                 body,
             })
-        },
+        }
         "if" => {
-            let clauses = tup.entries[2].list_iter().unwrap()
+            let clauses = tup.entries[2]
+                .list_iter()
+                .unwrap()
                 .map(|v| lower_if_clause(gen, v))
                 .collect();
             ast::Expr::If(ast::If {
@@ -765,44 +738,50 @@ fn lower_expr(
                 id: gen.next(),
                 clauses,
             })
-        },
-        "record" => {
-            match tup.entries.len() {
-                4 => {
-                    let name = tup.entries[2].atom().unwrap();
-                    let fields = tup.entries[3].list_iter().unwrap()
-                        .map(|v| lower_record_field(gen, v))
-                        .collect();
-                    ast::Expr::Record(ast::Record {
-                        span,
-                        id: gen.next(),
-                        name,
-                        fields,
-                    })
-                },
-                5 => {
-                    let old = lower_expr(gen, &tup.entries[2]);
-                    let name = tup.entries[3].atom().unwrap();
-                    let fields = tup.entries[4].list_iter().unwrap()
-                        .map(|v| lower_record_field(gen, v))
-                        .collect();
-                    ast::Expr::RecordUpdate(ast::RecordUpdate {
-                        span,
-                        id: gen.next(),
-                        record: Box::new(old),
-                        name,
-                        updates: fields,
-                    })
-                },
-                _ => unimplemented!(),
+        }
+        "record" => match tup.entries.len() {
+            4 => {
+                let name = tup.entries[2].atom().unwrap();
+                let fields = tup.entries[3]
+                    .list_iter()
+                    .unwrap()
+                    .map(|v| lower_record_field(gen, v))
+                    .collect();
+                ast::Expr::Record(ast::Record {
+                    span,
+                    id: gen.next(),
+                    name,
+                    fields,
+                })
             }
+            5 => {
+                let old = lower_expr(gen, &tup.entries[2]);
+                let name = tup.entries[3].atom().unwrap();
+                let fields = tup.entries[4]
+                    .list_iter()
+                    .unwrap()
+                    .map(|v| lower_record_field(gen, v))
+                    .collect();
+                ast::Expr::RecordUpdate(ast::RecordUpdate {
+                    span,
+                    id: gen.next(),
+                    record: Box::new(old),
+                    name,
+                    updates: fields,
+                })
+            }
+            _ => unimplemented!(),
         },
         "try" => {
             let exprs = lower_body(gen, &tup.entries[2]);
-            let clauses: Vec<_> = tup.entries[3].list_iter().unwrap()
+            let clauses: Vec<_> = tup.entries[3]
+                .list_iter()
+                .unwrap()
                 .map(|v| lower_clause(gen, v))
                 .collect();
-            let catch_clauses: Vec<_> = tup.entries[4].list_iter().unwrap()
+            let catch_clauses: Vec<_> = tup.entries[4]
+                .list_iter()
+                .unwrap()
                 .map(|v| lower_try_clause(gen, v))
                 .collect();
             let after = lower_body(gen, &tup.entries[5]);
@@ -810,12 +789,19 @@ fn lower_expr(
                 span,
                 id: gen.next(),
                 exprs,
-                clauses: if clauses.len() == 0 { None } else { Some(clauses) },
-                catch_clauses: if catch_clauses.len() == 0 { None } else {
-                    Some(catch_clauses) },
+                clauses: if clauses.len() == 0 {
+                    None
+                } else {
+                    Some(clauses)
+                },
+                catch_clauses: if catch_clauses.len() == 0 {
+                    None
+                } else {
+                    Some(catch_clauses)
+                },
                 after: if after.len() == 0 { None } else { Some(after) },
             })
-        },
+        }
         v => unimplemented!("{}", v),
     }
 }
@@ -834,10 +820,12 @@ fn integer(item: &aast::Item) -> &aast::Int {
 
 #[cfg(test)]
 mod test {
-    use libeir_util_parse::{Parser, Parse, Errors, ArcCodemap, ToDiagnostic, error_tee};
-    use libeir_util_parse_listing::parser::ParseError;
+    use libeir_diagnostics::{CodeMap, Diagnostic, ToDiagnostic};
+    use libeir_util_parse::{error_tee, Errors, Parse, Parser};
     use libeir_util_parse_listing::ast::Root;
-    use libeir_diagnostics::Diagnostic;
+    use libeir_util_parse_listing::parser::ParseError;
+    use std::path::Path;
+    use std::sync::Arc;
 
     use crate::LowerError;
 
@@ -864,45 +852,46 @@ mod test {
         }
     }
 
-    fn parse<'a, T>(input: &'a str) -> T
+    fn parse<T, S>(input: S) -> T
     where
-        T: Parse<T, Config = (), Error = ParseError>
+        T: Parse<T, Config = (), Error = ParseError>,
+        S: AsRef<str>,
     {
-        let codemap = ArcCodemap::default();
-        let parser = Parser::new(());
+        let parser = Parser::new((), Arc::new(CodeMap::new()));
 
         let mut errors = Errors::new();
 
-        match parser.parse_string::<&'a str, T>(&mut errors, &codemap, input) {
+        match parser.parse_string::<T, S>(&mut errors, input) {
             Ok(ast) => return ast,
             Err(()) => {
-                errors.print(&codemap);
+                errors.print(&parser.codemap);
                 panic!()
-            },
+            }
         };
     }
 
-    fn parse_file<'a, T>(input: &'a str) -> T
+    fn parse_file<T, S>(path: S) -> T
     where
-        T: Parse<T, Config = (), Error = ParseError>
+        T: Parse<T, Config = (), Error = ParseError>,
+        S: AsRef<Path>,
     {
-        let codemap = ArcCodemap::default();
-        let parser = Parser::new(());
+        let parser = Parser::new((), Arc::new(CodeMap::new()));
 
         let mut errors = Errors::new();
 
-        match parser.parse_file::<&'a str, T>(&mut errors, &codemap, input) {
+        match parser.parse_file::<T, S>(&mut errors, path) {
             Ok(ast) => return ast,
             Err(()) => {
-                errors.print(&codemap);
+                errors.print(&parser.codemap);
                 panic!()
-            },
+            }
         };
     }
 
     #[test]
     fn basic_ast() {
-        let root: Root = parse("
+        let root: Root = parse(
+            "
 {attribute,1,file,{\"woo.erl\",1}}.
 {attribute,1,module,woo}.
 {attribute,3,export,[{foo,2},{bar,1},{barr,1}]}.
@@ -923,7 +912,8 @@ mod test {
     [{bin,14,[{bin_element,14,{string,14,\"woo\"},default,default}]}]}]}.
 {function,16,string,0,[{clause,16,[],[],[{string,16,\"woo\"}]}]}.
 {eof,17}.
-");
+",
+        );
         super::lower(&root);
     }
 
@@ -935,17 +925,22 @@ mod test {
 
     #[test]
     fn match_suite() {
-        let codemap = ArcCodemap::default();
-
-        let parser = Parser::new(());
+        let parser = Parser::new((), Arc::new(CodeMap::new()));
 
         let mut errors: Errors<ParseOrLowerError, ParseOrLowerError> = Errors::new();
         let res = error_tee(&mut errors, |mut errors| {
-            match parser.parse_file::<_, Root>(&mut errors.make_into_adapter(), &codemap, "../test_data/match_SUITE.abstr") {
+            match parser.parse_file::<Root, &str>(
+                &mut errors.make_into_adapter(),
+                "../test_data/match_SUITE.abstr",
+            ) {
                 Ok(ast) => {
                     let module = super::lower(&ast);
-                    crate::lower_module(&mut errors.make_into_adapter(), &codemap, &module)
-                },
+                    crate::lower_module(
+                        &mut errors.make_into_adapter(),
+                        parser.codemap.clone(),
+                        &module,
+                    )
+                }
                 Err(()) => Err(()),
             }
         });
@@ -953,11 +948,9 @@ mod test {
         match res {
             Ok(_res) => (),
             Err(()) => {
-                errors.print(&codemap);
+                errors.print(&parser.codemap);
                 panic!();
-            },
+            }
         }
-
     }
-
 }

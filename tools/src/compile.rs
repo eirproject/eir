@@ -1,24 +1,22 @@
-use clap::{Arg, App, ArgMatches, arg_enum, value_t, values_t};
-
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use libeir_ir::FunctionIdent;
+use clap::{arg_enum, value_t, values_t, App, Arg, ArgMatches};
 
-use libeir_diagnostics::{
-    ColorChoice, Emitter, StandardStreamEmitter
+use libeir_diagnostics::term::{
+    self,
+    termcolor::{ColorChoice, StandardStream},
 };
+use libeir_diagnostics::CodeMap;
+use libeir_frontend::{
+    abstr_erlang::AbstrErlangFrontend, eir::EirFrontend, erlang::ErlangFrontend, AnyFrontend,
+    DynFrontend,
+};
+use libeir_ir::FunctionIdent;
 use libeir_passes::PassManager;
 
-use libeir_frontend::{
-    AnyFrontend, DynFrontend,
-    erlang::ErlangFrontend,
-    abstr_erlang::AbstrErlangFrontend,
-    eir::EirFrontend,
-};
-use libeir_util_parse::ArcCodemap;
-
-arg_enum!{
+arg_enum! {
     #[derive(Debug, PartialEq, Eq)]
     pub enum OutputType {
         Eir,
@@ -26,7 +24,7 @@ arg_enum!{
     }
 }
 
-arg_enum!{
+arg_enum! {
     #[derive(Debug, PartialEq, Eq)]
     pub enum InputType {
         Eir,
@@ -35,7 +33,7 @@ arg_enum!{
     }
 }
 
-arg_enum!{
+arg_enum! {
     #[derive(Debug)]
     pub enum CompileLevel {
         High,
@@ -44,7 +42,7 @@ arg_enum!{
     }
 }
 
-arg_enum!{
+arg_enum! {
     #[derive(Debug)]
     pub enum CompilePass {
         CompilePatterns,
@@ -54,7 +52,7 @@ arg_enum!{
     }
 }
 
-arg_enum!{
+arg_enum! {
     #[derive(Debug, Copy, Clone)]
     pub enum LogLevel {
         Error,
@@ -76,7 +74,7 @@ impl LogLevel {
     }
 }
 
-fn make_erlang_frontend(matches: &ArgMatches) -> ErlangFrontend {
+fn make_erlang_frontend(codemap: Arc<CodeMap>, matches: &ArgMatches) -> ErlangFrontend {
     use libeir_syntax_erl::ParseConfig;
 
     let mut config = ParseConfig::default();
@@ -92,14 +90,14 @@ fn make_erlang_frontend(matches: &ArgMatches) -> ErlangFrontend {
         }
     }
 
-    ErlangFrontend::new(config)
+    ErlangFrontend::new(config, codemap)
 }
 
-fn make_frontend(matches: &ArgMatches) -> AnyFrontend {
+fn make_frontend(codemap: Arc<CodeMap>, matches: &ArgMatches) -> AnyFrontend {
     match value_t!(matches, "IN_FORMAT", InputType).unwrap() {
-        InputType::Erl => make_erlang_frontend(matches).into(),
-        InputType::Abstr => AbstrErlangFrontend::new().into(),
-        InputType::Eir => EirFrontend::new().into(),
+        InputType::Erl => make_erlang_frontend(codemap, matches).into(),
+        InputType::Abstr => AbstrErlangFrontend::new(codemap).into(),
+        InputType::Eir => EirFrontend::new(codemap).into(),
     }
 }
 
@@ -120,69 +118,97 @@ fn setup_logger(level: log::LevelFilter) {
 }
 
 fn main() {
-
     let matches = App::new("Eir Compiler CLI")
         .version("alpha")
         .author("Hans Elias B. Josephsen")
         .about("CLI interface to various Eir compiler functionality")
-        .arg(Arg::with_name("IN_FILE")
-             .help("Input file for compiler")
-             .required(true))
-        .arg(Arg::from_usage("<IN_FORMAT> -f,--in-format <IN_FORMAT> 'input format'")
-             .default_value("erl")
-             .required(true)
-             .case_insensitive(true)
-             .possible_values(&InputType::variants()))
-        .arg(Arg::from_usage("<OUT_FORMAT> -p,--out-format <OUT_FORMAT> 'output format'")
-             .default_value("eir")
-             .required(true)
-             .case_insensitive(true)
-             .possible_values(&OutputType::variants()))
-        .arg(Arg::from_usage("<FUN_IDENT> -i,--ident <IDENT> 'select single function'")
-             .required(false))
-        .arg(Arg::from_usage("<OUT_FILE> -o,--output <FILE> 'output file'")
-             .required(false))
+        .arg(
+            Arg::with_name("IN_FILE")
+                .help("Input file for compiler")
+                .required(true),
+        )
+        .arg(
+            Arg::from_usage("<IN_FORMAT> -f,--in-format <IN_FORMAT> 'input format'")
+                .default_value("erl")
+                .required(true)
+                .case_insensitive(true)
+                .possible_values(&InputType::variants()),
+        )
+        .arg(
+            Arg::from_usage("<OUT_FORMAT> -p,--out-format <OUT_FORMAT> 'output format'")
+                .default_value("eir")
+                .required(true)
+                .case_insensitive(true)
+                .possible_values(&OutputType::variants()),
+        )
+        .arg(
+            Arg::from_usage("<FUN_IDENT> -i,--ident <IDENT> 'select single function'")
+                .required(false),
+        )
+        .arg(Arg::from_usage("<OUT_FILE> -o,--output <FILE> 'output file'").required(false))
         .arg(Arg::from_usage("-s,--to-stdout 'outputs to stdout'"))
-        .arg(Arg::from_usage("<DOT_FORMAT> --run-dot <FORMAT>")
-             .required(false))
-        .arg(Arg::from_usage("<COMPILE_LEVEL> -l,--compile-level <COMPILE_LEVEL> 'compilation level'")
-             .default_value("normal")
-             .required(false)
-             .case_insensitive(true)
-             .possible_values(&CompileLevel::variants()))
-        .arg(Arg::from_usage("[ANNOTATE_LIVE] --annotate-live 'annotate calculated live variables in ir"))
-        .arg(Arg::from_usage("<INCLUDE_PATHS> -I <INCLUDE_PATH> 'add include path for the erlang preprocessor'")
-             .required(false)
-             .multiple(true))
-        .arg(Arg::from_usage("<CODE_PATHS> -C <CODE_PATH> 'add code path for the erlang preprocessor'")
-             .required(false)
-             .multiple(true))
-        .arg(Arg::from_usage("<PASSES> --pass <PASS> 'run the given compilation pass'")
-             .required(false)
-             .multiple(true)
-             .number_of_values(1)
-             .possible_values(&CompilePass::variants()))
-        .arg(Arg::from_usage("<LOG_LEVEL> -L,--log-level <LOG_LEVEL> 'log level'")
-             .default_value("info")
-             .required(false)
-             .case_insensitive(true)
-             .possible_values(&LogLevel::variants()))
+        .arg(Arg::from_usage("<DOT_FORMAT> --run-dot <FORMAT>").required(false))
+        .arg(
+            Arg::from_usage(
+                "<COMPILE_LEVEL> -l,--compile-level <COMPILE_LEVEL> 'compilation level'",
+            )
+            .default_value("normal")
+            .required(false)
+            .case_insensitive(true)
+            .possible_values(&CompileLevel::variants()),
+        )
+        .arg(Arg::from_usage(
+            "[ANNOTATE_LIVE] --annotate-live 'annotate calculated live variables in ir",
+        ))
+        .arg(
+            Arg::from_usage(
+                "<INCLUDE_PATHS> -I <INCLUDE_PATH> 'add include path for the erlang preprocessor'",
+            )
+            .required(false)
+            .multiple(true),
+        )
+        .arg(
+            Arg::from_usage(
+                "<CODE_PATHS> -C <CODE_PATH> 'add code path for the erlang preprocessor'",
+            )
+            .required(false)
+            .multiple(true),
+        )
+        .arg(
+            Arg::from_usage("<PASSES> --pass <PASS> 'run the given compilation pass'")
+                .required(false)
+                .multiple(true)
+                .number_of_values(1)
+                .possible_values(&CompilePass::variants()),
+        )
+        .arg(
+            Arg::from_usage("<LOG_LEVEL> -L,--log-level <LOG_LEVEL> 'log level'")
+                .default_value("info")
+                .required(false)
+                .case_insensitive(true)
+                .possible_values(&LogLevel::variants()),
+        )
         .get_matches();
 
-    setup_logger(value_t!(matches, "LOG_LEVEL", LogLevel).unwrap().to_filter());
+    setup_logger(
+        value_t!(matches, "LOG_LEVEL", LogLevel)
+            .unwrap()
+            .to_filter(),
+    );
 
-    let frontend = make_frontend(&matches);
+    let codemap = Arc::new(CodeMap::new());
+    let frontend = make_frontend(codemap.clone(), &matches);
 
     let in_file_name = matches.value_of("IN_FILE").unwrap();
     let in_file_path = Path::new(in_file_name);
 
-    let codemap = ArcCodemap::default();
-    let (eir_res, diagnostics) = frontend.parse_file_dyn(codemap.clone(), &in_file_path);
-
-    let emitter = StandardStreamEmitter::new(ColorChoice::Auto)
-        .set_codemap(codemap.clone());
-    for diag in diagnostics.iter() {
-        emitter.diagnostic(diag).unwrap();
+    let (eir_res, diagnostics) = frontend.parse_file_dyn(&in_file_path);
+    {
+        let term_config = term::Config::default();
+        let mut out = StandardStream::stderr(ColorChoice::Auto);
+        for diag in diagnostics.iter() {
+            term::emit(&mut out, &term_config, &*codemap, diag).unwrap();
+        }
     }
 
     if eir_res.is_err() {
@@ -191,42 +217,40 @@ fn main() {
     let mut eir = eir_res.unwrap();
 
     match value_t!(matches, "COMPILE_LEVEL", CompileLevel).unwrap() {
-        CompileLevel::High => {},
+        CompileLevel::High => {}
         CompileLevel::Normal => {
             let mut pass_manager = PassManager::default();
             pass_manager.run(&mut eir);
-        },
+        }
         CompileLevel::Custom => {
             let mut pass_manager = PassManager::new();
             if matches.is_present("PASSES") {
                 for pass_type in values_t!(matches.values_of("PASSES"), CompilePass).unwrap() {
                     match pass_type {
                         CompilePass::CompilePatterns => {
-                            pass_manager.push_function_pass(
-                                libeir_passes::CompilePatternPass::new());
-                        },
+                            pass_manager
+                                .push_function_pass(libeir_passes::CompilePatternPass::new());
+                        }
                         CompilePass::SimplifyCfg => {
-                            pass_manager.push_function_pass(
-                                libeir_passes::SimplifyCfgPass::new());
-                        },
+                            pass_manager.push_function_pass(libeir_passes::SimplifyCfgPass::new());
+                        }
                         CompilePass::NaiveInlineClosures => {
-                            pass_manager.push_function_pass(
-                                libeir_passes::NaiveInlineClosuresPass::new());
-                        },
+                            pass_manager
+                                .push_function_pass(libeir_passes::NaiveInlineClosuresPass::new());
+                        }
                         CompilePass::Validate => {
-                            pass_manager.push_function_pass(
-                                libeir_passes::ValidatePass::new());
-                        },
+                            pass_manager.push_function_pass(libeir_passes::ValidatePass::new());
+                        }
                     }
                 }
             }
             pass_manager.run(&mut eir);
-        },
+        }
     }
 
-    let selected_function = matches.value_of("FUN_IDENT")
-        .map(|val| FunctionIdent::parse_with_module(
-            val, eir.name().clone()).unwrap());
+    let selected_function = matches
+        .value_of("FUN_IDENT")
+        .map(|val| FunctionIdent::parse_with_module(val, eir.name().clone()).unwrap());
 
     //if matches.is_present("ANNOTATE_LIVE") {
     //    print_ctx.add_annotator(EirLiveValuesAnnotator::new());
@@ -243,10 +267,10 @@ fn main() {
                 out_data = eir.to_text_standard();
             }
             out_ext = "eir";
-        },
+        }
         OutputType::Dot => {
-            let selected_function = selected_function.expect(
-                "Expected function ident with -i <FUN_IDENT>");
+            let selected_function =
+                selected_function.expect("Expected function ident with -i <FUN_IDENT>");
             let fun_def = &eir[&selected_function];
             let fun = fun_def.function();
 
@@ -256,11 +280,10 @@ fn main() {
         }
     }
 
-    let out_file_name = matches.value_of("OUT_FILE")
+    let out_file_name = matches
+        .value_of("OUT_FILE")
         .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            format!("{}.{}", in_file_name, out_ext)
-        });
+        .unwrap_or_else(|| format!("{}.{}", in_file_name, out_ext));
 
     println!("Writing to {}", out_file_name);
     let mut out = ::std::fs::File::create(&out_file_name).unwrap();
@@ -279,5 +302,4 @@ fn main() {
             .expect("Failed to run dot");
         assert!(res.status.success(), "Failed to run dot");
     }
-
 }

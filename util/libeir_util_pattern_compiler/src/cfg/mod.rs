@@ -1,7 +1,7 @@
 use ::std::collections::HashMap;
 
-use ::petgraph::Graph;
 use ::petgraph::graph::NodeIndex;
+use ::petgraph::Graph;
 
 mod generate_dot;
 
@@ -15,14 +15,19 @@ pub type CfgNodeIndex = NodeIndex;
 //}
 
 #[derive(Debug, Clone)]
-pub struct PatternCfg<P> where P: PatternProvider {
+pub struct PatternCfg<P>
+where
+    P: PatternProvider,
+{
     pub entry: CfgNodeIndex,
     pub graph: Graph<CfgNodeKind<P::CfgVariable>, CfgEdge<P>>,
     pub leaf_bindings: HashMap<NodeIndex, HashMap<P::PatternNodeKey, P::CfgVariable>>,
 }
 
-impl<P> PatternCfg<P> where P: PatternProvider {
-
+impl<P> PatternCfg<P>
+where
+    P: PatternProvider,
+{
     pub(crate) fn new() -> Self {
         let mut graph = Graph::new();
         PatternCfg {
@@ -36,8 +41,13 @@ impl<P> PatternCfg<P> where P: PatternProvider {
         self.graph.add_node(CfgNodeKind::Fail)
     }
 
-    pub(crate) fn add_leaf(&mut self, parent: CfgNodeIndex, leaf_num: usize, edge: CfgEdge<P>,
-                           binds: HashMap<P::PatternNodeKey, P::CfgVariable>) -> CfgNodeIndex {
+    pub(crate) fn add_leaf(
+        &mut self,
+        parent: CfgNodeIndex,
+        leaf_num: usize,
+        edge: CfgEdge<P>,
+        binds: HashMap<P::PatternNodeKey, P::CfgVariable>,
+    ) -> CfgNodeIndex {
         let index = self.graph.add_node(CfgNodeKind::Leaf(leaf_num));
         self.graph.add_edge(parent, index, edge);
         self.leaf_bindings.insert(index, binds);
@@ -52,32 +62,38 @@ impl<P> PatternCfg<P> where P: PatternProvider {
     //    self.graph.add_node(CfgNodeKind::Match(var))
     //}
 
-    pub(crate) fn add_edge(&mut self, parent: CfgNodeIndex, child: CfgNodeIndex,
-                           edge: CfgEdge<P>) {
+    pub(crate) fn add_edge(&mut self, parent: CfgNodeIndex, child: CfgNodeIndex, edge: CfgEdge<P>) {
         self.graph.add_edge(parent, child, edge);
     }
 
-    pub(crate) fn add_child(&mut self, parent: CfgNodeIndex, typ: CfgEdge<P>,
-                            var: P::CfgVariable,
-                            binds: HashMap<P::PatternNodeKey, P::CfgVariable>
-    ) -> CfgNodeIndex
-    {
+    pub(crate) fn add_child(
+        &mut self,
+        parent: CfgNodeIndex,
+        typ: CfgEdge<P>,
+        var: P::CfgVariable,
+        binds: HashMap<P::PatternNodeKey, P::CfgVariable>,
+    ) -> CfgNodeIndex {
         let child = self.graph.add_node(CfgNodeKind::Match(var));
         self.graph.add_edge(parent, child, typ);
         self.leaf_bindings.insert(child, binds);
         child
     }
-
 }
 
 #[derive(Clone)]
-pub struct CfgEdge<P> where P: PatternProvider {
+pub struct CfgEdge<P>
+where
+    P: PatternProvider,
+{
     //_provider: ::std::marker::PhantomData<P>,
     pub kind: Option<P::PatternNodeKind>,
     pub variable_binds: Vec<P::CfgVariable>,
     //pub pattern_node: super::pattern::PatternNodeIndex,
 }
-impl<P> ::std::fmt::Debug for CfgEdge<P> where P: PatternProvider {
+impl<P> ::std::fmt::Debug for CfgEdge<P>
+where
+    P: PatternProvider,
+{
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         if let Some(kind) = self.kind {
             write!(f, "{:?} {:?}", kind, self.variable_binds)

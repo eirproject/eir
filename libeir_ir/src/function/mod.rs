@@ -1,21 +1,20 @@
-use std::collections::{ HashSet };
-use std::hash::{ Hash, Hasher };
 use std::cmp::Eq;
+use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 
-use cranelift_entity::{ EntityRef, PrimaryMap, ListPool, EntityList, entity_impl };
+use cranelift_bforest::{BoundSet, Set, SetForest};
 use cranelift_entity::packed_option::ReservedValue;
-use cranelift_bforest::{SetForest, BoundSet, Set};
+use cranelift_entity::{entity_impl, EntityList, EntityRef, ListPool, PrimaryMap};
 
-use libeir_util_datastructures::pooled_entity_set::{ EntitySetPool, EntitySet,
-                                                     BoundEntitySet };
-use libeir_util_datastructures::aux_traits::{ HasAux, AuxDebug, AuxHash, AuxEq };
+use libeir_util_datastructures::aux_traits::{AuxDebug, AuxEq, AuxHash, HasAux};
 use libeir_util_datastructures::dedup_aux_primary_map::DedupAuxPrimaryMap;
+use libeir_util_datastructures::pooled_entity_set::{BoundEntitySet, EntitySet, EntitySetPool};
 
-use libeir_diagnostics::{ ByteSpan, DUMMY_SPAN };
+use libeir_diagnostics::SourceSpan;
 
-use crate::{ FunctionIdent, ArcDialect };
-use crate::constant::{ ConstantContainer, Const, ConstKind };
-use crate::pattern::{ PatternContainer, PatternClause };
+use crate::constant::{Const, ConstKind, ConstantContainer};
+use crate::pattern::{PatternClause, PatternContainer};
+use crate::{ArcDialect, FunctionIdent};
 
 pub mod builder;
 use builder::IntoValue;
@@ -24,14 +23,14 @@ mod pool_container;
 use pool_container::PoolContainer;
 
 mod op;
-pub use op::{ OpKind, MatchKind, BasicType, MapPutUpdate, CallKind };
+pub use op::{BasicType, CallKind, MapPutUpdate, MatchKind, OpKind};
 
 mod primop;
-pub use primop::{ PrimOpKind, BinOp, LogicOp };
+pub use primop::{BinOp, LogicOp, PrimOpKind};
 
 mod value;
 use value::ValueMap;
-pub use value::{ Value, ValueKind };
+pub use value::{Value, ValueKind};
 
 mod location;
 pub use location::{Location, LocationContainer};
@@ -98,10 +97,16 @@ impl AuxHash<PoolContainer> for PrimOpData {
     }
 }
 impl AuxEq<PoolContainer> for PrimOpData {
-    fn aux_eq(&self, rhs: &PrimOpData, self_aux: &PoolContainer, other_aux: &PoolContainer) -> bool {
-        if self.op != rhs.op { return false; }
-        self.reads.as_slice(&self_aux.value)
-            == rhs.reads.as_slice(&other_aux.value)
+    fn aux_eq(
+        &self,
+        rhs: &PrimOpData,
+        self_aux: &PoolContainer,
+        other_aux: &PoolContainer,
+    ) -> bool {
+        if self.op != rhs.op {
+            return false;
+        }
+        self.reads.as_slice(&self_aux.value) == rhs.reads.as_slice(&other_aux.value)
     }
 }
 
@@ -116,11 +121,10 @@ pub enum AttributeValue {
 
 #[derive(Clone)]
 pub struct Function {
-
     // Meta
     ident: FunctionIdent,
     entry_block: Option<Block>,
-    span: ByteSpan,
+    span: SourceSpan,
 
     dialect: ArcDialect,
 
@@ -143,7 +147,7 @@ impl Function {
         &self.dialect
     }
 
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         self.span
     }
 
@@ -154,7 +158,6 @@ impl Function {
     pub fn cons(&self) -> &ConstantContainer {
         &self.constant_container
     }
-
 }
 
 impl HasAux<ListPool<Value>> for Function {
@@ -187,8 +190,10 @@ impl std::fmt::Debug for Function {
 
 /// Values
 impl Function {
-
-    pub fn value_get<T>(&self, v: T) -> Option<Value> where T: IntoValue {
+    pub fn value_get<T>(&self, v: T) -> Option<Value>
+    where
+        T: IntoValue,
+    {
         v.get_value(self)
     }
 
@@ -208,8 +213,9 @@ impl Function {
         self.values[value].kind
     }
 
-    pub fn value_locations(&self, value: Value) -> Option<Vec<ByteSpan>> {
-        self.values[value].location
+    pub fn value_locations(&self, value: Value) -> Option<Vec<SourceSpan>> {
+        self.values[value]
+            .location
             .as_ref()
             .map(|loc| self.locations.lookup(loc))
     }
@@ -287,8 +293,7 @@ impl Function {
 
     /// Walks all nested values contained within
     /// the tree of potential PrimOps.
-    pub fn value_walk_nested_values<F, R>(&self, value: Value,
-                                          visit: &mut F) -> Result<(), R>
+    pub fn value_walk_nested_values<F, R>(&self, value: Value, visit: &mut F) -> Result<(), R>
     where
         F: FnMut(Value) -> Result<(), R>,
     {
@@ -298,8 +303,11 @@ impl Function {
         }
         Ok(())
     }
-    pub fn value_walk_nested_values_mut<F, R>(&mut self, value: Value,
-                                              visit: &mut F) -> Result<(), R>
+    pub fn value_walk_nested_values_mut<F, R>(
+        &mut self,
+        value: Value,
+        visit: &mut F,
+    ) -> Result<(), R>
     where
         F: FnMut(&mut Function, Value) -> Result<(), R>,
     {
@@ -309,12 +317,10 @@ impl Function {
         }
         Ok(())
     }
-
 }
 
 /// PrimOps
 impl Function {
-
     pub fn primop_kind(&self, primop: PrimOp) -> &PrimOpKind {
         &self.primops[primop].op
     }
@@ -322,8 +328,7 @@ impl Function {
         &self.primops[primop].reads.as_slice(&self.pool.value)
     }
 
-    pub fn primop_walk_nested_values<F, R>(&self, primop: PrimOp,
-                                           visit: &mut F) -> Result<(), R>
+    pub fn primop_walk_nested_values<F, R>(&self, primop: PrimOp, visit: &mut F) -> Result<(), R>
     where
         F: FnMut(Value) -> Result<(), R>,
     {
@@ -334,8 +339,11 @@ impl Function {
         Ok(())
     }
 
-    pub fn primop_walk_nested_values_mut<F, R>(&mut self, primop: PrimOp,
-                                               visit: &mut F) -> Result<(), R>
+    pub fn primop_walk_nested_values_mut<F, R>(
+        &mut self,
+        primop: PrimOp,
+        visit: &mut F,
+    ) -> Result<(), R>
     where
         F: FnMut(&mut Function, Value) -> Result<(), R>,
     {
@@ -346,13 +354,19 @@ impl Function {
         }
         Ok(())
     }
-
 }
 
 /// Blocks
 impl Function {
-
+    #[inline(always)]
     fn block_insert(&mut self) -> Block {
+        self.block_insert_with_span(None)
+    }
+
+    fn block_insert_with_span(&mut self, span: Option<SourceSpan>) -> Block {
+        let location = span
+            .map(|s| self.locations.location(None, None, None, s))
+            .unwrap_or_else(|| self.locations.location_empty());
         let block = self.blocks.push(BlockData {
             arguments: EntityList::new(),
 
@@ -362,7 +376,7 @@ impl Function {
             predecessors: Set::new(),
             successors: Set::new(),
 
-            location: self.locations.location_empty(),
+            location,
         });
         self.values.push(ValueKind::Block(block));
         block
@@ -387,7 +401,7 @@ impl Function {
         self.blocks[block].location
     }
 
-    pub fn block_locations(&self, block: Block) -> Vec<ByteSpan> {
+    pub fn block_locations(&self, block: Block) -> Vec<SourceSpan> {
         let loc = self.blocks[block].location;
         self.locations.lookup(&loc)
     }
@@ -395,7 +409,10 @@ impl Function {
     pub fn block_entry(&self) -> Block {
         self.entry_block.expect("Entry block not set on function")
     }
-    pub fn block_args<B>(&self, block: B) -> &[Value] where B: Into<Block> {
+    pub fn block_args<B>(&self, block: B) -> &[Value]
+    where
+        B: Into<Block>,
+    {
         let block: Block = block.into();
         self.blocks[block].arguments.as_slice(&self.pool.value)
     }
@@ -408,8 +425,7 @@ impl Function {
         self.values.get(ValueKind::Block(block)).unwrap()
     }
 
-    pub fn block_walk_nested_values<F, R>(&self, block: Block,
-                                          visit: &mut F) -> Result<(), R>
+    pub fn block_walk_nested_values<F, R>(&self, block: Block, visit: &mut F) -> Result<(), R>
     where
         F: FnMut(Value) -> Result<(), R>,
     {
@@ -420,8 +436,11 @@ impl Function {
         }
         Ok(())
     }
-    pub fn block_walk_nested_values_mut<F, R>(&mut self, block: Block,
-                                              visit: &mut F) -> Result<(), R>
+    pub fn block_walk_nested_values_mut<F, R>(
+        &mut self,
+        block: Block,
+        visit: &mut F,
+    ) -> Result<(), R>
     where
         F: FnMut(&mut Function, Value) -> Result<(), R>,
     {
@@ -454,12 +473,10 @@ impl Function {
     pub fn block_iter(&self) -> impl Iterator<Item = Block> {
         self.blocks.keys()
     }
-
 }
 
 /// Graph
 impl Function {
-
     /// Validates graph invariants for the block.
     /// Relatively inexpensive, for debug assertions.
     pub(crate) fn graph_validate_block(&self, block: Block) {
@@ -468,17 +485,21 @@ impl Function {
         let mut successors_set = HashSet::new();
         self.block_walk_nested_values::<_, ()>(block, &mut |val| {
             if let ValueKind::Block(succ_block) = self.value_kind(val) {
-                assert!(block_data.successors.contains(
-                    succ_block, &self.pool.block_set, &()));
+                assert!(block_data
+                    .successors
+                    .contains(succ_block, &self.pool.block_set, &()));
                 assert!(self.blocks[succ_block].predecessors.contains(
-                    block, &self.pool.block_set, &()));
+                    block,
+                    &self.pool.block_set,
+                    &()
+                ));
                 successors_set.insert(succ_block);
             }
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
 
-        assert!(block_data.successors.iter(&self.pool.block_set).count()
-                == successors_set.len());
+        assert!(block_data.successors.iter(&self.pool.block_set).count() == successors_set.len());
     }
 
     /// Validates graph invariants globally, for the whole
@@ -489,12 +510,10 @@ impl Function {
             self.graph_validate_block(block);
         }
     }
-
 }
 
 /// Patterns
 impl Function {
-
     pub fn pattern_container(&self) -> &PatternContainer {
         &self.pattern_container
     }
@@ -502,14 +521,16 @@ impl Function {
     pub fn pattern_container_mut(&mut self) -> &mut PatternContainer {
         &mut self.pattern_container
     }
-
 }
 
 pub trait GeneralSet<V> {
     fn contains(&self, key: &V, fun: &Function) -> bool;
     fn insert(&mut self, key: V, fun: &mut Function) -> bool;
 }
-impl<V> GeneralSet<V> for HashSet<V> where V: Hash + Eq {
+impl<V> GeneralSet<V> for HashSet<V>
+where
+    V: Hash + Eq,
+{
     fn contains(&self, key: &V, _fun: &Function) -> bool {
         HashSet::contains(self, key)
     }
@@ -517,7 +538,10 @@ impl<V> GeneralSet<V> for HashSet<V> where V: Hash + Eq {
         HashSet::insert(self, key)
     }
 }
-impl<V> GeneralSet<V> for Set<V> where V: Copy + Ord + SetPoolProvider {
+impl<V> GeneralSet<V> for Set<V>
+where
+    V: Copy + Ord + SetPoolProvider,
+{
     fn contains(&self, key: &V, fun: &Function) -> bool {
         Set::contains(self, *key, V::pool(fun), &())
     }
@@ -540,11 +564,10 @@ impl SetPoolProvider for Block {
 }
 
 impl Function {
-
-    pub fn new(ident: FunctionIdent) -> Self {
+    pub fn new(span: SourceSpan, ident: FunctionIdent) -> Self {
         Function {
             ident,
-            span: DUMMY_SPAN,
+            span,
 
             dialect: crate::dialect::NORMAL.clone(),
 
@@ -576,5 +599,4 @@ impl Function {
     pub fn entry_arg_num(&self) -> usize {
         self.block_args(self.block_entry()).len()
     }
-
 }

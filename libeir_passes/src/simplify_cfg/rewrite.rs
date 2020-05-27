@@ -2,17 +2,14 @@ use log::trace;
 
 use std::collections::BTreeMap;
 
-use libeir_ir::{FunctionBuilder, Value, Block};
-use libeir_ir::{Mangler, MangleTo};
+use libeir_ir::{Block, FunctionBuilder, Value};
+use libeir_ir::{MangleTo, Mangler};
 
 use libeir_util_datastructures::aux_traits::AuxImpl;
 
 use super::chain_graph::{
-    ChainGraph, Node, Chain, NodeKind,
-    synthesis::{
-        Synthesis, SegmentData, SegmentHeadKind, SegmentBodyKind, InstanceKind,
-        Instance,
-    },
+    synthesis::{Instance, InstanceKind, SegmentBodyKind, SegmentData, SegmentHeadKind, Synthesis},
+    Chain, ChainGraph, Node, NodeKind,
 };
 
 pub fn rewrite(
@@ -103,7 +100,7 @@ pub fn rewrite(
             NodeKind::Scope(value) => {
                 trace!("Uniform mapping: {} -> {} ({})", from, to, value);
                 map.insert(from, *value);
-            },
+            }
             NodeKind::EntryArg(entry_arg) => {
                 if synthesis.substitutions.contains_key(&entry_arg.chain) {
                     continue;
@@ -114,7 +111,7 @@ pub fn rewrite(
                 let to_value = entry_map[&key];
                 trace!("Uniform mapping: {} -> {} ({})", from, to, to_value);
                 map.insert(from, to_value);
-            },
+            }
             _ => unreachable!(),
         }
     }
@@ -153,7 +150,7 @@ pub fn rewrite(
 
                             global_map.insert(*in_arg, arg);
                             local_map.insert(node, arg);
-                        },
+                        }
                         _ => unreachable!(),
                     }
                 }
@@ -171,13 +168,12 @@ pub fn rewrite(
 
                             global_map.insert(*in_arg, arg);
                             local_map.insert(node, arg);
-                        },
+                        }
                         _ => unreachable!(),
                     }
                 }
             }
         }
-
 
         for external in segment.externals.as_slice(&synthesis.instance_pool) {
             let val = global_map[external];
@@ -214,14 +210,13 @@ pub fn rewrite(
                     if let Some(pred_node) = pred_node {
                         walker.put(pred_node);
                     }
-                },
+                }
                 _ => {
                     for pred_node in graph.node(node_id).dependencies() {
                         walker.put(pred_node);
                     }
-                },
+                }
             }
-
         }
 
         trace!("ORDER {:?}", order);
@@ -230,7 +225,7 @@ pub fn rewrite(
             match graph.node(*node_id) {
                 NodeKind::Scope(value) => {
                     local_map.insert(*node_id, *value);
-                },
+                }
                 NodeKind::EntryArg(entry_arg) => {
                     assert!(local_map.contains_key(node_id));
                     //let key = (entry_arg.chain, entry_arg.arg_index);
@@ -238,15 +233,15 @@ pub fn rewrite(
                     //    let new_entry_arg = entry_map[&key];
                     //    local_map.insert(*node_id, new_entry_arg);
                     //}
-                },
+                }
                 NodeKind::Phi(phi) => {
                     trace!("PHI {:#?}, {:?}", phi, segment_chains);
 
-                    if let Some(select_node) =
-                        phi.entries
-                           .iter()
-                           .find(|(chain, _node)| segment_chains.contains(**chain))
-                           .map(|(_chain, node)| *node)
+                    if let Some(select_node) = phi
+                        .entries
+                        .iter()
+                        .find(|(chain, _node)| segment_chains.contains(**chain))
+                        .map(|(_chain, node)| *node)
                     {
                         let from_value = local_map[&select_node];
                         local_map.insert(*node_id, from_value);
@@ -255,8 +250,7 @@ pub fn rewrite(
                         //let from_value = phi.value.unwrap();
                         //local_map.insert(*node_id, from_value);
                     }
-
-                },
+                }
                 NodeKind::Prim(prim) => {
                     let mut map_value = |val| -> Option<Value> {
                         let node = prim.dependencies.get(&val);
@@ -264,7 +258,7 @@ pub fn rewrite(
                     };
                     let new_prim = b.value_map(prim.prim, &mut map_value);
                     local_map.insert(*node_id, new_prim);
-                },
+                }
                 NodeKind::BlockCapture(bc) => {
                     let capture;
                     if all_chains || bc.dependencies.len() == 0 {
@@ -284,7 +278,7 @@ pub fn rewrite(
                     }
                     let capture_val = b.value(capture);
                     local_map.insert(*node_id, capture_val);
-                },
+                }
             }
         }
 
@@ -306,14 +300,14 @@ pub fn rewrite(
                     let to_val = local_map[&root_node];
                     map.insert(root_val, to_val);
                 }
-            },
+            }
             SegmentBodyKind::Terminal { single: false } => {
                 let mut map_value = |val| -> Option<Value> {
                     let node = graph.get_root(val);
                     node.map(|node| local_map[&node])
                 };
                 b.block_copy_body_map(target, block, &mut map_value);
-            },
+            }
             SegmentBodyKind::ToIntermediate { to, out_args } => {
                 let to_block = segment_map[to];
 
@@ -323,7 +317,7 @@ pub fn rewrite(
                 }
 
                 b.op_call_flow(block, to_block, &arg_buf);
-            },
+            }
         }
 
         //match &segment.kind {
@@ -405,9 +399,7 @@ pub fn rewrite(
         //        b.block_copy_body_map(target, block, &mut map_value);
         //    },
         //}
-
     }
-
 }
 
 //fn do_node(

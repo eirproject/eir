@@ -1,19 +1,21 @@
 #![allow(unused)]
 
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::Write;
 use std::marker::PhantomData;
-use std::collections::BTreeMap;
 
 use cranelift_entity::EntityRef;
-use pretty::{DocAllocator, Arena, RefDoc};
 use petgraph::visit::Dfs;
+use pretty::{Arena, DocAllocator, RefDoc};
 
-use crate::{Function, Block, Value, Const, ValueKind, OpKind, CallKind, PrimOpKind, Module, LogicOp, BinOp};
 use crate::graph::EntityVisitMap;
+use crate::{
+    BinOp, Block, CallKind, Const, Function, LogicOp, Module, OpKind, PrimOpKind, Value, ValueKind,
+};
 
-mod operation;
 mod constant;
+mod operation;
 
 type DynError = Box<dyn Error>;
 
@@ -38,8 +40,7 @@ type DynError = Box<dyn Error>;
 fn get_value_list<'a>(fun: &'a Function, value: Value) -> Option<&'a [Value]> {
     if let Some(prim) = fun.value_primop(value) {
         match fun.primop_kind(prim) {
-            crate::PrimOpKind::ValueList =>
-                return Some(fun.primop_reads(prim)),
+            crate::PrimOpKind::ValueList => return Some(fun.primop_reads(prim)),
             _ => (),
         }
     }
@@ -64,7 +65,8 @@ where
     pub block_value_layout: L,
 }
 
-pub type StandardFormatConfig = FormatConfig<DfsBlockIteratorConfig, StandardValueFormatter, ReferencePrimopBlockValueLayout>;
+pub type StandardFormatConfig =
+    FormatConfig<DfsBlockIteratorConfig, StandardValueFormatter, ReferencePrimopBlockValueLayout>;
 impl Default for StandardFormatConfig {
     fn default() -> Self {
         FormatConfig {
@@ -100,9 +102,7 @@ impl BlockIteratorConfig for DfsBlockIteratorConfig {
         let graph = fun.block_graph();
         let entry = fun.block_entry();
         let dfs = Dfs::new(&graph, entry);
-        DfsBlockIterator {
-            dfs,
-        }
+        DfsBlockIterator { dfs }
     }
 }
 pub struct DfsBlockIterator {
@@ -215,11 +215,7 @@ pub trait BlockFormatSink {
     /// contains the given blocks.
     /// Blocks will never overlap, and this will be called
     /// at most once for each block.
-    fn block_lines(
-        &mut self,
-        _block: Block,
-        _range: (Self::LineIndex, Self::LineIndex),
-    ) {}
+    fn block_lines(&mut self, _block: Block, _range: (Self::LineIndex, Self::LineIndex)) {}
 }
 
 pub struct StringSink {
@@ -264,7 +260,6 @@ where
     V: ValueFormatter,
     L: BlockValueLayout,
 {
-
     pub(crate) fn block_to_doc(
         &mut self,
         config: &mut FormatConfig<B, V, L>,
@@ -274,9 +269,9 @@ where
         let arena = self.arena;
 
         let ident = arena.as_string(block);
-        let args = arena.intersperse(
-            state.function.block_args(block)
-                .iter().map(|v| {
+        let args = arena
+            .intersperse(
+                state.function.block_args(block).iter().map(|v| {
                     self.buf.clear();
                     config.value_formatter.value(
                         &mut self.buf,
@@ -286,16 +281,16 @@ where
                     );
                     arena.as_string(&self.buf)
                 }),
-            arena.text(", "),
-        ).parens();
-        let header = ident
-            .append(args)
-            .append(":")
-            .group();
+                arena.text(", "),
+            )
+            .parens();
+        let header = ident.append(args).append(":").group();
 
         let body = self.block_body_to_doc(config, state, block);
 
-        header.append(arena.hardline().append(body).nest(2)).into_doc()
+        header
+            .append(arena.hardline().append(body).nest(2))
+            .into_doc()
     }
 
     pub(crate) fn block_body_to_doc(
@@ -322,18 +317,17 @@ where
         let value_buf = config.block_value_layout.values();
 
         let values = arena.concat(
-            value_buf.iter().rev()
+            value_buf
+                .iter()
+                .rev()
                 .map(|v| self.value_assign_to_doc(config, state, *v))
-                .map(|v| arena.nil().append(v).append(arena.hardline()))
+                .map(|v| arena.nil().append(v).append(arena.hardline())),
         );
 
         let op = self.block_op_to_doc(config, state, block);
 
-        values
-            .append(op)
-            .into_doc()
+        values.append(op).into_doc()
     }
-
 
     pub(crate) fn value_assign_to_doc(
         &mut self,
@@ -353,75 +347,75 @@ where
                     PrimOpKind::CaptureFunction => {
                         assert!(reads.len() == 3);
                         arena.nil().append(self.format_callee(config, state, reads))
-                    },
-                    PrimOpKind::Tuple => {
-                        arena
-                            .intersperse(
-                                reads.iter()
-                                     .map(|r| self.value_use(config, state, *r, Some(value))),
-                                arena.text(",").append(arena.space())
-                            )
-                            .enclose(arena.text("{"), arena.text("}"))
-                    },
-                    PrimOpKind::ValueList => {
-                        arena
-                            .intersperse(
-                                reads.iter()
-                                     .map(|r| self.value_use(config, state, *r, Some(value))),
-                                arena.text(",").append(arena.space())
-                            )
-                            .enclose(arena.text("<"), arena.text(">"))
-                    },
+                    }
+                    PrimOpKind::Tuple => arena
+                        .intersperse(
+                            reads
+                                .iter()
+                                .map(|r| self.value_use(config, state, *r, Some(value))),
+                            arena.text(",").append(arena.space()),
+                        )
+                        .enclose(arena.text("{"), arena.text("}")),
+                    PrimOpKind::ValueList => arena
+                        .intersperse(
+                            reads
+                                .iter()
+                                .map(|r| self.value_use(config, state, *r, Some(value))),
+                            arena.text(",").append(arena.space()),
+                        )
+                        .enclose(arena.text("<"), arena.text(">")),
                     PrimOpKind::ListCell => {
                         assert!(reads.len() == 2);
-                        arena.nil()
-                             .append(arena.text("["))
-                             .append(self.value_use(config, state, reads[0], Some(value)))
-                             .append(arena.space())
-                             .append(arena.text("|"))
-                             .append(arena.space())
-                             .append(self.value_use(config, state, reads[1], Some(value)))
-                             .append(arena.text("]"))
-                    },
+                        arena
+                            .nil()
+                            .append(arena.text("["))
+                            .append(self.value_use(config, state, reads[0], Some(value)))
+                            .append(arena.space())
+                            .append(arena.text("|"))
+                            .append(arena.space())
+                            .append(self.value_use(config, state, reads[1], Some(value)))
+                            .append(arena.text("]"))
+                    }
                     PrimOpKind::BinOp(BinOp::Equal) => {
                         assert!(reads.len() == 2);
-                        arena.nil()
-                             .append(self.value_use(config, state, reads[0], Some(value)))
-                             .append(arena.space())
-                             .append(arena.text("=="))
-                             .append(arena.space())
-                             .append(self.value_use(config, state, reads[1], Some(value)))
-                    },
-                    PrimOpKind::LogicOp(LogicOp::And) => {
-                        arena.intersperse(
-                            reads.iter()
-                                 .map(|r| self.value_use(config, state, *r, Some(value))),
-                            arena.text(",").append(arena.space())
-                        ).enclose("and[", "]")
-                    },
-                    PrimOpKind::LogicOp(LogicOp::Or) => {
-                        arena.intersperse(
-                            reads.iter()
-                                 .map(|r| self.value_use(config, state, *r, Some(value))),
-                            arena.text(",").append(arena.space())
-                        ).enclose("or[", "]")
-                    },
+                        arena
+                            .nil()
+                            .append(self.value_use(config, state, reads[0], Some(value)))
+                            .append(arena.space())
+                            .append(arena.text("=="))
+                            .append(arena.space())
+                            .append(self.value_use(config, state, reads[1], Some(value)))
+                    }
+                    PrimOpKind::LogicOp(LogicOp::And) => arena
+                        .intersperse(
+                            reads
+                                .iter()
+                                .map(|r| self.value_use(config, state, *r, Some(value))),
+                            arena.text(",").append(arena.space()),
+                        )
+                        .enclose("and[", "]"),
+                    PrimOpKind::LogicOp(LogicOp::Or) => arena
+                        .intersperse(
+                            reads
+                                .iter()
+                                .map(|r| self.value_use(config, state, *r, Some(value))),
+                            arena.text(",").append(arena.space()),
+                        )
+                        .enclose("or[", "]"),
                     _ => unimplemented!("{:?}", prim_kind),
                 }
-            },
+            }
             _ => unimplemented!("{:?}", value_kind),
         };
 
         self.buf.clear();
-        config.value_formatter.value(
-            &mut self.buf,
-            state.function,
-            ValueSite::Decl,
-            value,
-        );
+        config
+            .value_formatter
+            .value(&mut self.buf, state.function, ValueSite::Decl, value);
         let value_doc = arena.as_string(&self.buf);
 
-        arena.nil()
+        arena
+            .nil()
             .append(value_doc)
             .append(arena.space())
             .append(arena.text("="))
@@ -444,15 +438,12 @@ where
         &mut self,
         config: &FormatConfig<B, V, L>,
         state: &mut FormatState,
-        value: Value
+        value: Value,
     ) -> RefDoc<'a, ()> {
         self.buf.clear();
-        config.value_formatter.value(
-            &mut self.buf,
-            state.function,
-            ValueSite::Use,
-            value,
-        );
+        config
+            .value_formatter
+            .value(&mut self.buf, state.function, ValueSite::Use, value);
         self.arena.as_string(&self.buf).into_doc()
     }
 
@@ -462,12 +453,10 @@ where
         state: &mut FormatState,
         value: Value,
         within: Option<Value>,
-    ) -> RefDoc<'a, ()>
-    {
+    ) -> RefDoc<'a, ()> {
         if config.block_value_layout.should_layout(value, within) {
             match state.function.value_kind(value) {
-                ValueKind::Const(cons) =>
-                    self.constant(config, state, cons),
+                ValueKind::Const(cons) => self.constant(config, state, cons),
                 _ => self.value_use_only(config, state, value),
             }
         } else {
@@ -476,7 +465,7 @@ where
     }
 
     fn format_callee(
-        &mut self, 
+        &mut self,
         config: &FormatConfig<B, V, L>,
         state: &mut FormatState,
         reads: &[Value],
@@ -494,7 +483,8 @@ where
             let doc = self.constant(config, state, mc);
             let fk = state.function.value_kind(f);
             if let ValueKind::Const(fc) = fk {
-                arena.nil()
+                arena
+                    .nil()
                     .append(doc)
                     .append(arena.text(":"))
                     .append(self.constant(config, state, fc))
@@ -502,16 +492,18 @@ where
                     .append(arity)
                     .into_doc()
             } else {
-                arena.nil()
-                   .append(doc)
-                   .append(arena.text(":"))
-                   .append(self.value_use_only(config, state, f))
-                   .append(arena.text("/"))
-                   .append(arity)
-                   .into_doc()
+                arena
+                    .nil()
+                    .append(doc)
+                    .append(arena.text(":"))
+                    .append(self.value_use_only(config, state, f))
+                    .append(arena.text("/"))
+                    .append(arity)
+                    .into_doc()
             }
         } else {
-            arena.nil()
+            arena
+                .nil()
                 .append(self.value_use_only(config, state, m))
                 .append(arena.text(":"))
                 .append(self.value_use_only(config, state, f))
@@ -624,7 +616,6 @@ where
 }
 
 impl Function {
-
     pub fn to_text<B, V, L>(&self, config: &mut FormatConfig<B, V, L>) -> String
     where
         B: BlockIteratorConfig,
@@ -667,11 +658,9 @@ impl Function {
         doc.render_fmt(config.width, &mut ctx.buf).unwrap();
         ctx.buf
     }
-
 }
 
 impl Module {
-
     pub fn to_text<B, V, L>(&self, config: &mut FormatConfig<B, V, L>) -> String
     where
         B: BlockIteratorConfig,
@@ -686,16 +675,16 @@ impl Module {
     pub fn to_text_standard(&self) -> String {
         self.to_text(&mut StandardFormatConfig::default())
     }
-
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{FormatConfig, StandardFormatConfig, StringSink, format_function_body};
+    use super::{format_function_body, FormatConfig, StandardFormatConfig, StringSink};
 
     #[test]
     fn woo() {
-        let ir = crate::parse_function_unwrap("
+        let ir = crate::parse_function_unwrap(
+            "
 a'woo':a'hoo'/1 {
     entry(%ret, %thr, %a):
         %f1 = a'erlang':a'+'/2;
@@ -704,9 +693,9 @@ a'woo':a'hoo'/1 {
         %f2 = a'erlang':a'/'/2;
         %f2(%b, 2) => %ret except %thr;
 }
-");
+",
+        );
         let text = ir.to_text(&mut StandardFormatConfig::default());
         println!("{}", text);
     }
-
 }

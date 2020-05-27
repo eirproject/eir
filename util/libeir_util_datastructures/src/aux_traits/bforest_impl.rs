@@ -1,6 +1,6 @@
+use super::{AuxDebug, AuxImpl, HasAux};
+use cranelift_bforest::{Set, SetForest};
 use std::fmt::{Formatter, Result as FmtResult};
-use cranelift_bforest::{SetForest, Set};
-use super::{HasAux, AuxDebug, AuxImpl};
 
 impl<T: Copy + AuxDebug<C>, C: HasAux<SetForest<T>>> AuxDebug<C> for Set<T> {
     fn aux_fmt(&self, f: &mut Formatter<'_>, aux: &C) -> FmtResult {

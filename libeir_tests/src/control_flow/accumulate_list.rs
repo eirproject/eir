@@ -1,17 +1,16 @@
 use crate::lower;
 
-use libeir_ir::{ FunctionIdent };
-use libeir_syntax_erl::{ ParseConfig };
 use libeir_intern::Ident;
+use libeir_ir::FunctionIdent;
 use libeir_passes::PassManager;
+use libeir_syntax_erl::ParseConfig;
 
-use libeir_interpreter::{ VMState, Term };
+use libeir_interpreter::{Term, VMState};
 
 use std::rc::Rc;
 
 #[test]
 fn test_list_acc() {
-
     let mut eir_mod = lower(
         "-module(woo).
 
@@ -20,8 +19,9 @@ woo([H | T], Acc) -> woo(T, H + Acc).
 
 woo(V) -> woo(V, 0).
 ",
-        ParseConfig::default()
-    ).unwrap();
+        ParseConfig::default(),
+    )
+    .unwrap();
 
     let mut pass_manager = PassManager::default();
     pass_manager.run(&mut eir_mod);
@@ -37,12 +37,19 @@ woo(V) -> woo(V, 0).
     };
 
     {
-        let arg = Term::slice_to_list(&[
-            Term::Integer(1.into()).into(),
-            Term::Integer(2.into()).into(),
-            Term::Integer(4.into()).into(),
-        ], Term::Nil.into());
-        assert!(vm.call(&fun, &[Rc::try_unwrap(arg).unwrap()]).unwrap().as_i64() == Some(7));
+        let arg = Term::slice_to_list(
+            &[
+                Term::Integer(1.into()).into(),
+                Term::Integer(2.into()).into(),
+                Term::Integer(4.into()).into(),
+            ],
+            Term::Nil.into(),
+        );
+        assert!(
+            vm.call(&fun, &[Rc::try_unwrap(arg).unwrap()])
+                .unwrap()
+                .as_i64()
+                == Some(7)
+        );
     }
-
 }

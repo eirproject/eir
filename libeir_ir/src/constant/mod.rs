@@ -1,16 +1,16 @@
-use std::hash::{ Hash, Hasher };
+use std::hash::{Hash, Hasher};
 
-use libeir_intern::{ Ident };
+use libeir_intern::Ident;
 
-use libeir_util_datastructures::aux_traits::{ AuxHash, AuxEq };
 use libeir_util_datastructures::aux_hash_map::AuxHashMap;
+use libeir_util_datastructures::aux_traits::{AuxEq, AuxHash};
 
-use cranelift_entity::{ PrimaryMap, ListPool, EntityList, entity_impl };
+use cranelift_entity::{entity_impl, EntityList, ListPool, PrimaryMap};
 
 mod atomic;
 pub use atomic::*;
 mod float;
-pub use libeir_util_number::{Integer, ToPrimitive, FromPrimitive};
+pub use libeir_util_number::{FromPrimitive, Integer, ToPrimitive};
 
 /// These entities has the property that if they are equal, they
 /// represent the same value.
@@ -32,7 +32,7 @@ pub enum ConstKind {
         /// Key/value pairs are ALWAYS ordered by key constant index
         keys: EntityList<Const>,
         values: EntityList<Const>,
-    }
+    },
 }
 impl AuxHash<ListPool<Const>> for ConstKind {
     fn aux_hash<H: Hasher>(&self, state: &mut H, container: &ListPool<Const>) {
@@ -59,16 +59,34 @@ impl AuxHash<ListPool<Const>> for ConstKind {
     }
 }
 impl AuxEq<ListPool<Const>> for ConstKind {
-    fn aux_eq(&self, rhs: &ConstKind, self_aux: &ListPool<Const>, other_aux: &ListPool<Const>) -> bool {
+    fn aux_eq(
+        &self,
+        rhs: &ConstKind,
+        self_aux: &ListPool<Const>,
+        other_aux: &ListPool<Const>,
+    ) -> bool {
         match (self, rhs) {
             (ConstKind::Atomic(l), ConstKind::Atomic(r)) => l == r,
-            (ConstKind::ListCell { head: lh, tail: lt },
-             ConstKind::ListCell { head: rh, tail: rt }) => lh == rh && lt == rt,
-            (ConstKind::Tuple { entries: l }, ConstKind::Tuple { entries: r }) =>
-                l.as_slice(self_aux) == r.as_slice(other_aux),
-            (ConstKind::Map { keys: lk, values: lv }, ConstKind::Map { keys: rk, values: rv }) =>
+            (
+                ConstKind::ListCell { head: lh, tail: lt },
+                ConstKind::ListCell { head: rh, tail: rt },
+            ) => lh == rh && lt == rt,
+            (ConstKind::Tuple { entries: l }, ConstKind::Tuple { entries: r }) => {
+                l.as_slice(self_aux) == r.as_slice(other_aux)
+            }
+            (
+                ConstKind::Map {
+                    keys: lk,
+                    values: lv,
+                },
+                ConstKind::Map {
+                    keys: rk,
+                    values: rv,
+                },
+            ) => {
                 lk.as_slice(self_aux) == rk.as_slice(other_aux)
-                && lv.as_slice(self_aux) == rv.as_slice(other_aux),
+                    && lv.as_slice(self_aux) == rv.as_slice(other_aux)
+            }
             _ => false,
         }
     }
@@ -92,7 +110,6 @@ impl Default for ConstantContainer {
 }
 
 impl ConstantContainer {
-
     pub fn new() -> Self {
         Self::default()
     }
@@ -109,11 +126,17 @@ impl ConstantContainer {
         self.from(NilTerm)
     }
 
-    pub fn from<T>(&mut self, val: T) -> Const where T: IntoConst {
+    pub fn from<T>(&mut self, val: T) -> Const
+    where
+        T: IntoConst,
+    {
         val.into_const(self)
     }
 
-    pub fn get<T>(&self, val: T) -> Option<Const> where T: IntoConst {
+    pub fn get<T>(&self, val: T) -> Option<Const>
+    where
+        T: IntoConst,
+    {
         val.get_const(self)
     }
 
@@ -161,7 +184,9 @@ impl ConstantContainer {
             }
             ConstKind::Map { keys, values } => {
                 write!(out, "%{{").unwrap();
-                for (n, (key, val)) in keys.as_slice(&self.const_pool).iter()
+                for (n, (key, val)) in keys
+                    .as_slice(&self.const_pool)
+                    .iter()
                     .zip(values.as_slice(&self.const_pool))
                     .enumerate()
                 {
@@ -188,16 +213,19 @@ impl ConstantContainer {
             (ConstKind::Tuple { entries: t1 }, ConstKind::Tuple { entries: t2 }) => {
                 let s1 = t1.as_slice(&self.const_pool);
                 let s2 = t2.as_slice(&r_cont.const_pool);
-                if s1.len() != s2.len() { return false; }
+                if s1.len() != s2.len() {
+                    return false;
+                }
                 for (e1, e2) in s1.iter().zip(s2.iter()) {
-                    if !self.eq_other(*e1, r_cont, *e2) { return false; }
+                    if !self.eq_other(*e1, r_cont, *e2) {
+                        return false;
+                    }
                 }
                 true
-            },
+            }
             l => unimplemented!("{:?}", l),
         }
     }
-
 }
 
 pub trait IntoConst {
@@ -221,7 +249,10 @@ impl IntoConst for EmptyMap {
     }
 }
 
-impl<T> IntoConst for T where T: Into<AtomicTerm> {
+impl<T> IntoConst for T
+where
+    T: Into<AtomicTerm>,
+{
     fn into_const(self, c: &mut ConstantContainer) -> Const {
         c.from(ConstKind::Atomic(self.into()))
     }
@@ -267,7 +298,6 @@ pub struct TupleBuilder {
     elements: EntityList<Const>,
 }
 impl TupleBuilder {
-
     pub fn new() -> Self {
         TupleBuilder {
             elements: EntityList::new(),
@@ -287,7 +317,6 @@ impl TupleBuilder {
             entries: self.elements,
         })
     }
-
 }
 
 //struct TupleTerm<T: IntoConst, I: IntoIterator<Item = T>>(I);

@@ -1,19 +1,17 @@
 use libeir_intern::Symbol;
 use libeir_util_number::bigint_to_double;
 
-use crate::vm::{ VMState };
-use crate::module::{ NativeModule, NativeReturn };
-use crate::process::{ ProcessContext };
+use crate::module::{NativeModule, NativeReturn};
+use crate::process::ProcessContext;
+use crate::vm::VMState;
 
-use crate::term::{ Term };
-use crate::term::{ ErlEq, ErlExactEq, ErlOrd };
-use crate::term::{ ListIteratorItem };
+use crate::term::ListIteratorItem;
+use crate::term::Term;
+use crate::term::{ErlEq, ErlExactEq, ErlOrd};
 
-
-use ::num_traits::{ Signed };
+use ::num_traits::Signed;
 
 use std::rc::Rc;
-
 
 fn abs(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     if args.len() != 1 {
@@ -40,19 +38,24 @@ fn add(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRe
     let a2 = &*args[1];
 
     match (a1, a2) {
-        (Term::Integer(ref i1), Term::Integer(ref i2)) =>
-            NativeReturn::Return { term: Term::Integer(i1.clone() + i2).into() },
+        (Term::Integer(ref i1), Term::Integer(ref i2)) => NativeReturn::Return {
+            term: Term::Integer(i1.clone() + i2).into(),
+        },
         (Term::Integer(ref i1), Term::Float(f2)) => {
             let f1 = bigint_to_double(i1);
-            NativeReturn::Return { term: Term::Float((f1 + f2.0).into()).into() }
+            NativeReturn::Return {
+                term: Term::Float((f1 + f2.0).into()).into(),
+            }
         }
         (Term::Float(f1), Term::Integer(ref i2)) => {
             let f2 = bigint_to_double(i2);
-            NativeReturn::Return { term: Term::Float((f1.0 + f2).into()).into() }
+            NativeReturn::Return {
+                term: Term::Float((f1.0 + f2).into()).into(),
+            }
         }
-        (Term::Float(f1), Term::Float(f2)) => {
-            NativeReturn::Return { term: Term::Float((f1.0 + f2.0).into()).into() }
-        }
+        (Term::Float(f1), Term::Float(f2)) => NativeReturn::Return {
+            term: Term::Float((f1.0 + f2.0).into()).into(),
+        },
         _ => NativeReturn::Throw {
             typ: Term::new_atom("error").into(),
             reason: Term::new_atom("badarith").into(),
@@ -68,18 +71,24 @@ fn sub(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRe
     let a2 = &*args[1];
 
     match (a1, a2) {
-        (Term::Integer(ref i1), Term::Integer(ref i2)) =>
-            NativeReturn::Return { term: Term::Integer(i1.clone() - i2).into() },
+        (Term::Integer(ref i1), Term::Integer(ref i2)) => NativeReturn::Return {
+            term: Term::Integer(i1.clone() - i2).into(),
+        },
         (Term::Integer(ref int), Term::Float(ref flt)) => {
             let flt_c = bigint_to_double(int);
-            NativeReturn::Return { term: Term::Float((flt_c - flt.0).into()).into() }
+            NativeReturn::Return {
+                term: Term::Float((flt_c - flt.0).into()).into(),
+            }
         }
         (Term::Float(ref flt), Term::Integer(ref int)) => {
             let flt_c = bigint_to_double(int);
-            NativeReturn::Return { term: Term::Float((flt.0 - flt_c).into()).into() }
+            NativeReturn::Return {
+                term: Term::Float((flt.0 - flt_c).into()).into(),
+            }
         }
-        (Term::Float(flt1), Term::Float(flt2)) =>
-            NativeReturn::Return { term: Term::Float((flt1.0 - flt2.0).into()).into() },
+        (Term::Float(flt1), Term::Float(flt2)) => NativeReturn::Return {
+            term: Term::Float((flt1.0 - flt2.0).into()).into(),
+        },
         _ => NativeReturn::Throw {
             typ: Term::new_atom("error").into(),
             reason: Term::new_atom("badarith").into(),
@@ -92,10 +101,12 @@ fn invert(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> Nativ
         panic!();
     }
     match &*args[0] {
-        Term::Integer(ref i1) =>
-            NativeReturn::Return { term: Term::Integer(-i1.clone()).into() },
-        Term::Float(ref f1) =>
-            NativeReturn::Return { term: Term::Float((-f1.0).into()).into() },
+        Term::Integer(ref i1) => NativeReturn::Return {
+            term: Term::Integer(-i1.clone()).into(),
+        },
+        Term::Float(ref f1) => NativeReturn::Return {
+            term: Term::Float((-f1.0).into()).into(),
+        },
         _ => unimplemented!(),
     }
 }
@@ -108,8 +119,9 @@ fn mul(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRe
     let a2 = &*args[1];
 
     match (a1, a2) {
-        (Term::Integer(ref i1), Term::Integer(ref i2)) =>
-            NativeReturn::Return { term: Term::Integer(i1.clone() * i2).into() },
+        (Term::Integer(ref i1), Term::Integer(ref i2)) => NativeReturn::Return {
+            term: Term::Integer(i1.clone() * i2).into(),
+        },
         _ => unimplemented!(),
     }
 }
@@ -130,7 +142,9 @@ fn div(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRe
         _ => panic!(),
     };
 
-    NativeReturn::Return { term: Term::Float((a1 / a2).into()).into() }
+    NativeReturn::Return {
+        term: Term::Float((a1 / a2).into()).into(),
+    }
 }
 
 fn is_list(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
@@ -140,9 +154,15 @@ fn is_list(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> Nati
     let a1 = &*args[0];
 
     match a1 {
-        Term::ListCell(_, _) => NativeReturn::Return { term: Term::new_atom("true").into() },
-        Term::Nil => NativeReturn::Return { term: Term::new_atom("true").into() },
-        _ => NativeReturn::Return { term: Term::new_atom("false").into() },
+        Term::ListCell(_, _) => NativeReturn::Return {
+            term: Term::new_atom("true").into(),
+        },
+        Term::Nil => NativeReturn::Return {
+            term: Term::new_atom("true").into(),
+        },
+        _ => NativeReturn::Return {
+            term: Term::new_atom("false").into(),
+        },
     }
 }
 
@@ -153,8 +173,12 @@ fn is_atom(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> Nati
     let a1 = &*args[0];
 
     match a1 {
-        Term::Atom(_) => NativeReturn::Return { term: Term::new_bool(true).into() },
-        _ => NativeReturn::Return { term: Term::new_bool(false).into() },
+        Term::Atom(_) => NativeReturn::Return {
+            term: Term::new_bool(true).into(),
+        },
+        _ => NativeReturn::Return {
+            term: Term::new_bool(false).into(),
+        },
     }
 }
 
@@ -162,8 +186,12 @@ fn is_integer(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> N
     assert!(args.len() == 1);
     let a1 = &*args[0];
     match a1 {
-        Term::Integer(_) => NativeReturn::Return { term: Term::new_bool(true).into() },
-        _ => NativeReturn::Return { term: Term::new_bool(false).into() },
+        Term::Integer(_) => NativeReturn::Return {
+            term: Term::new_bool(true).into(),
+        },
+        _ => NativeReturn::Return {
+            term: Term::new_bool(false).into(),
+        },
     }
 }
 
@@ -171,8 +199,12 @@ fn is_pid(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> Nativ
     assert!(args.len() == 1);
     let a1 = &*args[0];
     match a1 {
-        Term::Pid(_) => NativeReturn::Return { term: Term::new_bool(true).into() },
-        _ => NativeReturn::Return { term: Term::new_bool(false).into() },
+        Term::Pid(_) => NativeReturn::Return {
+            term: Term::new_bool(true).into(),
+        },
+        _ => NativeReturn::Return {
+            term: Term::new_bool(false).into(),
+        },
     }
 }
 
@@ -180,8 +212,12 @@ fn is_tuple(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> Nat
     assert!(args.len() == 1);
     let a1 = &*args[0];
     match a1 {
-        Term::Tuple(_) => NativeReturn::Return { term: Term::new_bool(true).into() },
-        _ => NativeReturn::Return { term: Term::new_bool(false).into() },
+        Term::Tuple(_) => NativeReturn::Return {
+            term: Term::new_bool(true).into(),
+        },
+        _ => NativeReturn::Return {
+            term: Term::new_bool(false).into(),
+        },
     }
 }
 
@@ -189,8 +225,12 @@ fn is_map(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> Nativ
     assert!(args.len() == 1);
     let a1 = &*args[0];
     match a1 {
-        Term::Map(_) => NativeReturn::Return { term: Term::new_bool(true).into() },
-        _ => NativeReturn::Return { term: Term::new_bool(false).into() },
+        Term::Map(_) => NativeReturn::Return {
+            term: Term::new_bool(true).into(),
+        },
+        _ => NativeReturn::Return {
+            term: Term::new_bool(false).into(),
+        },
     }
 }
 
@@ -222,7 +262,9 @@ fn list_subtract(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -
     for item in Term::list_iter(&args[0]) {
         match item {
             ListIteratorItem::Elem(elem) => {
-                if let Some(idx) = to_remove_vec.iter().enumerate()
+                if let Some(idx) = to_remove_vec
+                    .iter()
+                    .enumerate()
                     .find(|(_, term)| elem.erl_eq(term))
                     .map(|(idx, _)| idx)
                 {
@@ -233,7 +275,9 @@ fn list_subtract(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -
             }
             ListIteratorItem::Tail(tail) => {
                 assert!(tail.erl_eq(&Term::Nil));
-                return NativeReturn::Return { term: Term::slice_to_list(&out, tail.clone()) }
+                return NativeReturn::Return {
+                    term: Term::slice_to_list(&out, tail.clone()),
+                };
             }
         }
     }
@@ -243,17 +287,23 @@ fn list_subtract(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -
 
 fn exact_eq(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 2);
-    NativeReturn::Return { term: Term::new_bool(args[0].erl_exact_eq(&*args[1])).into() }
+    NativeReturn::Return {
+        term: Term::new_bool(args[0].erl_exact_eq(&*args[1])).into(),
+    }
 }
 fn exact_not_eq(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 2);
-    NativeReturn::Return { term: Term::new_bool(!args[0].erl_exact_eq(&*args[1])).into() }
+    NativeReturn::Return {
+        term: Term::new_bool(!args[0].erl_exact_eq(&*args[1])).into(),
+    }
 }
 
 fn and(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 2);
     if let (Some(a1), Some(a2)) = (args[0].as_boolean(), args[1].as_boolean()) {
-        NativeReturn::Return { term: Term::new_bool(a1 && a2).into() }
+        NativeReturn::Return {
+            term: Term::new_bool(a1 && a2).into(),
+        }
     } else {
         panic!()
     }
@@ -262,7 +312,9 @@ fn and(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRe
 fn or(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 2);
     if let (Some(a1), Some(a2)) = (args[0].as_boolean(), args[1].as_boolean()) {
-        NativeReturn::Return { term: Term::new_bool(a1 || a2).into() }
+        NativeReturn::Return {
+            term: Term::new_bool(a1 || a2).into(),
+        }
     } else {
         panic!()
     }
@@ -271,7 +323,9 @@ fn or(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRet
 fn tuple_size(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 1);
     if let Term::Tuple(ref terms) = &*args[0] {
-        NativeReturn::Return { term: Term::new_i64(terms.len() as i64).into() }
+        NativeReturn::Return {
+            term: Term::new_i64(terms.len() as i64).into(),
+        }
     } else {
         panic!()
     }
@@ -292,12 +346,18 @@ fn is_function(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> 
 
     if let Term::CapturedFunction { ident, .. } = &*args[0] {
         let res = arity_ref.map(|a| a == ident.arity as i64).unwrap_or(true);
-        NativeReturn::Return { term: Term::new_bool(res).into() }
+        NativeReturn::Return {
+            term: Term::new_bool(res).into(),
+        }
     } else if let Term::BoundLambda { ident, .. } = &*args[0] {
         let res = arity_ref.map(|a| a == ident.arity as i64).unwrap_or(true);
-        NativeReturn::Return { term: Term::new_bool(res).into() }
+        NativeReturn::Return {
+            term: Term::new_bool(res).into(),
+        }
     } else {
-        NativeReturn::Return { term: Term::new_bool(false).into() }
+        NativeReturn::Return {
+            term: Term::new_bool(false).into(),
+        }
     }
 }
 
@@ -414,7 +474,9 @@ fn is_function(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> 
 fn not(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 1);
     if let Some(b) = args[0].as_boolean() {
-        NativeReturn::Return { term: Term::new_bool(!b).into() }
+        NativeReturn::Return {
+            term: Term::new_bool(!b).into(),
+        }
     } else {
         panic!()
     }
@@ -425,9 +487,15 @@ fn is_binary(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> Na
     let a1 = &*args[0];
 
     match a1 {
-        Term::Binary(_) => NativeReturn::Return { term: Term::new_bool(true).into() },
-        Term::BinarySlice { .. } => NativeReturn::Return { term: Term::new_bool(true).into() },
-        _ => NativeReturn::Return { term: Term::new_bool(false).into() },
+        Term::Binary(_) => NativeReturn::Return {
+            term: Term::new_bool(true).into(),
+        },
+        Term::BinarySlice { .. } => NativeReturn::Return {
+            term: Term::new_bool(true).into(),
+        },
+        _ => NativeReturn::Return {
+            term: Term::new_bool(false).into(),
+        },
     }
 }
 
@@ -437,48 +505,69 @@ fn atom_to_list(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) ->
 
     match a1 {
         Term::Atom(atom) => {
-            let chars: Vec<_> = atom.as_str()
+            let chars: Vec<_> = atom
+                .as_str()
                 .chars()
                 .map(|c| Term::new_i64(c as i64).into())
                 .collect();
-            NativeReturn::Return { term: Term::slice_to_list(&chars, Term::Nil.into()).into() }
+            NativeReturn::Return {
+                term: Term::slice_to_list(&chars, Term::Nil.into()).into(),
+            }
         }
         _ => panic!(),
     }
 }
 
-fn less_than_or_equal(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
+fn less_than_or_equal(
+    _vm: &VMState,
+    _proc: &mut ProcessContext,
+    args: &[Rc<Term>],
+) -> NativeReturn {
     assert!(args.len() == 2);
     let a1 = &*args[0];
     let a2 = &*args[1];
     let ord = a1.erl_ord(a2);
-    NativeReturn::Return { term: Term::new_bool(ord != std::cmp::Ordering::Greater).into() }
+    NativeReturn::Return {
+        term: Term::new_bool(ord != std::cmp::Ordering::Greater).into(),
+    }
 }
 fn less_than(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 2);
     let a1 = &*args[0];
     let a2 = &*args[1];
     let ord = a1.erl_ord(a2);
-    NativeReturn::Return { term: Term::new_bool(ord == std::cmp::Ordering::Less).into() }
+    NativeReturn::Return {
+        term: Term::new_bool(ord == std::cmp::Ordering::Less).into(),
+    }
 }
-fn greater_than_or_equal(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
+fn greater_than_or_equal(
+    _vm: &VMState,
+    _proc: &mut ProcessContext,
+    args: &[Rc<Term>],
+) -> NativeReturn {
     assert!(args.len() == 2);
     let a1 = &*args[0];
     let a2 = &*args[1];
     let ord = a1.erl_ord(a2);
-    NativeReturn::Return { term: Term::new_bool(ord != std::cmp::Ordering::Less).into() }
+    NativeReturn::Return {
+        term: Term::new_bool(ord != std::cmp::Ordering::Less).into(),
+    }
 }
 fn greater_than(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 2);
     let a1 = &*args[0];
     let a2 = &*args[1];
     let ord = a1.erl_ord(a2);
-    NativeReturn::Return { term: Term::new_bool(ord == std::cmp::Ordering::Greater).into() }
+    NativeReturn::Return {
+        term: Term::new_bool(ord == std::cmp::Ordering::Greater).into(),
+    }
 }
 
 fn setelement(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 3);
-    let idx = if let Some(num) = args[0].as_usize() { num } else {
+    let idx = if let Some(num) = args[0].as_usize() {
+        num
+    } else {
         panic!()
     };
     let value = args[2].clone();
@@ -487,8 +576,10 @@ fn setelement(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> N
             panic!()
         } else {
             let mut vals = vals.clone();
-            vals[idx-1] = value;
-            NativeReturn::Return { term: Term::Tuple(vals).into() }
+            vals[idx - 1] = value;
+            NativeReturn::Return {
+                term: Term::Tuple(vals).into(),
+            }
         }
     } else {
         panic!()
@@ -496,14 +587,18 @@ fn setelement(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> N
 }
 fn element(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 2);
-    let idx = if let Some(num) = args[0].as_usize() { num } else {
+    let idx = if let Some(num) = args[0].as_usize() {
+        num
+    } else {
         panic!()
     };
     if let Term::Tuple(vals) = &*args[1] {
         if idx == 0 || idx > vals.len() {
             panic!()
         } else {
-            NativeReturn::Return { term: vals[idx-1].clone() }
+            NativeReturn::Return {
+                term: vals[idx - 1].clone(),
+            }
         }
     } else {
         panic!()
@@ -512,7 +607,9 @@ fn element(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> Nati
 
 fn erl_self(_vm: &VMState, proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 0);
-    NativeReturn::Return { term: Term::Pid(proc.pid).into() }
+    NativeReturn::Return {
+        term: Term::Pid(proc.pid).into(),
+    }
 }
 
 //fn process_flag(vm: &VMState, proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
@@ -536,29 +633,40 @@ fn put(_vm: &VMState, proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeRet
         NativeReturn::Return { term: old }
     } else {
         proc.dict.push((args[0].clone(), args[1].clone()));
-        NativeReturn::Return { term: Term::new_atom("undefined").into() }
+        NativeReturn::Return {
+            term: Term::new_atom("undefined").into(),
+        }
     }
 }
 
 fn get(_vm: &VMState, proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 1);
     if let Some(entry) = proc.dict.iter().find(|e| e.0.erl_exact_eq(&args[0])) {
-        NativeReturn::Return { term: entry.1.clone() }
+        NativeReturn::Return {
+            term: entry.1.clone(),
+        }
     } else {
-        NativeReturn::Return { term: Term::new_atom("undefined").into() }
+        NativeReturn::Return {
+            term: Term::new_atom("undefined").into(),
+        }
     }
 }
 
 fn erase(_vm: &VMState, proc: &mut ProcessContext, args: &[Rc<Term>]) -> NativeReturn {
     assert!(args.len() == 1);
-    let idx = proc.dict.iter().enumerate()
+    let idx = proc
+        .dict
+        .iter()
+        .enumerate()
         .find(|e| (e.1).0.erl_exact_eq(&args[0]))
         .map(|(idx, _)| idx);
     if let Some(entry) = idx {
         let (_key, val) = proc.dict.remove(entry);
         NativeReturn::Return { term: val }
     } else {
-        NativeReturn::Return { term: Term::new_atom("undefined").into() }
+        NativeReturn::Return {
+            term: Term::new_atom("undefined").into(),
+        }
     }
 }
 
@@ -572,7 +680,9 @@ fn length(_vm: &VMState, _proc: &mut ProcessContext, args: &[Rc<Term>]) -> Nativ
             }
             ListIteratorItem::Tail(tail) => {
                 if tail.erl_eq(&Term::Nil) {
-                    return NativeReturn::Return { term: Term::new_i64(len as i64).into() };
+                    return NativeReturn::Return {
+                        term: Term::new_i64(len as i64).into(),
+                    };
                 } else {
                     return NativeReturn::Throw {
                         typ: Term::new_atom("error").into(),

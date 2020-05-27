@@ -1,10 +1,10 @@
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
 
-use libeir_diagnostics::ByteSpan;
+use libeir_diagnostics::SourceSpan;
 
+use crate::lexer::{DelayedSubstitution, LexicalToken, Symbol, Token};
 use crate::lexer::{IdentToken, SymbolToken};
-use crate::lexer::{LexicalToken, Symbol, Token, DelayedSubstitution};
 
 use super::directives::Define;
 use super::token_reader::{ReadFrom, TokenReader};
@@ -16,7 +16,6 @@ pub enum MacroIdent {
     Func(Symbol, usize),
 }
 impl MacroIdent {
-
     pub fn ident(&self) -> Symbol {
         match self {
             MacroIdent::Const(sym) => *sym,
@@ -30,7 +29,6 @@ impl MacroIdent {
             MacroIdent::Func(_, arity) => Some(*arity),
         }
     }
-
 }
 
 impl From<&MacroCall> for MacroIdent {
@@ -69,7 +67,6 @@ pub struct MacroContainer {
     const_defines: HashMap<Symbol, MacroDef>,
 }
 impl MacroContainer {
-
     pub fn new() -> Self {
         MacroContainer {
             func_defines: HashMap::new(),
@@ -77,12 +74,13 @@ impl MacroContainer {
         }
     }
 
-    pub fn insert<T>(&mut self, key: T, def: MacroDef) -> bool where T: Into<MacroIdent> {
+    pub fn insert<T>(&mut self, key: T, def: MacroDef) -> bool
+    where
+        T: Into<MacroIdent>,
+    {
         let key: MacroIdent = key.into();
         match key {
-            MacroIdent::Const(name) => {
-                self.const_defines.insert(name, def).is_some()
-            }
+            MacroIdent::Const(name) => self.const_defines.insert(name, def).is_some(),
             MacroIdent::Func(name, arity) => {
                 if !self.func_defines.contains_key(&name) {
                     self.func_defines.insert(name, HashMap::new());
@@ -93,13 +91,16 @@ impl MacroContainer {
         }
     }
 
-    pub fn get<'a, T>(&'a self, key: T) -> Option<&'a MacroDef> where T: Into<MacroIdent> {
+    pub fn get<'a, T>(&'a self, key: T) -> Option<&'a MacroDef>
+    where
+        T: Into<MacroIdent>,
+    {
         let key: MacroIdent = key.into();
         match key {
-            MacroIdent::Const(name) =>
-                self.const_defines.get(&name),
-            MacroIdent::Func(name, arity) =>
-                self.func_defines.get(&name).and_then(|c| c.get(&arity)),
+            MacroIdent::Const(name) => self.const_defines.get(&name),
+            MacroIdent::Func(name, arity) => {
+                self.func_defines.get(&name).and_then(|c| c.get(&arity))
+            }
         }
     }
 
@@ -119,7 +120,6 @@ impl MacroContainer {
     pub fn defined_func(&self, symbol: &Symbol) -> bool {
         self.func_defines.contains_key(symbol)
     }
-
 }
 
 /// Macro Definition.
@@ -152,14 +152,14 @@ pub struct MacroCall {
     pub args: Option<MacroArgs>,
 }
 impl MacroCall {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._question.0;
         let end = self
             .args
             .as_ref()
             .map(|a| a.span().end())
             .unwrap_or_else(|| self.name.span().end());
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 
     pub fn name(&self) -> Symbol {
@@ -195,8 +195,8 @@ pub struct NoArgsMacroCall {
     pub name: MacroName,
 }
 impl NoArgsMacroCall {
-    pub fn span(&self) -> ByteSpan {
-        ByteSpan::new(self._question.span().start(), self.name.span().end())
+    pub fn span(&self) -> SourceSpan {
+        SourceSpan::new(self._question.span().start(), self.name.span().end())
     }
 }
 impl ReadFrom for NoArgsMacroCall {
@@ -217,10 +217,10 @@ pub struct Stringify {
     pub name: IdentToken,
 }
 impl Stringify {
-    pub fn span(&self) -> ByteSpan {
+    pub fn span(&self) -> SourceSpan {
         let start = self._double_question.0;
         let end = self.name.2;
-        ByteSpan::new(start, end)
+        SourceSpan::new(start, end)
     }
 }
 impl fmt::Display for Stringify {

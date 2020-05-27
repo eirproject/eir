@@ -5,12 +5,12 @@
 //! details.
 
 mod term;
-pub use term::{ TermType, Term, Pid, Reference, ErlEq, ErlExactEq, ErlOrd };
+pub use term::{ErlEq, ErlExactEq, ErlOrd, Pid, Reference, Term, TermType};
 
 pub mod erl_lib;
 
 mod vm;
-pub use vm::{ VMState, WatchType };
+pub use vm::{VMState, WatchType};
 
 mod process;
 

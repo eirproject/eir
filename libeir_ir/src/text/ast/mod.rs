@@ -1,7 +1,7 @@
 use libeir_intern::Ident;
 
-use crate::{BasicType, BinaryEntrySpecifier, BinOp};
 use crate::constant::Integer;
+use crate::{BasicType, BinOp, BinaryEntrySpecifier};
 
 mod lower;
 pub use lower::{LowerError, LowerMap};

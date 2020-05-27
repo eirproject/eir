@@ -3,15 +3,16 @@
 // Implements a variant of
 // http://www.cs.tufts.edu/~nr/cs257/archive/luc-maranget/jun08.pdf
 
-#[macro_use] extern crate derivative;
+#[macro_use]
+extern crate derivative;
 
 pub use petgraph::visit::EdgeRef;
 
 mod pattern;
-pub use self::pattern::{ PatternProvider, ExpandedClauseNodes };
+pub use self::pattern::{ExpandedClauseNodes, PatternProvider};
 
 mod cfg;
-pub use self::cfg::{ PatternCfg, CfgEdge, CfgNodeKind, CfgNodeIndex };
+pub use self::cfg::{CfgEdge, CfgNodeIndex, CfgNodeKind, PatternCfg};
 
 mod matrix;
 
@@ -28,7 +29,10 @@ const TARGET: &'static str = "pattern_compiler";
 struct LeafId(usize);
 
 #[derive(Debug)]
-pub struct MatchCompileContext<'a, P> where P: pattern::PatternProvider + 'a {
+pub struct MatchCompileContext<'a, P>
+where
+    P: pattern::PatternProvider + 'a,
+{
     pattern: &'a mut P,
 
     cfg: cfg::PatternCfg<P>,
@@ -36,19 +40,18 @@ pub struct MatchCompileContext<'a, P> where P: pattern::PatternProvider + 'a {
     root_matrix: matrix::MatchMatrix<P>,
     fail_leaf: NodeIndex,
 }
-impl<'a, P> MatchCompileContext<'a, P> where P: PatternProvider {
-
+impl<'a, P> MatchCompileContext<'a, P>
+where
+    P: PatternProvider,
+{
     pub fn new(pattern: &'a mut P) -> Self {
         let root = pattern.get_root();
 
         let mut cfg = cfg::PatternCfg::new();
         let fail_leaf = cfg.add_fail();
-        let leaves: Vec<LeafId> = (0..(root.clauses))
-            .map(|idx| LeafId(idx))
-            .collect();
+        let leaves: Vec<LeafId> = (0..(root.clauses)).map(|idx| LeafId(idx)).collect();
 
-        let root_matrix = matrix::MatchMatrix::new(
-            &root.nodes, leaves, root.variables);
+        let root_matrix = matrix::MatchMatrix::new(&root.nodes, leaves, root.variables);
 
         MatchCompileContext {
             pattern: pattern,
@@ -63,18 +66,18 @@ impl<'a, P> MatchCompileContext<'a, P> where P: PatternProvider {
     fn root_matrix(&self) -> &matrix::MatchMatrix<P> {
         &self.root_matrix
     }
-
 }
 
-fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
-                              ctx: &mut MatchCompileContext<P>,
-                              spec: Option<P::PatternNodeKind>,
-                              matrix: &matrix::MatchMatrix<P>,
-                              introduced_vars: Vec<P::CfgVariable>, level: usize)
-    where P: PatternProvider
+fn matrix_to_decision_tree<P>(
+    parent: cfg::CfgNodeIndex,
+    ctx: &mut MatchCompileContext<P>,
+    spec: Option<P::PatternNodeKind>,
+    matrix: &matrix::MatchMatrix<P>,
+    introduced_vars: Vec<P::CfgVariable>,
+    level: usize,
+) where
+    P: PatternProvider,
 {
-
-
     #[cfg(feature = "debug_table_print")]
     {
         let mut buf = String::new();
@@ -103,11 +106,10 @@ fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
         let node = ctx.cfg.add_leaf(parent, node_id.0, edge, binds.clone());
 
         let new_mat = matrix.without_head();
-        matrix_to_decision_tree(node, ctx, None, &new_mat, vec![], level+1);
+        matrix_to_decision_tree(node, ctx, None, &new_mat, vec![], level + 1);
 
         return;
     }
-
 
     // Select the variable we should specialize on.
     // This will be the column with the most consecutive non-wildcards
@@ -116,22 +118,31 @@ fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
     let specialize_variable_cfg_var = matrix.get_var(specialize_variable);
 
     // Add new CFG node for current
-    let cfg_node = ctx.cfg.add_child(parent, edge, specialize_variable_cfg_var,
-                                     matrix.binds_for_head().clone());
+    let cfg_node = ctx.cfg.add_child(
+        parent,
+        edge,
+        specialize_variable_cfg_var,
+        matrix.binds_for_head().clone(),
+    );
 
     // Find what pattern types we have as children, so that we can
     // specialize and branch to them in the CFG
-    let specialization_types = matrix.collect_specialization_types(
-        &ctx.pattern, specialize_variable);
+    let specialization_types =
+        matrix.collect_specialization_types(&ctx.pattern, specialize_variable);
 
     // Specialize on specific matrices
     for specialization in specialization_types.iter() {
-        let (introduced, specialized) = matrix.specialize(ctx, specialize_variable,
-                                                          *specialization);
+        let (introduced, specialized) =
+            matrix.specialize(ctx, specialize_variable, *specialization);
 
         matrix_to_decision_tree(
-            cfg_node, ctx, Some(*specialization),
-            &specialized, introduced, level+1);
+            cfg_node,
+            ctx,
+            Some(*specialization),
+            &specialized,
+            introduced,
+            level + 1,
+        );
     }
 
     // Specialize on default matrix
@@ -139,14 +150,18 @@ fn matrix_to_decision_tree<P>(parent: cfg::CfgNodeIndex,
 
     let wildcard = ctx.pattern.get_wildcard();
     matrix_to_decision_tree(
-        cfg_node, ctx,
+        cfg_node,
+        ctx,
         Some(wildcard),
-        &default, introduced, level+1);
-
+        &default,
+        introduced,
+        level + 1,
+    );
 }
 
 pub fn to_decision_tree<P>(pattern: &mut P) -> cfg::PatternCfg<P>
-    where P: PatternProvider
+where
+    P: PatternProvider,
 {
     let mut context = MatchCompileContext::new(pattern);
 
@@ -155,10 +170,14 @@ pub fn to_decision_tree<P>(pattern: &mut P) -> cfg::PatternCfg<P>
     let root_cfg = context.cfg.get_entry();
     let wildcard = context.pattern.get_wildcard();
 
-    matrix_to_decision_tree(root_cfg, &mut context,
-                            Some(wildcard),
-                            &root,
-                            root.variables.clone(), 0);
+    matrix_to_decision_tree(
+        root_cfg,
+        &mut context,
+        Some(wildcard),
+        &root,
+        root.variables.clone(),
+        0,
+    );
 
     let cfg = context.cfg;
     assert!(!::petgraph::algo::is_cyclic_directed(&cfg.graph));

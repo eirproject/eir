@@ -1,6 +1,6 @@
 //-*- mode: rust -*-
 
-use libeir_diagnostics::{ByteIndex, ByteSpan, Diagnostic, Label as DiagLabel};
+use libeir_diagnostics::{SourceIndex, SourceSpan, Diagnostic, Label as DiagLabel};
 use libeir_intern::{Ident, Symbol};
 use libeir_util_parse::ErrorReceiver;
 use libeir_util_number::ToPrimitive;
@@ -75,19 +75,21 @@ FunctionItem: FunctionItem = {
 
     // Label
     <l:@L> <name:Value> "(" <args:Comma<Value>> ")" ":" <r:@R> => {
-        let span = ByteSpan::new(l, r);
+        let span = SourceSpan::new(l, r);
         if name.block().is_none() {
             errors.error(
-                Diagnostic::new_error("label name must be block")
-                    .with_label(DiagLabel::new_primary(span))
+                Diagnostic::error()
+                    .with_message("label name must be block")
+                    .with_labels(vec![DiagLabel::primary(span.source_id(), span)])
                     .into()
             );
         }
         for arg in args.iter() {
             if arg.value().is_none() {
                 errors.error(
-                    Diagnostic::new_error("argument to label must be value")
-                        .with_label(DiagLabel::new_primary(span))
+                    Diagnostic::error()
+                        .with_message("argument to label must be value")
+                        .with_labels(vec![DiagLabel::primary(span.source_id(), span)])
                         .into()
                 );
             }
@@ -101,9 +103,11 @@ FunctionItem: FunctionItem = {
 FunctionAssignItem: FunctionItem = {
     <l:@L> <lhs:Value> "=" <rhs:Value> <r:@R> => {
         if lhs.value().is_none() {
+            let span = SourceSpan::new(l, r);
             errors.error(
-                Diagnostic::new_error("assignment must be to a value")
-                    .with_label(DiagLabel::new_primary(ByteSpan::new(l, r)))
+                Diagnostic::error()
+                    .with_message("assignment must be to a value")
+                    .with_labels(vec![DiagLabel::primary(span.source_id(), span)])
                     .into()
             );
         }
@@ -308,11 +312,11 @@ BinOp: BinOp = {
 Block: Ident = {
     <ident> => <>,
     <l:@L> "type" <r:@R> =>
-        Ident::new(Symbol::intern("type"), ByteSpan::new(l, r)),
+        Ident::new(Symbol::intern("type"), SourceSpan::new(l, r)),
 };
 
 extern {
-    type Location = ByteIndex;
+    type Location = SourceIndex;
     type Error = ParserError;
 
     enum Token {
