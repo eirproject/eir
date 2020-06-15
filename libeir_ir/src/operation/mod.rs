@@ -10,7 +10,7 @@ use stack_dst::Value;
 pub mod binary_construct;
 pub mod receive;
 
-pub trait Op: MetaEntry {
+pub trait Op: MetaEntry + Send {
     fn name(&self) -> &str;
 
     fn dyn_clone(&self) -> DynOp;
