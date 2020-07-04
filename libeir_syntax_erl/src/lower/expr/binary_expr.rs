@@ -101,7 +101,7 @@ pub(super) fn lower_binary_expr(ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut
                 BinaryOp::Bsl => (Ident::from_str("erlang"), Ident::from_str("bsl")),
                 BinaryOp::Bsr => (Ident::from_str("erlang"), Ident::from_str("bsr")),
                 BinaryOp::Or => (Ident::from_str("erlang"), Ident::from_str("or")),
-                BinaryOp::And => (Ident::from_str("erlang"), Ident::from_str("&")),
+                BinaryOp::And => (Ident::from_str("erlang"), Ident::from_str("and")),
                 BinaryOp::Send => (Ident::from_str("erlang"), Ident::from_str("!")),
                 _ => unimplemented!("{:?}", op),
             };
