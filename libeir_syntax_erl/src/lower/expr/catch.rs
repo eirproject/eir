@@ -1,4 +1,5 @@
-use libeir_ir::{Block as IrBlock, CaseBuilder, FunctionBuilder, Value as IrValue};
+use libeir_ir::operation::case::{Case, CaseBuilder};
+use libeir_ir::{Block as IrBlock, FunctionBuilder, Value as IrValue};
 
 use libeir_intern::Symbol;
 
@@ -46,13 +47,15 @@ pub(super) fn lower_try_expr(
                 .make_error_jump(b, span, block, typ_val, err_val);
         }
 
-        let mut case_b = b.op_case_build(span);
+        let mut case_b = Case::builder();
+        case_b.set_span(span);
         case_b.match_on = Some(body_ret);
         case_b.no_match = Some(b.value(no_match));
 
         for clause in clauses {
             match lower_clause(
                 ctx,
+                &mut case_b.container,
                 b,
                 &mut block,
                 false,
@@ -96,7 +99,8 @@ pub(super) fn lower_try_expr(
 
         let match_val = b.prim_value_list(&[exc_type, exc_error]);
 
-        let mut case_b = b.op_case_build(span);
+        let mut case_b = Case::builder();
+        case_b.set_span(span);
         case_b.match_on = Some(match_val);
         case_b.no_match = Some(b.value(catch_no_match_block));
 
@@ -112,6 +116,7 @@ pub(super) fn lower_try_expr(
 
             match lower_clause(
                 ctx,
+                &mut case_b.container,
                 b,
                 &mut block,
                 false,
@@ -201,23 +206,24 @@ pub(super) fn lower_catch_expr(
     let exc_error = b.block_arg_insert(exc_block);
     let exc_trace = b.block_arg_insert(exc_block);
 
-    let mut case_b = b.op_case_build(span);
+    let mut case_b = Case::builder();
+    case_b.set_span(span);
 
     // Atoms
     let big_exit_atom = b.value(Symbol::intern("EXIT"));
 
     let make_value_clause = |b: &mut FunctionBuilder, case_b: &mut CaseBuilder, val: IrValue| {
-        let clause = b.pat_mut().clause_start(span);
+        let clause = case_b.container.clause_start(span);
 
         // Value
         case_b.push_value(val, b);
-        let pat_val = b.pat_mut().clause_value(clause);
+        let pat_val = case_b.container.clause_value(clause);
 
-        let pat = b.pat_mut().node_empty(Some(span));
-        b.pat_mut().value(pat, pat_val);
+        let pat = case_b.container.node_empty(Some(span));
+        case_b.container.value(pat, pat_val);
 
-        b.pat_mut().clause_node_push(clause, pat);
-        b.pat_mut().clause_finish(clause);
+        case_b.container.clause_node_push(clause, pat);
+        case_b.container.clause_finish(clause);
         clause
     };
 

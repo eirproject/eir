@@ -1,12 +1,14 @@
 use std::collections::BTreeSet;
 
-use petgraph::visit::{GraphBase, IntoNeighbors, IntoNeighborsDirected};
+use petgraph::visit::{Dfs, DfsPostOrder};
+use petgraph::visit::{GraphBase, IntoNeighbors, IntoNeighborsDirected, Visitable, Walker};
 use petgraph::Direction;
 
 use cranelift_entity::{EntityList, ListPool, SecondaryMap};
 
 use itertools::Either;
 
+use super::block_graph::EntityVisitMap;
 use crate::Function;
 use crate::Value;
 
@@ -24,7 +26,9 @@ pub struct CfgBranch(pub usize);
 /// The semantics of the below graph are as follows:
 /// - Nodes are values
 /// - Only explicit control flow are graph edges
+#[derive(Debug)]
 pub struct ControlFlowGraph {
+    entry: Option<Value>,
     forward: SecondaryMap<Value, EntityList<Value>>,
     back: SecondaryMap<Value, EntityList<Value>>,
     pool: ListPool<Value>,
@@ -33,6 +37,7 @@ pub struct ControlFlowGraph {
 impl ControlFlowGraph {
     pub fn new() -> Self {
         ControlFlowGraph {
+            entry: None,
             forward: SecondaryMap::new(),
             back: SecondaryMap::new(),
             pool: ListPool::new(),
@@ -40,6 +45,11 @@ impl ControlFlowGraph {
     }
 
     pub fn calculate(&mut self, fun: &Function, entry: Value) {
+        self.entry = Some(entry);
+        self.forward.clear();
+        self.back.clear();
+        self.pool.clear();
+
         let mut to_walk = Vec::new();
         to_walk.push(entry);
         let mut walked = BTreeSet::new();
@@ -54,12 +64,29 @@ impl ControlFlowGraph {
                 let forward = &mut self.forward[val];
                 for out in fun.op_branch_iter(block) {
                     forward.push(out, &mut self.pool);
+                    self.back[out].push(val, &mut self.pool);
                     if !walked.contains(&out) {
                         to_walk.push(out);
                     }
                 }
             }
         }
+    }
+
+    pub fn dfs(&self) -> Dfs<Value, EntityVisitMap<Value>> {
+        Dfs::new(self, self.entry.unwrap())
+    }
+
+    pub fn dfs_iter<'a>(&'a self) -> impl Iterator<Item = Value> + 'a {
+        self.dfs().iter(self)
+    }
+
+    pub fn dfs_post_order(&self) -> DfsPostOrder<Value, EntityVisitMap<Value>> {
+        DfsPostOrder::new(self, self.entry.unwrap())
+    }
+
+    pub fn dfs_post_order_iter<'a>(&'a self) -> impl Iterator<Item = Value> + 'a {
+        self.dfs_post_order().iter(self)
     }
 }
 
@@ -128,5 +155,17 @@ impl<'a> IntoNeighborsDirected for &'a ControlFlowGraph {
             Direction::Outgoing => Either::Left(self.neighbors(value)),
             Direction::Incoming => Either::Right(ControlFlowPredecessors::new(self, value)),
         }
+    }
+}
+
+impl<'a> Visitable for ControlFlowGraph {
+    type Map = EntityVisitMap<Value>;
+    #[inline]
+    fn visit_map(&self) -> EntityVisitMap<Value> {
+        EntityVisitMap::new(self.forward.capacity())
+    }
+    #[inline]
+    fn reset_map(&self, map: &mut EntityVisitMap<Value>) {
+        map.reset(self.forward.capacity());
     }
 }

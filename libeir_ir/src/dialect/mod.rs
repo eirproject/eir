@@ -15,6 +15,7 @@ lazy_static! {
         let mut d = Dialect::new();
         op::receive::register(&mut d);
         op::binary_construct::register(&mut d);
+        op::case::register(&mut d);
         Arc::new(d)
     };
 }

@@ -1,6 +1,6 @@
 use bumpalo::{collections::Vec as BVec, Bump};
 
-use libeir_ir::pattern::{PatternClause, PatternNode};
+use libeir_ir::pattern::{PatternClause, PatternContainer, PatternNode};
 use libeir_ir::FunctionBuilder;
 use libeir_ir::{BasicType, Block, Value};
 
@@ -65,6 +65,7 @@ impl<'a, 'b, 'bump> LowerCtx<'a, 'b, 'bump> {
 pub fn lower_cfg(
     bump: &Bump,
     b: &mut FunctionBuilder,
+    pat: &PatternContainer,
     provider: &ErlangPatternProvider,
     cfg: &PatternCfg<ErlangPatternProvider>,
     clauses: &[PatternClause],
@@ -129,6 +130,7 @@ pub fn lower_cfg(
         lower_cfg_rec(
             bump,
             b,
+            pat,
             &mut ctx,
             cfg,
             clauses,
@@ -148,6 +150,7 @@ pub fn lower_cfg(
 fn lower_cfg_rec(
     bump: &Bump,
     b: &mut FunctionBuilder,
+    pat: &PatternContainer,
     ctx: &mut LowerCtx,
     cfg: &PatternCfg<ErlangPatternProvider>,
     clauses: &[PatternClause],
@@ -195,7 +198,7 @@ fn lower_cfg_rec(
                         ctx.bind(weight.variable_binds[0], args[0]);
                         ctx.bind(weight.variable_binds[1], args[1]);
 
-                        lower_cfg_rec(bump, b, ctx, cfg, clauses, ok, outgoing.target());
+                        lower_cfg_rec(bump, b, pat, ctx, cfg, clauses, ok, outgoing.target());
                     }
                     NodeKind::TupleSize(size) => {
                         assert!(size == weight.variable_binds.len());
@@ -212,7 +215,7 @@ fn lower_cfg_rec(
                         }
 
                         // Ok
-                        lower_cfg_rec(bump, b, ctx, cfg, clauses, ok, outgoing.target());
+                        lower_cfg_rec(bump, b, pat, ctx, cfg, clauses, ok, outgoing.target());
                     }
                     NodeKind::ListCell => {
                         assert!(weight.variable_binds.len() == 2);
@@ -228,7 +231,7 @@ fn lower_cfg_rec(
                         }
 
                         // Ok
-                        lower_cfg_rec(bump, b, ctx, cfg, clauses, ok, outgoing.target());
+                        lower_cfg_rec(bump, b, pat, ctx, cfg, clauses, ok, outgoing.target());
                     }
                     NodeKind::Map => {
                         let ok = match_builder.push_type(BasicType::Map, b);
@@ -237,7 +240,7 @@ fn lower_cfg_rec(
                             ctx.bind(*bind, match_val);
                         }
 
-                        lower_cfg_rec(bump, b, ctx, cfg, clauses, ok, outgoing.target());
+                        lower_cfg_rec(bump, b, pat, ctx, cfg, clauses, ok, outgoing.target());
                     }
                     NodeKind::MapItem(val_or_const) => {
                         assert!(weight.variable_binds.len() == 1);
@@ -248,12 +251,12 @@ fn lower_cfg_rec(
                         let ok_arg = b.block_args(ok)[0];
                         ctx.bind(weight.variable_binds[0], ok_arg);
 
-                        lower_cfg_rec(bump, b, ctx, cfg, clauses, ok, outgoing.target());
+                        lower_cfg_rec(bump, b, pat, ctx, cfg, clauses, ok, outgoing.target());
                     }
                     NodeKind::Value(val_or_const) => {
                         let val = ctx.value_or_const_to_value(val_or_const, node, b, cfg);
                         let ok = match_builder.push_value(val, b);
-                        lower_cfg_rec(bump, b, ctx, cfg, clauses, ok, outgoing.target());
+                        lower_cfg_rec(bump, b, pat, ctx, cfg, clauses, ok, outgoing.target());
                     }
                     _ => unimplemented!("{:?}", kind),
                 }
@@ -265,6 +268,7 @@ fn lower_cfg_rec(
             lower_cfg_rec(
                 bump,
                 b,
+                pat,
                 ctx,
                 cfg,
                 clauses,
@@ -281,9 +285,9 @@ fn lower_cfg_rec(
             let clause = clauses[leaf_num];
 
             let mut args = vec![];
-            let num_binds = b.pat().clause_binds(clause).len();
+            let num_binds = pat.clause_binds(clause).len();
             for bind_num in 0..num_binds {
-                let bind_node = b.pat().clause_binds(clause)[bind_num];
+                let bind_node = pat.clause_binds(clause)[bind_num];
                 let val = ctx.node_to_value(bind_node, node, cfg);
                 args.push(val);
             }
@@ -309,7 +313,7 @@ fn lower_cfg_rec(
                 let edge = edges.next().unwrap();
                 assert!(edges.next().is_none());
 
-                lower_cfg_rec(bump, b, ctx, cfg, clauses, false_block, edge.target());
+                lower_cfg_rec(bump, b, pat, ctx, cfg, clauses, false_block, edge.target());
             }
         }
     }

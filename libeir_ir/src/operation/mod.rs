@@ -7,7 +7,27 @@ use std::raw::TraitObject;
 use meta_table::MetaEntry;
 use stack_dst::Value;
 
+macro_rules! impl_op {
+    ($typ:ident, $name:expr) => {
+        impl Op for $typ {
+            fn name(&self) -> &str {
+                $name
+            }
+            fn dyn_clone(&self) -> DynOp {
+                DynOp::new(self.clone())
+            }
+            fn type_id(&self) -> TypeId {
+                TypeId::of::<Self>()
+            }
+            fn meta_entry(&self) -> &dyn MetaEntry {
+                self
+            }
+        }
+    };
+}
+
 pub mod binary_construct;
+pub mod case;
 pub mod receive;
 
 pub trait Op: MetaEntry {

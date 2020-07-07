@@ -13,7 +13,6 @@ use libeir_util_datastructures::pooled_entity_set::{BoundEntitySet, EntitySet, E
 use libeir_diagnostics::SourceSpan;
 
 use crate::constant::{Const, ConstKind, ConstantContainer};
-use crate::pattern::{PatternClause, PatternContainer};
 use crate::{ArcDialect, FunctionIdent};
 
 pub mod builder;
@@ -134,7 +133,6 @@ pub struct Function {
 
     pub pool: PoolContainer,
 
-    pattern_container: PatternContainer,
     constant_container: ConstantContainer,
 
     // Auxiliary information
@@ -151,10 +149,6 @@ impl Function {
         self.span
     }
 
-    pub fn pat(&self) -> &PatternContainer {
-        &self.pattern_container
-    }
-
     pub fn cons(&self) -> &ConstantContainer {
         &self.constant_container
     }
@@ -163,11 +157,6 @@ impl Function {
 impl HasAux<ListPool<Value>> for Function {
     fn get_aux(&self) -> &ListPool<Value> {
         &self.pool.value
-    }
-}
-impl HasAux<ListPool<PatternClause>> for Function {
-    fn get_aux(&self) -> &ListPool<PatternClause> {
-        &self.pool.clause
     }
 }
 impl HasAux<SetForest<Block>> for Function {
@@ -454,8 +443,6 @@ impl Function {
 
     pub fn block_op_eq(&self, lb: Block, r_fun: &Function, rb: Block) -> bool {
         match (self.block_kind(lb).unwrap(), r_fun.block_kind(rb).unwrap()) {
-            (OpKind::Case { .. }, _) => unimplemented!(),
-            (_, OpKind::Case { .. }) => unimplemented!(),
             (OpKind::Call(l), OpKind::Call(r)) => l == r,
             (OpKind::IfBool, OpKind::IfBool) => true,
             (OpKind::Dyn(l), OpKind::Dyn(r)) => l.op_eq(&**r),
@@ -509,17 +496,6 @@ impl Function {
         for block in self.blocks.keys() {
             self.graph_validate_block(block);
         }
-    }
-}
-
-/// Patterns
-impl Function {
-    pub fn pattern_container(&self) -> &PatternContainer {
-        &self.pattern_container
-    }
-
-    pub fn pattern_container_mut(&mut self) -> &mut PatternContainer {
-        &mut self.pattern_container
     }
 }
 
@@ -579,11 +555,9 @@ impl Function {
 
             pool: PoolContainer {
                 value: ListPool::new(),
-                clause: ListPool::new(),
                 block_set: SetForest::new(),
             },
 
-            pattern_container: PatternContainer::new(),
             constant_container: ConstantContainer::new(),
 
             constant_values: HashSet::new(),

@@ -2,7 +2,7 @@ use libeir_diagnostics::SourceSpan;
 
 use super::Function;
 use super::ValueKind;
-use super::{Block, Const, Location, PrimOp, Value};
+use super::{Block, Const, Location, OpKind, PrimOp, Value};
 use super::{PrimOpData, PrimOpKind};
 
 use crate::constant::{ConstantContainer, IntoConst};
@@ -12,8 +12,6 @@ use crate::BinOp;
 use cranelift_entity::EntityList;
 
 mod op;
-pub use op::CaseBuilder;
-
 mod primop;
 
 impl Function {
@@ -140,13 +138,6 @@ impl<'a> FunctionBuilder<'a> {
     }
     pub fn fun_mut(&mut self) -> &mut Function {
         &mut self.fun
-    }
-
-    pub fn pat(&self) -> &PatternContainer {
-        &self.fun.pattern_container
-    }
-    pub fn pat_mut(&mut self) -> &mut PatternContainer {
-        &mut self.fun.pattern_container
     }
 
     pub fn cons(&self) -> &ConstantContainer {
@@ -303,20 +294,19 @@ impl<'a> FunctionBuilder<'a> {
         self.fun.blocks[block].location = loc;
     }
 
-    /// This will explicitly clear the operation contained in the
-    /// block. This will remove all successors, and will cause
-    /// this block to be removed from their predecessors.
-    pub fn block_clear(&mut self, block: Block) {
+    pub fn block_clear_take(&mut self, block: Block) -> Option<OpKind> {
         #[cfg(debug_assertions)]
         self.fun().graph_validate_block(block);
 
         let mut value_buf = self.value_buf.take().unwrap();
         debug_assert!(value_buf.is_empty());
 
+        let op;
+
         {
             let data = self.fun.blocks.get_mut(block).unwrap();
 
-            data.op = None;
+            op = data.op.take();
             for read in data.reads.as_slice(&self.fun.pool.value) {
                 value_buf.push(*read);
             }
@@ -337,6 +327,15 @@ impl<'a> FunctionBuilder<'a> {
 
         value_buf.clear();
         self.value_buf = Some(value_buf);
+
+        op
+    }
+
+    /// This will explicitly clear the operation contained in the
+    /// block. This will remove all successors, and will cause
+    /// this block to be removed from their predecessors.
+    pub fn block_clear(&mut self, block: Block) {
+        self.block_clear_take(block);
     }
 
     pub fn block_value_map<F>(&mut self, block: Block, mut map: F)

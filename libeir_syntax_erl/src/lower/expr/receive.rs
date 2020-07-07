@@ -1,5 +1,6 @@
 use libeir_intern::Ident;
 use libeir_ir::{
+    operation::case::Case,
     operation::receive::{ReceiveDone, ReceiveStart, ReceiveWait},
     Block as IrBlock, FunctionBuilder, Value as IrValue,
 };
@@ -45,7 +46,8 @@ pub(super) fn lower_receive(
         let no_match = b.block_insert();
         b.op_call_flow(no_match, recv_wait_block, &[recv_ref_val]);
 
-        let mut case_b = b.op_case_build(recv.span);
+        let mut case_b = Case::builder();
+        case_b.set_span(recv.span);
         case_b.match_on = Some(body_message_arg);
         case_b.no_match = Some(b.value(no_match));
 
@@ -54,6 +56,7 @@ pub(super) fn lower_receive(
         for clause in clauses.iter() {
             match lower_clause(
                 ctx,
+                &mut case_b.container,
                 b,
                 &mut body_block,
                 false,

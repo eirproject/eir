@@ -1,3 +1,6 @@
+pub use petgraph::visit::IntoNeighborsDirected;
+pub use petgraph::Direction;
+
 mod block_graph;
 pub use block_graph::{BlockGraph, EntityVisitMap};
 

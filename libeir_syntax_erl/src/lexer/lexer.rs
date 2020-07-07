@@ -789,179 +789,150 @@ mod test {
             let lexer = Lexer::new(scanner);
             let results = lexer.map(|result| {
                 match result {
-                    Ok(LexicalToken(start, token, end)) => {
-                        Ok((start.to_usize(), token, end.to_usize()))
+                    Ok(LexicalToken(_start, token, _end)) => {
+                        Ok(token)
                     }
                     Err(err) =>  {
                         Err(err)
                     }
                 }
             }).collect::<Vec<_>>();
-            assert_eq!(results, $expected);
+            assert_eq!(results, $expected(id));
         })
     );
 
     #[test]
     fn lex_symbols() {
-        assert_lex!(":", vec![Ok((1, Token::Colon, 2))]);
-        assert_lex!(",", vec![Ok((1, Token::Comma, 2))]);
-        assert_lex!("=", vec![Ok((1, Token::Equals, 2))]);
+        assert_lex!(":", |_| vec![Ok(Token::Colon)]);
+        assert_lex!(",", |_| vec![Ok(Token::Comma)]);
+        assert_lex!("=", |_| vec![Ok(Token::Equals)]);
     }
 
     #[test]
     fn lex_comment() {
-        assert_lex!("% this is a comment", vec![]);
-        assert_lex!("% @author Paul", vec![Ok((1, Token::Edoc, 15))]);
+        assert_lex!("% this is a comment", |_| vec![]);
+        assert_lex!("% @author Paul", |_| vec![Ok(Token::Edoc)]);
     }
 
     #[test]
     fn lex_float_literal() {
         // With leading 0
-        assert_lex!("0.0", vec![Ok((1, Token::Float(0.0), 4))]);
-        assert_lex!("000051.0", vec![Ok((1, Token::Float(51.0), 9))]);
-        assert_lex!("05162.0", vec![Ok((1, Token::Float(5162.0), 8))]);
-        assert_lex!("099.0", vec![Ok((1, Token::Float(99.0), 6))]);
-        assert_lex!("04624.51235", vec![Ok((1, Token::Float(4624.51235), 12))]);
-        assert_lex!("0.987", vec![Ok((1, Token::Float(0.987), 6))]);
-        assert_lex!("0.55e10", vec![Ok((1, Token::Float(0.55e10), 8))]);
-        assert_lex!("612.0e61", vec![Ok((1, Token::Float(612e61), 9))]);
-        assert_lex!("0.0e-1", vec![Ok((1, Token::Float(0e-1), 7))]);
-        assert_lex!("41.0e+9", vec![Ok((1, Token::Float(41e+9), 8))]);
+        assert_lex!("0.0", |_| vec![Ok(Token::Float(0.0))]);
+        assert_lex!("000051.0", |_| vec![Ok(Token::Float(51.0))]);
+        assert_lex!("05162.0", |_| vec![Ok(Token::Float(5162.0))]);
+        assert_lex!("099.0", |_| vec![Ok(Token::Float(99.0))]);
+        assert_lex!("04624.51235", |_| vec![Ok(Token::Float(4624.51235))]);
+        assert_lex!("0.987", |_| vec![Ok(Token::Float(0.987))]);
+        assert_lex!("0.55e10", |_| vec![Ok(Token::Float(0.55e10))]);
+        assert_lex!("612.0e61", |_| vec![Ok(Token::Float(612e61))]);
+        assert_lex!("0.0e-1", |_| vec![Ok(Token::Float(0e-1))]);
+        assert_lex!("41.0e+9", |_| vec![Ok(Token::Float(41e+9))]);
 
         // Without leading 0
-        assert_lex!("5162.0", vec![Ok((1, Token::Float(5162.0), 7))]);
-        assert_lex!("99.0", vec![Ok((1, Token::Float(99.0), 5))]);
-        assert_lex!("4624.51235", vec![Ok((1, Token::Float(4624.51235), 11))]);
-        assert_lex!("612.0e61", vec![Ok((1, Token::Float(612e61), 9))]);
-        assert_lex!("41.0e+9", vec![Ok((1, Token::Float(41e+9), 8))]);
+        assert_lex!("5162.0", |_| vec![Ok(Token::Float(5162.0))]);
+        assert_lex!("99.0", |_| vec![Ok(Token::Float(99.0))]);
+        assert_lex!("4624.51235", |_| vec![Ok(Token::Float(4624.51235))]);
+        assert_lex!("612.0e61", |_| vec![Ok(Token::Float(612e61))]);
+        assert_lex!("41.0e+9", |_| vec![Ok(Token::Float(41e+9))]);
 
         // With leading negative sign
-        assert_lex!(
-            "-700.5",
-            vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(700.5), 7))]
-        );
-        assert_lex!(
-            "-9.0e2",
-            vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(9.0e2), 7))]
-        );
-        assert_lex!(
-            "-0.5e1",
-            vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(0.5e1), 7))]
-        );
-        assert_lex!(
-            "-0.0",
-            vec![Ok((1, Token::Minus, 2)), Ok((2, Token::Float(0.0), 5))]
-        );
+        assert_lex!("-700.5", |_| vec![
+            Ok(Token::Minus),
+            Ok(Token::Float(700.5))
+        ]);
+        assert_lex!("-9.0e2", |_| vec![
+            Ok(Token::Minus),
+            Ok(Token::Float(9.0e2))
+        ]);
+        assert_lex!("-0.5e1", |_| vec![
+            Ok(Token::Minus),
+            Ok(Token::Float(0.5e1))
+        ]);
+        assert_lex!("-0.0", |_| vec![Ok(Token::Minus), Ok(Token::Float(0.0))]);
     }
 
     #[test]
     fn lex_identifier_or_atom() {
-        assert_lex!(
-            "_identifier",
-            vec![Ok((1, Token::Ident(symbol!("_identifier")), 12))]
-        );
-        assert_lex!(
-            "_Identifier",
-            vec![Ok((1, Token::Ident(symbol!("_Identifier")), 12))]
-        );
-        assert_lex!(
-            "identifier",
-            vec![Ok((1, Token::Atom(symbol!("identifier")), 11))]
-        );
-        assert_lex!(
-            "Identifier",
-            vec![Ok((1, Token::Ident(symbol!("Identifier")), 11))]
-        );
-        assert_lex!("z0123", vec![Ok((1, Token::Atom(symbol!("z0123")), 6))]);
-        assert_lex!(
-            "i_d@e_t0123",
-            vec![Ok((1, Token::Atom(symbol!("i_d@e_t0123")), 12))]
-        );
+        assert_lex!("_identifier", |_| vec![Ok(Token::Ident(symbol!(
+            "_identifier"
+        )))]);
+        assert_lex!("_Identifier", |_| vec![Ok(Token::Ident(symbol!(
+            "_Identifier"
+        )))]);
+        assert_lex!("identifier", |_| vec![Ok(Token::Atom(symbol!(
+            "identifier"
+        )))]);
+        assert_lex!("Identifier", |_| vec![Ok(Token::Ident(symbol!(
+            "Identifier"
+        )))]);
+        assert_lex!("z0123", |_| vec![Ok(Token::Atom(symbol!("z0123")))]);
+        assert_lex!("i_d@e_t0123", |_| vec![Ok(Token::Atom(symbol!(
+            "i_d@e_t0123"
+        )))]);
     }
 
     #[test]
     fn lex_integer_literal() {
         // Decimal
-        assert_lex!("1", vec![Ok((1, Token::Integer(1.into()), 2))]);
-        assert_lex!("9624", vec![Ok((1, Token::Integer(9624.into()), 5))]);
-        assert_lex!(
-            "-1",
-            vec![
-                Ok((1, Token::Minus, 2)),
-                Ok((2, Token::Integer(1.into()), 3))
-            ]
-        );
-        assert_lex!(
-            "-9624",
-            vec![
-                Ok((1, Token::Minus, 2)),
-                Ok((2, Token::Integer(9624.into()), 6))
-            ]
-        );
+        assert_lex!("1", |_| vec![Ok(Token::Integer(1.into()))]);
+        assert_lex!("9624", |_| vec![Ok(Token::Integer(9624.into()))]);
+        assert_lex!("-1", |_| vec![
+            Ok(Token::Minus),
+            Ok(Token::Integer(1.into()))
+        ]);
+        assert_lex!("-9624", |_| vec![
+            Ok(Token::Minus),
+            Ok(Token::Integer(9624.into()))
+        ]);
 
         // Hexadecimal
-        assert_lex!(r#"\x00"#, vec![Ok((1, Token::Integer(0x0.into()), 5))]);
-        assert_lex!(
-            r#"\x{1234FF}"#,
-            vec![Ok((1, Token::Integer(0x1234FF.into()), 11))]
-        );
-        assert_lex!(
-            "-16#0",
-            vec![
-                Ok((1, Token::Minus, 2)),
-                Ok((2, Token::Integer(0x0.into()), 6))
-            ]
-        );
-        assert_lex!(
-            "-16#1234FF",
-            vec![
-                Ok((1, Token::Minus, 2)),
-                Ok((2, Token::Integer(0x1234FF.into()), 11))
-            ]
-        );
+        assert_lex!(r#"\x00"#, |_| vec![Ok(Token::Integer(0x0.into()))]);
+        assert_lex!(r#"\x{1234FF}"#, |_| vec![Ok(Token::Integer(
+            0x1234FF.into()
+        ))]);
+        assert_lex!("-16#0", |_| vec![
+            Ok(Token::Minus),
+            Ok(Token::Integer(0x0.into()))
+        ]);
+        assert_lex!("-16#1234FF", |_| vec![
+            Ok(Token::Minus),
+            Ok(Token::Integer(0x1234FF.into()))
+        ]);
 
         // Octal
-        assert_lex!(r#"\00"#, vec![Ok((1, Token::Integer(0.into()), 4))]);
-        assert_lex!(r#"\0624"#, vec![Ok((1, Token::Integer(0o624.into()), 6))]);
+        assert_lex!(r#"\00"#, |_| vec![Ok(Token::Integer(0.into()))]);
+        assert_lex!(r#"\0624"#, |_| vec![Ok(Token::Integer(0o624.into()))]);
 
         // Octal integer literal followed by non-octal digits.
-        assert_lex!(
-            r#"\008"#,
-            vec![
-                Ok((1, Token::Integer(0.into()), 4)),
-                Ok((4, Token::Integer(8.into()), 5))
-            ]
-        );
-        assert_lex!(
-            r#"\01238"#,
-            vec![
-                Ok((1, Token::Integer(0o123.into()), 6)),
-                Ok((6, Token::Integer(8.into()), 7))
-            ]
-        );
+        assert_lex!(r#"\008"#, |_| vec![
+            Ok(Token::Integer(0.into())),
+            Ok(Token::Integer(8.into()))
+        ]);
+        assert_lex!(r#"\01238"#, |_| vec![
+            Ok(Token::Integer(0o123.into())),
+            Ok(Token::Integer(8.into()))
+        ]);
     }
 
     #[test]
     fn lex_string() {
-        assert_lex!(
-            r#""this is a string""#,
-            vec![Ok((1, Token::String(symbol!("this is a string")), 19,))]
-        );
+        assert_lex!(r#""this is a string""#, |_| vec![Ok(Token::String(
+            symbol!("this is a string")
+        ))]);
 
-        assert_lex!(
-            r#""this is a string"#,
-            vec![Err(LexicalError::UnclosedString {
+        assert_lex!(r#""this is a string"#, |source_id| vec![Err(
+            LexicalError::UnclosedString {
                 span: SourceSpan::new(
-                    SourceIndex::new(SourceId::UNKNOWN, ByteIndex(1)),
-                    SourceIndex::new(SourceId::UNKNOWN, ByteIndex(18))
+                    SourceIndex::new(source_id, ByteIndex(0)),
+                    SourceIndex::new(source_id, ByteIndex(17))
                 )
-            })]
-        );
+            }
+        )]);
     }
 
     #[test]
     fn lex_whitespace() {
-        assert_lex!("      \n \t", vec![]);
-        assert_lex!("\r\n", vec![]);
+        assert_lex!("      \n \t", |_| vec![]);
+        assert_lex!("\r\n", |_| vec![]);
     }
 }

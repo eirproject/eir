@@ -23,10 +23,11 @@ impl SourceIndex {
 
     #[inline]
     pub fn source_id(&self) -> SourceId {
-        if *self == Self::UNKNOWN {
+        let source_id_part = (self.0.get() >> 32) as u32;
+        if source_id_part == SourceId::UNKNOWN_SOURCE_ID {
             SourceId::UNKNOWN
         } else {
-            SourceId::new((self.0.get() >> 32) as u32)
+            SourceId::new(source_id_part)
         }
     }
 

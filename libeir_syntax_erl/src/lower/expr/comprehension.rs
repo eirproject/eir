@@ -1,4 +1,5 @@
 use libeir_ir::constant::NilTerm;
+use libeir_ir::operation::case::Case;
 use libeir_ir::BinOp;
 use libeir_ir::{Block as IrBlock, FunctionBuilder, Value as IrValue};
 
@@ -87,8 +88,14 @@ where
                 block = unpack_ok_block;
                 let pattern_span = gen.pattern.span();
 
+                let mut case_b = Case::builder();
+                case_b.set_span(pattern_span);
+                case_b.match_on = Some(head_val);
+                case_b.no_match = Some(b.value(no_match));
+
                 match lower_clause(
                     ctx,
+                    &mut case_b.container,
                     b,
                     &mut block,
                     false,
@@ -98,10 +105,6 @@ where
                 ) {
                     Ok(lowered) => {
                         let (scope_token, body) = lowered.make_body(ctx, b);
-
-                        let mut case_b = b.op_case_build(pattern_span);
-                        case_b.match_on = Some(head_val);
-                        case_b.no_match = Some(b.value(no_match));
 
                         // Add to case
                         let body_val = b.value(body);

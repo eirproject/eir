@@ -24,7 +24,7 @@ pub use algo::validate::ValidationError;
 
 pub mod text;
 
-mod graph;
+pub mod graph;
 pub use graph::LiveBlockGraph;
 
 // Subcontainers
@@ -39,7 +39,7 @@ pub use function::{
 pub use function::{Block, Function, Location, PrimOp, Value};
 pub use function::{ContainerDebug, ContainerDebugAdapter};
 
-pub use function::builder::{CaseBuilder, DynValue, FunctionBuilder, IntoValue};
+pub use function::builder::{DynValue, FunctionBuilder, IntoValue};
 
 pub use constant::EmptyMap;
 pub use constant::{AtomTerm, BigIntTerm, BinaryTerm, FloatTerm, IntTerm, NilTerm};

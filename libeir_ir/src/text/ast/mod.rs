@@ -1,3 +1,4 @@
+use libeir_diagnostics::SourceSpan;
 use libeir_intern::Ident;
 
 use crate::constant::Integer;
@@ -6,10 +7,11 @@ use crate::{BasicType, BinOp, BinaryEntrySpecifier};
 mod lower;
 pub use lower::{LowerError, LowerMap};
 
-mod raise;
+//mod raise;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Module {
+    pub span: SourceSpan,
     pub name: Ident,
     pub items: Vec<ModuleItem>,
 }
@@ -21,6 +23,7 @@ pub enum ModuleItem {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Function {
+    pub span: SourceSpan,
     pub name: Ident,
     pub arity: Integer,
     pub items: Vec<FunctionItem>,
@@ -35,6 +38,7 @@ pub enum FunctionItem {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Label {
+    pub span: SourceSpan,
     pub name: Value,
     // Only Value::Value is supported here
     pub args: Vec<Value>,
@@ -42,13 +46,14 @@ pub struct Label {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Assignment {
+    pub span: SourceSpan,
     pub lhs: Value,
     pub rhs: Value,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum DynOpt {
-    Parens(Vec<DynOpt>),
+    Parens(Vec<DynOpt>, SourceSpan),
     Value(Value),
 }
 
@@ -67,6 +72,7 @@ pub enum Op {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CaseOp {
+    pub span: SourceSpan,
     pub value: Value,
     pub entries: Vec<CaseEntry>,
     pub no_match: Option<Value>,
@@ -74,6 +80,7 @@ pub struct CaseOp {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CaseEntry {
+    pub span: SourceSpan,
     pub patterns: Vec<CasePattern>,
     pub args: Vec<Ident>,
     pub guard: Value,
@@ -99,11 +106,13 @@ pub enum CasePattern {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct MatchOp {
+    pub span: SourceSpan,
     pub value: Value,
     pub entries: Vec<MatchEntry>,
 }
 #[derive(Debug, PartialEq, Eq)]
 pub struct MatchEntry {
+    pub span: SourceSpan,
     pub target: Value,
     pub kind: MatchKind,
 }
@@ -120,6 +129,7 @@ pub enum MatchKind {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct UnpackValueListOp {
+    pub span: SourceSpan,
     pub arity: usize,
     pub value: Value,
     pub block: Value,
@@ -127,11 +137,13 @@ pub struct UnpackValueListOp {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CallControlFlowOp {
+    pub span: SourceSpan,
     pub target: Value,
     pub args: Vec<Value>,
 }
 #[derive(Debug, PartialEq, Eq)]
 pub struct CallFunctionOp {
+    pub span: SourceSpan,
     pub target: Value,
     pub ret: Value,
     pub thr: Value,
@@ -140,6 +152,7 @@ pub struct CallFunctionOp {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct IfBoolOp {
+    pub span: SourceSpan,
     pub value: Value,
     pub tru: Value,
     pub fal: Value,
@@ -148,6 +161,7 @@ pub struct IfBoolOp {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct TraceCaptureRawOp {
+    pub span: SourceSpan,
     pub then: Value,
 }
 

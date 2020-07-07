@@ -62,7 +62,6 @@ impl Function {
             OpKind::TraceConstruct => 1,
             OpKind::UnpackValueList(_) => 1,
             OpKind::MapPut { .. } => 2,
-            OpKind::Case { clauses } => 1 + clauses.len(&self.pool.clause),
             OpKind::Dyn(dyn_op) => {
                 let op_branches = self.dialect().get_op_branches(&**dyn_op).unwrap();
                 op_branches.branches_len()
@@ -93,16 +92,6 @@ impl Function {
 
             (OpKind::IfBool, 3, n) if n < 2 => reads[n],
             (OpKind::IfBool, 4, n) if n < 3 => reads[n],
-
-            (OpKind::Case { .. }, _, 0) => reads[0],
-            (OpKind::Case { .. }, _, n) => {
-                let n = n - 1;
-                if n % 2 == 0 {
-                    self.value_list_get_n(reads[2], n / 2).unwrap()
-                } else {
-                    self.value_list_get_n(reads[1], n / 2).unwrap()
-                }
-            }
 
             (OpKind::TraceCaptureRaw, _, 0) => reads[0],
             (OpKind::TraceConstruct, _, 0) => reads[0],

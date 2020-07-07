@@ -9,9 +9,9 @@ use libeir_util_parse::ErrorReceiver;
 use snafu::Snafu;
 
 use crate::text::ast;
-use crate::PatternNode;
 use crate::{Block, Value};
 use crate::{Function, FunctionBuilder, FunctionIdent, Module};
+use crate::{PatternContainer, PatternNode};
 
 type ErrCollector<'a> = &'a mut dyn ErrorReceiver<E = LowerError, W = LowerError>;
 
@@ -332,30 +332,39 @@ fn lower_operation(
             b.op_unreachable(SourceSpan::UNKNOWN, block);
         }
         ast::Op::Case(case_op) => {
+            use crate::operation::case::Case;
             let value = lower_value(errors, b, scope, &case_op.value)?;
 
             let mut binds = HashMap::new();
 
-            let mut case_b = b.op_case_build(SourceSpan::UNKNOWN);
+            let mut case_b = Case::builder();
+
             for entry in case_op.entries.iter() {
                 binds.clear();
-                let clause = b.pat_mut().clause_start(SourceSpan::UNKNOWN);
+                let clause = case_b.container.clause_start(SourceSpan::UNKNOWN);
 
                 for pattern in entry.patterns.iter() {
-                    let pat = lower_case_pattern(errors, b, scope, &mut binds, pattern)?;
-                    b.pat_mut().clause_node_push(clause, pat);
+                    let pat = lower_case_pattern(
+                        errors,
+                        &mut case_b.container,
+                        b,
+                        scope,
+                        &mut binds,
+                        pattern,
+                    )?;
+                    case_b.container.clause_node_push(clause, pat);
                 }
 
                 for bind in entry.args.iter() {
                     if let Some(node) = binds.get(bind) {
-                        b.pat_mut().clause_bind_push(clause, node.1);
+                        case_b.container.clause_bind_push(clause, node.1);
                     } else {
                         errors.error(LowerError::UndefinedBind { span: bind.span });
                         return Err(());
                     }
                 }
 
-                b.pat_mut().clause_finish(clause);
+                case_b.container.clause_finish(clause);
 
                 let guard = lower_value(errors, b, scope, &entry.guard)?;
                 let target = lower_value(errors, b, scope, &entry.target)?;
@@ -378,6 +387,7 @@ fn lower_operation(
 
 fn lower_case_pattern(
     errors: ErrCollector,
+    pat: &mut PatternContainer,
     b: &mut FunctionBuilder,
     scope: &mut HashMapStack<Name, (SourceSpan, Value)>,
     binds: &mut HashMap<Ident, (SourceSpan, PatternNode)>,
@@ -385,7 +395,7 @@ fn lower_case_pattern(
 ) -> Result<PatternNode, ()> {
     match pattern {
         ast::CasePattern::Binding { name, pattern } => {
-            let child = lower_case_pattern(errors, b, scope, binds, pattern)?;
+            let child = lower_case_pattern(errors, pat, b, scope, binds, pattern)?;
             if binds.contains_key(name) {
                 errors.error(LowerError::DuplicateDefinititon {
                     current: name.span,
@@ -397,8 +407,8 @@ fn lower_case_pattern(
             Ok(child)
         }
         ast::CasePattern::Wildcard => {
-            let node = b.pat_mut().node_empty(Some(SourceSpan::UNKNOWN));
-            b.pat_mut().wildcard(node);
+            let node = pat.node_empty(Some(SourceSpan::UNKNOWN));
+            pat.wildcard(node);
             Ok(node)
         }
         _ => unimplemented!(),

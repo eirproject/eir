@@ -125,15 +125,6 @@ where
         let reads = state.function.block_reads(block);
 
         let op_doc = match op {
-            OpKind::Case { clauses, .. } => {
-                let block = arena.nil();
-
-                arena
-                    .nil()
-                    .append(arena.text("case"))
-                    .append(arena.space())
-                    .append(block.nest(1).braces())
-            }
             OpKind::Match { branches } => {
                 let dests = reads[0];
                 let num_dests = state.function.value_list_length(dests);

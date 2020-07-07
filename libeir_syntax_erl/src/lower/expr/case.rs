@@ -1,3 +1,4 @@
+use libeir_ir::operation::case::Case as CaseOp;
 use libeir_ir::{Block as IrBlock, FunctionBuilder, Value as IrValue};
 
 use libeir_intern::Symbol;
@@ -27,7 +28,8 @@ pub(super) fn lower_case_expr(
             .make_error_jump(b, span, no_match, typ_val, err_val);
     }
 
-    let mut case_b = b.op_case_build(span);
+    let mut case_b = CaseOp::builder();
+    case_b.set_span(span);
     case_b.match_on = Some(match_val);
     case_b.no_match = Some(b.value(no_match));
 
@@ -38,6 +40,7 @@ pub(super) fn lower_case_expr(
     for clause in case.clauses.iter() {
         match lower_clause(
             ctx,
+            &mut case_b.container,
             b,
             &mut block,
             false,
@@ -96,7 +99,8 @@ pub(super) fn lower_if_expr(
             .make_error_jump(b, span, block, typ_val, err_val);
     }
 
-    let mut case_b = b.op_case_build(span);
+    let mut case_b = CaseOp::builder();
+    case_b.set_span(span);
     case_b.match_on = Some(match_val);
     case_b.no_match = Some(b.value(no_match));
 
@@ -107,6 +111,7 @@ pub(super) fn lower_if_expr(
     for clause in if_expr.clauses.iter() {
         match lower_clause(
             ctx,
+            &mut case_b.container,
             b,
             &mut block,
             false,

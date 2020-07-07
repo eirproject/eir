@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use libeir_ir::operation::case::Case;
 use libeir_ir::{
     Block as IrBlock, FunctionBuilder, IntoValue, Location, Module as IrModule, Value as IrValue,
 };
@@ -276,7 +277,9 @@ fn lower_function_base(
     // Top level function case expression
     {
         // TODO: Fuse locations of function heads
-        let mut func_case = b.op_case_build(span);
+        //let mut func_case = b.op_case_build(span);
+        let mut func_case = Case::builder();
+        func_case.set_span(span);
 
         func_case.match_on = Some(args_list);
         func_case.no_match = Some(b.value(match_fail_block));
@@ -284,6 +287,7 @@ fn lower_function_base(
         for clause in clauses.iter() {
             match lower_clause(
                 ctx,
+                &mut func_case.container,
                 b,
                 &mut block,
                 true,

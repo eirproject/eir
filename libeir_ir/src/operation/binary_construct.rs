@@ -56,21 +56,7 @@ pub struct BinaryConstructToken(());
 #[derive(Debug, Clone)]
 pub struct BinaryConstructStart;
 impl_meta_entry!(BinaryConstructStart);
-
-impl Op for BinaryConstructStart {
-    fn name(&self) -> &str {
-        "binary_construct_start"
-    }
-    fn dyn_clone(&self) -> DynOp {
-        DynOp::new(self.clone())
-    }
-    fn type_id(&self) -> TypeId {
-        TypeId::of::<Self>()
-    }
-    fn meta_entry(&self) -> &dyn MetaEntry {
-        self
-    }
-}
+impl_op!(BinaryConstructStart, "binary_construct_start");
 
 impl OpBranches for BinaryConstructStart {
     fn branches_len(&self) -> usize {

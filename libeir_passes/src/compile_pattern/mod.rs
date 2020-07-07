@@ -1,13 +1,11 @@
-use matches::matches;
-
 use bumpalo::{collections::Vec as BVec, Bump};
 use hashbrown::HashMap;
 
 use fnv::FnvBuildHasher;
 type BFnvHashMap<'bump, K, V> = HashMap<K, V, FnvBuildHasher, &'bump Bump>;
 
+use libeir_ir::operation::case::Case;
 use libeir_ir::FunctionBuilder;
-use libeir_ir::OpKind;
 use libeir_ir::PatternNode;
 use libeir_ir::Value;
 
@@ -59,7 +57,7 @@ impl CompilePatternPass {
 
                 let graph = fun.block_graph();
                 for block in graph.dfs_iter() {
-                    if matches!(fun.block_kind(block), Some(OpKind::Case { .. })) {
+                    if fun.block_kind(block).unwrap().get_dyn::<Case>().is_some() {
                         case_blocks.push(block);
                     }
                 }
@@ -73,14 +71,15 @@ impl CompilePatternPass {
                 let mut bodies = BVec::new_in(&bump);
                 let match_val;
                 let mut values = BVec::new_in(&bump);
-                let mut clauses = BVec::new_in(&bump);
+                //let mut clauses = BVec::new_in(&bump);
 
-                if let Some(OpKind::Case { clauses: c }) = b.fun().block_kind(block) {
-                    clauses.extend(c.as_slice(&b.fun().pool.clause).iter().cloned());
-                } else {
-                    unreachable!()
-                };
-                let num_clauses = clauses.len();
+                let case = b
+                    .fun()
+                    .block_kind(block)
+                    .unwrap()
+                    .get_dyn::<Case>()
+                    .unwrap();
+                let num_clauses = case.clauses().len();
 
                 // Extract arguments from block reads
                 {
@@ -105,6 +104,9 @@ impl CompilePatternPass {
                     }
                 }
 
+                let op = b.block_clear_take(block).unwrap();
+                let case = op.get_dyn::<Case>().unwrap();
+
                 let destinations = DecisionTreeDestinations {
                     fail: no_match,
                     guards,
@@ -113,8 +115,8 @@ impl CompilePatternPass {
 
                 // Get/validate number of roots
                 let mut roots_num = None;
-                for clause in clauses.iter() {
-                    let num = b.pat().clause_root_nodes(*clause).len();
+                for clause in case.clauses().iter() {
+                    let num = case.pat().clause_root_nodes(*clause).len();
                     if let Some(num_old) = roots_num {
                         assert!(num == num_old);
                     } else {
@@ -126,8 +128,8 @@ impl CompilePatternPass {
                 {
                     // Create map of PatternValue => Value
                     let mut value_idx = 0;
-                    for clause in clauses.iter() {
-                        for value in b.pat().clause_values(*clause) {
+                    for clause in case.clauses().iter() {
+                        for value in case.pat().clause_values(*clause) {
                             value_map.insert(*value, ValueBind::Value(values[value_idx]));
                             value_idx += 1;
                         }
@@ -136,21 +138,29 @@ impl CompilePatternPass {
 
                     // Create map of PatternValue => PatternNode
                     value_map.extend(
-                        clauses
+                        case.clauses()
                             .iter()
-                            .flat_map(|clause| b.pat().clause_node_binds_iter(*clause))
+                            .flat_map(|clause| case.pat().clause_node_binds_iter(*clause))
                             .map(|(k, v)| (k, ValueBind::Node(v))),
                     );
                 }
 
-                let mut provider = pattern_to_provider(b, &clauses, &value_map);
+                let mut provider =
+                    pattern_to_provider(b.fun(), case.pat(), case.clauses(), &value_map);
                 let decision_tree = to_decision_tree(&mut provider);
 
                 let mut out = Vec::new();
                 decision_tree.to_dot(&mut out).unwrap();
 
-                let cfg_entry =
-                    lower_cfg(&bump, b, &provider, &decision_tree, &clauses, &destinations);
+                let cfg_entry = lower_cfg(
+                    &bump,
+                    b,
+                    case.pat(),
+                    &provider,
+                    &decision_tree,
+                    case.clauses(),
+                    &destinations,
+                );
 
                 b.block_clear(block);
                 b.op_call_flow(block, cfg_entry, &[match_val]);

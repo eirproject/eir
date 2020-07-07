@@ -125,10 +125,6 @@ impl<'a> FunctionBuilder<'a> {
         MapPutBuilder::new(span, value, self)
     }
 
-    pub fn op_case_build(&mut self, span: SourceSpan) -> CaseBuilder {
-        CaseBuilder::new(span)
-    }
-
     pub fn op_unpack_value_list_next(
         &mut self,
         block: Block,
@@ -252,109 +248,6 @@ impl<'a> FunctionBuilder<'a> {
 
     pub fn op_match_build(&mut self, span: SourceSpan) -> MatchBuilder {
         MatchBuilder::new(span)
-    }
-}
-
-pub struct CaseBuilder {
-    span: SourceSpan,
-
-    pub match_on: Option<Value>,
-    pub no_match: Option<Value>,
-
-    clauses: EntityList<PatternClause>,
-    clauses_b: EntityList<Value>,
-    values: EntityList<Value>,
-}
-
-impl Default for CaseBuilder {
-    fn default() -> Self {
-        CaseBuilder {
-            span: SourceSpan::UNKNOWN,
-            match_on: None,
-            no_match: None,
-
-            clauses: EntityList::new(),
-            clauses_b: EntityList::new(),
-            values: EntityList::new(),
-        }
-    }
-}
-
-impl CaseBuilder {
-    pub fn new(span: SourceSpan) -> Self {
-        let mut this = Self::default();
-        this.span = span;
-        this
-    }
-
-    pub fn push_clause<'a>(
-        &mut self,
-        clause: PatternClause,
-        guard: Value,
-        body: Value,
-        b: &mut FunctionBuilder<'a>,
-    ) {
-        self.clauses.push(clause, &mut b.fun.pool.clause);
-        self.clauses_b
-            .extend([guard, body].iter().cloned(), &mut b.fun.pool.value);
-    }
-
-    pub fn push_value<'a>(&mut self, value: Value, b: &mut FunctionBuilder<'a>) {
-        self.values.push(value, &mut b.fun.pool.value);
-    }
-
-    pub fn finish<'a>(mut self, block: Block, b: &mut FunctionBuilder<'a>) {
-        // Validate that the number of values matches between the
-        // clauses and reads
-        let mut num_values = 0;
-        for clause in self.clauses.as_slice(&b.fun().pool.clause) {
-            num_values += b.fun().pat().clause_values(*clause).len();
-        }
-        let num_value_reads = self.values.len(&b.fun().pool.value);
-        assert!(num_values == num_value_reads);
-
-        let data = b.fun.blocks.get_mut(block).unwrap();
-        assert!(data.op.is_none());
-        assert!(data.reads.is_empty());
-
-        data.op = Some(OpKind::Case {
-            clauses: self.clauses,
-        });
-        data.location = b.fun.locations.location(None, None, None, self.span);
-
-        let mut buf = b.value_buf.take().unwrap();
-        buf.clear();
-
-        data.reads
-            .push(self.no_match.unwrap(), &mut b.fun.pool.value);
-
-        // Guard and body blocks for clauses
-        for c in self.clauses_b.as_slice(&b.fun.pool.value) {
-            buf.push(*c);
-        }
-        data.reads
-            .extend(buf.iter().cloned(), &mut b.fun.pool.value);
-
-        // Match value
-        data.reads
-            .push(self.match_on.unwrap(), &mut b.fun.pool.value);
-
-        // Values
-        buf.clear();
-        for c in self.values.as_slice(&b.fun.pool.value) {
-            buf.push(*c);
-        }
-        data.reads
-            .extend(buf.iter().cloned(), &mut b.fun.pool.value);
-
-        buf.clear();
-        b.value_buf = Some(buf);
-
-        self.clauses_b.clear(&mut b.fun.pool.value);
-        self.values.clear(&mut b.fun.pool.value);
-
-        b.graph_update_block(block);
-        b.fun.graph_validate_block(block);
     }
 }
 

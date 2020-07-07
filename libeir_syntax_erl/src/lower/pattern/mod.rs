@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use libeir_diagnostics::SourceSpan;
-use libeir_ir::pattern::{PatternClause, PatternValue};
+use libeir_ir::pattern::{PatternClause, PatternContainer, PatternValue};
 use libeir_ir::{Block as IrBlock, FunctionBuilder, LogicOp, Value as IrValue};
 
 use crate::parser::ast::{Expr, Guard};
@@ -48,12 +48,12 @@ struct ClauseLowerCtx {
 }
 
 impl ClauseLowerCtx {
-    pub fn clause_value(&mut self, b: &mut FunctionBuilder, val: IrValue) -> PatternValue {
+    pub fn clause_value(&mut self, pat: &mut PatternContainer, val: IrValue) -> PatternValue {
         if let Some(pat_val) = self.value_dedup.get(&val) {
             *pat_val
         } else {
             self.values.push(val);
-            b.pat_mut().clause_value(self.pat_clause)
+            pat.clause_value(self.pat_clause)
         }
     }
 }
@@ -113,6 +113,7 @@ impl UnreachableClause {
 /// * The body is empty
 pub(super) fn lower_clause<'a, P>(
     ctx: &mut LowerCtx,
+    pat: &mut PatternContainer,
     b: &mut FunctionBuilder,
     pre_case: &mut IrBlock,
     shadow: bool,
@@ -125,7 +126,7 @@ where
 {
     assert!(b.fun().block_kind(*pre_case).is_none());
 
-    let pat_clause = b.pat_mut().clause_start(span);
+    let pat_clause = pat.clause_start(span);
 
     let mut clause_ctx = ClauseLowerCtx {
         span,
@@ -154,7 +155,7 @@ where
         });
     }
 
-    tree.lower(b, &mut clause_ctx);
+    tree.lower(b, pat, &mut clause_ctx);
 
     // Construct guard lambda
     let guard_lambda_block = clause_ctx.lower_guard(ctx, b, shadow, guard);

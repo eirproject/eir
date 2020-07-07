@@ -18,7 +18,7 @@ libeir_util_number = { path = "../util/libeir_util_number" }
 libeir_util_dot_graph = { path = "../util/libeir_util_dot_graph" }
 meta_table = { path = "../util/meta_table" }
 
-stack_dst = { version = "0.6.0" }
+stack_dst = { version = "0.6.0", features = ["unsize"] }
 
 string-intern = { version = "0.1.7", default-features = false }
 pretty = "0.7"

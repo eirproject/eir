@@ -30,8 +30,9 @@ Comma<T>: Vec<T> = {
 };
 
 pub Module: Module = {
-    <name:atom> "{" <items:ModuleItem*> "}" => {
+    <l:@L> <name:atom> "{" <items:ModuleItem*> "}" <r:@R> => {
         Module {
+            span: span!(l, r),
             name: name,
             items,
         }
@@ -43,10 +44,11 @@ ModuleItem: ModuleItem = {
 };
 
 pub StandaloneFunction: (Ident, Function) = {
-    <module:atom> ":" <name:atom> "/" <arity:integer> "{" <items:FunctionItem*> "}" => {
+    <l:@L> <module:atom> ":" <name:atom> "/" <arity:integer> "{" <items:FunctionItem*> "}" <r:@R> => {
         (
             module,
             Function {
+                span: span!(l, r),
                 name: name,
                 arity: arity,
                 items,
@@ -56,8 +58,9 @@ pub StandaloneFunction: (Ident, Function) = {
 };
 
 Function: Function = {
-    <name:atom> "/" <arity:integer> "{" <items:FunctionItem*> "}" => {
+    <l:@L> <name:atom> "/" <arity:integer> "{" <items:FunctionItem*> "}" <r:@R> => {
         Function {
+            span: span!(l, r),
             name: name,
             arity: arity,
             items,
@@ -94,7 +97,7 @@ FunctionItem: FunctionItem = {
                 );
             }
         }
-        FunctionItem::Label(Label { name: name, args })
+        FunctionItem::Label(Label { span: span!(l, r), name: name, args })
     },
 
 };
@@ -113,6 +116,7 @@ FunctionAssignItem: FunctionItem = {
         }
 
         FunctionItem::Assignment(Assignment {
+            span: span!(l, r),
             lhs,
             rhs,
         })
@@ -120,7 +124,7 @@ FunctionAssignItem: FunctionItem = {
 };
 
 DynOpt: DynOpt = {
-    "(" <entries:Comma<DynOpt>> ")" => DynOpt::Parens(entries),
+    <l:@L> "(" <entries:Comma<DynOpt>> ")" <r:@R> => DynOpt::Parens(entries, span!(l, r)),
     <value:Value> => DynOpt::Value(value),
 };
 
@@ -137,32 +141,36 @@ FunctionOp: Op = {
     },
 
     // Call
-    <target:Value> "(" <args:Comma<Value>> ")" "=>" <ret:Value> "except" <thr:Value> => {
+    <l:@L> <target:Value> "(" <args:Comma<Value>> ")" "=>" <ret:Value> "except" <thr:Value> <r:@R> => {
         Op::CallFunction(CallFunctionOp {
+            span: span!(l, r),
             target,
             ret,
             thr,
             args,
         })
     },
-    <target:Value> "(" <args:Comma<Value>> ")" => {
+    <l:@L> <target:Value> "(" <args:Comma<Value>> ")" <r:@R> => {
         Op::CallControlFlow(CallControlFlowOp {
+            span: span!(l, r),
             target,
             args,
         })
     },
 
     // UnpackValueList
-    "unpack" <value:Value> "arity" <arity:integer> "=>" <block:Value> => {
+    <l:@L> "unpack" <value:Value> "arity" <arity:integer> "=>" <block:Value> <r:@R> => {
         Op::UnpackValueList(UnpackValueListOp {
+            span: span!(l, r),
             arity: arity.to_usize().unwrap(),
             value,
             block,
         })
     },
 
-    "if_bool" <value:Value> <tru:Value> <fal:Value> <or:Value?> => {
+    <l:@L> "if_bool" <value:Value> <tru:Value> <fal:Value> <or:Value?> <r:@R> => {
         Op::IfBool(IfBoolOp {
+            span: span!(l, r),
             value,
             tru,
             fal,
@@ -170,21 +178,24 @@ FunctionOp: Op = {
         })
     },
 
-    "trace_capture_raw" <then:Value> => {
+    <l:@L> "trace_capture_raw" <then:Value> <r:@R> => {
         Op::TraceCaptureRaw(TraceCaptureRawOp {
+            span: span!(l, r),
             then,
         })
     },
 
-    "match" <value:Value> "{" <entries:MatchEntry*> "}" => {
+    <l:@L> "match" <value:Value> "{" <entries:MatchEntry*> "}" <r:@R> => {
         Op::Match(MatchOp {
+            span: span!(l, r),
             value,
             entries,
         })
     },
 
-    "case" <value:Value> "{" <entries:CaseEntry*> <no_match:CaseNoMatch?> "}" => {
+    <l:@L> "case" <value:Value> "{" <entries:CaseEntry*> <no_match:CaseNoMatch?> "}" <r:@R> => {
         Op::Case(CaseOp {
+            span: span!(l, r),
             value,
             entries,
             no_match,
@@ -197,16 +208,18 @@ FunctionOp: Op = {
 };
 
 CaseEntry: CaseEntry = {
-    "<" <patterns:Comma<CasePattern>> ">" "guard" <guard: Value> "=>" <target:Value> "(" <args:Comma<ident>> ")" ";" => {
+    <l:@L> "<" <patterns:Comma<CasePattern>> ">" "guard" <guard: Value> "=>" <target:Value> "(" <args:Comma<ident>> ")" ";" <r:@R> => {
         CaseEntry {
+            span: span!(l, r),
             patterns,
             args,
             guard,
             target,
         }
     },
-    <pattern:CasePattern> "guard" <guard:Value> "=>" <target:Value> "(" <args:Comma<ident>> ")" ";" => {
+    <l:@L> <pattern:CasePattern> "guard" <guard:Value> "=>" <target:Value> "(" <args:Comma<ident>> ")" ";" <r:@R> => {
         CaseEntry {
+            span: span!(l, r),
             patterns: vec![pattern],
             args,
             guard,
@@ -248,8 +261,9 @@ CasePattern: CasePattern = {
 };
 
 MatchEntry: MatchEntry = {
-    <kind:MatchKind> "=>" <target:Value> ";" => {
+    <l:@L> <kind:MatchKind> "=>" <target:Value> ";" <r:@R> => {
         MatchEntry {
+            span: span!(l, r),
             target,
             kind,
         }

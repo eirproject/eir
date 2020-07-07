@@ -1,4 +1,5 @@
 use libeir_ir::constant::NilTerm;
+use libeir_ir::operation::case::Case;
 use libeir_ir::{Block as IrBlock, FunctionBuilder, Value as IrValue};
 
 use libeir_intern::{Ident, Symbol};
@@ -224,8 +225,12 @@ fn lower_expr(
                     .make_error_jump(b, mat.span, no_match, typ_val, err_val);
             }
 
+            let mut match_case = Case::builder();
+            match_case.set_span(mat.span);
+
             match lower_clause(
                 ctx,
+                &mut match_case.container,
                 b,
                 &mut block,
                 false,
@@ -236,7 +241,6 @@ fn lower_expr(
                 Ok(lowered) => {
                     let (_scope_token, body) = lowered.make_body(ctx, b);
 
-                    let mut match_case = b.op_case_build(mat.span);
                     match_case.match_on = Some(match_val);
                     match_case.no_match = Some(b.value(no_match));
 

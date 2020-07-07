@@ -1,5 +1,5 @@
 use crate::binary::BinaryEntrySpecifier;
-use crate::operation::DynOp;
+use crate::operation::{DynOp, Op};
 use crate::pattern::PatternClause;
 
 use cranelift_entity::EntityList;
@@ -118,36 +118,6 @@ pub enum OpKind {
     /// should not be concerned with these operations.
     UnpackValueList(usize),
 
-    // Case structure
-    /// ```ignore
-    /// (
-    ///     no_match: fn(),
-    ///     clause_guards: (fn(ok: fn(), fail: fn(), pat_refs..)..)
-    ///     clause_bodies: (fn(pat_refs..)..)
-    ///     match_val: (term..),
-    ///     match_values: (term..),
-    /// )
-    /// ```
-    /// High level matching construct, lowered to explicit control flow
-    /// in a Eir compiler pass. Only allowed in high level Eir dialect.
-    /// This OP indicates the start of a case structure.
-    /// A guard is strictly required to return through either the ok
-    /// or fail continuation.
-    Case {
-        clauses: EntityList<PatternClause>,
-    },
-
-    // Binary construction
-
-    // /// (cont: fn(ref))
-    // BinaryConstructStart,
-    // /// (ok: fn(), fail: fn(), ref, value)
-    // /// (ok: fn(), fail: fn(), ref, value, size)
-    // BinaryConstructPush {
-    //     specifier: BinaryEntrySpecifier,
-    // },
-    // /// (cont: fn(result), ref)
-    // BinaryConstructFinish,
     /// Match on a single value.
     /// Branches are tested in order, first matched is branched to.
     /// ```ignore
@@ -175,6 +145,13 @@ impl OpKind {
         match self {
             OpKind::Call(_) => true,
             _ => false,
+        }
+    }
+
+    pub fn get_dyn<O: Op>(&self) -> Option<&O> {
+        match self {
+            OpKind::Dyn(d) => d.downcast_ref(),
+            _ => None,
         }
     }
 }
