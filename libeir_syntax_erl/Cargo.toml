@@ -29,7 +29,7 @@ itertools = "0.8"
 lazy_static = "1.2"
 either = "1.5"
 
-bumpalo = { git = "https://github.com/hansihe/bumpalo", branch = "nightly_alloc", features = ["nightly", "collections"] }
+bumpalo = { git = "https://github.com/bitwalker/bumpalo", branch = "nightly_alloc", features = ["nightly", "collections"] }
 
 # [dependencies.rug]
 # version = "1.2"
