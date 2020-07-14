@@ -8,4 +8,4 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bumpalo = { git = "https://github.com/hansihe/bumpalo", branch = "nightly_alloc", features = ["nightly", "collections"] }
+bumpalo = { git = "https://github.com/bitwalker/bumpalo", branch = "nightly_alloc", features = ["nightly", "collections"] }
