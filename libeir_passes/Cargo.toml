@@ -11,10 +11,10 @@ cranelift-entity = "0.56.0"
 cranelift-bforest = { git = "https://github.com/hansihe/wasmtime.git", branch = "main" }
 
 petgraph = "0.4"
-bumpalo = { git = "https://github.com/hansihe/bumpalo", branch = "nightly_alloc", features = ["nightly", "collections"] }
+bumpalo = { git = "https://github.com/bitwalker/bumpalo", branch = "nightly_alloc", features = ["nightly", "collections"] }
 fnv = "1.0.3"
 log = "0.4"
-hashbrown = { git = "https://github.com/hansihe/hashbrown.git", features = ["raw", "nightly"] }
+hashbrown = { git = "https://github.com/bitwalker/hashbrown.git", features = ["raw", "nightly"] }
 
 libeir_ir = { path = "../libeir_ir" }
 libeir_intern = { path = "../libeir_intern" }
