@@ -28,7 +28,7 @@ itertools = "0.8.0"
 cranelift-entity = "0.56.0"
 cranelift-bforest = { git = "https://github.com/hansihe/wasmtime.git", branch = "main" }
 
-bumpalo = { git = "https://github.com/hansihe/bumpalo", branch = "nightly_alloc", features = ["nightly", "collections"] }
+bumpalo = { git = "https://github.com/bitwalker/bumpalo", branch = "nightly_alloc", features = ["nightly", "collections"] }
 
 petgraph = "0.4"
 
@@ -43,7 +43,7 @@ lalrpop-util = "0.17"
 snafu = "0.5"
 
 fnv = "1.0.3"
-hashbrown = { git = "https://github.com/hansihe/hashbrown.git", features = ["raw", "nightly"] }
+hashbrown = { git = "https://github.com/bitwalker/hashbrown.git", features = ["raw", "nightly"] }
 
 [dev-dependencies]
 pretty_assertions = "0.6"
