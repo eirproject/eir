@@ -4,7 +4,8 @@ use std::sync::Arc;
 use libeir_diagnostics::*;
 use libeir_ir::{
     text::{
-        ast::{LowerError, Module as ModuleAst},
+        LowerError,
+        ast::Module as ModuleAst,
         parser::ParserError,
     },
     Module,

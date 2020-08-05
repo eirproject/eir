@@ -116,7 +116,8 @@ impl<'a> LowerCtx<'a> {
         b.fun_mut().locations.from_bytespan(
             &self.codemap,
             span,
-            Some((self.module.name.as_str().to_string(), self.function_name())),
+            Some(self.module.name.as_str().to_string()),
+            Some(self.function_name()),
         )
     }
 
