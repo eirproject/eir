@@ -4,11 +4,10 @@ use std::hash::{Hash, Hasher};
 
 use cranelift_bforest::{BoundSet, Set, SetForest};
 use cranelift_entity::packed_option::ReservedValue;
-use cranelift_entity::{entity_impl, EntityList, EntityRef, ListPool, PrimaryMap};
+use cranelift_entity::{entity_impl, EntityList, ListPool, PrimaryMap};
 
 use libeir_util_datastructures::aux_traits::{AuxDebug, AuxEq, AuxHash, HasAux};
 use libeir_util_datastructures::dedup_aux_primary_map::DedupAuxPrimaryMap;
-use libeir_util_datastructures::pooled_entity_set::{BoundEntitySet, EntitySet, EntitySetPool};
 
 use libeir_diagnostics::SourceSpan;
 
@@ -166,7 +165,7 @@ impl HasAux<SetForest<Block>> for Function {
 }
 
 impl<C: HasAux<Function>> AuxDebug<C> for Function {
-    fn aux_fmt(&self, f: &mut std::fmt::Formatter<'_>, container: &C) -> std::fmt::Result {
+    fn aux_fmt(&self, _f: &mut std::fmt::Formatter<'_>, _container: &C) -> std::fmt::Result {
         unimplemented!()
     }
 }
@@ -354,7 +353,7 @@ impl Function {
 
     fn block_insert_with_span(&mut self, span: Option<SourceSpan>) -> Block {
         let location = span
-            .map(|s| self.locations.location(None, None, None, s))
+            .map(|s| self.locations.location(None, None, None, None, s))
             .unwrap_or_else(|| self.locations.location_empty());
         let block = self.blocks.push(BlockData {
             arguments: EntityList::new(),

@@ -1,7 +1,7 @@
-use ::std::rc::Rc;
 use std::cmp::{Ord, Ordering};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 
 use libeir_intern::{LocalInternedString, Symbol};
 
@@ -9,8 +9,8 @@ use libeir_ir::{Block, FunctionIdent};
 
 use libeir_util_binary::{BitSlice, BitVec};
 
-use ::num_bigint::BigInt;
-use ::num_traits::cast::ToPrimitive;
+use num_bigint::BigInt;
+use num_traits::cast::ToPrimitive;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Pid(pub usize);
@@ -480,6 +480,13 @@ impl Term {
             atom.as_str()
         } else {
             panic!();
+        }
+    }
+
+    pub fn is_nil(&self) -> bool {
+        match self {
+            Term::Nil => true,
+            _ => false,
         }
     }
 

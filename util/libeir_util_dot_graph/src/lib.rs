@@ -286,8 +286,6 @@ mod test {
         p.node("hoo", "Something else");
         p.edge("woo", "hoo", "Some edge");
         let out = p.finish().unwrap();
-
-        panic!("{}", out);
     }
 
     #[test]

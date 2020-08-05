@@ -23,8 +23,11 @@ struct LocationTerminalData {
     file: Option<String>,
     /// Line number in origin file
     line: Option<u32>,
-    /// Name of module and function/stack entity
-    names: Option<(String, String)>,
+
+    /// Name of module
+    module: Option<String>,
+    /// Name of function/stack entity
+    entity: Option<String>,
 
     /// Span in the file this was read from.
     /// While the `file`, `line` and `name` files are
@@ -112,7 +115,8 @@ impl LocationContainer {
             LocationTerminalData {
                 file: None,
                 line: None,
-                names: None,
+                module: None,
+                entity: None,
                 span: SourceSpan::UNKNOWN,
             },
             &mut (),
@@ -129,22 +133,35 @@ impl LocationContainer {
         )
     }
 
+    pub fn terminal(
+        &mut self,
+        file: Option<String>,
+        line: Option<u32>,
+        module: Option<String>,
+        entity: Option<String>,
+        span: SourceSpan,
+    ) -> LocationTerminal {
+        self.terminals.push(
+            LocationTerminalData {
+                file,
+                line,
+                module,
+                entity,
+                span,
+            },
+            &mut (),
+        )
+    }
+
     pub fn location(
         &mut self,
         file: Option<String>,
         line: Option<u32>,
-        names: Option<(String, String)>,
+        module: Option<String>,
+        entity: Option<String>,
         span: SourceSpan,
     ) -> Location {
-        let terminal = self.terminals.push(
-            LocationTerminalData {
-                file,
-                line,
-                names,
-                span,
-            },
-            &mut (),
-        );
+        let terminal = self.terminal(file, line, module, entity, span);
 
         let mut terminals = EntityList::new();
         terminals.push(terminal, &mut self.terminal_pool);
@@ -153,12 +170,13 @@ impl LocationContainer {
             .push(LocationData { terminals }, &mut self.terminal_pool)
     }
 
-    pub fn from_bytespan(
+    pub fn terminal_from_bytespan(
         &mut self,
         codemap: &CodeMap,
         span: SourceSpan,
-        names: Option<(String, String)>,
-    ) -> Location {
+        module: Option<String>,
+        entity: Option<String>,
+    ) -> LocationTerminal {
         let mut file = None;
         let mut line = None;
 
@@ -169,7 +187,35 @@ impl LocationContainer {
             line = Some(line_idx.0);
         }
 
-        self.location(file, line, names, span)
+        self.terminal(file, line, module, entity, span)
+    }
+
+    pub fn from_bytespan(
+        &mut self,
+        codemap: &CodeMap,
+        span: SourceSpan,
+        module: Option<String>,
+        entity: Option<String>,
+    ) -> Location {
+        let terminal = self.terminal_from_bytespan(codemap, span, module, entity);
+
+        let mut terminals = EntityList::new();
+        terminals.push(terminal, &mut self.terminal_pool);
+
+        self.locations
+            .push(LocationData { terminals }, &mut self.terminal_pool)
+    }
+
+    pub fn from_terminals(&mut self, terminals: &[LocationTerminal]) -> Location {
+        let mut n_terminals = EntityList::new();
+        n_terminals.extend(terminals.iter().cloned(), &mut self.terminal_pool);
+
+        self.locations.push(
+            LocationData {
+                terminals: n_terminals,
+            },
+            &mut self.terminal_pool,
+        )
     }
 
     pub fn concat_locations(&mut self, bottom: Location, top: Location) -> Location {
@@ -198,5 +244,28 @@ impl LocationContainer {
             },
             &mut self.terminal_pool,
         )
+    }
+
+    pub fn location_eq(&self, l_loc: Location, r: &Self, r_loc: Location) -> bool {
+        let l_n = &self.locations[l_loc];
+        let r_n = &r.locations[r_loc];
+
+        let l_ts = l_n.terminals.as_slice(&self.terminal_pool);
+        let r_ts = r_n.terminals.as_slice(&r.terminal_pool);
+
+        if l_ts.len() != r_ts.len() {
+            return false;
+        }
+
+        for (l_t, r_t) in l_ts.iter().zip(r_ts.iter()) {
+            let l_i = &self.terminals[*l_t];
+            let r_i = &r.terminals[*r_t];
+
+            if l_i != r_i {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

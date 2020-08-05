@@ -6,6 +6,11 @@ pub mod printer;
 pub mod dot_printer;
 pub use dot_printer::function_to_dot;
 
+mod lower;
+pub use lower::{LowerContext, LowerError, LowerMap};
+
+pub mod parse_dyn;
+
 //pub trait TextFormatter {
 //    // TODO add result
 //    fn write(&mut self, text: &str);

@@ -4,10 +4,95 @@ use libeir_intern::Ident;
 use crate::constant::Integer;
 use crate::{BasicType, BinOp, BinaryEntrySpecifier};
 
-mod lower;
-pub use lower::{LowerError, LowerMap};
+#[derive(Debug, PartialEq, Eq)]
+pub enum DynToken {
+    Parens(Vec<DynToken>, SourceSpan),
+    Braces(Vec<DynToken>, SourceSpan),
+    MapBraces(Vec<DynToken>, SourceSpan),
+    SquareBrackets(Vec<DynToken>, SourceSpan),
+    AngleBrackets(Vec<DynToken>, SourceSpan),
 
-//mod raise;
+    Ident(Ident),
+    Variable(Ident),
+
+    Atom(Ident),
+    Integer(Integer, SourceSpan),
+    Float(Ident),
+    String(Ident),
+
+    Percent(SourceSpan),
+    Colon(SourceSpan),
+    SemiColon(SourceSpan),
+    Comma(SourceSpan),
+    Question(SourceSpan),
+    ForwardSlash(SourceSpan),
+    Equals(SourceSpan),
+    EqualsEquals(SourceSpan),
+    FatArrow(SourceSpan),
+    Underscore(SourceSpan),
+    Pipe(SourceSpan),
+    At(SourceSpan),
+    Bang(SourceSpan),
+
+    Unpack(SourceSpan),
+    Unreachable(SourceSpan),
+    Arity(SourceSpan),
+    IfBool(SourceSpan),
+    TraceCaptureRaw(SourceSpan),
+    Value(SourceSpan),
+    Match(SourceSpan),
+    Type(SourceSpan),
+    Case(SourceSpan),
+    Guard(SourceSpan),
+    Except(SourceSpan),
+}
+
+impl DynToken {
+    pub fn span(&self) -> SourceSpan {
+        use DynToken::*;
+        match self {
+            Parens(_, span) => *span,
+            Braces(_, span) => *span,
+            MapBraces(_, span) => *span,
+            SquareBrackets(_, span) => *span,
+            AngleBrackets(_, span) => *span,
+
+            Ident(ident) => ident.span,
+            Variable(ident) => ident.span,
+
+            Atom(ident) => ident.span,
+            Integer(_, span) => *span,
+            Float(ident) => ident.span,
+            String(ident) => ident.span,
+
+            Percent(span) => *span,
+            Colon(span) => *span,
+            SemiColon(span) => *span,
+            Comma(span) => *span,
+            Question(span) => *span,
+            ForwardSlash(span) => *span,
+            Equals(span) => *span,
+            EqualsEquals(span) => *span,
+            FatArrow(span) => *span,
+            Underscore(span) => *span,
+            Pipe(span) => *span,
+            At(span) => *span,
+            Bang(span) => *span,
+
+            Unpack(span) => *span,
+            Unreachable(span) => *span,
+            Arity(span) => *span,
+            IfBool(span) => *span,
+            TraceCaptureRaw(span) => *span,
+            Value(span) => *span,
+            Match(span) => *span,
+            Type(span) => *span,
+            Case(span) => *span,
+            Guard(span) => *span,
+            Except(span) => *span,
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Module {
@@ -32,8 +117,16 @@ pub struct Function {
 #[derive(Debug, PartialEq, Eq)]
 pub enum FunctionItem {
     Label(Label),
+    Meta(Meta),
     Assignment(Assignment),
     Op(Op),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Meta {
+    pub span: SourceSpan,
+    pub name: Ident,
+    pub tokens: Vec<DynToken>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -52,14 +145,8 @@ pub struct Assignment {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum DynOpt {
-    Parens(Vec<DynOpt>, SourceSpan),
-    Value(Value),
-}
-
-#[derive(Debug, PartialEq, Eq)]
 pub enum Op {
-    Dyn(Ident, Vec<DynOpt>),
+    Dyn(Ident, Vec<DynToken>),
     UnpackValueList(UnpackValueListOp),
     CallControlFlow(CallControlFlowOp),
     CallFunction(CallFunctionOp),

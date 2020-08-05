@@ -6,7 +6,6 @@ use super::{Block, Const, Location, OpKind, PrimOp, Value};
 use super::{PrimOpData, PrimOpKind};
 
 use crate::constant::{ConstantContainer, IntoConst};
-use crate::pattern::PatternContainer;
 use crate::BinOp;
 
 use cranelift_entity::EntityList;

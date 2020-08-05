@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::error::Error;
 
-use libeir_diagnostics::{Diagnostic, Label, SourceSpan, ToDiagnostic};
+use libeir_diagnostics::{CodeMap, Diagnostic, Label, SourceSpan, ToDiagnostic};
 use libeir_intern::Ident;
 use libeir_util_datastructures::hashmap_stack::HashMapStack;
 use libeir_util_number::ToPrimitive;
@@ -13,7 +14,23 @@ use crate::{Block, Value};
 use crate::{Function, FunctionBuilder, FunctionIdent, Module};
 use crate::{PatternContainer, PatternNode};
 
+mod location;
+
 type ErrCollector<'a> = &'a mut dyn ErrorReceiver<E = LowerError, W = LowerError>;
+
+pub struct LowerContext<'a, 'b> {
+    builder: &'a mut FunctionBuilder<'b>,
+    errors: ErrCollector<'a>,
+    scope: &'a mut HashMapStack<Name, (SourceSpan, Value)>,
+}
+
+impl<'a, 'b> LowerContext<'a, 'b> {
+    pub fn error<T: ToDiagnostic>(&mut self, diag: T) {
+        self.errors.error(LowerError::DynError {
+            diagnostic: diag.to_diagnostic(),
+        })
+    }
+}
 
 #[derive(Debug, Snafu)]
 pub enum LowerError {
@@ -38,6 +55,18 @@ pub enum LowerError {
 
     UndefinedBind {
         span: SourceSpan,
+    },
+
+    UnknownMeta {
+        span: SourceSpan,
+        name: Ident,
+    },
+
+    UnknownDyn {
+        span: SourceSpan,
+    },
+    DynError {
+        diagnostic: Diagnostic,
     },
 }
 
@@ -65,6 +94,15 @@ impl ToDiagnostic for LowerError {
                 .with_message("undefined block name")
                 .with_labels(vec![Label::primary(span.source_id(), *span)
                     .with_message("block name was not defined in the IR")]),
+            LowerError::UnknownMeta { name, .. } => Diagnostic::error()
+                .with_message("unknown meta entry")
+                .with_labels(vec![Label::primary(name.span.source_id(), name.span)
+                    .with_message("meta entry is unknown to the compiler")]),
+            LowerError::UnknownDyn { span } => Diagnostic::error()
+                .with_message("unknown dynop identifier")
+                .with_labels(vec![Label::primary(span.source_id(), *span)
+                    .with_message("no parser exists for dynop in current dialect")]),
+            LowerError::DynError { diagnostic } => diagnostic.clone(),
             _ => Diagnostic::error().with_message(msg),
         }
     }
@@ -141,7 +179,7 @@ fn insert_check_duplicate(
 impl ast::Function {
     pub fn lower(&self, errors: ErrCollector, module: Ident) -> Result<(Function, LowerMap), ()> {
         let ident = FunctionIdent {
-            module: module,
+            module,
             name: self.name,
             arity: self.arity.to_usize().unwrap(),
         };
@@ -162,6 +200,8 @@ impl ast::Function {
         let mut scope: HashMapStack<Name, (SourceSpan, Value)> = HashMapStack::new();
         scope.push();
 
+        let mut location = None;
+
         // 1. Create blocks and their args
         let mut first_block = None;
         for item in self.items.iter() {
@@ -169,6 +209,11 @@ impl ast::Function {
                 ast::FunctionItem::Label(label) => {
                     let block_name = label.name.block().unwrap();
                     let block = b.block_insert();
+
+                    if let Some(loc) = location {
+                        b.block_set_location(block, loc);
+                    }
+
                     insert_check_duplicate(
                         errors,
                         &mut scope,
@@ -189,6 +234,35 @@ impl ast::Function {
                         first_block = Some(block);
                     }
                 }
+                ast::FunctionItem::Meta(meta) => match &*meta.name.as_str() {
+                    "location" => {
+                        let mut ctx = super::parse_dyn::ParseCtx::new(&meta.tokens, meta.span);
+                        match self::location::parse_location(&mut ctx) {
+                            Ok(loc_desc) => {
+                                let mut terminals = vec![];
+                                for term_desc in loc_desc.terminals.iter() {
+                                    let term = b.fun_mut().locations.terminal(
+                                        term_desc.file.map(|v| v.to_string()),
+                                        term_desc.line,
+                                        term_desc.module.map(|v| v.to_string()),
+                                        term_desc.function.map(|v| v.to_string()),
+                                        meta.span,
+                                    );
+                                    terminals.push(term);
+                                }
+                                let loc = b.fun_mut().locations.from_terminals(&terminals);
+                                location = Some(loc);
+                            }
+                            Err(err) => errors.error(LowerError::DynError {
+                                diagnostic: err.to_diagnostic(),
+                            }),
+                        }
+                    }
+                    _ => errors.error(LowerError::UnknownMeta {
+                        span: meta.span,
+                        name: meta.name,
+                    }),
+                },
                 _ => (),
             }
         }
@@ -210,6 +284,13 @@ impl ast::Function {
                     current_block = Some((block_name.span, blocks[&block_name].1));
                     scope.push();
                 }
+                ast::FunctionItem::Meta(meta) => match &*meta.name.as_str() {
+                    "location" => {}
+                    _ => errors.error(LowerError::UnknownMeta {
+                        span: meta.span,
+                        name: meta.name,
+                    }),
+                },
                 ast::FunctionItem::Assignment(assign) => {
                     let lhs = assign.lhs.value().unwrap();
                     let value = lower_value(errors, b, &mut scope, &assign.rhs)?;
@@ -253,7 +334,19 @@ fn lower_operation(
     op: &ast::Op,
 ) -> Result<(), ()> {
     match op {
-        ast::Op::Dyn(ident, opts) => unimplemented!(),
+        ast::Op::Dyn(ident, opts) => {
+            let mut ctx = LowerContext {
+                builder: b,
+                errors,
+                scope,
+            };
+
+            if let Some(parser) = crate::dialect::NORMAL.get_op_parser(ident.name) {
+                parser.parse(&mut ctx, block, opts)?;
+            } else {
+                errors.error(LowerError::UnknownDyn { span: ident.span });
+            }
+        }
         ast::Op::CallControlFlow(call) => {
             let target = lower_value(errors, b, scope, &call.target)?;
             let args: Result<Vec<_>, _> = call

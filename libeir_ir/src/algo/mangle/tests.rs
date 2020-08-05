@@ -102,7 +102,7 @@ a'foo':a'bar'/2 {
     b2(%p):
         %ret(%p);
 
-    ! This just exists to have a dummy variable available
+    # This just exists to have a dummy variable available
     dummy(%t):
         %t();
 }

@@ -247,11 +247,11 @@ mod test {
         let file2 = codemap.get(id2).unwrap();
         let mut source2 = FileMapSource::new(file2);
         assert_eq!(
-            Some((SourceIndex::new(id2, ByteIndex(1)), 'h')),
+            Some((SourceIndex::new(id2, ByteIndex(0)), 'h')),
             source2.peek()
         );
         assert_eq!(
-            Some((SourceIndex::new(id2, ByteIndex(1)), 'h')),
+            Some((SourceIndex::new(id2, ByteIndex(0)), 'h')),
             source2.next()
         );
 
@@ -259,19 +259,19 @@ mod test {
         let file3 = codemap.get(id3).unwrap();
         let mut source3 = FileMapSource::new(file3);
         assert_eq!(
-            Some((SourceIndex::new(id3, ByteIndex(1)), 'é')),
+            Some((SourceIndex::new(id3, ByteIndex(0)), 'é')),
             source3.peek()
         );
         assert_eq!(
-            Some((SourceIndex::new(id3, ByteIndex(1)), 'é')),
+            Some((SourceIndex::new(id3, ByteIndex(0)), 'é')),
             source3.next()
         );
         assert_eq!(
-            Some((SourceIndex::new(id3, ByteIndex(3)), 'é')),
+            Some((SourceIndex::new(id3, ByteIndex(2)), 'é')),
             source3.peek()
         );
         assert_eq!(
-            Some((SourceIndex::new(id3, ByteIndex(3)), 'é')),
+            Some((SourceIndex::new(id3, ByteIndex(2)), 'é')),
             source3.next()
         );
     }

@@ -17,6 +17,7 @@ pub mod traits;
 
 // Auxiliary utilities
 mod algo;
+pub use algo::equality::GraphEqOptions;
 pub use algo::func_tree::{FunctionEntry, FunctionTree};
 pub use algo::live::LiveValues;
 pub use algo::mangle::{MangleFrom, MangleTarget, MangleTo, Mangler};

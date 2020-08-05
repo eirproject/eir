@@ -1,6 +1,5 @@
 use cranelift_bforest::SetForest;
 use cranelift_entity::ListPool;
-use libeir_util_datastructures::pooled_entity_set::EntitySetPool;
 
 use super::{Block, Value};
 

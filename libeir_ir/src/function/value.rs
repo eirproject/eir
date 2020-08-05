@@ -6,7 +6,6 @@ use cranelift_bforest::Set;
 use cranelift_entity::packed_option::ReservedValue;
 use cranelift_entity::{entity_impl, PrimaryMap};
 use libeir_util_datastructures::aux_traits::AuxDebug;
-use libeir_util_datastructures::pooled_entity_set::EntitySet;
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Value(u32);

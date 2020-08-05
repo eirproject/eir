@@ -85,6 +85,7 @@ pub enum Token {
     Integer(Integer),
     /// 12.2
     Float(Ident),
+    String(Ident),
 
     // Symbols
     ParenOpen,
@@ -108,6 +109,7 @@ pub enum Token {
     Underscore,
     Pipe,
     At,
+    Bang,
 
     // Keywords
     Unreachable,
@@ -253,7 +255,7 @@ where
                 continue;
             }
 
-            if c == '!' {
+            if c == '#' {
                 'inner: loop {
                     let (pos, c) = self.scanner.read();
 
@@ -352,12 +354,14 @@ where
             },
             '_' => pop!(self, Token::Underscore),
             '@' => pop!(self, Token::At),
+            '!' => pop!(self, Token::Bang),
             c if c == 'a' => match self.peek() {
                 '\'' => self.lex_atom(),
                 _ => self.lex_ident(),
             },
             c if c.is_alphabetic() => self.lex_ident(),
             c if c.is_numeric() => self.lex_integer(),
+            '"' => self.lex_string(),
             c => unimplemented!("{}", c),
         }
     }
@@ -384,6 +388,30 @@ where
         }
     }
 
+    fn lex_string(&mut self) -> Token {
+        let c = self.pop();
+        debug_assert!(c == '"');
+
+        loop {
+            match self.read() {
+                '\\' => {
+                    self.skip();
+                    self.skip();
+                }
+                '"' => {
+                    break;
+                }
+                _ => self.skip(),
+            }
+        }
+
+        let symbol = Symbol::intern(&self.slice()[1..]);
+        self.skip();
+        let ident = Ident::new(symbol, self.span());
+
+        Token::String(ident)
+    }
+
     fn lex_variable(&mut self) -> Token {
         let c = self.pop();
         debug_assert!(c == '%');
@@ -405,7 +433,7 @@ where
 
     fn lex_integer(&mut self) -> Token {
         let c = self.pop();
-        debug_assert!(c.is_numeric());
+        debug_assert!(c.is_numeric() || c == '-');
 
         loop {
             match self.read() {

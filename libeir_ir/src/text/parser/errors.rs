@@ -4,7 +4,7 @@ use libeir_diagnostics::{Diagnostic, Label, SourceIndex, SourceSpan, ToDiagnosti
 use libeir_util_parse::SourceError;
 
 use super::lexer::Token;
-use crate::text::ast::LowerError;
+use crate::text::LowerError;
 
 pub type ParseError = lalrpop_util::ParseError<SourceIndex, Token, ParserError>;
 

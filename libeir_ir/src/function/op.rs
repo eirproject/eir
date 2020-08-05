@@ -1,8 +1,5 @@
 use crate::binary::BinaryEntrySpecifier;
 use crate::operation::{DynOp, Op};
-use crate::pattern::PatternClause;
-
-use cranelift_entity::EntityList;
 
 use serde::{Deserialize, Serialize};
 

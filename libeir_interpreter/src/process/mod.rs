@@ -63,6 +63,7 @@ impl CallExecutor {
             }
             Term::CapturedFunction { ident } => {
                 let module = &vm.modules[&ident.module.name];
+                println!("{}", ident);
                 match module {
                     ModuleType::Erlang(erl, overlay) => {
                         if let Some(native) = overlay {
@@ -71,7 +72,6 @@ impl CallExecutor {
                                 return Continuation::Term(res);
                             }
                         }
-                        println!("{}", ident);
                         Continuation::Term(
                             self.run_erlang(vm, erl, ident, None, &call.args).unwrap(),
                         )
@@ -532,6 +532,7 @@ impl CallExecutor {
             //}
             OpKind::MapPut { action } => {
                 let map_term = self.make_term(fun, reads[2]);
+                println!("{:#?}", map_term);
                 let mut map = map_term.as_map().unwrap().clone();
 
                 let mut idx = 3;

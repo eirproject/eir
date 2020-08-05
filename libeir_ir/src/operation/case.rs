@@ -1,13 +1,16 @@
 use std::any::TypeId;
 
-use cranelift_entity::EntityList;
 use libeir_diagnostics::SourceSpan;
+use libeir_intern::Symbol;
 use meta_table::{impl_meta_entry, MetaEntry};
 use pretty::{DocAllocator, RefDoc};
 
 use super::{DynOp, Op, OpBuild};
 use crate::pattern::{PatternClause, PatternContainer};
-use crate::traits::{FormatOpCtx, OpBranches, OpPrinter};
+use crate::text::ast::DynToken;
+use crate::text::parse_dyn::{DynParserError, ParseCtx};
+use crate::text::LowerContext;
+use crate::traits::{FormatOpCtx, OpBranches, OpParser, OpPrinter};
 use crate::{Block, Dialect, Function, FunctionBuilder, Value};
 
 pub struct CaseToken(());
@@ -65,7 +68,7 @@ impl Op for Case {
         self
     }
     fn op_eq(&self, other: &dyn Op) -> bool {
-        if let Some(other_i) = other.downcast_ref::<Self>() {
+        if let Some(_other_i) = other.downcast_ref::<Self>() {
             unimplemented!()
         } else {
             false
@@ -91,16 +94,19 @@ impl OpBranches for Case {
 }
 
 impl OpPrinter for Case {
-    fn to_doc<'doc>(&self, ctx: &mut dyn FormatOpCtx<'doc>, block: Block) -> RefDoc<'doc, ()> {
+    fn to_doc<'doc>(&self, ctx: &mut dyn FormatOpCtx<'doc>, _block: Block) -> RefDoc<'doc, ()> {
         let arena = ctx.arena();
+        let inner = &*self.inner;
 
-        let block = arena.nil();
+        //let block = arena.concat(inner.clauses.iter().map(|clause| {
+        //    let root_nodes = inner.container.clause_root_nodes(clause);
+        //}));
 
         arena
             .nil()
             .append(arena.text("case"))
             .append(arena.space())
-            .append(block.nest(1).braces())
+            //.append(block.nest(1).braces())
             .into_doc()
     }
 }
@@ -157,17 +163,17 @@ impl CaseBuilder {
         clause: PatternClause,
         guard: Value,
         body: Value,
-        b: &mut FunctionBuilder<'a>,
+        _b: &mut FunctionBuilder<'a>,
     ) {
         self.clauses.push(clause);
         self.clauses_b.extend([guard, body].iter().cloned());
     }
 
-    pub fn push_value<'a>(&mut self, value: Value, b: &mut FunctionBuilder<'a>) {
+    pub fn push_value<'a>(&mut self, value: Value, _b: &mut FunctionBuilder<'a>) {
         self.values.push(value);
     }
 
-    pub fn finish<'a>(mut self, block: Block, b: &mut FunctionBuilder<'a>) {
+    pub fn finish<'a>(self, block: Block, b: &mut FunctionBuilder<'a>) {
         // Validate that the number of values matches between the
         // clauses and reads
         let mut num_values = 0;
@@ -242,12 +248,70 @@ impl OpBuild for Case {
     type Token = CaseToken;
 }
 
+macro_rules! parser_fail {
+    ($context:expr, $value:expr) => {
+        match $value {
+            Ok(value) => value,
+            Err(error) => {
+                $context.error(error);
+                return Err(());
+            }
+        }
+    };
+}
+
+struct CaseParser;
+impl OpParser for CaseParser {
+    fn parse(
+        &self,
+        context: &mut LowerContext,
+        block: Block,
+        tokens: &[DynToken],
+    ) -> Result<(), ()> {
+        use crate::text::parse_dyn::val;
+
+        let mut ctx = ParseCtx::new(tokens, SourceSpan::UNKNOWN);
+
+        let value = parser_fail!(context, val(&mut ctx));
+        parser_fail!(context, parse_case_body(&mut ctx));
+        parser_fail!(context, ctx.eof());
+
+        unimplemented!()
+    }
+}
+
+fn parse_case_body(ctx: &mut ParseCtx) -> Result<(), DynParserError> {
+    let (tokens, span) = ctx.tok_braces()?;
+    let mut ictx = ParseCtx::new(tokens, span);
+    Ok(())
+}
+
 pub fn register(dialect: &mut Dialect) {
-    dialect.register_op::<Case>();
-    dialect.register_op_branches_impl(&Case {
+    let case = Case {
         inner: Box::new(Inner {
             container: PatternContainer::new(),
             clauses: Vec::new(),
         }),
-    });
+    };
+
+    dialect.register_op::<Case>();
+    dialect.register_op_branches_impl(&case);
+    dialect.register_op_printer_impl(&case);
+    dialect.register_op_parser(Symbol::intern("casen"), Box::new(CaseParser));
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn basic_parse() {
+        let fun = crate::text::parse_function_unwrap(
+            "
+a'foo':a'bar'/1 {
+  entry(%ret, %thr, %a):
+    @casen <%a> {};
+}
+",
+        );
+    }
 }

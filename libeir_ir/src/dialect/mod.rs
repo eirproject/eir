@@ -74,4 +74,12 @@ impl Dialect {
     pub fn get_op_printer<'a>(&self, obj: &'a dyn Op) -> Option<&'a dyn OpPrinter> {
         self.op_printer.get(obj.meta_entry())
     }
+
+    pub fn register_op_parser(&mut self, sym: Symbol, parser: Box<dyn OpParser>) {
+        self.op_parser.insert(sym, parser);
+    }
+
+    pub fn get_op_parser(&self, sym: Symbol) -> Option<&dyn OpParser> {
+        self.op_parser.get(&sym).map(|v| &**v)
+    }
 }

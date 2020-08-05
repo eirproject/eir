@@ -31,8 +31,9 @@ use meta_table::{impl_meta_entry, MetaEntry};
 
 use super::{DynOp, Op, OpBuild};
 use crate::dialect::Dialect;
-use crate::traits::OpBranches;
+use crate::traits::{FormatOpCtx, OpBranches, OpPrinter};
 use crate::{Block, Function, FunctionBuilder, Value};
+use pretty::{DocAllocator, RefDoc};
 
 pub struct ReceiveToken(());
 
@@ -79,6 +80,18 @@ impl OpBranches for ReceiveStart {
             0 => fun.block_reads(block)[0],
             _ => unreachable!(),
         }
+    }
+}
+
+impl OpPrinter for ReceiveStart {
+    fn to_doc<'doc>(&self, ctx: &mut dyn FormatOpCtx<'doc>, block: Block) -> RefDoc<'doc, ()> {
+        let arena = ctx.arena();
+        arena
+            .nil()
+            .append(arena.text("@"))
+            .append(arena.text("receive_start"))
+            .append(arena.space())
+            .into_doc()
     }
 }
 
@@ -136,7 +149,7 @@ impl Op for ReceiveWait {
         DynOp::new(self.clone())
     }
     fn type_id(&self) -> TypeId {
-        TypeId::of::<ReceiveStart>()
+        TypeId::of::<ReceiveWait>()
     }
     fn meta_entry(&self) -> &dyn MetaEntry {
         self
@@ -220,7 +233,7 @@ impl Op for ReceiveDone {
         DynOp::new(self.clone())
     }
     fn type_id(&self) -> TypeId {
-        TypeId::of::<ReceiveStart>()
+        TypeId::of::<ReceiveDone>()
     }
     fn meta_entry(&self) -> &dyn MetaEntry {
         self
@@ -283,10 +296,13 @@ impl OpBuild for ReceiveDone {
 pub fn register(dialect: &mut Dialect) {
     dialect.register_op::<ReceiveStart>();
     dialect.register_op_branches_impl(&ReceiveStart);
+    //dialect.register_op_printer_impl(&ReceiveStart);
 
     dialect.register_op::<ReceiveWait>();
     dialect.register_op_branches_impl(&ReceiveWait);
+    //dialect.register_op_printer_impl(&ReceiveWait);
 
     dialect.register_op::<ReceiveDone>();
     dialect.register_op_branches_impl(&ReceiveDone);
+    //dialect.register_op_printer_impl(&ReceiveDone);
 }

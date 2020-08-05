@@ -12,7 +12,7 @@ use crate::text::ast::{Module, ModuleItem, Function, FunctionItem, Label,
                        Op, CallControlFlowOp, CallFunctionOp, Value,
                        Assignment, UnpackValueListOp, IfBoolOp,
                        TraceCaptureRawOp, MatchEntry, MatchKind,
-                       MatchOp, CaseOp, CaseEntry, CasePattern, DynOpt};
+                       MatchOp, CaseOp, CaseEntry, CasePattern, Meta, DynToken};
 use super::ParserErrorReceiver;
 use super::errors::{ParserError, Errors};
 
@@ -76,6 +76,15 @@ FunctionItem: FunctionItem = {
     // Operations
     <FunctionOp> ";" => FunctionItem::Op(<>),
 
+    // Meta
+    <l:@L> "!" <name:ident> <tokens:DynToken*> ";" <r:@R> => {
+        FunctionItem::Meta(Meta {
+            span: SourceSpan::new(l, r),
+            name,
+            tokens,
+        })
+    },
+
     // Label
     <l:@L> <name:Value> "(" <args:Comma<Value>> ")" ":" <r:@R> => {
         let span = SourceSpan::new(l, r);
@@ -123,21 +132,62 @@ FunctionAssignItem: FunctionItem = {
     }
 };
 
-DynOpt: DynOpt = {
-    <l:@L> "(" <entries:Comma<DynOpt>> ")" <r:@R> => DynOpt::Parens(entries, span!(l, r)),
-    <value:Value> => DynOpt::Value(value),
+DynToken: DynToken = {
+    <DynToken100> => <>,
 };
 
-DynOpts: Vec<DynOpt> = {
-    <opts:DynOpt*> => opts,
+DynTokenInner: DynToken = {
+    <l:@L> ";" <r:@R> => DynToken::SemiColon(span!(l, r)),
+    <DynToken100> => <>,
+};
+
+DynToken100: DynToken = {
+    <l:@L> "(" <i:DynTokenInner*> ")" <r:@R> => DynToken::Parens(i, span!(l, r)),
+    <l:@L> "{" <i:DynTokenInner*> "}" <r:@R> => DynToken::Braces(i, span!(l, r)),
+    <l:@L> "%{" <i:DynTokenInner*> "}" <r:@R> => DynToken::MapBraces(i, span!(l, r)),
+    <l:@L> "[" <i:DynTokenInner*> "]" <r:@R> => DynToken::SquareBrackets(i, span!(l, r)),
+    <l:@L> "<" <i:DynTokenInner*> ">" <r:@R> => DynToken::AngleBrackets(i, span!(l, r)),
+
+    <i:ident> => DynToken::Ident(i),
+    <i:variable> => DynToken::Variable(i),
+
+    <i:atom> => DynToken::Atom(i),
+    <l:@L> <i:integer> <r:@R> => DynToken::Integer(i, span!(l, r)),
+    <i:float> => DynToken::Float(i),
+    <s:string> => DynToken::String(s),
+
+    <l:@L> "%" <r:@R> => DynToken::Percent(span!(l, r)),
+    <l:@L> ":" <r:@R> => DynToken::Colon(span!(l, r)),
+    <l:@L> "," <r:@R> => DynToken::Comma(span!(l, r)),
+    <l:@L> "?" <r:@R> => DynToken::Question(span!(l, r)),
+    <l:@L> "/" <r:@R> => DynToken::ForwardSlash(span!(l, r)),
+    <l:@L> "=" <r:@R> => DynToken::Equals(span!(l, r)),
+    <l:@L> "==" <r:@R> => DynToken::EqualsEquals(span!(l, r)),
+    <l:@L> "=>" <r:@R> => DynToken::FatArrow(span!(l, r)),
+    <l:@L> "_" <r:@R> => DynToken::Underscore(span!(l, r)),
+    <l:@L> "|" <r:@R> => DynToken::Pipe(span!(l, r)),
+    <l:@L> "@" <r:@R> => DynToken::At(span!(l, r)),
+    <l:@L> "!" <r:@R> => DynToken::Bang(span!(l, r)),
+
+    <l:@L> "unpack" <r:@R> => DynToken::Unpack(span!(l, r)),
+    <l:@L> "unreachable" <r:@R> => DynToken::Unreachable(span!(l, r)),
+    <l:@L> "arity" <r:@R> => DynToken::Arity(span!(l, r)),
+    <l:@L> "if_bool" <r:@R> => DynToken::IfBool(span!(l, r)),
+    <l:@L> "trace_capture_raw" <r:@R> => DynToken::TraceCaptureRaw(span!(l, r)),
+    <l:@L> "value" <r:@R> => DynToken::Value(span!(l, r)),
+    <l:@L> "match" <r:@R> => DynToken::Match(span!(l, r)),
+    <l:@L> "type" <r:@R> => DynToken::Type(span!(l, r)),
+    <l:@L> "case" <r:@R> => DynToken::Case(span!(l, r)),
+    <l:@L> "guard" <r:@R> => DynToken::Guard(span!(l, r)),
+    <l:@L> "except" <r:@R> => DynToken::Except(span!(l, r)),
 };
 
 #[inline]
 FunctionOp: Op = {
 
     // Intrinsic/Dynop
-    "@" <name:ident> <opts:DynOpts> => {
-        Op::Dyn(name, opts)
+    "@" <name:ident> <tokens:DynToken*> => {
+        Op::Dyn(name, tokens)
     },
 
     // Call
@@ -313,6 +363,10 @@ ValueMax: Value = {
         Value::Tuple(<>),
     "<" <Comma<Value>> ">" =>
         Value::ValueList(<>),
+    <AtomicValue> => <>,
+};
+
+AtomicValue: Value = {
     <atom> => Value::Atom(<>),
     <integer> => Value::Integer(<>),
     <Block> => Value::Block(<>),
@@ -342,6 +396,7 @@ extern {
         atom => Token::Atom(<Ident>),
         integer => Token::Integer(<Integer>),
         float => Token::Float(<Ident>),
+        string => Token::String(<Ident>),
 
         "(" => Token::ParenOpen,
         ")" => Token::ParenClose,
@@ -364,6 +419,7 @@ extern {
         "_" => Token::Underscore,
         "|" => Token::Pipe,
         "@" => Token::At,
+        "!" => Token::Bang,
 
         "unpack" => Token::UnpackValueList,
         "unreachable" => Token::Unreachable,

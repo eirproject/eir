@@ -160,6 +160,7 @@ fn bs_match_suite() {
     run_ct_suite(&mut vm, Ident::from_str("bs_match_SUITE"));
 }
 
+#[ignore]
 #[test]
 fn maps_suite() {
     let _ = env_logger::try_init();

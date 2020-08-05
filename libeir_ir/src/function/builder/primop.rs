@@ -8,7 +8,7 @@ use crate::{ConstKind, IntoValue, LogicOp, Value, ValueKind};
 /// PrimOp constructors
 impl<'a> FunctionBuilder<'a> {
     pub fn prim_binop(&mut self, span: SourceSpan, op: BinOp, lhs: Value, rhs: Value) -> Value {
-        let loc = self.fun.locations.location(None, None, None, span);
+        let loc = self.fun.locations.location(None, None, None, None, span);
         let mut reads = EntityList::new();
         if op.symmetric() && lhs >= rhs {
             reads.extend([rhs, lhs].iter().cloned(), &mut self.fun.pool.value);
@@ -42,7 +42,7 @@ impl<'a> FunctionBuilder<'a> {
             let cons = self.cons_mut().from(ConstKind::Tuple { entries });
             self.value(cons)
         } else {
-            let loc = self.fun.locations.location(None, None, None, span);
+            let loc = self.fun.locations.location(None, None, None, None, span);
             let mut reads = EntityList::new();
             for val in values {
                 reads.push(*val, &mut self.fun.pool.value);
@@ -100,7 +100,7 @@ impl<'a> FunctionBuilder<'a> {
             });
             self.value(cons)
         } else {
-            let loc = self.fun.locations.location(None, None, None, span);
+            let loc = self.fun.locations.location(None, None, None, None, span);
             let mut value_pair = self.value_pair_buf.take().unwrap();
             assert!(value_pair.is_empty());
 
@@ -144,7 +144,7 @@ impl<'a> FunctionBuilder<'a> {
             });
             self.value(cons)
         } else {
-            let loc = self.fun.locations.location(None, None, None, span);
+            let loc = self.fun.locations.location(None, None, None, None, span);
             let mut entries_list = EntityList::new();
             entries_list.push(head, &mut self.fun.pool.value);
             entries_list.push(tail, &mut self.fun.pool.value);
@@ -249,7 +249,7 @@ impl<'a> FunctionBuilder<'a> {
                 LogicOp::Eq => unimplemented!(),
             }
         } else {
-            let loc = self.fun.locations.location(None, None, None, span);
+            let loc = self.fun.locations.location(None, None, None, None, span);
             let mut entries_list = EntityList::new();
             entries_list.extend(values.iter().cloned(), &mut self.fun.pool.value);
 
@@ -281,7 +281,7 @@ impl<'a> FunctionBuilder<'a> {
         entries_list.push(f_val, &mut self.fun.pool.value);
         entries_list.push(a_val, &mut self.fun.pool.value);
 
-        let loc = self.fun.locations.location(None, None, None, span);
+        let loc = self.fun.locations.location(None, None, None, None, span);
         let primop = self.fun.primops.push(
             PrimOpData {
                 op: PrimOpKind::CaptureFunction,

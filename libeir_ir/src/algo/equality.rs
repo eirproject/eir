@@ -4,21 +4,46 @@ use snafu::Snafu;
 
 use crate::Function;
 use crate::ValueKind;
-use crate::{Block, Const, PrimOp, Value};
+use crate::{Block, Const, Location, PrimOp, Value};
 
 #[derive(Snafu, Debug, PartialEq, Eq)]
 pub enum EqualityFail {
-    BlockArity { left: Block, right: Block },
+    BlockArity {
+        left: Block,
+        right: Block,
+    },
 
-    BlockOp { left: Block, right: Block },
+    BlockOp {
+        left: Block,
+        right: Block,
+    },
 
-    BlockReadsLength { left: Block, right: Block },
+    BlockReadsLength {
+        left: Block,
+        right: Block,
+    },
 
-    MismatchingValue { left: Value, right: Value },
+    MismatchingValue {
+        left: Value,
+        right: Value,
+    },
 
-    PrimReadsLength { left: PrimOp, right: PrimOp },
+    PrimReadsLength {
+        left: PrimOp,
+        right: PrimOp,
+    },
 
-    MismatchingConst { left: Const, right: Const },
+    MismatchingConst {
+        left: Const,
+        right: Const,
+    },
+
+    MismatchingBlockLocation {
+        left_block: Block,
+        right_block: Block,
+        left_loc: Location,
+        right_loc: Location,
+    },
 }
 
 struct EqCtx<'a> {
@@ -29,12 +54,26 @@ struct EqCtx<'a> {
     map: BTreeMap<Value, Value>,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct GraphEqOptions {
+    pub check_block_locations: bool,
+}
+
+impl Default for GraphEqOptions {
+    fn default() -> Self {
+        GraphEqOptions {
+            check_block_locations: false,
+        }
+    }
+}
+
 impl Function {
-    pub fn graph_eq(
+    pub fn graph_eq_opts(
         &self,
         lhs_block: Block,
         rhs: &Function,
         rhs_block: Block,
+        opts: &GraphEqOptions,
     ) -> Result<(), EqualityFail> {
         let mut ctx = EqCtx {
             lf: self,
@@ -109,7 +148,36 @@ impl Function {
             }
         }
 
+        for (lhs_v, rhs_v) in ctx.map.iter() {
+            match (self.value_block(*lhs_v), self.value_block(*rhs_v)) {
+                (Some(lhs_b), Some(rhs_b)) => {
+                    if opts.check_block_locations {
+                        let l_loc = self.block_location(lhs_b);
+                        let r_loc = rhs.block_location(rhs_b);
+                        if !self.locations.location_eq(l_loc, &rhs.locations, r_loc) {
+                            return Result::Err(EqualityFail::MismatchingBlockLocation {
+                                left_block: lhs_b,
+                                right_block: rhs_b,
+                                left_loc: l_loc,
+                                right_loc: r_loc,
+                            });
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
+
         Ok(())
+    }
+
+    pub fn graph_eq(
+        &self,
+        lhs_block: Block,
+        rhs: &Function,
+        rhs_block: Block,
+    ) -> Result<(), EqualityFail> {
+        self.graph_eq_opts(lhs_block, rhs, rhs_block, &GraphEqOptions::default())
     }
 }
 
@@ -321,5 +389,36 @@ a'foo':a'bar'/1 {
         assert!(ir1
             .graph_eq(ir1.block_entry(), &ir2, ir2.block_entry())
             .is_err());
+    }
+
+    #[test]
+    fn block_location_equality() {
+        let opts = super::GraphEqOptions {
+            check_block_locations: true,
+        };
+
+        let ir1 = parse_function_unwrap(
+            "
+a'foo':a'bar'/1 {
+    !location [\"foo\":\"bar\"@\"foo.erl\":12];
+    entry(%ret, %thr, %arg1):
+        %ret(%arg1);
+}
+",
+        );
+
+        let ir2 = parse_function_unwrap(
+            "
+a'foo':a'bar'/1 {
+    !location [\"foo\":\"bar\"@\"foo.erl\":12];
+    entry(%ret, %thr, %arg1):
+        %ret(%arg1);
+}
+",
+        );
+
+        assert!(ir1
+            .graph_eq_opts(ir1.block_entry(), &ir2, ir2.block_entry(), &opts)
+            .is_ok());
     }
 }

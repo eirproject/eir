@@ -15,7 +15,7 @@ mod errors;
 use self::errors::Errors;
 pub use self::errors::ParserError;
 
-use super::ast::LowerMap;
+use super::lower::LowerMap;
 
 pub type Parser = parse::Parser<()>;
 
@@ -421,6 +421,19 @@ a'foo':a'add_one'/1 {
     entry(%return, %throw, %num):
         %add_fun = a'erlang':a'+'/2;
         %add_fun(%return, %throw, %num, 1);
+}
+",
+        );
+    }
+
+    #[test]
+    fn location() {
+        let _fun = function_unwrap(
+            "
+a'foo':a'bar'/1 {
+  !location [\"foo\":\"bar\"@\"foo.erl\":12];
+  entry(%ret, %thr, %num):
+    %ret(%num);
 }
 ",
         );

@@ -1,7 +1,4 @@
-use std::{
-    any::{Any, TypeId},
-    marker::PhantomData,
-};
+use std::{any::TypeId, marker::PhantomData};
 
 use hashbrown::HashMap;
 
