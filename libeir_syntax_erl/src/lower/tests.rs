@@ -62,6 +62,32 @@ pat(A, A) -> 1.
     println!("{}", fun.to_text(&mut StandardFormatConfig::default()));
 }
 
+#[test]
+fn spec_named_return_type() {
+    let _result = lower(
+        "
+-module(test).
+-spec uniform() -> X :: float().
+uniform() -> 1.0.
+",
+        ParseConfig::default(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn delayed_substitution_macros() {
+    let _result = lower(
+        "
+-module(test).
+function_name() -> ?FUNCTION_NAME.
+function_arity() -> ?FUNCTION_ARITY.
+",
+        ParseConfig::default(),
+    )
+    .unwrap();
+}
+
 //#[test]
 //fn compiler_lower() {
 //    let mut config = ParseConfig::default();

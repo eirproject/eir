@@ -714,7 +714,7 @@ impl Module {
         // Check for orphaned type specs
         for (spec_name, spec) in &specs {
             if !module.functions.contains_key(&spec_name.to_local()) {
-                errs.error(ParserError::ShowDiagnostic {
+                errs.warning(ParserError::ShowDiagnostic {
                     diagnostic: Diagnostic::warning()
                         .with_message("type spec for undefined function")
                         .with_labels(vec![Label::primary(

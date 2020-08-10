@@ -304,9 +304,9 @@ TypeSpec: TypeSpec = {
 };
 
 TypeSig: TypeSig = {
-    <l:@L> "(" ")" "->" <ret:TopType100> <guards:("when" <Comma<TypeGuard>>)?> <r:@R>
+    <l:@L> "(" ")" "->" <ret:TopType> <guards:("when" <Comma<TypeGuard>>)?> <r:@R>
         => TypeSig { span: span!(l, r), params: Vec::new(), ret: Box::new(ret), guards },
-    <l:@L> "(" <params:Comma<TopType>> ")" "->" <ret:TopType100> <guards:("when" <Comma<TypeGuard>>)?> <r:@R>
+    <l:@L> "(" <params:Comma<TopType>> ")" "->" <ret:TopType> <guards:("when" <Comma<TypeGuard>>)?> <r:@R>
         => TypeSig { span: span!(l, r), params, ret: Box::new(ret), guards },
 };
 
