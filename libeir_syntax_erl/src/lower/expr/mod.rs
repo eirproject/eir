@@ -13,7 +13,10 @@ use crate::parser::ast::UnaryOp;
 use crate::parser::ast::{Apply, Remote, UnaryExpr};
 use crate::parser::ast::{Arity, Name};
 use crate::parser::ast::{Expr, Literal, Var};
-use crate::parser::ast::{FunctionName, LocalFunctionName};
+use crate::{
+    parser::ast::{FunctionName, LocalFunctionName},
+    DelayedSubstitution,
+};
 
 pub mod literal;
 use literal::lower_literal;
@@ -359,6 +362,15 @@ fn lower_expr(
             comprehension::lower_binary_comprehension_expr(ctx, b, block, compr)
         }
         Expr::Binary(bin) => binary::lower_binary_expr(ctx, b, block, None, bin),
+        Expr::DelayedSubstitution(_, id, DelayedSubstitution::FunctionName) => {
+            lower_literal(ctx, b, block, &Literal::Atom(*id, b.fun().ident().name))
+        }
+        Expr::DelayedSubstitution(span, id, DelayedSubstitution::FunctionArity) => lower_literal(
+            ctx,
+            b,
+            block,
+            &Literal::Integer(*span, *id, b.fun().ident().arity.into()),
+        ),
         _ => {
             unimplemented!("{:?}", expr);
         }
