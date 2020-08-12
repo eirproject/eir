@@ -336,7 +336,6 @@ fn pattern_to_tree_node(
                         });
                         None
                     } else {
-                        println!("SIZE EXPR {:?}", size_expr);
                         let ret = match size_expr {
                             Expr::Var(Var(_id, var)) => Either::Left(*var),
                             _ => {
