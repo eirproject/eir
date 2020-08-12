@@ -211,7 +211,14 @@ fn lower_expr(
                     Symbol::intern("+"),
                     &[operand_val],
                 ),
-                op => unimplemented!("{:?}", op),
+                UnaryOp::Bnot => ctx.call_function(
+                    b,
+                    block,
+                    *span,
+                    Symbol::intern("erlang"),
+                    Symbol::intern("bnot"),
+                    &[operand_val],
+                ),
             };
 
             (block, val)
