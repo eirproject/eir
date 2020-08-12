@@ -102,12 +102,16 @@ pub(super) fn lower_binary_expr(
                 BinaryOp::StrictNotEqual => (Ident::from_str("erlang"), Ident::from_str("=/=")),
                 BinaryOp::Band => (Ident::from_str("erlang"), Ident::from_str("band")),
                 BinaryOp::Bor => (Ident::from_str("erlang"), Ident::from_str("bor")),
+                BinaryOp::Bxor => (Ident::from_str("erlang"), Ident::from_str("bxor")),
                 BinaryOp::Bsl => (Ident::from_str("erlang"), Ident::from_str("bsl")),
                 BinaryOp::Bsr => (Ident::from_str("erlang"), Ident::from_str("bsr")),
                 BinaryOp::Or => (Ident::from_str("erlang"), Ident::from_str("or")),
+                BinaryOp::Xor => (Ident::from_str("erlang"), Ident::from_str("xor")),
                 BinaryOp::And => (Ident::from_str("erlang"), Ident::from_str("and")),
                 BinaryOp::Send => (Ident::from_str("erlang"), Ident::from_str("!")),
-                _ => unimplemented!("{:?}", op),
+
+                BinaryOp::AndAlso => unreachable!(),
+                BinaryOp::OrElse => unreachable!(),
             };
 
             ctx.call_function(b, block, span, m, f, &[lhs_val, rhs_val])
