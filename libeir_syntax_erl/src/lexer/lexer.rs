@@ -610,17 +610,78 @@ where
     }
 
     #[inline]
+    fn lex_digits(
+        &mut self,
+        radix: u32,
+        allow_leading_underscore: bool,
+        num: &mut String,
+    ) -> Result<(), LexicalError> {
+        let mut last_underscore = !allow_leading_underscore;
+        let mut c = self.read();
+        loop {
+            match c {
+                c if c.is_digit(radix) => {
+                    last_underscore = false;
+                    num.push(self.pop());
+                }
+                '_' if last_underscore => {
+                    return Err(LexicalError::UnexpectedCharacter {
+                        start: self.span().start(),
+                        found: c,
+                    });
+                }
+                '_' if self.peek().is_digit(radix) => {
+                    last_underscore = true;
+                    self.pop();
+                }
+                _ => break,
+            }
+            c = self.read();
+        }
+
+        Ok(())
+    }
+
+    #[inline]
     fn lex_number(&mut self) -> Token {
         let mut num = String::new();
-        let mut c = self.pop();
-        debug_assert!(c == '-' || c == '+' || c.is_digit(10));
+        let mut c;
 
+        // Expect the first character to be either a sign on digit
+        c = self.read();
+        debug_assert!(c == '-' || c == '+' || c.is_digit(10), "got {}", c);
+
+        // If sign, consume it
+        //
+        // -10
+        // ^
+        //
         let negative = c == '-';
-        num.push(c);
-        // Parse leading digits
-        while self.read().is_digit(10) {
+        if c == '-' || c == '+' {
             num.push(self.pop());
         }
+
+        // Consume leading digits
+        //
+        // -10.0
+        //  ^^
+        //
+        // 10e10
+        // ^^
+        //
+        if let Err(err) = self.lex_digits(10, false, &mut num) {
+            return Token::Error(err);
+        }
+
+        // If we have a dot with a trailing number, we lex a float.
+        // Otherwise we return consumed digits as an integer token.
+        //
+        // 10.0
+        //   ^ lex_float()
+        //
+        // fn() -> 10 + 10.
+        //                ^ return integer token
+        //
         c = self.read();
         if c == '.' {
             if self.peek().is_digit(10) {
@@ -630,6 +691,14 @@ where
             }
             return to_integer_literal(&num, 10);
         }
+
+        // Consume exponent marker
+        //
+        // 10e10
+        //   ^ lex_float()
+        //
+        // 10e-10
+        //  ^^ lex_float()
         if c == 'e' || c == 'E' {
             let c2 = self.peek();
             if c2 == '-' || c2 == '+' {
@@ -641,7 +710,11 @@ where
                 return self.lex_float(num, true);
             }
         }
+
         // If followed by '#', the leading digits were the radix
+        //
+        // 10#16
+        //   ^ interpret leading as radix
         if c == '#' {
             self.skip();
             // Parse in the given radix
@@ -655,23 +728,22 @@ where
                 }
             };
             if radix >= 2 && radix <= 32 {
+                let mut num = String::new();
+
+                // If we have a sign, push that to the new integer string
                 c = self.read();
                 if c.is_digit(radix) {
-                    let mut num = String::new();
                     if negative {
                         num.push('-');
                     }
-                    num.push(self.pop());
-                    while self.read().is_digit(radix) {
-                        num.push(self.pop());
-                    }
-                    return to_integer_literal(&num, radix);
-                } else {
-                    Token::Error(LexicalError::UnexpectedCharacter {
-                        start: self.span().start(),
-                        found: c,
-                    })
                 }
+
+                // Lex the digits themselves
+                if let Err(err) = self.lex_digits(radix, false, &mut num) {
+                    return Token::Error(err);
+                }
+
+                return to_integer_literal(&num, radix);
             } else {
                 Token::Error(LexicalError::InvalidRadix {
                     span: self.span(),
@@ -687,13 +759,13 @@ where
     #[inline]
     fn lex_float(&mut self, num: String, seen_e: bool) -> Token {
         let mut num = num;
-        let mut c = self.pop();
-        debug_assert!(c.is_digit(10));
 
+        let mut c = self.pop();
+        debug_assert!(c.is_digit(10), "got {}", c);
         num.push(c);
 
-        while self.read().is_digit(10) {
-            num.push(self.pop());
+        if let Err(err) = self.lex_digits(10, true, &mut num) {
+            return Token::Error(err);
         }
 
         c = self.read();
@@ -710,18 +782,19 @@ where
                 num.push(self.pop());
                 c = self.read();
             }
-            if c.is_digit(10) {
-                while self.read().is_digit(10) {
-                    num.push(self.pop());
-                }
 
-                return self.to_float_literal(num);
+            if !c.is_digit(10) {
+                return Token::Error(LexicalError::InvalidFloat {
+                    span: self.span(),
+                    reason: "expected digits after scientific notation".to_string(),
+                });
             }
-            return Token::Error(LexicalError::InvalidFloat {
-                span: self.span(),
-                reason: "expected digits after scientific notation".to_string(),
-            });
+
+            if let Err(err) = self.lex_digits(10, false, &mut num) {
+                return Token::Error(err);
+            }
         }
+
         self.to_float_literal(num)
     }
 
@@ -849,6 +922,17 @@ mod test {
             Ok(Token::Float(0.5e1))
         ]);
         assert_lex!("-0.0", |_| vec![Ok(Token::Minus), Ok(Token::Float(0.0))]);
+
+        // Underscores
+        assert_lex!("12_3.45_6", |_| vec![Ok(Token::Float(123.456))]);
+        assert_lex!("1e1_0", |_| vec![Ok(Token::Float(1e10))]);
+
+        assert_lex!("123_.456", |_| vec![
+            Ok(Token::Integer(123.into())),
+            Ok(Token::Ident(symbol!("_"))),
+            Ok(Token::Dot),
+            Ok(Token::Integer(456.into())),
+        ]);
     }
 
     #[test]
@@ -911,6 +995,31 @@ mod test {
         assert_lex!(r#"\01238"#, |_| vec![
             Ok(Token::Integer(0o123.into())),
             Ok(Token::Integer(8.into()))
+        ]);
+
+        // Underscores
+        assert_lex!("123_456", |_| vec![Ok(Token::Integer(123456.into()))]);
+        assert_lex!("123_456_789", |_| vec![Ok(Token::Integer(
+            123456789.into()
+        ))]);
+        assert_lex!("1_2", |_| vec![Ok(Token::Integer(12.into()))]);
+        assert_lex!("16#123_abc", |_| vec![Ok(Token::Integer(0x123abc.into()))]);
+        assert_lex!("10#123_abc", |_| vec![
+            Ok(Token::Integer(123.into())),
+            Ok(Token::Ident(Symbol::intern("_abc")))
+        ]);
+        assert_lex!("1_6#abc", |_| vec![Ok(Token::Integer(0xabc.into()))]);
+        assert_lex!("1__0", |_| vec![
+            Ok(Token::Integer(1.into())),
+            Ok(Token::Ident(Symbol::intern("__0")))
+        ]);
+        assert_lex!("123_", |_| vec![
+            Ok(Token::Integer(123.into())),
+            Ok(Token::Ident(Symbol::intern("_"))),
+        ]);
+        assert_lex!("123__", |_| vec![
+            Ok(Token::Integer(123.into())),
+            Ok(Token::Ident(Symbol::intern("__"))),
         ]);
     }
 
