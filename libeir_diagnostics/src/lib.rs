@@ -14,7 +14,7 @@ pub use codespan::{LineIndexOutOfBoundsError, LocationError, SpanOutOfBoundsErro
 pub use codespan::{Location, Span};
 pub use codespan::{RawIndex, RawOffset};
 
-pub use codespan_reporting::diagnostic::{Label, LabelStyle, Severity};
+pub use codespan_reporting::diagnostic::{LabelStyle, Severity};
 pub use codespan_reporting::files::Files;
 pub use codespan_reporting::term;
 
@@ -25,6 +25,7 @@ pub use self::source::{SourceFile, SourceId};
 pub use self::span::SourceSpan;
 
 pub type Diagnostic = codespan_reporting::diagnostic::Diagnostic<SourceId>;
+pub type Label = codespan_reporting::diagnostic::Label<SourceId>;
 
 pub trait ToDiagnostic {
     fn to_diagnostic(&self) -> Diagnostic;
