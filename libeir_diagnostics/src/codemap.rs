@@ -10,6 +10,7 @@ use super::*;
 #[derive(Debug)]
 pub struct CodeMap {
     files: DashMap<SourceId, Arc<SourceFile>>,
+    names: DashMap<FileName, SourceId>,
     seen: DashMap<PathBuf, SourceId>,
     next_file_id: AtomicU32,
 }
@@ -18,6 +19,7 @@ impl CodeMap {
     pub fn new() -> Self {
         Self {
             files: DashMap::new(),
+            names: DashMap::new(),
             seen: DashMap::new(),
             next_file_id: AtomicU32::new(1),
         }
@@ -49,10 +51,12 @@ impl CodeMap {
 
     fn insert_file(&self, name: FileName, source: String) -> SourceId {
         let file_id = self.next_file_id();
+        let filename = name.clone();
         self.files.insert(
             file_id,
             Arc::new(SourceFile::new(file_id, name.into(), source)),
         );
+        self.names.insert(filename, file_id);
         file_id
     }
 
@@ -63,6 +67,16 @@ impl CodeMap {
         } else {
             self.files.get(&file_id).map(|r| r.value().clone())
         }
+    }
+
+    /// Get the file id corresponding to the given FileName
+    pub fn get_file_id(&self, filename: &FileName) -> Option<SourceId> {
+        self.names.get(filename).map(|id| *id)
+    }
+
+    /// Get the file corresponding to the given FileName
+    pub fn get_by_name(&self, filename: &FileName) -> Option<Arc<SourceFile>> {
+        self.get_file_id(filename).and_then(|id| self.get(id))
     }
 
     pub fn name(&self, file_id: SourceId) -> Option<FileName> {
