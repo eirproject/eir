@@ -1,7 +1,6 @@
 use super::super::{Chain, ChainGraph};
 use super::{Synthesis, SynthesisStrategy};
-use crate::util::Walker;
-use libeir_ir::Function;
+use libeir_ir::{Function, LiveValues};
 
 pub fn can_subsitute(graph: &ChainGraph, fun: &Function, chain: Chain) -> bool {
     let target = graph.target_block;
@@ -46,7 +45,7 @@ pub fn can_subsitute(graph: &ChainGraph, fun: &Function, chain: Chain) -> bool {
 pub struct SingleStrategy;
 
 impl SynthesisStrategy for SingleStrategy {
-    fn try_run(&self, graph: &ChainGraph, fun: &Function) -> Option<Synthesis> {
+    fn try_run(&self, graph: &ChainGraph, fun: &Function, _live: &LiveValues) -> Option<Synthesis> {
         if graph.chains.len() != 1 {
             return None;
         }

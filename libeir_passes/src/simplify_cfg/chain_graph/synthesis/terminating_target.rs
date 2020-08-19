@@ -1,11 +1,10 @@
 use log::trace;
 
-use libeir_ir::Function;
+use libeir_ir::{Function, LiveValues};
 
 use super::super::ChainGraph;
 use super::single::can_subsitute;
 use super::{Synthesis, SynthesisStrategy};
-use crate::util::Walker;
 
 /// A synthesis strategy that specializes the target into every entry.
 /// This is only valid for target blocks that terminate/don't use any values
@@ -17,16 +16,25 @@ use crate::util::Walker;
 pub struct TerminatingTargetStrategy;
 
 impl SynthesisStrategy for TerminatingTargetStrategy {
-    fn try_run(&self, graph: &ChainGraph, fun: &Function) -> Option<Synthesis> {
+    fn try_run(&self, graph: &ChainGraph, fun: &Function, live: &LiveValues) -> Option<Synthesis> {
         // TODO change this to check outgoing values instead
 
         let target = graph.target_block;
         let target_reads = fun.block_reads(target);
 
-        if !(fun.block_kind(target).unwrap().is_call() && fun.value_kind(target_reads[0]).is_arg())
-        {
-            return None;
+        // This strategy can only be run if NONE of the values defined
+        // conditionally in the graph are used outside of the target block.
+        // We validate this by going through all outgoing edges, and checking
+        // that none of the graph entry edges are live at those block heads.
+        let bg = fun.block_graph();
+        for outgoing in bg.outgoing(target) {
+            for val in live.live_at(outgoing).iter() {
+                if graph.entry_edges.contains_key(&val) {
+                    return None;
+                }
+            }
         }
+
         trace!("TERMINATING TARGET STRATEGY");
 
         let mut synthesis = Synthesis::new();

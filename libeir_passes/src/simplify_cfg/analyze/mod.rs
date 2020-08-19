@@ -1,11 +1,3 @@
-// TODO
-// Something might be broken with what values become Scope vs EntryArg.
-// Revisit this and make sure things are correct.
-// Should all values that are arguments of a block in the tree become
-// EntryArg?
-// Maybe not since then we would need to special case references from
-// primops/blocks?
-
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use bumpalo::{collections::Vec as BVec, Bump};
@@ -580,11 +572,6 @@ pub fn analyze_chain<'bump>(
     analysis: &'bump GraphAnalysis,
 ) -> super::chain_graph::ChainGraph {
     let tree = &analysis.trees[&target];
-
-    // Get the live values in the body of the block.
-    //let mut primary_conds = BTreeSet::new();
-    //let target_live = live.live_in(target);
-    //primary_conds.extend(target_live.iter());
 
     let mut chain_graph = super::chain_graph::ChainGraph::new(target);
 

@@ -1,7 +1,7 @@
 use super::SimplifyCfgPass;
 use crate::FunctionPass;
 
-use libeir_ir::{parse_function_map_unwrap, parse_function_unwrap};
+use libeir_ir::{parse_function_map_unwrap, parse_function_unwrap, StandardFormatConfig};
 
 #[test]
 fn primop_in_chain() {
@@ -570,11 +570,9 @@ a'fib':a'fib'/1 {
         %15 = a'erlang':a'<'/2;
         %15(%28, 2) => block13 except block12;
     block13(%38):
-        block11(%38);
+        if_bool %38 block9 block10;
     block12(%34, %35, %36):
-        block11(a'false');
-    block11(%32):
-        if_bool %32 block9 block10;
+        if_bool a'false' block9 block10;
     block9():
         unreachable;
     block10():
@@ -587,6 +585,112 @@ a'fib':a'fib'/1 {
         .graph_eq(b.fun().block_entry(), &after, after.block_entry())
         .is_ok());
 }
+
+#[test]
+fn basic_locations() {
+    let _ = env_logger::try_init();
+
+    let opts = libeir_ir::GraphEqOptions {
+        check_block_locations: true,
+    };
+
+    // !location [\"foo\":\"foo\"@\"foo.erl\":1];
+
+    let mut fun = parse_function_unwrap(
+        "
+a'foo':a'bar'/1 {
+    !location [\"foo\":\"foo\"@\"foo.erl\":1];
+    entry(%ret, %thr, %a):
+        b2(%a);
+    !location [\"foo\":\"foo\"@\"foo.erl\":2];
+    b2(%b):
+        b3({%b});
+    !location [\"foo\":\"foo\"@\"foo.erl\":3];
+    b3(%c):
+        b4({%c});
+    !location [\"foo\":\"foo\"@\"foo.erl\":4];
+    b4(%d):
+        %ret(%d);
+}
+",
+    );
+    let mut b = fun.builder();
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    let after = parse_function_unwrap(
+        "
+a'foo':a'bar'/1 {
+    !location [\"foo\":\"foo\"@\"foo.erl\":4];
+    entry(%ret, %thr, %a):
+        %ret({{%a}});
+}
+",
+    );
+    let res = b
+        .fun()
+        .graph_eq_opts(b.fun().block_entry(), &after, after.block_entry(), &opts);
+    assert!(res.is_ok());
+}
+
+//#[test]
+//fn basic_locations() {
+//    let _ = env_logger::try_init();
+//
+//    let opts = libeir_ir::GraphEqOptions {
+//        check_block_locations: true,
+//    };
+//
+//    // !location [\"foo\":\"foo\"@\"foo.erl\":1];
+//
+//    let mut fun = parse_function_unwrap(
+//        "
+//a'foo':a'bar'/1 {
+//    !location [\"foo\":\"foo\"@\"foo.erl\":1];
+//    entry(%ret, %thr, %a):
+//        b2(%a);
+//    !location [\"foo\":\"foo\"@\"foo.erl\":2];
+//    b2(%b):
+//        b3({%b});
+//    !location [\"foo\":\"foo\"@\"foo.erl\":3];
+//    b3(%c):
+//        b4({%c});
+//    !location [\"foo\":\"foo\"@\"foo.erl\":4];
+//    b4(%d):
+//        %ret(%d);
+//}
+//",
+//    );
+//    println!(
+//        "before: \n {}========",
+//        fun.to_text(&mut StandardFormatConfig::default())
+//    );
+//    let mut b = fun.builder();
+//
+//    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+//    simplify_cfg_pass.run_function_pass(&mut b);
+//
+//    let after = parse_function_unwrap(
+//        "
+//a'foo':a'bar'/1 {
+//    !location [\"foo\":\"foo\"@\"foo.erl\":4];
+//    entry(%ret, %thr, %a):
+//        %ret({{%a}});
+//}
+//",
+//    );
+//    let res = b
+//        .fun()
+//        .graph_eq_opts(b.fun().block_entry(), &after, after.block_entry(), &opts);
+//
+//    println!("{}", b.fun().to_text(&mut StandardFormatConfig::default()));
+//    println!("============");
+//    println!("{}", after.to_text(&mut StandardFormatConfig::default()));
+//
+//    println!("{:?}", res);
+//    assert!(res.is_ok());
+//}
 
 // Fails because of https://github.com/eirproject/eir/issues/24
 #[test]
@@ -620,7 +724,7 @@ a'a':a'get_values'/1 {
 }
 
 #[test]
-fn aaaa() {
+fn dynamic_ops() {
     use libeir_intern::Symbol;
     use libeir_ir::operation::binary_construct::{BinaryConstructFinish, BinaryConstructStart};
     use libeir_ir::AtomTerm;
@@ -998,4 +1102,47 @@ a'a':a'underscore'/1 {
     b.fun().validate(&mut errs);
     println!("{:?}", errs);
     assert!(errs.len() == 0)
+}
+
+#[test]
+fn terminating_strategy_checks_live_in_outgoing() {
+    let _ = env_logger::try_init();
+
+    let mut fun = parse_function_unwrap(
+        r#"
+a'a':a'a'/2 {
+    block1(%3, %4, %5, %6):
+      if_bool %5 block16 block17;
+
+    block16():
+      block10(1);
+
+    block17():
+      block10(2);
+
+    block10(%41):
+      %6() => block11 except unr3;
+    block11(%44):
+      %3(%41);
+
+    unr3(%a, %b, %c):
+        unreachable;
+}
+"#,
+    );
+
+    let mut b = fun.builder();
+
+    let mut errs = Vec::new();
+    b.fun().validate(&mut errs);
+    println!("{:?}", errs);
+    assert!(errs.len() == 0);
+
+    let mut simplify_cfg_pass = SimplifyCfgPass::new();
+    simplify_cfg_pass.run_function_pass(&mut b);
+
+    let mut errs = Vec::new();
+    b.fun().validate(&mut errs);
+    println!("{:?}", errs);
+    assert!(errs.len() == 0);
 }

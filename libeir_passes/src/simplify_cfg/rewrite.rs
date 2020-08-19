@@ -8,7 +8,7 @@ use libeir_ir::{MangleTo, Mangler};
 use libeir_util_datastructures::aux_traits::AuxImpl;
 
 use super::chain_graph::{
-    synthesis::{Instance, InstanceKind, SegmentBodyKind, SegmentData, SegmentHeadKind, Synthesis},
+    synthesis::{Instance, InstanceKind, SegmentBodyKind, SegmentHeadKind, Synthesis},
     Chain, ChainGraph, Node, NodeKind,
 };
 
@@ -19,8 +19,8 @@ pub fn rewrite(
     graph: &ChainGraph,
     synthesis: &Synthesis,
 ) {
-    let segment_set_pool = synthesis.segment_set_pool.as_ref().unwrap();
-    let segments_back = synthesis.segments_back.as_ref().unwrap();
+    //let segment_set_pool = synthesis.segment_set_pool.as_ref().unwrap();
+    //let segments_back = synthesis.segments_back.as_ref().unwrap();
 
     trace!("REWRITE {}", target);
     //println!("{:#?}", synthesis);
@@ -319,133 +319,5 @@ pub fn rewrite(
                 b.op_call_flow(block, to_block, &arg_buf);
             }
         }
-
-        //match &segment.kind {
-        //    SegmentKind::In { chain, out_args, successor } => {
-        //        local_map.clear();
-
-        //        println!("Chain: {}", chain);
-        //        b.block_clear(*chain);
-
-        //        for node_id in segment.nodes.as_slice(&synthesis.pool).iter().rev() {
-        //            println!("{}", node_id);
-        //            let node = graph.node(*node_id);
-        //            println!("{:?}", node);
-        //            do_node(*node_id, node, &mut local_map, b, graph, synthesis, segment);
-        //        }
-
-        //        arg_buf.clear();
-        //        for out_arg in out_args.as_slice(&synthesis.pool) {
-        //            let arg_val = local_map[out_arg];
-        //            arg_buf.push(arg_val);
-        //        }
-
-        //        let target = segment_map[successor];
-        //        b.op_call_flow(*chain, target, &arg_buf);
-        //    },
-        //    SegmentKind::Middle { in_args, out_args, successor } => {
-        //        todo!()
-        //    },
-        //    SegmentKind::Out { in_args } => {
-        //        local_map.clear();
-
-        //        let block = b.block_insert();
-        //        segment_map.insert(*segment_id, block);
-        //        for arg in in_args.as_slice(&synthesis.pool) {
-        //            let arg_val = b.block_arg_insert(block);
-        //            local_map.insert(*arg, arg_val);
-        //        }
-        //        println!("{:?}", local_map);
-
-        //        for node_id in segment.nodes.as_slice(&synthesis.pool).iter().rev() {
-        //            println!("{}", node_id);
-        //            if !local_map.contains_key(node_id) {
-        //                let node = graph.node(*node_id);
-        //                println!("{:?}", node);
-
-        //                // Phis are never allowed in Out segments since they can
-        //                // never have specialized.
-        //                assert!(!node.is_phi());
-
-        //                do_node(*node_id, node, &mut local_map, b, graph, synthesis, segment);
-        //            }
-        //        }
-
-        //        let mut map_value = |val| -> Option<Value> {
-        //            let node = graph.get_root(val);
-        //            node.map(|n| local_map[&n])
-        //        };
-
-        //        b.block_copy_body_map(target, block, &mut map_value);
-        //    },
-        //    SegmentKind::Single { chain } => {
-        //        local_map.clear();
-
-        //        let block = *chain;
-        //        b.block_clear(block);
-
-        //        for node_id in segment.nodes.as_slice(&synthesis.pool).iter().rev() {
-        //            println!("{}", node_id);
-        //            let node = graph.node(*node_id);
-        //            println!("{:?}", node);
-        //            do_node(*node_id, node, &mut local_map, b, graph, synthesis, segment);
-        //        }
-
-        //        let mut map_value = |val| -> Option<Value> {
-        //            let node = graph.get_root(val);
-        //            node.map(|n| local_map[&n])
-        //        };
-
-        //        b.block_copy_body_map(target, block, &mut map_value);
-        //    },
-        //}
     }
 }
-
-//fn do_node(
-//    node_id: Node,
-//    node: &NodeKind,
-//    local_map: &mut BTreeMap<Node, Value>,
-//    b: &mut FunctionBuilder,
-//    graph: &ChainGraph,
-//    synthesis: &Synthesis,
-//    segment: &SegmentData,
-//) {
-//    match node {
-//        NodeKind::Value(val) => {
-//            unimplemented!()
-//            //local_map.insert(node_id, *val);
-//        },
-//        NodeKind::Phi(phi) => {
-//            let mut found_node = None;
-//            for block in segment.blocks.iter(&synthesis.block_pool) {
-//                let found_node_d = phi.entries[&block];
-//                if let Some(found_node_i) = found_node {
-//                    assert!(found_node_i == found_node_d);
-//                }
-//                found_node = Some(found_node_d);
-//            }
-//            let found_value = local_map[&found_node.unwrap()];
-//            local_map.insert(node_id, found_value);
-//        },
-//        NodeKind::Prim(prim) => {
-//            let mut map_val = |val| -> Option<Value> {
-//                println!("MAP: {}", val);
-//
-//                let node = prim.dependencies.get(&val);
-//                node.map(|n| local_map[n])
-//
-//                //if val == prim.prim {
-//                //    None
-//                //} else {
-//                //    let node = prim.dependencies.get(&val).unwrap();
-//                //    Some(local_map[node])
-//                //}
-//            };
-//
-//            let new_prim = b.value_map(prim.prim, &mut map_val);
-//            local_map.insert(node_id, new_prim);
-//        },
-//        NodeKind::BlockCapture(_) => todo!(),
-//    }
-//}

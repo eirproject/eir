@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use super::{Chain, ChainGraph, Node};
 use cranelift_entity::{entity_impl, EntityList, ListPool, PrimaryMap, SecondaryMap};
-use libeir_ir::{Function, Value};
+use libeir_ir::{Function, LiveValues, Value};
 use libeir_util_datastructures::aux_traits::{AuxDebug, AuxImpl};
 use libeir_util_datastructures::pooled_entity_set::{EntitySet, EntitySetPool};
 
@@ -455,5 +455,5 @@ impl SegmentBodyKind {
 pub trait SynthesisStrategy {
     /// If the strategy is compatible with the given graph, returns the
     /// synthesized CFG.
-    fn try_run(&self, graph: &ChainGraph, fun: &Function) -> Option<Synthesis>;
+    fn try_run(&self, graph: &ChainGraph, fun: &Function, live: &LiveValues) -> Option<Synthesis>;
 }
