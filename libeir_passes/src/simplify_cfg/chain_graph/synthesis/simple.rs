@@ -3,7 +3,7 @@ use log::trace;
 use std::collections::BTreeSet;
 
 use cranelift_entity::EntityList;
-use libeir_ir::Function;
+use libeir_ir::{Function, LiveValues};
 use libeir_util_datastructures::pooled_entity_set::EntitySet;
 
 use super::super::{ChainGraph, NodeKind};
@@ -23,7 +23,12 @@ use crate::util::Walker;
 pub struct SimpleStrategy;
 
 impl SynthesisStrategy for SimpleStrategy {
-    fn try_run(&self, graph: &ChainGraph, _fun: &Function) -> Option<Synthesis> {
+    fn try_run(
+        &self,
+        graph: &ChainGraph,
+        _fun: &Function,
+        _live: &LiveValues,
+    ) -> Option<Synthesis> {
         trace!("SIMPLE STRATEGY");
 
         let mut synthesis = Synthesis::new();
