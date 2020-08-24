@@ -4,6 +4,7 @@ use itertools::Itertools;
 use snafu::Snafu;
 
 use libeir_diagnostics::*;
+use libeir_intern::Symbol;
 use libeir_util_parse::SourceError;
 
 use crate::lexer::{LexicalError, LexicalToken, TokenConvertError};
@@ -84,6 +85,13 @@ pub enum PreprocessorError {
 
     #[snafu(display("unexpected eof"))]
     UnexpectedEOF,
+
+    #[snafu(display("warning directive: {}", message))]
+    WarningDirective {
+        span: SourceSpan,
+        message: Symbol,
+        as_error: bool,
+    },
 }
 impl PreprocessorError {
     pub fn to_diagnostic(&self) -> Diagnostic {
@@ -230,7 +238,15 @@ impl PreprocessorError {
                 }
             }
             PreprocessorError::UnexpectedEOF =>
-                Diagnostic::error().with_message(self.to_string())
+                Diagnostic::error().with_message(self.to_string()),
+            PreprocessorError::WarningDirective { span, message, as_error } => {
+                let message_str = message.as_str().get();
+                if *as_error { Diagnostic::error() } else { Diagnostic::warning() }
+                    .with_message("found warning directive")
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), *span).with_message(message_str),
+                    ])
+            }
         }
     }
 }

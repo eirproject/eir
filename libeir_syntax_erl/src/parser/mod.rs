@@ -687,6 +687,17 @@ system_version() ->
             ),
             None => panic!("expected compiler error, but didn't get any errors!"),
         }
+
+        match errs.errors.pop() {
+            Some(ErrorOrWarning::Warning(ParserError::Preprocessor {
+                source: PreprocessorError::WarningDirective { .. },
+            })) => (),
+            Some(err) => panic!(
+                "expected warning directive, but got a different error instead: {:?}",
+                err
+            ),
+            None => panic!("expected compiler error, but didn't get any errors!"),
+        }
     }
 
     #[test]

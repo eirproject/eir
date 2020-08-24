@@ -418,25 +418,22 @@ where
                 if self.no_warn {
                     return Ok(Some(directive));
                 }
+
                 if self.warnings_as_errors {
-                    let span = d.span();
-                    let err = d.message.symbol().as_str().get().to_string();
-                    return error_into!(
-                        self.errors,
-                        Err(PreprocessorError::CompilerError {
-                            span: Some(span),
-                            reason: err
-                        })
-                    );
+                    let err = PreprocessorError::WarningDirective {
+                        span: d.span(),
+                        message: d.message.symbol(),
+                        as_error: true,
+                    };
+                    return error_into!(self.errors, Err(err));
+                } else {
+                    let err = PreprocessorError::WarningDirective {
+                        span: d.span(),
+                        message: d.message.symbol(),
+                        as_error: false,
+                    };
+                    self.errors.warning(err);
                 }
-                let span = d.span();
-                let warn = d.message.symbol().as_str().get();
-                let diag = Diagnostic::warning()
-                    .with_message("found warning directive")
-                    .with_labels(vec![
-                        Label::primary(span.source_id(), span).with_message(warn)
-                    ]);
-                self.warning_diagnostic(diag);
             }
             Directive::File(ref f) if !ignore => {
                 // TODO
@@ -445,15 +442,6 @@ where
             _ => {}
         }
         Ok(Some(directive))
-    }
-
-    fn warning_diagnostic(&self, diagnostic: Diagnostic) {
-        use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
-        use codespan_reporting::term::*;
-
-        let config = Config::default();
-        let mut out = StandardStream::stderr(ColorChoice::Always);
-        term::emit(&mut out, &config, &*self.codemap, &diagnostic).unwrap();
     }
 
     fn eval_conditional(
