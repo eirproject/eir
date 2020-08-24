@@ -3,10 +3,7 @@ use std::sync::Arc;
 
 use libeir_diagnostics::*;
 use libeir_ir::{
-    text::{
-        ast::{LowerError, Module as ModuleAst},
-        parser::ParserError,
-    },
+    text::{ast::Module as ModuleAst, parser::ParserError, LowerError},
     Module,
 };
 use libeir_util_parse::{error_tee, Parse, Parser};
