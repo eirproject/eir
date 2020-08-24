@@ -181,16 +181,11 @@ impl<T> TypedArena<T> {
             if let Some(last_chunk) = chunks.last_mut() {
                 let used_bytes = self.ptr.get() as usize - last_chunk.start() as usize;
                 let currently_used_cap = used_bytes / mem::size_of::<T>();
-                if last_chunk.storage.reserve_in_place(currently_used_cap, n) {
-                    self.end.set(last_chunk.end());
-                    return;
-                } else {
-                    new_capacity = last_chunk.storage.capacity();
-                    loop {
-                        new_capacity = new_capacity.checked_mul(2).unwrap();
-                        if new_capacity >= currently_used_cap + n {
-                            break;
-                        }
+                new_capacity = last_chunk.storage.capacity();
+                loop {
+                    new_capacity = new_capacity.checked_mul(2).unwrap();
+                    if new_capacity >= currently_used_cap + n {
+                        break;
                     }
                 }
             } else {
@@ -318,19 +313,11 @@ impl DroplessArena {
             let (chunk, mut new_capacity);
             if let Some(last_chunk) = chunks.last_mut() {
                 let used_bytes = self.ptr.get() as usize - last_chunk.start() as usize;
-                if last_chunk
-                    .storage
-                    .reserve_in_place(used_bytes, needed_bytes)
-                {
-                    self.end.set(last_chunk.end());
-                    return;
-                } else {
-                    new_capacity = last_chunk.storage.capacity();
-                    loop {
-                        new_capacity = new_capacity.checked_mul(2).unwrap();
-                        if new_capacity >= used_bytes + needed_bytes {
-                            break;
-                        }
+                new_capacity = last_chunk.storage.capacity();
+                loop {
+                    new_capacity = new_capacity.checked_mul(2).unwrap();
+                    if new_capacity >= used_bytes + needed_bytes {
+                        break;
                     }
                 }
             } else {
