@@ -280,7 +280,6 @@ fn lower_if_clause(gen: &mut ast::NodeIdGenerator, clause: &aast::Item) -> ast::
 }
 
 fn lower_try_clause(gen: &mut ast::NodeIdGenerator, clause: &aast::Item) -> ast::TryClause {
-    println!("{:#?}", clause);
     let tup = clause.tuple().unwrap();
 
     assert!(tup.entries[0].atom().unwrap().as_str() == "clause");
@@ -304,8 +303,6 @@ fn lower_try_clause(gen: &mut ast::NodeIdGenerator, clause: &aast::Item) -> ast:
     let err_trace = patterns_tup.next().unwrap();
     assert!(patterns_tup.next().is_none());
 
-    println!("{:?}", pattern);
-    println!("{:?}", err_kind);
     let err_kind_tup = err_kind.tuple().unwrap();
     let err_kind_name = match &*err_kind_tup.entries[0].atom().unwrap().as_str() {
         "var" => ast::Name::Var(err_kind_tup.entries[2].atom().unwrap()),
@@ -362,7 +359,6 @@ fn lower_body(gen: &mut ast::NodeIdGenerator, body: &aast::Item) -> Vec<ast::Exp
 }
 
 fn lower_expr(gen: &mut ast::NodeIdGenerator, expr: &aast::Item) -> ast::Expr {
-    println!("{:#?}", expr);
     let tup = expr.tuple().unwrap();
 
     let name = tup.entries[0].atom().unwrap().as_str();
