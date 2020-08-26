@@ -35,6 +35,17 @@ impl SynthesisStrategy for TerminatingTargetStrategy {
             }
         }
 
+        // If the body has no reads from the chain, specialization is useless,
+        // don't do it.
+        fun.block_walk_nested_values::<_, ()>(target, &mut |val| {
+            if graph.entry_edges.contains_key(&val) {
+                Err(())
+            } else {
+                Ok(())
+            }
+        })
+        .err()?;
+
         trace!("TERMINATING TARGET STRATEGY");
 
         let mut synthesis = Synthesis::new();
