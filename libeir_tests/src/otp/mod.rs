@@ -85,6 +85,7 @@ fn core_parse() {
     pass_manager.run(&mut eir_mod);
 }
 
+#[ignore]
 #[test]
 fn maps() {
     let _ = env_logger::try_init();
@@ -101,6 +102,7 @@ fn maps() {
     pass_manager.run(&mut eir_mod);
 }
 
+#[ignore]
 #[test]
 fn match_suite() {
     let _ = env_logger::try_init();
