@@ -1,3 +1,4 @@
+use log::warn;
 use pretty::{DocAllocator, RefDoc};
 
 use crate::binary::{BinaryEntrySpecifier, Endianness};
@@ -394,7 +395,7 @@ where
                 }
             }
             _ => {
-                println!("UNIMPL: {:?}", op);
+                warn!("Unimplemented printer for OP: {:?}", op);
                 arena.text("unknown")
             }
         };
