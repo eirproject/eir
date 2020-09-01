@@ -145,6 +145,7 @@ impl<'a> LowerCtx<'a> {
         b.block_set_location(block, loc);
 
         let (ok_block, fail_block) = b.op_call_function(span, block, fun_val, args);
+        b.block_set_location(fail_block, loc);
 
         let fail_type = b.block_args(fail_block)[0];
         let fail_error = b.block_args(fail_block)[1];
@@ -217,19 +218,21 @@ pub fn lower_module<'a>(
 fn lower_function(ctx: &mut LowerCtx, b: &mut FunctionBuilder, fun: &Function) -> IrBlock {
     let entry = b.block_insert_with_span(Some(fun.span()));
 
+    ctx.fun_num += 1;
+    let base_fun = &ctx.functions[0];
+    let new_fun = format!("{}-fun-{}", base_fun, ctx.fun_num);
+    ctx.functions.push(new_fun);
+
     match fun {
-        Function::Named(_named) => unimplemented!(),
+        Function::Named(named) => {
+            lower_function_base(ctx, b, entry, named.span, named.arity, &named.clauses);
+        }
         Function::Unnamed(lambda) => {
-            ctx.fun_num += 1;
-            let base_fun = &ctx.functions[0];
-            let new_fun = format!("{}-fun-{}", base_fun, ctx.fun_num);
-            ctx.functions.push(new_fun);
-
             lower_function_base(ctx, b, entry, lambda.span, lambda.arity, &lambda.clauses);
-
-            ctx.functions.pop().unwrap();
         }
     }
+
+    ctx.functions.pop().unwrap();
 
     entry
 }
@@ -243,6 +246,8 @@ fn lower_function_base(
     arity: usize,
     clauses: &[FunctionClause],
 ) {
+    let match_loc = ctx.current_location(b, span);
+
     let mut block = entry;
 
     // Ok and Fail continuations
@@ -261,11 +266,13 @@ fn lower_function_base(
 
     // Join block after case
     let join_block = b.block_insert();
+    b.block_set_location(join_block, match_loc);
     let join_arg = b.block_arg_insert(join_block);
     b.op_call_flow(join_block, ok_cont, &[join_arg]);
 
     // Match fail block
     let match_fail_block = b.block_insert();
+    b.block_set_location(match_fail_block, match_loc);
     {
         let typ_val = b.value(Symbol::intern("error"));
         let err_val = b.value(Symbol::intern("function_clause"));
@@ -334,6 +341,9 @@ fn lower_top_function(ctx: &mut LowerCtx, b: &mut FunctionBuilder, function: &Na
     let fun_name = format!("{}/{}", function.name, function.arity);
     assert!(ctx.functions.len() == 0);
     ctx.functions.push(fun_name);
+
+    let loc = ctx.current_location(b, function.span);
+    b.block_set_location(entry, loc);
 
     lower_function_base(
         ctx,

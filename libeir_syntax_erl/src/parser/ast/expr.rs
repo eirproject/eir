@@ -381,6 +381,13 @@ impl MapField {
             &MapField::Exact { ref value, .. } => value.clone(),
         }
     }
+
+    pub fn span(&self) -> SourceSpan {
+        match self {
+            MapField::Assoc { span, .. } => *span,
+            MapField::Exact { span, .. } => *span,
+        }
+    }
 }
 impl PartialEq for MapField {
     fn eq(&self, other: &Self) -> bool {

@@ -22,6 +22,19 @@ pub enum TypeName {
     Utf16,
     Utf32,
 }
+impl std::fmt::Display for TypeName {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TypeName::Integer => write!(f, "integer"),
+            TypeName::Float => write!(f, "float"),
+            TypeName::Bytes => write!(f, "binary"),
+            TypeName::Bits => write!(f, "bitstring"),
+            TypeName::Utf8 => write!(f, "utf8"),
+            TypeName::Utf16 => write!(f, "utf16"),
+            TypeName::Utf32 => write!(f, "utf32"),
+        }
+    }
+}
 
 pub fn default_specifier() -> BinaryEntrySpecifier {
     BinaryEntrySpecifier::Integer {
@@ -253,7 +266,7 @@ pub(crate) fn lower_binary_elem(
     let spec = elem.bit_type.as_ref().map(|b| specifier_from_parsed(&*b));
 
     let (spec, size_val) = match &elem.bit_expr {
-        Expr::Literal(Literal::String(_id, string)) => {
+        Expr::Literal(Literal::String(_id, _string)) => {
             let spec = match spec {
                 None => BinaryEntrySpecifier::Bytes { unit: 1 },
                 Some(Ok(inner)) => inner,

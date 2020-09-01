@@ -573,7 +573,7 @@ pub Expr: Expr = {
     <l:@L> "catch" <e:Expr> <r:@R>
         => Expr::Catch(Catch { span: span!(l, r), id: nid.next(), expr: Box::new(e) }),
     Expr100,
-}
+};
 
 Expr100: Expr = {
     // We would like to use Pattern200 here, but this leads to an ambiguity conflict

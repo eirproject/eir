@@ -52,7 +52,6 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(thr, &mut self.fun.pool.value);
         data.reads
             .extend(args.iter().cloned(), &mut self.fun.pool.value);
-        data.location = self.fun.locations.location(None, None, None, None, span);
 
         self.graph_update_block(block);
     }
@@ -85,7 +84,6 @@ impl<'a> FunctionBuilder<'a> {
 
         data.op = Some(OpKind::TraceCaptureRaw);
         data.reads.push(next, &mut self.fun.pool.value);
-        data.location = self.fun.locations.location(None, None, None, None, span);
 
         self.graph_update_block(block);
     }
@@ -169,7 +167,6 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(f, &mut self.fun.pool.value);
         data.reads.push(o, &mut self.fun.pool.value);
         data.reads.push(value, &mut self.fun.pool.value);
-        data.location = self.fun.locations.location(None, None, None, None, span);
 
         self.graph_update_block(block);
     }
@@ -214,7 +211,6 @@ impl<'a> FunctionBuilder<'a> {
         data.reads.push(t, &mut self.fun.pool.value);
         data.reads.push(f, &mut self.fun.pool.value);
         data.reads.push(value, &mut self.fun.pool.value);
-        data.location = self.fun.locations.location(None, None, None, None, span);
 
         self.graph_update_block(block);
     }
@@ -240,7 +236,6 @@ impl<'a> FunctionBuilder<'a> {
         assert!(data.reads.is_empty());
 
         data.op = Some(OpKind::Unreachable);
-        data.location = self.fun.locations.location(None, None, None, None, span);
 
         self.graph_update_block(block);
     }
@@ -393,7 +388,6 @@ impl MatchBuilder {
         let (block, block_val) = b.block_insert_get_val();
         {
             let mut block_data = b.fun.blocks.get_mut(block).unwrap();
-            block_data.location = b.fun.locations.location(None, None, None, None, span);
         }
         self.push_wildcard_next(block_val, b);
         block
@@ -420,7 +414,6 @@ impl MatchBuilder {
             branches: self.kinds,
         });
         data.reads = reads;
-        data.location = b.fun.locations.location(None, None, None, None, self.span);
 
         b.graph_update_block(block);
         b.fun.graph_validate_block(block);
@@ -479,7 +472,6 @@ impl MapPutBuilder {
             action: self.actions,
         });
         data.reads = self.reads;
-        data.location = b.fun.locations.location(None, None, None, None, self.span);
 
         b.graph_update_block(block);
 

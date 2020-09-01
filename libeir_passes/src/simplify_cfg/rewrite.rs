@@ -54,10 +54,13 @@ pub fn rewrite(
         map.insert(from_value, *to_value);
     }
 
+    let loc = b.fun().block_location(target);
+
     for segment_id in synthesis.order.iter() {
         let segment = &synthesis.segments[*segment_id];
 
         let block = b.block_insert();
+        b.block_set_location(block, loc);
         segment_map.insert(*segment_id, block);
 
         match segment.head {

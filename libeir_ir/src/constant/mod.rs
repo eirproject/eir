@@ -92,6 +92,15 @@ impl AuxEq<ListPool<Const>> for ConstKind {
     }
 }
 
+impl ConstKind {
+    pub fn is_map(&self) -> bool {
+        match self {
+            ConstKind::Map { .. } => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ConstantContainer {
     const_values: PrimaryMap<Const, ConstKind>,

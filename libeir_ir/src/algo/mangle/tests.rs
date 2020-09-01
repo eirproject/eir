@@ -53,6 +53,46 @@ a'foo':a'bar'/1 {
 }
 
 #[test]
+fn preserves_block_locations() {
+    let eir_str = "
+a'foo':a'bar'/1 {
+    !location [\"foo\":\"foo\"@\"foo.erl\":1];
+    entry(%ret):
+        b1();
+    !location [\"foo\":\"foo\"@\"foo.erl\":2];
+    b1():
+        %ret([]);
+}
+";
+
+    let (mut ir, map) = crate::parse_function_map_unwrap(eir_str);
+
+    let mut b = ir.builder();
+
+    let mut mangler = Mangler::new();
+
+    let b1 = map.get_block("entry");
+    let b1_ret = map.get_value("ret");
+
+    mangler.start(ToT(b1));
+    let new_b1 = mangler.run(&mut b);
+    b.block_set_entry(new_b1);
+
+    let after = crate::parse_function_unwrap(eir_str);
+
+    let opts = crate::GraphEqOptions {
+        check_block_locations: true,
+    };
+
+    let res = b
+        .fun()
+        .graph_eq_opts(b.fun().block_entry(), &after, after.block_entry(), &opts);
+
+    println!("{:?}", res);
+    assert!(res.is_ok());
+}
+
+#[test]
 fn mangle_primop() {
     let (mut ir, map) = crate::parse_function_map_unwrap(
         "
