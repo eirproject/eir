@@ -41,7 +41,11 @@ impl ExceptionHandlerStack {
         typ: Value,
         error: Value,
     ) {
+        let loc = b.fun().block_location(block);
+
         let cont = b.op_trace_capture_raw(span, block);
+        b.block_set_location(cont, loc);
+
         let trace = b.block_args(cont)[0];
         self.make_error_jump_trace(b, cont, typ, error, trace);
     }

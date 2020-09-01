@@ -261,11 +261,53 @@ impl LocationContainer {
             let l_i = &self.terminals[*l_t];
             let r_i = &r.terminals[*r_t];
 
-            if l_i != r_i {
+            if l_i.file != r_i.file
+                || l_i.module != r_i.module
+                || l_i.entity != r_i.entity
+                || l_i.line != r_i.line
+            {
                 return false;
             }
         }
 
         return true;
+    }
+
+    pub fn format_loc(&self, loc: Location) -> String {
+        use std::fmt::Write;
+
+        let loc_inner = &self.locations[loc];
+        let mut out = String::new();
+
+        write!(&mut out, "[").unwrap();
+        for term in loc_inner.terminals.as_slice(&self.terminal_pool) {
+            let term_inner = &self.terminals[*term];
+
+            if let Some(file) = &term_inner.file {
+                write!(&mut out, "{:?}:", file).unwrap();
+            } else {
+                write!(&mut out, "nil:").unwrap();
+            }
+            if let Some(line) = &term_inner.line {
+                write!(&mut out, "{:?}@", line).unwrap();
+            } else {
+                write!(&mut out, "nil@").unwrap();
+            }
+            if let Some(module) = &term_inner.module {
+                write!(&mut out, "{:?}:", module).unwrap();
+            } else {
+                write!(&mut out, "nil:").unwrap();
+            }
+            if let Some(entity) = &term_inner.entity {
+                write!(&mut out, "{:?}", entity).unwrap();
+            } else {
+                write!(&mut out, "nil").unwrap();
+            }
+
+            write!(&mut out, ", ").unwrap();
+        }
+        write!(&mut out, "]").unwrap();
+
+        out
     }
 }

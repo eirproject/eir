@@ -55,12 +55,12 @@ pub enum LowerError {
     BinaryUnknownSpecifier { span: SourceSpan },
     #[snafu(display("conflicting specifiers in binary entry"))]
     BinaryConflictingSpecifier { new: SourceSpan, old: SourceSpan },
-    #[snafu(display("invalid specifier for type in binary entry"))]
+    #[snafu(display("invalid specifier for {} in binary entry", typ))]
     BinaryInvalidSpecifier {
         span: SourceSpan,
         typ: BinaryTypeName,
     },
-    #[snafu(display("type does not support size in binary entry"))]
+    #[snafu(display("{} does not support size in binary entry", typ))]
     BinaryInvalidSize {
         span: SourceSpan,
         typ: BinaryTypeName,
@@ -71,6 +71,12 @@ pub enum LowerError {
     DuplicateRecordField { new: SourceSpan, old: SourceSpan },
     #[snafu(display("record is not defined"))]
     UndefinedRecord { span: SourceSpan },
+
+    // Maps
+    #[snafu(display("only map put (=>) allowed in map construction"))]
+    MapUpdateInConstruction { map: SourceSpan, field: SourceSpan },
+    #[snafu(display("map update performed on a non map"))]
+    MapUpdateOnNonMap { map: SourceSpan },
 }
 
 impl ToDiagnostic for LowerError {
@@ -91,6 +97,23 @@ impl ToDiagnostic for LowerError {
                 if let Some(right) = right {
                     labels.push(
                         Label::primary(right.source_id(), *right).with_message("right pattern"),
+                    );
+                }
+                dig.with_labels(labels)
+            }
+            LowerError::UnmatchablePatternWarning { pat, reason } => {
+                let dig = Diagnostic::warning().with_message(msg);
+                let mut labels = vec![];
+                if let Some(pat) = pat {
+                    labels.push(
+                        Label::primary(pat.source_id(), *pat)
+                            .with_message("pattern can never be matched"),
+                    );
+                }
+                if let Some(reason) = reason {
+                    labels.push(
+                        Label::primary(reason.source_id(), *reason)
+                            .with_message("matched against this"),
                     );
                 }
                 dig.with_labels(labels)
@@ -130,7 +153,49 @@ impl ToDiagnostic for LowerError {
                     Label::secondary(old.source_id(), *old).with_message("previously bound here"),
                 ])
             }
-            _ => unimplemented!(),
+            LowerError::BinaryUnknownSpecifier { span } => Diagnostic::error()
+                .with_message(msg)
+                .with_labels(vec![
+                    Label::primary(span.source_id(), *span).with_message("specifier is not known")
+                ]),
+            LowerError::BinaryConflictingSpecifier { new, old } => {
+                Diagnostic::error().with_message(msg).with_labels(vec![
+                    Label::primary(new.source_id(), *new).with_message("specifier 1"),
+                    Label::primary(old.source_id(), *old).with_message("specifier 2"),
+                ])
+            }
+            LowerError::BinaryInvalidSpecifier { span, typ } => Diagnostic::error()
+                .with_message(msg)
+                .with_labels(vec![Label::primary(span.source_id(), *span)
+                    .with_message(format!("specifier is not valid for {} entries", typ))]),
+            LowerError::BinaryInvalidSize { span, typ } => Diagnostic::error()
+                .with_message(msg)
+                .with_labels(vec![Label::primary(span.source_id(), *span).with_message(
+                    format!("size specifier not valid for {} binary entries", typ),
+                )]),
+            LowerError::DuplicateRecordField { new, old } => {
+                Diagnostic::error().with_message(msg).with_labels(vec![
+                    Label::primary(new.source_id(), *old)
+                        .with_message("duplicate field definition in record"),
+                    Label::secondary(old.source_id(), *old).with_message("previously defined here"),
+                ])
+            }
+            LowerError::UndefinedRecord { span } => Diagnostic::error()
+                .with_message(msg)
+                .with_labels(vec![Label::primary(span.source_id(), *span)]),
+            LowerError::MapUpdateInConstruction { map, field } => {
+                Diagnostic::error().with_message(msg).with_labels(vec![
+                    Label::primary(field.source_id(), *field)
+                        .with_message("map update (:=) attempted"),
+                    Label::secondary(map.source_id(), *map)
+                        .with_message("expression is map construction"),
+                ])
+            }
+            LowerError::MapUpdateOnNonMap { map } => Diagnostic::warning()
+                .with_message(msg)
+                .with_labels(vec![Label::primary(map.source_id(), *map).with_message(
+                    "updated value is not a map, this will fail at runtime",
+                )]),
         }
     }
 }

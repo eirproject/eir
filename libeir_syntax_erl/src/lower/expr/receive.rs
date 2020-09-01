@@ -16,7 +16,10 @@ pub(super) fn lower_receive(
     mut block: IrBlock,
     recv: &Receive,
 ) -> (IrBlock, IrValue) {
+    let loc = ctx.current_location(b, recv.span);
+
     let join_block = b.block_insert();
+    b.block_set_location(join_block, loc);
     let join_arg = b.block_arg_insert(join_block);
 
     // The timeout time
@@ -28,10 +31,12 @@ pub(super) fn lower_receive(
 
     // Receive start
     let recv_wait_block = ReceiveStart::build(b, block, after_timeout_val);
+    b.block_set_location(recv_wait_block, loc);
     let recv_ref_val = b.block_args(recv_wait_block)[0];
 
     // Receive wait
     let (after_block, mut body_block) = ReceiveWait::build(b, recv_wait_block, recv_ref_val);
+    b.block_set_location(body_block, loc);
     let body_message_arg = b.block_args(body_block)[0];
 
     // If there is a timeout block, the after code
@@ -39,11 +44,13 @@ pub(super) fn lower_receive(
         let (after_ret_block, after_ret) = lower_block(ctx, b, after_block, &after.body);
         b.op_call_flow(after_ret_block, join_block, &[after_ret]);
     } else {
+        b.block_set_location(after_block, loc);
         b.op_unreachable(recv.span, after_block);
     };
 
     if let Some(clauses) = &recv.clauses {
         let no_match = b.block_insert();
+        b.block_set_location(no_match, loc);
         b.op_call_flow(no_match, recv_wait_block, &[recv_ref_val]);
 
         let mut case_b = Case::builder();
@@ -67,6 +74,9 @@ pub(super) fn lower_receive(
                 Ok(lowered) => {
                     let scope_token = ctx.scope.push();
                     let body = b.block_insert();
+
+                    let body_loc = ctx.current_location(b, clause.span);
+                    b.block_set_location(body, body_loc);
 
                     // Map all matched values through receive_done.
                     // This enables us to do things like copy from

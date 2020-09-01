@@ -17,9 +17,12 @@ pub(super) fn lower_case_expr(
     case: &Case,
 ) -> (IrBlock, IrValue) {
     let span = case.span;
+    let case_loc = ctx.current_location(b, span);
+
     let match_val = map_block!(block, lower_single(ctx, b, block, &case.expr));
 
     let no_match = b.block_insert();
+    b.block_set_location(no_match, case_loc);
     {
         let typ_val = b.value(Symbol::intern("error"));
         let case_clause_val = b.value(Symbol::intern("case_clause"));
@@ -87,11 +90,14 @@ pub(super) fn lower_if_expr(
     if_expr: &If,
 ) -> (IrBlock, IrValue) {
     let span = if_expr.span;
+    let loc = ctx.current_location(b, span);
+
     let match_val = b.prim_value_list(&[]);
 
     let no_match = b.block_insert();
     {
         let block = no_match;
+        b.block_set_location(block, loc);
         let typ_val = b.value(Symbol::intern("error"));
         let badmatch_val = b.value(Symbol::intern("badmatch"));
         let err_val = b.prim_tuple(span, &[badmatch_val, match_val]);

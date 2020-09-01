@@ -24,6 +24,7 @@ string-intern = { version = "0.1.7", default-features = false }
 pretty = "0.7"
 lazy_static = "1.2.0"
 itertools = "0.8.0"
+log = "0.4"
 
 cranelift-entity = "0.56.0"
 cranelift-bforest = { git = "https://github.com/hansihe/wasmtime.git", branch = "main" }

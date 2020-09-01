@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use libeir_diagnostics::SourceSpan;
 use libeir_ir::pattern::{PatternClause, PatternContainer, PatternValue};
-use libeir_ir::{Block as IrBlock, FunctionBuilder, LogicOp, Value as IrValue};
+use libeir_ir::{Block as IrBlock, FunctionBuilder, Location, LogicOp, Value as IrValue};
 
 use crate::parser::ast::{Expr, Guard};
 
@@ -23,6 +23,7 @@ enum EqGuard {
 
 struct ClauseLowerCtx {
     span: SourceSpan,
+    loc: Location,
 
     // The clause we are constructing
     pat_clause: PatternClause,
@@ -115,6 +116,11 @@ pub(super) fn lower_clause<'a, P>(
     ctx: &mut LowerCtx,
     pat: &mut PatternContainer,
     b: &mut FunctionBuilder,
+    // Once all clauses have been lowered, this is the block where the case
+    // operation itself will be lowered into. The lowering logic for a clause
+    // can use this to prepend anything it needs done before the pattern
+    // starts, like creating needed values.
+    // This block should always be empty.
     pre_case: &mut IrBlock,
     shadow: bool,
     span: SourceSpan,
@@ -125,11 +131,13 @@ where
     P: Iterator<Item = &'a Expr>,
 {
     assert!(b.fun().block_kind(*pre_case).is_none());
+    let loc = ctx.current_location(b, span);
 
     let pat_clause = pat.clause_start(span);
 
     let mut clause_ctx = ClauseLowerCtx {
         span,
+        loc,
 
         pat_clause,
         pre_case: *pre_case,
@@ -194,6 +202,7 @@ impl ClauseLowerCtx {
         guard: Option<&Vec<Guard>>,
     ) -> IrBlock {
         let guard_lambda_block = b.block_insert();
+        b.block_set_location(guard_lambda_block, self.loc);
 
         let ret_cont = b.block_arg_insert(guard_lambda_block);
         let _throw_cont = b.block_arg_insert(guard_lambda_block);
@@ -201,6 +210,7 @@ impl ClauseLowerCtx {
         let scope_tok = ctx.scope.push();
         {
             let fail_handler_block = b.block_insert();
+            b.block_set_location(fail_handler_block, self.loc);
             b.block_arg_insert(fail_handler_block);
             b.block_arg_insert(fail_handler_block);
             b.block_arg_insert(fail_handler_block);
@@ -247,10 +257,12 @@ impl ClauseLowerCtx {
             let fun_val = b.prim_capture_function(self.span, erlang_atom, exact_eq_atom, two_atom);
 
             let (ok_block, err_block) = b.op_call_function(self.span, block, fun_val, &[lhs, rhs]);
+            b.block_set_location(block, self.loc);
             let res_val = b.block_args(ok_block)[0];
             block = ok_block;
 
             b.op_unreachable(self.span, err_block);
+            b.block_set_location(err_block, self.loc);
 
             top_and.push(res_val);
         }
@@ -264,6 +276,7 @@ impl ClauseLowerCtx {
                 for condition in guard.conditions.iter() {
                     let (block_new, val) =
                         lower_block(ctx, b, block, [condition].iter().map(|v| *v));
+
                     and.push(val);
                     block = block_new;
                 }
@@ -280,6 +293,7 @@ impl ClauseLowerCtx {
 
         let result_bool = b.prim_logic_op(self.span, LogicOp::And, &top_and);
         b.op_call_flow(block, ret_cont, &[result_bool]);
+        b.block_set_location(block, self.loc);
 
         ctx.exc_stack.pop_handler();
         ctx.scope.pop(scope_tok);

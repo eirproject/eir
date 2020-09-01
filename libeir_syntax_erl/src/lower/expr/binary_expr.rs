@@ -25,6 +25,8 @@ pub(super) fn lower_binary_expr(
 
     match op {
         BinaryOp::AndAlso => {
+            let loc = ctx.current_location(b, span);
+
             let (l1_block, lhs_val) = lower_single(ctx, b, block, lhs);
 
             let ret_block = b.block_insert();
@@ -41,15 +43,23 @@ pub(super) fn lower_binary_expr(
             b.op_call_flow(false1_block, ret_block, &[false_val]);
 
             // Nonbool branch
-            let typ_val = b.value(Symbol::intern("error"));
-            let err_atom = b.value(Symbol::intern("badarg"));
-            let err_val = b.prim_tuple(span, &[err_atom, lhs_val]);
-            ctx.exc_stack
-                .make_error_jump(b, span, non1_block, typ_val, err_val);
+            {
+                let block = non1_block;
+
+                let typ_val = b.value(Symbol::intern("error"));
+                let err_atom = b.value(Symbol::intern("badarg"));
+                let err_val = b.prim_tuple(span, &[err_atom, lhs_val]);
+
+                b.block_set_location(block, loc);
+                ctx.exc_stack
+                    .make_error_jump(b, span, block, typ_val, err_val);
+            }
 
             (ret_block, ret_val)
         }
         BinaryOp::OrElse => {
+            let loc = ctx.current_location(b, span);
+
             let (l1_block, lhs_val) = lower_single(ctx, b, block, lhs);
 
             let ret_block = b.block_insert();
@@ -73,6 +83,7 @@ pub(super) fn lower_binary_expr(
                 let err_atom = b.value(Symbol::intern("badarg"));
                 let err_val = b.prim_tuple(span, &[err_atom, lhs_val]);
 
+                b.block_set_location(block, loc);
                 ctx.exc_stack
                     .make_error_jump(b, span, block, typ_val, err_val);
             }

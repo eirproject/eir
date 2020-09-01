@@ -43,10 +43,12 @@ where
     let scope_tok = ctx.scope.push();
     let mut block = block;
     let mut value = None;
+    let mut loc = None;
 
     for expr in exprs {
         assert!(b.fun().block_kind(block).is_none());
         let (new_block, val) = lower_expr(ctx, b, block, expr);
+        loc = Some(b.fun().block_location(block));
         assert!(b.fun().block_kind(new_block).is_none());
         block = new_block;
         value = Some(val);
@@ -55,6 +57,12 @@ where
     // This will pop all the scopes that has been pushed by
     // the expressions in the block.
     ctx.scope.pop(scope_tok);
+
+    // In the case that this is the last block in a function, we want the
+    // location of the return block to be the last expression.
+    if let Some(loc) = loc {
+        b.block_set_location(block, loc);
+    }
 
     (block, value.unwrap())
 }
@@ -115,6 +123,10 @@ fn lower_expr(
     expr: &Expr,
 ) -> (IrBlock, IrValue) {
     let mut block = block;
+
+    let loc = ctx.current_location(b, expr.span());
+    b.block_set_location(block, loc);
+
     match expr {
         Expr::Apply(Apply {
             span, callee, args, ..
@@ -166,10 +178,8 @@ fn lower_expr(
                 arg_vals.push(arg_val);
             }
 
-            let loc = ctx.current_location(b, span);
-            b.block_set_location(block, loc);
-
             let (ok_block, fail_block) = b.op_call_function(span, block, callee_val, &arg_vals);
+            b.block_set_location(fail_block, loc);
 
             let fail_type = b.block_args(fail_block)[0];
             let fail_error = b.block_args(fail_block)[1];
@@ -227,6 +237,7 @@ fn lower_expr(
             let match_val = map_block!(block, lower_single_same_scope(ctx, b, block, &mat.expr));
 
             let no_match = b.block_insert();
+            b.block_set_location(no_match, loc);
             {
                 let typ_val = b.value(Symbol::intern("error"));
                 let badmatch_val = b.value(Symbol::intern("badmatch"));

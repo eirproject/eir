@@ -43,6 +43,9 @@ pub enum EqualityFail {
         right_block: Block,
         left_loc: Location,
         right_loc: Location,
+
+        left_desc: String,
+        right_desc: String,
     },
 }
 
@@ -149,7 +152,7 @@ impl Function {
         }
 
         for (lhs_v, rhs_v) in ctx.map.iter() {
-            match (self.value_block(*lhs_v), self.value_block(*rhs_v)) {
+            match (self.value_block(*lhs_v), rhs.value_block(*rhs_v)) {
                 (Some(lhs_b), Some(rhs_b)) => {
                     if opts.check_block_locations {
                         let l_loc = self.block_location(lhs_b);
@@ -160,6 +163,8 @@ impl Function {
                                 right_block: rhs_b,
                                 left_loc: l_loc,
                                 right_loc: r_loc,
+                                left_desc: self.locations.format_loc(l_loc),
+                                right_desc: rhs.locations.format_loc(r_loc),
                             });
                         }
                     }
