@@ -11,6 +11,12 @@ pub type ParseError = lalrpop_util::ParseError<SourceIndex, Token, ()>;
 
 #[derive(Debug, Snafu)]
 pub enum ParserError {
+    #[snafu(display("{} occurred while reading {:?}", source, path))]
+    RootFile {
+        source: std::io::Error,
+        path: std::path::PathBuf,
+    },
+
     #[snafu(visibility(pub), display("{}", source))]
     Preprocessor { source: PreprocessorError },
 
@@ -62,6 +68,7 @@ impl From<ParseError> for ParserError {
 impl ToDiagnostic for ParserError {
     fn to_diagnostic(&self) -> Diagnostic {
         match self {
+            Self::RootFile { .. } => Diagnostic::error().with_message(self.to_string()),
             Self::ShowDiagnostic { diagnostic } => diagnostic.clone(),
             Self::Preprocessor { source } => source.to_diagnostic(),
             Self::Source { source } => source.to_diagnostic(),

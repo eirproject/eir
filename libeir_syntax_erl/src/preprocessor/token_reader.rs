@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use snafu::ResultExt;
 
-use libeir_diagnostics::CodeMap;
+use libeir_diagnostics::{CodeMap, SourceSpan};
 use libeir_util_parse::{FileMapSource, Scanner, Source};
 
 use crate::lexer::{AtomToken, SymbolToken, TokenConvertError};
@@ -23,7 +23,7 @@ pub trait TokenReader: Sized {
 
     fn new(codemap: Arc<CodeMap>, tokens: Self::Source) -> Self;
 
-    fn inject_include<P>(&mut self, path: P) -> Result<()>
+    fn inject_include<P>(&mut self, path: P, directive: SourceSpan) -> Result<()>
     where
         P: AsRef<Path>;
 
@@ -120,14 +120,15 @@ impl TokenReader for TokenBufferReader {
     }
 
     // Adds tokens from the provided path
-    fn inject_include<P>(&mut self, path: P) -> Result<()>
+    fn inject_include<P>(&mut self, path: P, directive: SourceSpan) -> Result<()>
     where
         P: AsRef<Path>,
     {
         let path = path.as_ref();
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| e.into())
-            .context(errors::Source)?;
+        let content = std::fs::read_to_string(path).context(errors::IncludeError {
+            path: path.to_owned(),
+            span: directive,
+        })?;
         let id = self.codemap.add(path, content);
         let file = self.codemap.get(id).unwrap();
         let source = FileMapSource::new(file);
@@ -180,14 +181,15 @@ where
     }
 
     // Adds tokens from the provided path
-    fn inject_include<P>(&mut self, path: P) -> Result<()>
+    fn inject_include<P>(&mut self, path: P, directive: SourceSpan) -> Result<()>
     where
         P: AsRef<Path>,
     {
         let path = path.as_ref();
-        let content = fs::read_to_string(path)
-            .map_err(|e| e.into())
-            .context(errors::Source)?;
+        let content = fs::read_to_string(path).context(errors::IncludeError {
+            path: path.to_owned(),
+            span: directive,
+        })?;
         let id = self.codemap.add(path, content);
         let file = self.codemap.get(id).unwrap();
         let source = Source::new(file);

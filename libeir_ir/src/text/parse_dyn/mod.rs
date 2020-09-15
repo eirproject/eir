@@ -212,14 +212,14 @@ macro_rules! try_seq {
 }
 
 macro_rules! container_token {
-	($name:ident, $ident:ident) => {
+    ($name:ident, $ident:ident) => {
         pub fn $name(&mut self) -> Result<(&'a [DynToken], SourceSpan), DynParserError> {
             match self.pop()? {
                 DynToken::$ident(inner, span) => Ok((inner, *span)),
                 other => Err(DynParserError::UnexpectedToken { span: other.span() }),
             }
         }
-	};
+    };
 }
 
 pub struct ParseCtx<'a> {
