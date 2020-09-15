@@ -81,7 +81,7 @@ impl Frontend for AbstrErlangFrontend {
     ) -> Result<Module, ()> {
         match std::fs::read_to_string(path) {
             Err(err) => {
-                errors.error(<Root as Parse<Root>>::file_map_error(err.into()).into());
+                errors.error(<Root as Parse<Root>>::root_file_error(err, path.to_owned()).into());
                 Err(())
             }
             Ok(content) => {

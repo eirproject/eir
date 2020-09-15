@@ -1,7 +1,7 @@
 use std::convert::From;
 
 use libeir_diagnostics::*;
-use libeir_util_parse::{ErrorReceiver, Parse, Parser, Scanner, Source, SourceError};
+use libeir_util_parse::{ErrorReceiver, Parse, Parser, Scanner, Source};
 
 use super::ast;
 use super::token::{Lexer, Token};
@@ -25,6 +25,10 @@ pub(crate) mod grammar {
 
 #[derive(Debug)]
 pub enum ParseError {
+    RootFileError {
+        source: std::io::Error,
+        path: std::path::PathBuf,
+    },
     LalrPop(lalrpop_util::ParseError<SourceIndex, Token, ()>),
 }
 impl ParseError {
@@ -42,6 +46,8 @@ impl ToDiagnostic for ParseError {
     fn to_diagnostic(&self) -> Diagnostic {
         use lalrpop_util::ParseError::*;
         match self {
+            Self::RootFileError { source, path } => Diagnostic::error()
+                .with_message(format!("{} occurred when reading {:?}", source, path)),
             Self::LalrPop(InvalidToken { location }) => {
                 let source_id = location.source_id();
                 let index = *location;
@@ -85,8 +91,8 @@ impl Parse for ast::Root {
     type Config = ();
     type Token = Result<(SourceIndex, Token, SourceIndex), ()>;
 
-    fn file_map_error(_err: SourceError) -> Self::Error {
-        unimplemented!()
+    fn root_file_error(source: std::io::Error, path: std::path::PathBuf) -> Self::Error {
+        ParseError::RootFileError { source, path }
     }
 
     fn parse<S>(

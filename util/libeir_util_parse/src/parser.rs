@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use libeir_diagnostics::*;
@@ -55,7 +55,7 @@ impl<C> Parser<C> {
         let path = source.as_ref();
         match std::fs::read_to_string(path) {
             Err(err) => {
-                errors.error(<T as Parse<T>>::file_map_error(err.into()));
+                errors.error(<T as Parse<T>>::root_file_error(err, path.to_owned()));
                 Err(())
             }
             Ok(content) => {
@@ -73,7 +73,7 @@ pub trait Parse<T = Self> {
     type Config;
     type Token;
 
-    fn file_map_error(err: SourceError) -> Self::Error;
+    fn root_file_error(err: std::io::Error, path: PathBuf) -> Self::Error;
 
     /// Initializes a token stream for the underlying parser and invokes parse_tokens
     fn parse<'a, S>(

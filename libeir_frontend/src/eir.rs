@@ -77,7 +77,7 @@ impl Frontend for EirFrontend {
     ) -> Result<Module, ()> {
         match std::fs::read_to_string(path) {
             Err(err) => {
-                errors.error(<ModuleAst as Parse<ModuleAst>>::file_map_error(err.into()).into());
+                errors.error(<ModuleAst as Parse<ModuleAst>>::root_file_error(err, path.to_owned()).into());
                 Err(())
             }
             Ok(content) => {

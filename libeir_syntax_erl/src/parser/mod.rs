@@ -87,8 +87,8 @@ impl GParse for ast::Module {
     type Config = ParseConfig;
     type Token = Preprocessed;
 
-    fn file_map_error(err: SourceError) -> Self::Error {
-        err.into()
+    fn root_file_error(source: std::io::Error, path: std::path::PathBuf) -> Self::Error {
+        ParserError::RootFile { source, path }
     }
 
     fn parse<'a, S>(
@@ -125,8 +125,8 @@ impl GParse for ast::Expr {
     type Config = ParseConfig;
     type Token = Preprocessed;
 
-    fn file_map_error(err: SourceError) -> Self::Error {
-        err.into()
+    fn root_file_error(source: std::io::Error, path: std::path::PathBuf) -> Self::Error {
+        ParserError::RootFile { source, path }
     }
 
     fn parse<S>(parser: &Parser, err: &mut ParserErrorReceiver, source: S) -> Result<Self, ()>
