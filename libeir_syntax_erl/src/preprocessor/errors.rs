@@ -111,7 +111,7 @@ impl PreprocessorError {
         match self {
             PreprocessorError::Lexical { source } => source.to_diagnostic(),
             PreprocessorError::Source { source } => source.to_diagnostic(),
-            PreprocessorError::IncludeError { source, span, .. } => {
+            PreprocessorError::IncludeError { span, .. } => {
                 Diagnostic::error()
                     .with_message(self.to_string())
                     .with_labels(vec![

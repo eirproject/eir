@@ -4,7 +4,6 @@ use std::path::{Component, PathBuf};
 
 use snafu::{ResultExt, Snafu};
 
-use glob::glob;
 use libeir_diagnostics::{Diagnostic, Label, SourceSpan};
 use libeir_util_parse::substitute_path_variables;
 use libeir_util_parse::PathVariableSubstituteError;
@@ -15,6 +14,14 @@ use crate::lexer::{AtomToken, IntegerToken, StringToken, SymbolToken};
 use super::token_reader::{ReadFrom, TokenReader};
 use super::types::{MacroName, MacroVariables};
 use super::{PreprocessorError, Result};
+
+#[derive(Debug)]
+pub enum IncludeLibErrorVariant {
+    NoAppNameComponent,
+    NotFound {
+        searched: Vec<String>,
+    },
+}
 
 #[derive(Debug, Snafu)]
 pub enum DirectiveError {
@@ -30,15 +37,11 @@ pub enum DirectiveError {
         searched: Vec<String>,
     },
 
-    #[snafu(display("glob pattern error: {}", source))]
-    GlobPattern {
+    #[snafu(display("include_lib could not find file"))]
+    IncludeLibError {
         span: SourceSpan,
-        source: glob::PatternError,
-    },
-    #[snafu(display("glob error: {}", source))]
-    Glob {
-        span: SourceSpan,
-        source: glob::GlobError,
+        first_searched: Vec<String>,
+        second: IncludeLibErrorVariant,
     },
 }
 impl DirectiveError {
@@ -49,11 +52,16 @@ impl DirectiveError {
                 .with_labels(vec![Label::primary(span.source_id(), *span)
                     .with_message("in expansion of this path")]),
             DirectiveError::FileNotFound { span, searched } => {
-                let mut aux_msg = format!("search paths:\n");
-                for path in searched.iter() {
-                    aux_msg.push_str(path);
-                    aux_msg.push('\n');
-                }
+                let aux_msg = if searched.is_empty() {
+                    format!("attempted searching include paths, but none were specified\n")
+                } else {
+                    let mut msg = format!("attempted searching search paths:\n");
+                    for path in searched.iter() {
+                        msg.push_str(path);
+                        msg.push('\n');
+                    }
+                    msg
+                };
 
                 Diagnostic::error()
                     .with_message("could not find file")
@@ -62,16 +70,49 @@ impl DirectiveError {
                     ])
                     .with_notes(vec![aux_msg])
             }
-            DirectiveError::GlobPattern { span, source } => Diagnostic::error()
-                .with_message(format!("error in glob pattern: {}", source))
-                .with_labels(vec![
-                    Label::primary(span.source_id(), *span).with_message("in this glob pattern")
-                ]),
-            DirectiveError::Glob { span, source } => Diagnostic::error()
-                .with_message(format!("glob error: {}", source))
-                .with_labels(vec![
-                    Label::primary(span.source_id(), *span).with_message("in this glob pattern")
-                ]),
+            DirectiveError::IncludeLibError { span, first_searched, second } => {
+                let aux_msg_1 = if first_searched.is_empty() {
+                    format!("first, attempted searching include paths, but none were specified\n")
+                } else {
+                    let mut msg = format!("first, attempted searching include paths:\n");
+                    for path in first_searched.iter() {
+                        msg.push_str(" - ");
+                        msg.push_str(path);
+                        msg.push('\n');
+                    }
+                    msg
+                };
+
+                let aux_msg_2 = match second {
+                    IncludeLibErrorVariant::NoAppNameComponent => {
+                        format!("then, attempted searching codepath, but first path component wasn't an application directory!")
+                    },
+                    IncludeLibErrorVariant::NotFound { searched } if searched.is_empty() => {
+                        format!("then, attempted searching codepath, but none were specified\n")
+                    },
+                    IncludeLibErrorVariant::NotFound { searched } => {
+                        let mut msg = format!("then, attempted include from codepath:\n");
+
+                        if searched.is_empty() {
+                            msg.push_str("[]\n");
+                        }
+                        for path in searched.iter() {
+                            msg.push_str(" - ");
+                            msg.push_str(path);
+                            msg.push('\n');
+                        }
+                        
+                        msg
+                    },
+                };
+
+                Diagnostic::error()
+                    .with_message("could not find file")
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), *span).with_message("failed to find file")
+                    ])
+                    .with_notes(vec![aux_msg_1, aux_msg_2])
+            }
         }
     }
 }
@@ -137,6 +178,28 @@ impl ReadFrom for Module {
     }
 }
 
+fn do_include(subs_path: &PathBuf, include_paths: &VecDeque<PathBuf>) -> std::result::Result<PathBuf, Vec<String>> {
+    let mut tmp_path = PathBuf::new();
+    for include_path in include_paths.iter() {
+        tmp_path.push(include_path);
+        tmp_path.push(subs_path);
+        if tmp_path.exists() {
+            return Ok(tmp_path);
+        }
+        tmp_path.clear();
+    }
+
+    let searched: Vec<String> = include_paths
+        .iter()
+        .map(|path| {
+            path.to_str()
+                .map(|v| v.to_owned())
+                .unwrap_or_else(|| path.to_string_lossy().chars().collect())
+        })
+    .collect();
+    Err(searched)
+}
+
 /// `include` directive.
 ///
 /// See [9.1 File Inclusion](http://erlang.org/doc/reference_manual/macros.html#id85412)
@@ -159,29 +222,13 @@ impl Include {
             },
         )?;
 
-        let mut tmp_path;
-        for include_path in include_paths.iter() {
-            tmp_path = PathBuf::new();
-            tmp_path.push(include_path);
-            tmp_path.push(&path);
-            if tmp_path.exists() {
-                return Ok(tmp_path);
-            }
+        match do_include(&path, include_paths) {
+            Ok(path) => Ok(path),
+            Err(searched) => Err(DirectiveError::FileNotFound {
+                span: self.span(),
+                searched,
+            }),
         }
-
-        let searched: Vec<String> = include_paths
-            .iter()
-            .map(|path| {
-                path.to_str()
-                    .map(|v| v.to_owned())
-                    .unwrap_or_else(|| path.to_string_lossy().chars().collect())
-            })
-            .collect();
-
-        Err(DirectiveError::FileNotFound {
-            span: self.span(),
-            searched,
-        })
     }
 
     pub fn span(&self) -> SourceSpan {
@@ -233,40 +280,48 @@ pub struct IncludeLib {
 }
 impl IncludeLib {
     /// Executes file inclusion.
-    pub fn include_lib(&self, code_paths: &VecDeque<PathBuf>) -> DirectiveResult<PathBuf> {
-        let mut path = substitute_path_variables(self.path.symbol().as_str().get()).context(
+    pub fn include_lib(&self, include_paths: &VecDeque<PathBuf>, code_paths: &VecDeque<PathBuf>) -> DirectiveResult<PathBuf> {
+        let path = substitute_path_variables(self.path.symbol().as_str().get()).context(
             PathSubstitute {
                 span: self.path.span(),
             },
         )?;
 
-        let temp_path = path.clone();
-        let mut components = temp_path.components();
-        if let Some(Component::Normal(app_name)) = components.next() {
-            let app_name = app_name
-                .to_str()
-                .expect("internal error: expected app name here");
-            let pattern = format!("{}", app_name);
-            'root: for root in code_paths.iter() {
-                let pattern = root.join(&pattern);
-                let pattern = pattern.to_str().unwrap();
-                if let Some(entry) = glob(pattern)
-                    .context(GlobPattern {
-                        span: self.path.span(),
-                    })?
-                    .nth(0)
-                {
-                    path = entry.context(Glob {
-                        span: self.path.span(),
-                    })?;
-                    for c in components {
-                        path.push(c.as_os_str());
-                    }
-                    break 'root;
+        let first_searched = match do_include(&path, include_paths) {
+            Ok(path) => return Ok(path),
+            Err(searched) => searched,
+        };
+
+        let mut second_searched = Vec::new();
+
+        let components: Vec<_> = path.components().collect();
+        if let Component::Normal(_app_name) = &components[0] {
+            for root in code_paths.iter() {
+                let full_path = root.join(&path);
+                if full_path.exists() {
+                    return Ok(full_path);
                 }
+
+                let string = full_path.to_str()
+                    .map(|v| v.to_owned())
+                    .unwrap_or_else(|| path.to_string_lossy().chars().collect());
+                second_searched.push(string);
             }
+
+            Err(DirectiveError::IncludeLibError {
+                span: self.span(),
+                first_searched,
+                second: IncludeLibErrorVariant::NotFound {
+                    searched: second_searched,
+                },
+            })
+        } else {
+            Err(DirectiveError::IncludeLibError {
+                span: self.span(),
+                first_searched,
+                second: IncludeLibErrorVariant::NoAppNameComponent,
+            })
         }
-        Ok(path)
     }
 
     pub fn span(&self) -> SourceSpan {
