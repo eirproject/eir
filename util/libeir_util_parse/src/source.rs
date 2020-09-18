@@ -1,5 +1,6 @@
 use std::char;
 use std::ops::Range;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use snafu::Snafu;
@@ -22,8 +23,11 @@ pub trait Source: Sized {
 
 #[derive(Debug, Snafu)]
 pub enum SourceError {
-    #[snafu(display("{}", source))]
-    IO { source: std::io::Error },
+    #[snafu(visibility(pub), display("{} while reading {:?}", source, path))]
+    RootFileIO {
+        source: std::io::Error,
+        path: PathBuf,
+    },
 
     #[snafu(display("invalid source path"))]
     InvalidPath { reason: String },
@@ -36,17 +40,14 @@ pub enum SourceError {
 impl SourceError {
     pub fn to_diagnostic(&self) -> Diagnostic {
         match self {
-            SourceError::IO { source } => Diagnostic::error().with_message(source.to_string()),
+            SourceError::RootFileIO { source, path } => {
+                Diagnostic::error().with_message(source.to_string())
+            }
             SourceError::InvalidPath { reason } => {
                 Diagnostic::error().with_message(format!("invalid path: {}", reason))
             }
             SourceError::PathVariableSubstitute { source } => source.to_diagnostic(),
         }
-    }
-}
-impl From<std::io::Error> for SourceError {
-    fn from(source: std::io::Error) -> Self {
-        Self::IO { source }
     }
 }
 

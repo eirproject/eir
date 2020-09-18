@@ -333,15 +333,15 @@ where
                     self.errors,
                     d.include(&self.include_paths).context(errors::BadDirective)
                 )?;
-                error_into!(self.errors, self.reader.inject_include(path))?;
+                error_into!(self.errors, self.reader.inject_include(path, d.span()))?;
             }
             Directive::IncludeLib(ref d) if !ignore => {
                 let path = error_into!(
                     self.errors,
-                    d.include_lib(&self.code_paths)
+                    d.include_lib(&self.include_paths, &self.code_paths)
                         .context(errors::BadDirective)
                 )?;
-                error_into!(self.errors, self.reader.inject_include(path))?;
+                error_into!(self.errors, self.reader.inject_include(path, d.span()))?;
             }
             Directive::Define(ref d) if !ignore => {
                 self.macros.insert(d, MacroDef::Static(d.clone()));

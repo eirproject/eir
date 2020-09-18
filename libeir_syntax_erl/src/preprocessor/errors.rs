@@ -1,4 +1,5 @@
 use std;
+use std::path::PathBuf;
 
 use itertools::Itertools;
 use snafu::Snafu;
@@ -22,6 +23,16 @@ pub enum PreprocessorError {
 
     #[snafu(visibility(pub), display("{}", source))]
     Source { source: SourceError },
+
+    #[snafu(
+        visibility(pub),
+        display("{} occurred while including {:?}", source, path)
+    )]
+    IncludeError {
+        source: std::io::Error,
+        path: PathBuf,
+        span: SourceSpan,
+    },
 
     #[snafu(display("unable to parse constant expression"))]
     ParseError {
@@ -104,6 +115,14 @@ impl PreprocessorError {
         match self {
             PreprocessorError::Lexical { source } => source.to_diagnostic(),
             PreprocessorError::Source { source } => source.to_diagnostic(),
+            PreprocessorError::IncludeError { span, .. } => {
+                Diagnostic::error()
+                    .with_message(self.to_string())
+                    .with_labels(vec![
+                        Label::primary(span.source_id(), *span)
+                        .with_message("while processing include directive"),
+                    ])
+            },
             PreprocessorError::ParseError { span, inner } => {
                 let err = inner.to_diagnostic();
                 let mut labels = vec![
@@ -273,11 +292,6 @@ impl From<TokenConvertError> for PreprocessorError {
             token,
             expected: err.expected.to_string(),
         }
-    }
-}
-impl From<std::io::Error> for PreprocessorError {
-    fn from(err: std::io::Error) -> Self {
-        PreprocessorError::Source { source: err.into() }
     }
 }
 impl From<Diagnostic> for PreprocessorError {

@@ -59,8 +59,8 @@ impl Parse for super::ast::Module {
     type Config = ();
     type Token = std::result::Result<(SourceIndex, Token, SourceIndex), ParserError>;
 
-    fn file_map_error(err: SourceError) -> Self::Error {
-        ParserError::Source { source: err }
+    fn root_file_error(source: std::io::Error, path: std::path::PathBuf) -> Self::Error {
+        ParserError::RootFileError { source, path }
     }
 
     fn parse_tokens<S>(errors: &mut ParserErrorReceiver, tokens: S) -> Result<Self, ()>
@@ -100,8 +100,8 @@ impl Parse for NamedFunction {
     type Config = ();
     type Token = std::result::Result<(SourceIndex, Token, SourceIndex), ParserError>;
 
-    fn file_map_error(err: SourceError) -> Self::Error {
-        ParserError::Source { source: err }
+    fn root_file_error(source: std::io::Error, path: std::path::PathBuf) -> Self::Error {
+        ParserError::RootFileError { source, path }
     }
 
     fn parse_tokens<S>(errors: &mut ParserErrorReceiver, tokens: S) -> Result<Self, ()>

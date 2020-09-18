@@ -1,4 +1,5 @@
 use snafu::Snafu;
+use std::path::PathBuf;
 
 use libeir_diagnostics::{Diagnostic, Label, SourceIndex, SourceSpan, ToDiagnostic};
 use libeir_util_parse::SourceError;
@@ -13,6 +14,12 @@ pub type Errors = libeir_util_parse::Errors<ParserError, ParserError>;
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(super)")]
 pub enum ParserError {
+    #[snafu(display("{} occurred while reading {:?}", source, path))]
+    RootFileError {
+        source: std::io::Error,
+        path: PathBuf,
+    },
+
     #[snafu(display("{}", source))]
     Source {
         source: SourceError,
