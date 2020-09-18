@@ -3,12 +3,15 @@ use std::convert::TryInto;
 
 use cranelift_entity::EntityList;
 
-use libeir_ir::{AtomicTerm, BigIntTerm, BinaryTerm, Block, FunctionBuilder, IntTerm, NilTerm};
+use libeir_ir::{
+    AtomicTerm, BigIntTerm, BinaryTerm, Block, FloatTerm, FunctionBuilder, IntTerm, NilTerm,
+};
 
 use libeir_diagnostics::SourceSpan;
 
 use libeir_util_number::bigint::BigInt;
 
+use crate::evaluator::{eval_expr, Term};
 use crate::lower::{lower_single, LowerCtx, LowerError};
 use crate::parser::ast::{Binary, BinaryExpr, BinaryOp, Expr, Literal, UnaryExpr, UnaryOp, Var};
 
@@ -63,56 +66,98 @@ fn pattern_to_tree_node_append_tail(
     }
 }
 
-fn eval_const_expr(
-    ctx: &mut LowerCtx,
-    b: &mut FunctionBuilder,
-    pre_block: &mut Block,
-    expr: &Expr,
-) -> AtomicTerm {
-    match expr {
-        Expr::Literal(lit) => match lit {
-            Literal::Integer(_span, _id, int) => int.clone().into(),
-            val => unimplemented!("{:?}", val),
-        },
-        Expr::UnaryExpr(
-            unary @ UnaryExpr {
-                op: UnaryOp::Minus, ..
-            },
-        ) => match eval_const_expr(ctx, b, pre_block, &unary.operand) {
-            AtomicTerm::Int(IntTerm(int)) => AtomicTerm::Int(IntTerm(-int)),
-            val => unimplemented!("{:?}", val),
-        },
-        Expr::BinaryExpr(
-            binary @ BinaryExpr {
-                op: BinaryOp::Add, ..
-            },
-        ) => {
-            let lhs = eval_const_expr(ctx, b, pre_block, &binary.lhs);
-            let rhs = eval_const_expr(ctx, b, pre_block, &binary.rhs);
-            match (lhs, rhs) {
-                (AtomicTerm::Int(IntTerm(l)), AtomicTerm::Int(IntTerm(r))) => {
-                    AtomicTerm::Int(IntTerm(l + r))
-                }
-                val => unimplemented!("{:?}", val),
-            }
-        }
-        Expr::BinaryExpr(
-            binary @ BinaryExpr {
-                op: BinaryOp::Bsl, ..
-            },
-        ) => {
-            let lhs = eval_const_expr(ctx, b, pre_block, &binary.lhs);
-            let rhs = eval_const_expr(ctx, b, pre_block, &binary.rhs);
-            match (lhs, rhs) {
-                (AtomicTerm::Int(IntTerm(l)), AtomicTerm::Int(IntTerm(r))) => {
-                    AtomicTerm::BigInt(BigIntTerm(BigInt::from(l) << r.try_into().unwrap()))
-                }
-                val => unimplemented!("{:?}", val),
-            }
-        }
-        _ => unimplemented!("{:?}", expr),
-    }
-}
+//fn eval_const_expr(
+//    ctx: &mut LowerCtx,
+//    b: &mut FunctionBuilder,
+//    pre_block: &mut Block,
+//    expr: &Expr,
+//) -> Option<AtomicTerm> {
+//    use libeir_util_number::Integer;
+//    macro_rules! toi {
+//        ($int:expr) => {{
+//            let r: Integer = ($int).into();
+//            r
+//        }};
+//    }
+//
+//    let res = match expr {
+//        Expr::Literal(lit) => match lit {
+//            Literal::Integer(_span, _id, int) => int.clone().into(),
+//            Literal::Float(_span, _id, float) => (*float).into(),
+//
+//            _ => {
+//                ctx.error(LowerError::InvalidPatternConstExpression {
+//                    span: bin_expr.span,
+//                });
+//                return None;
+//            }
+//        },
+//        Expr::UnaryExpr(
+//            unary @ UnaryExpr {
+//                op: UnaryOp::Minus, ..
+//            },
+//        ) => match eval_const_expr(ctx, b, pre_block, &unary.operand)? {
+//            AtomicTerm::Int(IntTerm(int)) => AtomicTerm::Int(IntTerm(-int)),
+//            val => unimplemented!("{:?}", val),
+//        },
+//        Expr::BinaryExpr(bin_expr) => {
+//            use AtomicTerm as A;
+//            use BinaryOp as B;
+//
+//            let lhs = eval_const_expr(ctx, b, pre_block, &bin_expr.lhs)?;
+//            let rhs = eval_const_expr(ctx, b, pre_block, &bin_expr.rhs)?;
+//
+//            match (bin_expr.op, lhs, rhs) {
+//                (B::Add, A::Int(IntTerm(l)), A::Int(IntTerm(r))) => (toi!(l) + &toi!(r)).into(),
+//                (B::Add, A::Int(IntTerm(l)), A::Float(FloatTerm(r))) => (l as f64 + r).into(),
+//                (B::Add, A::Float(FloatTerm(l)), A::Int(IntTerm(r))) => (l + r as f64).into(),
+//                (B::Add, A::Float(FloatTerm(l)), A::Float(FloatTerm(r))) => (l + r).into(),
+//
+//                (B::Sub, A::Int(IntTerm(l)), A::Int(IntTerm(r))) => (toi!(l) - &toi!(r)).into(),
+//                (B::Sub, A::Int(IntTerm(l)), A::Float(FloatTerm(r))) => (l as f64 - r).into(),
+//                (B::Sub, A::Float(FloatTerm(l)), A::Int(IntTerm(r))) => (l - r as f64).into(),
+//                (B::Sub, A::Float(FloatTerm(l)), A::Float(FloatTerm(r))) => (l - r).into(),
+//
+//                _ => {
+//                    ctx.error(LowerError::InvalidPatternConstExpression {
+//                        span: bin_expr.span,
+//                    });
+//                    return None;
+//                }
+//            }
+//        }
+//        Expr::BinaryExpr(
+//            binary @ BinaryExpr {
+//                op: BinaryOp::Add, ..
+//            },
+//        ) => {
+//            let lhs = eval_const_expr(ctx, b, pre_block, &binary.lhs)?;
+//            let rhs = eval_const_expr(ctx, b, pre_block, &binary.rhs)?;
+//            match (lhs, rhs) {
+//                (AtomicTerm::Int(IntTerm(l)), AtomicTerm::Int(IntTerm(r))) => {
+//                    AtomicTerm::Int(IntTerm(l + r))
+//                }
+//                val => unimplemented!("{:?}", val),
+//            }
+//        }
+//        Expr::BinaryExpr(
+//            binary @ BinaryExpr {
+//                op: BinaryOp::Bsl, ..
+//            },
+//        ) => {
+//            let lhs = eval_const_expr(ctx, b, pre_block, &binary.lhs)?;
+//            let rhs = eval_const_expr(ctx, b, pre_block, &binary.rhs)?;
+//            match (lhs, rhs) {
+//                (AtomicTerm::Int(IntTerm(l)), AtomicTerm::Int(IntTerm(r))) => {
+//                    AtomicTerm::BigInt(BigIntTerm(BigInt::from(l) << r.try_into().unwrap()))
+//                }
+//                val => unimplemented!("{:?}", val),
+//            }
+//        }
+//        _ => unimplemented!("{:?}", expr),
+//    };
+//    Some(res)
+//}
 
 impl Tree {
     pub(crate) fn add_root(
@@ -383,9 +428,25 @@ fn pattern_to_tree_node(
             })
         }
         expr => {
-            let atomic_term = eval_const_expr(ctx, b, pre_block, expr);
-            let cons = b.cons_mut().from(atomic_term);
-            t.nodes.push(TreeNodeKind::Atomic(expr.span(), cons))
+            match eval_expr(expr) {
+                Ok(term) => {
+                    let constant = match term {
+                        Term::Number(num) => b.cons_mut().from(num),
+                        _ => unreachable!(),
+                    };
+                    t.nodes.push(TreeNodeKind::Atomic(expr.span(), constant))
+                }
+                Err(error) => {
+                    ctx.error(LowerError::PatternConst {
+                        source: error,
+                        span: expr.span(),
+                    });
+
+                    // In this path compilation has failed.
+                    // Add a wildcard to don't affect other parts of the compilation.
+                    t.nodes.push(TreeNodeKind::Wildcard(expr.span()))
+                }
+            }
         }
     }
 }

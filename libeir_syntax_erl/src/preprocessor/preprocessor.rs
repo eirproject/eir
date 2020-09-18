@@ -8,6 +8,7 @@ use snafu::ResultExt;
 use libeir_diagnostics::*;
 use libeir_util_parse::{ErrorReceiver, ErrorReceiverTee, Source};
 
+use crate::evaluator;
 use crate::lexer::Lexer;
 use crate::lexer::{symbols, DelayedSubstitution, IdentToken, Lexed, LexicalToken, Symbol, Token};
 use crate::parser::Parser;
@@ -452,7 +453,6 @@ where
         use crate::lexer::Ident;
         use crate::parser::ast::{Expr, Literal};
         use crate::parser::Parse;
-        use crate::preprocessor::evaluator;
 
         let result = {
             let mut adapter = self.errors.make_adapter(
@@ -472,17 +472,9 @@ where
             //);
             Expr::parse_tokens(&mut adapter, pp)
         };
-        match evaluator::eval(result?) {
-            Ok(Expr::Literal(Literal::Atom(_, Ident { ref name, .. })))
-                if *name == symbols::True =>
-            {
-                Ok(true)
-            }
-            Ok(Expr::Literal(Literal::Atom(_, Ident { ref name, .. })))
-                if *name == symbols::False =>
-            {
-                Ok(false)
-            }
+        match evaluator::eval_expr(&result?) {
+            Ok(evaluator::Term::Atom(atom)) if atom == symbols::True => Ok(true),
+            Ok(evaluator::Term::Atom(atom)) if atom == symbols::False => Ok(false),
             Err(err) => {
                 self.errors.error(err.into());
                 return Err(());

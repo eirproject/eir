@@ -1,7 +1,9 @@
 //#![deny(warnings)]
 #![feature(trait_alias)]
+#![feature(or_patterns)]
 
 mod abstr;
+mod evaluator;
 mod lexer;
 mod lower;
 mod parser;

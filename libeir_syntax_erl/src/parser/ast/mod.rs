@@ -65,7 +65,7 @@ impl NodeIdGenerator {
 }
 
 /// The set of all binary operators which may be used in expressions
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BinaryOp {
     // 100 !, right associative
     Send,
@@ -104,7 +104,7 @@ pub enum BinaryOp {
 }
 
 /// The set of all unary (prefix) operators which may be used in expressions
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum UnaryOp {
     // 600 <all prefix operators>
     Plus,

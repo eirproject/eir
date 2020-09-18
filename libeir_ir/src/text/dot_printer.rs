@@ -17,6 +17,7 @@ where
 
     let mut config = pr::FormatConfig {
         width: 80,
+        print_locations: true,
         block_iterator_config: pr::DfsBlockIteratorConfig,
         value_formatter: pr::StandardValueFormatter,
         block_value_layout: pr::ReferencePrimopBlockValueLayout::default(),

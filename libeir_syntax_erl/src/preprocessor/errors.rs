@@ -5,6 +5,7 @@ use snafu::Snafu;
 
 use libeir_diagnostics::*;
 use libeir_intern::Symbol;
+use libeir_util_number::FloatError;
 use libeir_util_parse::SourceError;
 
 use crate::lexer::{LexicalError, LexicalToken, TokenConvertError};
@@ -36,6 +37,9 @@ pub enum PreprocessorError {
 
     #[snafu(display("invalid constant expression found in preprocessor directive"))]
     InvalidConstExpression { span: SourceSpan },
+
+    #[snafu(display("constant evaluation error"))]
+    EvalError { source: crate::evaluator::EvalError },
 
     #[snafu(visibility(pub))]
     BadDirective { source: DirectiveError },
@@ -129,6 +133,7 @@ impl PreprocessorError {
                         Label::primary(span.source_id(), *span)
                             .with_message("expected valid constant expression (example: `?OTP_VERSION >= 21`)")
                     ]),
+            PreprocessorError::EvalError { source } => source.to_diagnostic(),
             PreprocessorError::BadDirective { source } => source.to_diagnostic(),
             PreprocessorError::InvalidConditional { span, .. } =>
                 Diagnostic::error()
@@ -278,5 +283,11 @@ impl From<std::io::Error> for PreprocessorError {
 impl From<Diagnostic> for PreprocessorError {
     fn from(diagnostic: Diagnostic) -> Self {
         PreprocessorError::ShowDiagnostic { diagnostic }
+    }
+}
+
+impl From<crate::evaluator::EvalError> for PreprocessorError {
+    fn from(source: crate::evaluator::EvalError) -> Self {
+        PreprocessorError::EvalError { source }
     }
 }

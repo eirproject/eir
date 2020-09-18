@@ -1,24 +1,45 @@
+use crate::{DivisionError, Float, FloatError};
+
 use std::cmp::Ordering;
 use std::convert::TryInto;
 use std::fmt::{Display, Formatter};
-use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
+use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub};
 use std::str::FromStr;
 
 use num_bigint::{BigInt, ParseBigIntError};
-pub use num_traits::{FromPrimitive, ToPrimitive};
+pub use num_traits::{FromPrimitive, ToPrimitive, Zero};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub enum Integer {
     Small(i64),
     Big(BigInt),
 }
 
 impl Integer {
+    pub fn is_zero(&self) -> bool {
+        match self {
+            Integer::Small(num) => *num == 0,
+            Integer::Big(num) => num.is_zero(),
+        }
+    }
+
+    pub fn plus(&self) -> Integer {
+        match self {
+            Integer::Small(num) if num < &0 => Integer::Small(-num),
+            Integer::Big(num) if num < &0 => Integer::Big(-num.clone()),
+            _ => self.clone(),
+        }
+    }
+
     pub fn to_float(&self) -> f64 {
         match self {
             Integer::Small(int) => *int as f64,
             Integer::Big(int) => crate::bigint_to_double(int),
         }
+    }
+
+    pub fn to_efloat(&self) -> Result<Float, FloatError> {
+        Float::new(self.to_float())
     }
 
     pub fn to_bigint(self) -> BigInt {
@@ -181,6 +202,21 @@ impl PartialOrd<Integer> for i64 {
     }
 }
 
+impl Shr<u32> for Integer {
+    type Output = Integer;
+    fn shr(self, num: u32) -> Integer {
+        let big = self.to_bigint() >> (num as usize);
+        Integer::Big(big).shrink()
+    }
+}
+impl Shl<u32> for Integer {
+    type Output = Integer;
+    fn shl(self, num: u32) -> Integer {
+        let big = self.to_bigint() << (num as usize);
+        Integer::Big(big).shrink()
+    }
+}
+
 impl Mul<i64> for Integer {
     type Output = Integer;
     fn mul(self, rhs: i64) -> Integer {
@@ -206,14 +242,18 @@ impl Mul<&Integer> for Integer {
     }
 }
 impl Div<&Integer> for Integer {
-    type Output = Integer;
-    fn div(self, rhs: &Integer) -> Integer {
+    type Output = Result<Integer, DivisionError>;
+    fn div(self, rhs: &Integer) -> Self::Output {
+        if rhs.is_zero() {
+            return Err(DivisionError);
+        }
+
         let mut lhs = self.to_bigint();
         match rhs {
             Integer::Small(rhs) => lhs = lhs / rhs,
             Integer::Big(rhs) => lhs /= rhs,
         }
-        Integer::Big(lhs).shrink()
+        Ok(Integer::Big(lhs).shrink())
     }
 }
 impl Add<&Integer> for Integer {
@@ -250,18 +290,52 @@ impl Rem<&Integer> for Integer {
     }
 }
 
+impl BitAnd<&Integer> for Integer {
+    type Output = Integer;
+    fn bitand(self, rhs: &Integer) -> Integer {
+        let l = self.to_bigint();
+        match rhs {
+            Integer::Small(r) => l & BigInt::from(*r),
+            Integer::Big(r) => l & r,
+        }
+        .into()
+    }
+}
+impl BitOr<&Integer> for Integer {
+    type Output = Integer;
+    fn bitor(self, rhs: &Integer) -> Integer {
+        let l = self.to_bigint();
+        match rhs {
+            Integer::Small(r) => l | BigInt::from(*r),
+            Integer::Big(r) => l | r,
+        }
+        .into()
+    }
+}
+impl BitXor<&Integer> for Integer {
+    type Output = Integer;
+    fn bitxor(self, rhs: &Integer) -> Integer {
+        let l = self.to_bigint();
+        match rhs {
+            Integer::Small(r) => l ^ BigInt::from(*r),
+            Integer::Big(r) => l ^ r,
+        }
+        .into()
+    }
+}
+
 impl Neg for Integer {
     type Output = Integer;
-    fn neg(self) -> Self {
+    fn neg(self) -> Integer {
         match self {
             Integer::Small(int) => Integer::Small(-int),
             Integer::Big(int) => Integer::Big(-int),
         }
     }
 }
-impl Not for Integer {
+impl Not for &Integer {
     type Output = Integer;
-    fn not(self) -> Self {
+    fn not(self) -> Integer {
         match self {
             Integer::Small(int) => Integer::Small(!int),
             Integer::Big(int) => Integer::Big(!int),
@@ -310,5 +384,15 @@ impl From<i32> for Integer {
 impl From<usize> for Integer {
     fn from(i: usize) -> Integer {
         Integer::from_usize(i).unwrap()
+    }
+}
+impl From<char> for Integer {
+    fn from(i: char) -> Integer {
+        Integer::from_u64(i as u64).unwrap()
+    }
+}
+impl From<BigInt> for Integer {
+    fn from(i: BigInt) -> Integer {
+        Integer::Big(i)
     }
 }

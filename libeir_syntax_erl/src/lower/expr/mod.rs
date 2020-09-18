@@ -7,7 +7,7 @@ use libeir_intern::{Ident, Symbol};
 use super::lower_function;
 
 use super::pattern::lower_clause;
-use super::LowerCtx;
+use super::{LowerCtx, LowerError};
 
 use crate::parser::ast::UnaryOp;
 use crate::parser::ast::{Apply, Remote, UnaryExpr};
@@ -389,8 +389,15 @@ fn lower_expr(
             block,
             &Literal::Integer(*span, *id, b.fun().ident().arity.into()),
         ),
-        _ => {
-            unimplemented!("{:?}", expr);
+        Expr::Remote(rem) => {
+            ctx.error(LowerError::IllegalExpression { span: rem.span });
+            (block, ctx.sentinel())
         }
+        Expr::MapProjection(_) => unreachable!(),
+        Expr::BinaryGenerator(_) => unreachable!(),
+        Expr::Generator(_) => unreachable!(),
+        //_ => {
+        //    unimplemented!("{:?}", expr);
+        //}
     }
 }

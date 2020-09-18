@@ -1,6 +1,7 @@
 use libeir_diagnostics::SourceSpan;
 use libeir_intern::Ident;
 use libeir_ir::ToPrimitive;
+use libeir_util_number::Float;
 use libeir_util_parse::MessageIgnore;
 
 use std::convert::TryInto;
@@ -655,7 +656,11 @@ fn lower_expr(gen: &mut ast::NodeIdGenerator, expr: &aast::Item) -> ast::Expr {
         }
         "float" => {
             let float = tup.entries[2].float().unwrap();
-            ast::Expr::Literal(ast::Literal::Float(span, gen.next(), float.float))
+            ast::Expr::Literal(ast::Literal::Float(
+                span,
+                gen.next(),
+                Float::new(float.float).unwrap(),
+            ))
         }
         "catch" => ast::Expr::Catch(ast::Catch {
             span,

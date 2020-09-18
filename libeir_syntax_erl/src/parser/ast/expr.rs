@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use libeir_diagnostics::SourceSpan;
-use libeir_util_number::Integer;
+use libeir_util_number::{Float, Integer, Number};
 
 use super::NodeId;
 use super::{BinaryOp, Ident, UnaryOp};
@@ -136,33 +136,33 @@ impl Expr {
         Expr::Binary(bin)
     }
 }
-impl PartialOrd for Expr {
-    // number < atom < reference < fun < port < pid < tuple < map < nil < list < bit string
-    fn partial_cmp(&self, other: &Expr) -> Option<Ordering> {
-        match (self, other) {
-            (&Expr::Binary(_), &Expr::Binary(_)) => None,
-            (&Expr::Binary(_), _) => Some(Ordering::Greater),
-            (_, &Expr::Binary(_)) => Some(Ordering::Less),
-            (&Expr::Cons(ref lhs), &Expr::Cons(ref rhs)) => lhs.partial_cmp(rhs),
-            (&Expr::Cons(_), _) => Some(Ordering::Greater),
-            (_, &Expr::Cons(_)) => Some(Ordering::Less),
-            (&Expr::Nil(_), &Expr::Nil(_)) => Some(Ordering::Equal),
-            (&Expr::Nil(_), _) => Some(Ordering::Greater),
-            (_, &Expr::Nil(_)) => Some(Ordering::Less),
-            (&Expr::Map(ref lhs), &Expr::Map(ref rhs)) => lhs.partial_cmp(rhs),
-            (&Expr::Map(_), _) => Some(Ordering::Greater),
-            (_, &Expr::Map(_)) => Some(Ordering::Less),
-            (&Expr::Tuple(ref lhs), &Expr::Tuple(ref rhs)) => lhs.partial_cmp(rhs),
-            (&Expr::Tuple(_), _) => Some(Ordering::Greater),
-            (_, &Expr::Tuple(_)) => Some(Ordering::Less),
-            (&Expr::Fun(_), &Expr::Fun(_)) => None,
-            (&Expr::Fun(_), _) => Some(Ordering::Greater),
-            (_, &Expr::Fun(_)) => Some(Ordering::Less),
-            (&Expr::Literal(ref lhs), &Expr::Literal(ref rhs)) => lhs.partial_cmp(rhs),
-            _ => None,
-        }
-    }
-}
+//impl PartialOrd for Expr {
+//    // number < atom < reference < fun < port < pid < tuple < map < nil < list < bit string
+//    fn partial_cmp(&self, other: &Expr) -> Option<Ordering> {
+//        match (self, other) {
+//            (&Expr::Binary(_), &Expr::Binary(_)) => None,
+//            (&Expr::Binary(_), _) => Some(Ordering::Greater),
+//            (_, &Expr::Binary(_)) => Some(Ordering::Less),
+//            (&Expr::Cons(ref lhs), &Expr::Cons(ref rhs)) => lhs.partial_cmp(rhs),
+//            (&Expr::Cons(_), _) => Some(Ordering::Greater),
+//            (_, &Expr::Cons(_)) => Some(Ordering::Less),
+//            (&Expr::Nil(_), &Expr::Nil(_)) => Some(Ordering::Equal),
+//            (&Expr::Nil(_), _) => Some(Ordering::Greater),
+//            (_, &Expr::Nil(_)) => Some(Ordering::Less),
+//            (&Expr::Map(ref lhs), &Expr::Map(ref rhs)) => lhs.partial_cmp(rhs),
+//            (&Expr::Map(_), _) => Some(Ordering::Greater),
+//            (_, &Expr::Map(_)) => Some(Ordering::Less),
+//            (&Expr::Tuple(ref lhs), &Expr::Tuple(ref rhs)) => lhs.partial_cmp(rhs),
+//            (&Expr::Tuple(_), _) => Some(Ordering::Greater),
+//            (_, &Expr::Tuple(_)) => Some(Ordering::Less),
+//            (&Expr::Fun(_), &Expr::Fun(_)) => None,
+//            (&Expr::Fun(_), _) => Some(Ordering::Greater),
+//            (_, &Expr::Fun(_)) => Some(Ordering::Less),
+//            (&Expr::Literal(ref lhs), &Expr::Literal(ref rhs)) => lhs.partial_cmp(rhs),
+//            _ => None,
+//        }
+//    }
+//}
 
 #[derive(Debug, Clone)]
 pub struct Var(pub NodeId, pub Ident);
@@ -194,14 +194,14 @@ impl PartialEq for Cons {
         self.head == other.head && self.tail == other.tail
     }
 }
-impl PartialOrd for Cons {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match self.head.partial_cmp(&other.head) {
-            None => self.tail.partial_cmp(&other.tail),
-            Some(order) => Some(order),
-        }
-    }
-}
+//impl PartialOrd for Cons {
+//    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+//        match self.head.partial_cmp(&other.head) {
+//            None => self.tail.partial_cmp(&other.tail),
+//            Some(order) => Some(order),
+//        }
+//    }
+//}
 
 #[derive(Debug, Clone)]
 pub struct Tuple {
@@ -214,11 +214,11 @@ impl PartialEq for Tuple {
         self.elements == other.elements
     }
 }
-impl PartialOrd for Tuple {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.elements.partial_cmp(&other.elements)
-    }
-}
+//impl PartialOrd for Tuple {
+//    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+//        self.elements.partial_cmp(&other.elements)
+//    }
+//}
 
 #[derive(Debug, Clone)]
 pub struct Map {
@@ -231,11 +231,11 @@ impl PartialEq for Map {
         self.fields == other.fields
     }
 }
-impl PartialOrd for Map {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.fields.partial_cmp(&other.fields)
-    }
-}
+//impl PartialOrd for Map {
+//    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+//        self.fields.partial_cmp(&other.fields)
+//    }
+//}
 
 // Updating fields on an existing map, e.g. `Map#{field1 = value1}.`
 #[derive(Debug, Clone)]
@@ -278,7 +278,7 @@ pub enum Literal {
     Binary(NodeId, Ident),
     Char(SourceSpan, NodeId, char),
     Integer(SourceSpan, NodeId, Integer),
-    Float(SourceSpan, NodeId, f64),
+    Float(SourceSpan, NodeId, Float),
 }
 impl Literal {
     pub fn span(&self) -> SourceSpan {
@@ -331,19 +331,43 @@ impl PartialOrd for Literal {
             (Literal::Atom(_, ref lhs), Literal::Atom(_, ref rhs)) => lhs.partial_cmp(rhs),
             (Literal::Atom(_, _), _) => Some(Ordering::Greater),
             (_, Literal::Atom(_, _)) => Some(Ordering::Less),
-            (Literal::Integer(_, _, x), Literal::Integer(_, _, y)) => x.partial_cmp(y),
-            (Literal::Integer(_, _, x), Literal::Float(_, _, y)) => x.partial_cmp(y),
-            (Literal::Integer(_, _, x), Literal::Char(_, _, y)) => x.partial_cmp(y),
-            (Literal::Float(_, _, x), Literal::Float(_, _, y)) => x.partial_cmp(y),
-            (Literal::Float(_, _, x), Literal::Integer(_, _, y)) => x.partial_cmp(y),
-            (Literal::Float(_, _, x), Literal::Char(_, _, y)) => {
-                x.partial_cmp(&((*y as i64) as f64))
+
+            (
+                l @ (Literal::Integer(_, _, _) | Literal::Float(_, _, _) | Literal::Char(_, _, _)),
+                r @ (Literal::Integer(_, _, _) | Literal::Float(_, _, _) | Literal::Char(_, _, _)),
+            ) => {
+                let to_num = |lit: &Literal| match lit {
+                    Literal::Integer(_, _, x) => x.clone().into(),
+                    Literal::Float(_, _, x) => x.clone().into(),
+                    Literal::Char(_, _, x) => {
+                        let int: Integer = (*x).into();
+                        int.into()
+                    }
+                    _ => unreachable!(),
+                };
+
+                let ln: Number = to_num(l);
+                let rn: Number = to_num(r);
+
+                ln.partial_cmp(&rn)
             }
-            (Literal::Char(_, _, x), Literal::Char(_, _, y)) => x.partial_cmp(y),
-            (Literal::Char(_, _, x), Literal::Integer(_, _, y)) => x.partial_cmp(y),
-            (Literal::Char(_, _, x), Literal::Float(_, _, y)) => {
-                ((*x as i64) as f64).partial_cmp(y)
-            }
+
+            _ => unimplemented!(),
+            //(Literal::Integer(_, _, x), Literal::Integer(_, _, y)) => x.partial_cmp(y),
+            //(Literal::Integer(_, _, x), Literal::Float(_, _, y)) => x.partial_cmp(y),
+            //(Literal::Integer(_, _, x), Literal::Char(_, _, y)) => x.partial_cmp(y),
+            //(Literal::Float(_, _, x), Literal::Float(_, _, y)) => x.partial_cmp(y),
+            //(Literal::Float(_, _, x), Literal::Integer(_, _, y)) => {
+            //    PartialOrd::<&Integer>::partial_cmp(x, y)
+            //}
+            //(Literal::Float(_, _, x), Literal::Char(_, _, y)) => {
+            //    x.partial_cmp(&Float::new(((*y as i64) as f64)).unwrap())
+            //}
+            //(Literal::Char(_, _, x), Literal::Char(_, _, y)) => x.partial_cmp(y),
+            //(Literal::Char(_, _, x), Literal::Integer(_, _, y)) => x.partial_cmp(y),
+            //(Literal::Char(_, _, x), Literal::Float(_, _, y)) => {
+            //    Float::new((*x as i64) as f64).unwrap().partial_cmp(y)
+            //}
         }
     }
 }
@@ -394,15 +418,15 @@ impl PartialEq for MapField {
         (self.key() == other.key()) && (self.value() == other.value())
     }
 }
-impl PartialOrd for MapField {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match self.key().partial_cmp(&other.key()) {
-            None => None,
-            Some(Ordering::Equal) => self.value().partial_cmp(&other.value()),
-            Some(order) => Some(order),
-        }
-    }
-}
+//impl PartialOrd for MapField {
+//    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+//        match self.key().partial_cmp(&other.key()) {
+//            None => None,
+//            Some(Ordering::Equal) => self.value().partial_cmp(&other.value()),
+//            Some(order) => Some(order),
+//        }
+//    }
+//}
 
 #[derive(Debug, Clone)]
 pub struct Record {

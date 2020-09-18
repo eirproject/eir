@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use libeir_diagnostics::{ByteOffset, SourceIndex, SourceSpan};
 
-use libeir_util_number::{Integer, ToPrimitive};
+use libeir_util_number::{Float, FloatError, Integer, ToPrimitive};
 use libeir_util_parse::{Scanner, Source};
 
 use super::errors::LexicalError;
@@ -799,13 +799,19 @@ where
     }
 
     fn to_float_literal(&self, num: String) -> Token {
-        match f64::from_str(&num) {
-            Ok(f) => Token::Float(f),
-            Err(e) => Token::Error(LexicalError::InvalidFloat {
-                span: self.span(),
-                reason: e.to_string(),
-            }),
-        }
+        let reason = match f64::from_str(&num) {
+            Ok(f) => match Float::new(f) {
+                Ok(f) => return Token::Float(f),
+                Err(FloatError::Nan) => "float cannot be NaN".to_string(),
+                Err(FloatError::Infinite) => "float cannot be -Inf or Inf".to_string(),
+            },
+            Err(e) => e.to_string(),
+        };
+
+        Token::Error(LexicalError::InvalidFloat {
+            span: self.span(),
+            reason,
+        })
     }
 }
 
@@ -841,6 +847,7 @@ fn to_integer_literal(literal: &str, radix: u32) -> Token {
 #[cfg(test)]
 mod test {
     use libeir_diagnostics::{ByteIndex, CodeMap, SourceId, SourceIndex, SourceSpan};
+    use libeir_util_number::Float;
     use libeir_util_parse::{FileMapSource, Scanner, Source};
     use pretty_assertions::assert_eq;
 
@@ -887,45 +894,42 @@ mod test {
         assert_lex!("% @author Paul", |_| vec![Ok(Token::Edoc)]);
     }
 
+    macro_rules! f {
+        ($float:expr) => {
+            Token::Float(Float::new($float).unwrap())
+        };
+    }
+
     #[test]
     fn lex_float_literal() {
         // With leading 0
-        assert_lex!("0.0", |_| vec![Ok(Token::Float(0.0))]);
-        assert_lex!("000051.0", |_| vec![Ok(Token::Float(51.0))]);
-        assert_lex!("05162.0", |_| vec![Ok(Token::Float(5162.0))]);
-        assert_lex!("099.0", |_| vec![Ok(Token::Float(99.0))]);
-        assert_lex!("04624.51235", |_| vec![Ok(Token::Float(4624.51235))]);
-        assert_lex!("0.987", |_| vec![Ok(Token::Float(0.987))]);
-        assert_lex!("0.55e10", |_| vec![Ok(Token::Float(0.55e10))]);
-        assert_lex!("612.0e61", |_| vec![Ok(Token::Float(612e61))]);
-        assert_lex!("0.0e-1", |_| vec![Ok(Token::Float(0e-1))]);
-        assert_lex!("41.0e+9", |_| vec![Ok(Token::Float(41e+9))]);
+        assert_lex!("0.0", |_| vec![Ok(f!(0.0))]);
+        assert_lex!("000051.0", |_| vec![Ok(f!(51.0))]);
+        assert_lex!("05162.0", |_| vec![Ok(f!(5162.0))]);
+        assert_lex!("099.0", |_| vec![Ok(f!(99.0))]);
+        assert_lex!("04624.51235", |_| vec![Ok(f!(4624.51235))]);
+        assert_lex!("0.987", |_| vec![Ok(f!(0.987))]);
+        assert_lex!("0.55e10", |_| vec![Ok(f!(0.55e10))]);
+        assert_lex!("612.0e61", |_| vec![Ok(f!(612e61))]);
+        assert_lex!("0.0e-1", |_| vec![Ok(f!(0e-1))]);
+        assert_lex!("41.0e+9", |_| vec![Ok(f!(41e+9))]);
 
         // Without leading 0
-        assert_lex!("5162.0", |_| vec![Ok(Token::Float(5162.0))]);
-        assert_lex!("99.0", |_| vec![Ok(Token::Float(99.0))]);
-        assert_lex!("4624.51235", |_| vec![Ok(Token::Float(4624.51235))]);
-        assert_lex!("612.0e61", |_| vec![Ok(Token::Float(612e61))]);
-        assert_lex!("41.0e+9", |_| vec![Ok(Token::Float(41e+9))]);
+        assert_lex!("5162.0", |_| vec![Ok(f!(5162.0))]);
+        assert_lex!("99.0", |_| vec![Ok(f!(99.0))]);
+        assert_lex!("4624.51235", |_| vec![Ok(f!(4624.51235))]);
+        assert_lex!("612.0e61", |_| vec![Ok(f!(612e61))]);
+        assert_lex!("41.0e+9", |_| vec![Ok(f!(41e+9))]);
 
         // With leading negative sign
-        assert_lex!("-700.5", |_| vec![
-            Ok(Token::Minus),
-            Ok(Token::Float(700.5))
-        ]);
-        assert_lex!("-9.0e2", |_| vec![
-            Ok(Token::Minus),
-            Ok(Token::Float(9.0e2))
-        ]);
-        assert_lex!("-0.5e1", |_| vec![
-            Ok(Token::Minus),
-            Ok(Token::Float(0.5e1))
-        ]);
-        assert_lex!("-0.0", |_| vec![Ok(Token::Minus), Ok(Token::Float(0.0))]);
+        assert_lex!("-700.5", |_| vec![Ok(Token::Minus), Ok(f!(700.5))]);
+        assert_lex!("-9.0e2", |_| vec![Ok(Token::Minus), Ok(f!(9.0e2))]);
+        assert_lex!("-0.5e1", |_| vec![Ok(Token::Minus), Ok(f!(0.5e1))]);
+        assert_lex!("-0.0", |_| vec![Ok(Token::Minus), Ok(f!(0.0))]);
 
         // Underscores
-        assert_lex!("12_3.45_6", |_| vec![Ok(Token::Float(123.456))]);
-        assert_lex!("1e1_0", |_| vec![Ok(Token::Float(1e10))]);
+        assert_lex!("12_3.45_6", |_| vec![Ok(f!(123.456))]);
+        assert_lex!("1e1_0", |_| vec![Ok(f!(1e10))]);
 
         assert_lex!("123_.456", |_| vec![
             Ok(Token::Integer(123.into())),

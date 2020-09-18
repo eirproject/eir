@@ -6,6 +6,9 @@ use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 pub enum LowerError {
+    #[snafu(display("illegal expression"))]
+    IllegalExpression { span: SourceSpan },
+
     /// An invalid expression occurred in a pattern
     #[snafu(display("an invalid expression occurred in a pattern"))]
     NotAllowedInPattern { span: SourceSpan },
@@ -32,6 +35,12 @@ pub enum LowerError {
     UnsupportedPatternUnion {
         left: Option<SourceSpan>,
         right: SourceSpan,
+    },
+
+    #[snafu(display("invalid const expression in pattern"))]
+    PatternConst {
+        source: crate::evaluator::EvalError,
+        span: SourceSpan,
     },
 
     /// When parsing a string, an invalid character escape
@@ -83,6 +92,11 @@ impl ToDiagnostic for LowerError {
     fn to_diagnostic(&self) -> Diagnostic {
         let msg = self.to_string();
         match self {
+            LowerError::IllegalExpression { span } => Diagnostic::error()
+                .with_message(msg)
+                .with_labels(vec![
+                    Label::primary(span.source_id(), *span).with_message("illegal expression")
+                ]),
             LowerError::NotAllowedInPattern { span } => Diagnostic::error()
                 .with_message(msg)
                 .with_labels(vec![Label::primary(span.source_id(), *span)
@@ -129,6 +143,7 @@ impl ToDiagnostic for LowerError {
                     .push(Label::primary(right.source_id(), *right).with_message("right pattern"));
                 dig.with_labels(labels)
             }
+            LowerError::PatternConst { source, .. } => source.to_diagnostic(),
             LowerError::InvalidStringEscape { span } => Diagnostic::error()
                 .with_message(msg)
                 .with_labels(vec![

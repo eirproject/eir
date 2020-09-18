@@ -1,7 +1,7 @@
 //-*- mode: rust -*-
 use libeir_diagnostics::*;
 
-use libeir_util_number::{Integer, ToPrimitive};
+use libeir_util_number::{Integer, ToPrimitive, Float};
 
 use crate::lexer::{Token, DelayedSubstitution, Symbol, Ident};
 use crate::preprocessor::PreprocessorError;
@@ -1043,7 +1043,7 @@ BaseInt: Integer = {
     "-" <i:int> => -i,
     <i:int> => i,
 };
-Float: f64 = {
+Float: Float = {
     "-" <i:float> => -i,
     <i:float> => i,
 };
@@ -1058,7 +1058,7 @@ extern {
         // Literals
         char => Token::Char(<char>),
         int => Token::Integer(<Integer>),
-        float => Token::Float(<f64>),
+        float => Token::Float(<Float>),
         "atom" => Token::Atom(<Symbol>),
         string => Token::String(<Symbol>),
         ident => Token::Ident(<Symbol>),

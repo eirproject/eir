@@ -55,6 +55,8 @@ where
 {
     pub width: usize,
 
+    pub print_locations: bool,
+
     /// Encapsulates the iteration order for blocks within a function.
     pub block_iterator_config: B,
 
@@ -71,6 +73,7 @@ impl Default for StandardFormatConfig {
     fn default() -> Self {
         FormatConfig {
             width: 80,
+            print_locations: true,
             block_iterator_config: DfsBlockIteratorConfig,
             value_formatter: StandardValueFormatter,
             block_value_layout: ReferencePrimopBlockValueLayout::default(),
@@ -268,6 +271,23 @@ where
     ) -> RefDoc<'a, ()> {
         let arena = self.arena;
 
+        let pre;
+        if config.print_locations {
+            let loc = state.function.block_location(block);
+            let loc_str = state.function.locations.format_loc(loc);
+            pre = arena
+                .nil()
+                .append(arena.text("!location"))
+                .append(arena.space())
+                .append(arena.as_string(loc))
+                .append(arena.space())
+                .append(arena.as_string(loc_str))
+                .append(arena.text(";"))
+                .append(arena.hardline());
+        } else {
+            pre = arena.nil();
+        }
+
         let ident = arena.as_string(block);
         let args = arena
             .intersperse(
@@ -288,7 +308,7 @@ where
 
         let body = self.block_body_to_doc(config, state, block);
 
-        header
+        pre.append(header)
             .append(arena.hardline().append(body).nest(2))
             .into_doc()
     }

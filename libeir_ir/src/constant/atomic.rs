@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::hash::{Hash, Hasher};
 
-use libeir_util_number::{cast, BigInt, NumCast};
+use libeir_util_number::{cast, BigInt, Float, NumCast, Number};
 
 use libeir_intern::Symbol;
 
@@ -105,11 +105,11 @@ impl From<char> for AtomicTerm {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct FloatTerm(pub f64);
+pub struct FloatTerm(pub Float);
 impl FloatTerm {
     #[inline]
     pub fn value(&self) -> f64 {
-        self.0
+        self.0.inner()
     }
 }
 impl Eq for FloatTerm {}
@@ -119,7 +119,7 @@ impl Hash for FloatTerm {
     where
         H: Hasher,
     {
-        raw_double_bits(&self.0).hash(state)
+        raw_double_bits(&self.value()).hash(state)
     }
 }
 impl From<FloatTerm> for AtomicTerm {
@@ -129,7 +129,20 @@ impl From<FloatTerm> for AtomicTerm {
 }
 impl From<f64> for AtomicTerm {
     fn from(data: f64) -> Self {
+        AtomicTerm::Float(FloatTerm(Float::new(data).unwrap()))
+    }
+}
+impl From<Float> for AtomicTerm {
+    fn from(data: Float) -> Self {
         AtomicTerm::Float(FloatTerm(data))
+    }
+}
+impl From<Number> for AtomicTerm {
+    fn from(data: Number) -> Self {
+        match data {
+            Number::Float(float) => float.into(),
+            Number::Integer(int) => int.into(),
+        }
     }
 }
 impl Display for FloatTerm {

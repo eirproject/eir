@@ -212,6 +212,7 @@ impl ast::Function {
 
                     if let Some(loc) = location {
                         b.block_set_location(block, loc);
+                        location = None;
                     }
 
                     insert_check_duplicate(

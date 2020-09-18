@@ -303,6 +303,7 @@ pub fn register(dialect: &mut Dialect) {
 #[cfg(test)]
 mod tests {
 
+    #[ignore]
     #[test]
     fn basic_parse() {
         let fun = crate::text::parse_function_unwrap(

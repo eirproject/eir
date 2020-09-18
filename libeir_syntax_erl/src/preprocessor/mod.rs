@@ -1,6 +1,6 @@
 mod directive;
 mod errors;
-mod evaluator;
+//mod evaluator;
 mod macros;
 mod preprocessor;
 mod token_reader;

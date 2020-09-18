@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::mem;
 
 use libeir_diagnostics::{SourceIndex, SourceSpan};
-use libeir_util_number::{Integer, ToPrimitive};
+use libeir_util_number::{Float, Integer, ToPrimitive};
 
 use super::{LexicalError, Symbol, TokenConvertError, TokenConvertResult};
 
@@ -287,7 +287,7 @@ pub enum Token {
     // Literals
     Char(char),
     Integer(Integer),
-    Float(f64),
+    Float(Float),
     Atom(Symbol),
     String(Symbol),
     Ident(Symbol),
@@ -440,7 +440,7 @@ impl Eq for Token {}
 impl Hash for Token {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match *self {
-            Token::Float(n) => (n as u64).hash(state),
+            Token::Float(n) => n.raw().hash(state),
             Token::Error(ref e) => e.hash(state),
             Token::Atom(ref a) => a.hash(state),
             Token::Ident(ref i) => i.hash(state),
