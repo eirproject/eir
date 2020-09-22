@@ -142,6 +142,8 @@ AttributeDefinition: Attribute = {
         => Attribute::ExportType(span!(l, r), exports),
     <l:@L> "-" "behaviour" "(" <module:atom> ")" "." <r:@R>
         => Attribute::Behaviour(span!(l, r), module),
+    <l:@L> "-" "on_load" "(" <fun:FunctionName> ")" "." <r:@R>
+        => Attribute::OnLoad(span!(l, r), fun),
     TypeAttribute,
     TypeSpecAttribute,
     CallbackAttribute,

@@ -902,6 +902,19 @@ woo() -> 2.
     }
 
     #[test]
+    fn parse_on_load() {
+        let _result: Module = parse(
+            ParseConfig::default(),
+            Arc::new(CodeMap::new()),
+            r#"-module(foo).
+-on_load(bar/0).
+
+bar() -> yay.
+"#,
+        );
+    }
+
+    #[test]
     fn parse_elixir_enum_erl() {
         use std::io::Read;
 
