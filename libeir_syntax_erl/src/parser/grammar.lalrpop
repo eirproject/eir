@@ -99,10 +99,7 @@ FunctionHead: FunctionClause = {
 };
 
 FunctionClause: FunctionClause = {
-    <l:@L> <a:atom?> "(" ")" <g:Guards?> "->" <body:Comma<Expr>> <r:@R> => {
-        FunctionClause::new(span!(l, r), a, Vec::new(), g, body)
-    },
-    <l:@L> <a:atom?> "(" <params:Comma<Pattern>> ")" <g:Guards?> "->" <body:Comma<Expr>> <r:@R> => {
+    <l:@L> <a:atom?> "(" <params:CommaOpt<Pattern>> ")" <g:Guards?> "->" <body:Comma<Expr>> <r:@R> => {
         FunctionClause::new(span!(l, r), a, params, g, body)
     }
 };
@@ -134,11 +131,11 @@ AttributeDefinition: Attribute = {
         => Attribute::Author(span!(l, r), author),
     <l:@L> "-" "compile" "(" <opts:Constant> ")" "." <r:@R>
         => Attribute::Compile(span!(l, r), opts),
-    <l:@L> "-" "import" "(" <module:atom> "," "[" <imports:Comma<FunctionName>> "]" ")" "." <r:@R>
+    <l:@L> "-" "import" "(" <module:atom> "," "[" <imports:CommaOpt<FunctionName>> "]" ")" "." <r:@R>
         => Attribute::Import(span!(l, r), module, imports),
-    <l:@L> "-" "export" "(" "[" <exports:Comma<FunctionName>> "]" ")" "." <r:@R>
+    <l:@L> "-" "export" "(" "[" <exports:CommaOpt<FunctionName>> "]" ")" "." <r:@R>
         => Attribute::Export(span!(l, r), exports),
-    <l:@L> "-" "export_type" "(" "[" <exports:Comma<FunctionName>> "]" ")" "." <r:@R>
+    <l:@L> "-" "export_type" "(" "[" <exports:CommaOpt<FunctionName>> "]" ")" "." <r:@R>
         => Attribute::ExportType(span!(l, r), exports),
     <l:@L> "-" "behaviour" "(" <module:atom> ")" "." <r:@R>
         => Attribute::Behaviour(span!(l, r), module),
@@ -158,7 +155,7 @@ RecordDeclaration: Record = {
 };
 
 RemovedAttribute: Attribute = {
-    <l:@L> "-" "removed" "(" "[" <rs:Comma<Removed>> "]" ")" "." <r:@R>
+    <l:@L> "-" "removed" "(" "[" <rs:CommaOpt<Removed>> "]" ")" "." <r:@R>
         => Attribute::Removed(span!(l, r), rs),
 };
 
@@ -248,7 +245,7 @@ DeprecatedAttribute: Attribute = {
     },
     "-" "deprecated" "(" <d:Deprecation> ")" "."
         => Attribute::Deprecation(vec![d]),
-    "-" "deprecated" "(" "[" <ds:Comma<Deprecation>> "]"  ")" "."
+    "-" "deprecated" "(" "[" <ds:CommaOpt<Deprecation>> "]"  ")" "."
         => Attribute::Deprecation(ds),
 };
 
@@ -298,8 +295,7 @@ UserAttribute: Attribute = {
 };
 
 TypedRecordFields: Vec<RecordField> = {
-    "{" "}" => Vec::new(),
-    "{" <Comma<TypedRecordField>> "}"
+    "{" <CommaOpt<TypedRecordField>> "}"
 };
 
 TypedRecordField: RecordField = {
@@ -327,9 +323,7 @@ TypeSpec: TypeSpec = {
 };
 
 TypeSig: TypeSig = {
-    <l:@L> "(" ")" "->" <ret:TopType> <guards:("when" <Comma<TypeGuard>>)?> <r:@R>
-        => TypeSig { span: span!(l, r), params: Vec::new(), ret: Box::new(ret), guards },
-    <l:@L> "(" <params:Comma<TopType>> ")" "->" <ret:TopType> <guards:("when" <Comma<TypeGuard>>)?> <r:@R>
+    <l:@L> "(" <params:CommaOpt<TopType>> ")" "->" <ret:TopType> <guards:("when" <Comma<TypeGuard>>)?> <r:@R>
         => TypeSig { span: span!(l, r), params, ret: Box::new(ret), guards },
 };
 
@@ -394,17 +388,13 @@ Type500: Type = {
 };
 
 Type600: Type = {
-    <l:@L> <fun:atom> "(" ")" <r:@R>
-        => Type::Generic { span: span!(l, r), fun, params: Vec::new() },
-    <l:@L> <fun:atom> "(" <params:Comma<TopType>> ")" <r:@R>
+    <l:@L> <fun:atom> "(" <params:CommaOpt<TopType>> ")" <r:@R>
         => Type::Generic { span: span!(l, r), fun, params },
     Type700,
 };
 
 Type700: Type = {
-    <l:@L> <module:atom> ":" <fun:atom> "(" ")" <r:@R>
-        => Type::Remote { span: span!(l, r), module, fun, args: Vec::new() },
-    <l:@L> <module:atom> ":" <fun:atom> "(" <args:Comma<TopType>> ")" <r:@R>
+    <l:@L> <module:atom> ":" <fun:atom> "(" <args:CommaOpt<TopType>> ")" <r:@R>
         => Type::Remote { span: span!(l, r), module, fun, args },
     Type800,
 };
@@ -422,17 +412,11 @@ TypeMax: Type = {
         => Type::List(span!(l, r), Box::new(lt)),
     <l:@L> "[" <lt:TopType> "," "..." "]" <r:@R>
         => Type::NonEmptyList(span!(l, r), Box::new(lt)),
-    <l:@L> "{" "}" <r:@R>
-        => Type::Tuple(span!(l, r), Vec::new()),
-    <l:@L> "{" <et:Comma<TopType>> "}" <r:@R>
+    <l:@L> "{" <et:CommaOpt<TopType>> "}" <r:@R>
         => Type::Tuple(span!(l, r), et),
-    <l:@L> "#" "{"  "}" <r:@R>
-        => Type::Map(span!(l, r), Vec::new()),
-    <l:@L> "#" "{" <ft:Comma<MapFieldType>> "}" <r:@R>
+    <l:@L> "#" "{" <ft:CommaOpt<MapFieldType>> "}" <r:@R>
         => Type::Map(span!(l, r), ft),
-    <l:@L> "#" <record:atom> "{" "}" <r:@R>
-        => Type::Record(span!(l, r), record, Vec::new()),
-    <l:@L> "#" <record:atom> "{" <ft:Comma<RecordFieldType>> "}" <r:@R>
+    <l:@L> "#" <record:atom> "{" <ft:CommaOpt<RecordFieldType>> "}" <r:@R>
         => Type::Record(span!(l, r), record, ft),
     BinaryType,
     <name:TypeName>
@@ -468,9 +452,7 @@ FunType: Type = {
         => Type::AnyFun { span: span!(l, r), ret: None },
     <l:@L> "fun" "(" "(" "..." ")" "->" <ret:TopType> ")" <r:@R>
         => Type::AnyFun { span: span!(l, r), ret: Some(Box::new(ret)) },
-    <l:@L> "fun" "(" "(" ")" "->" <ret:TopType> ")" <r:@R>
-        => Type::Fun { span: span!(l, r), params: Vec::new(), ret: Box::new(ret) },
-    <l:@L> "fun" "(" "(" <params:Comma<TopType>> ")" "->" <ret:TopType> ")" <r:@R>
+    <l:@L> "fun" "(" "(" <params:CommaOpt<TopType>> ")" "->" <ret:TopType> ")" <r:@R>
         => Type::Fun { span: span!(l, r), params, ret: Box::new(ret) },
 };
 
@@ -564,8 +546,7 @@ MapPattern: Expr = {
 };
 
 MapTuplePattern: Vec<MapField> = {
-    "{" "}" => Vec::new(),
-    "{" <Comma<MapFieldPattern>> "}"
+    "{" <CommaOpt<MapFieldPattern>> "}"
 };
 
 MapFieldPattern: MapField = {
@@ -583,8 +564,7 @@ RecordPattern: Expr = {
 };
 
 RecordTuplePattern: Vec<RecordField> = {
-    "{" "}" => Vec::new(),
-    "{" <Comma<RecordFieldPattern>> "}"
+    "{" <CommaOpt<RecordFieldPattern>> "}"
 };
 
 RecordFieldPattern: RecordField = {
@@ -759,9 +739,7 @@ Clause: Clause = {
 };
 
 Apply: Expr = {
-    <l:@L> <lhs:Expr800> "(" ")" <r:@R>
-        => Expr::Apply(Apply { span: span!(l, r), id: nid.next(), callee: Box::new(lhs), args: Vec::new()  }),
-    <l:@L> <lhs:Expr800> "(" <args:Comma<Expr>> ")" <r:@R>
+    <l:@L> <lhs:Expr800> "(" <args:CommaOpt<Expr>> ")" <r:@R>
         => Expr::Apply(Apply { span: span!(l, r), id: nid.next(), callee: Box::new(lhs), args })
 };
 
@@ -784,9 +762,7 @@ ComprehensionExpr: Expr = {
 };
 
 Binary: Expr = {
-    <l:@L> "<<" ">>" <r:@R>
-        => Expr::Binary(Binary { span: span!(l, r), id: nid.next(), elements: Vec::new() }),
-    <l:@L> "<<" <elements:Comma<BinaryElement>> ">>" <r:@R>
+    <l:@L> "<<" <elements:CommaOpt<BinaryElement>> ">>" <r:@R>
         => Expr::from_binary(Binary { span: span!(l, r), id: nid.next(), elements }),
 };
 
@@ -817,9 +793,7 @@ BitType: BitType = {
 };
 
 Tuple: Expr = {
-    <l:@L> "{" "}" <r:@R>
-        => Expr::Tuple(Tuple { span: span!(l, r), id: nid.next(), elements: Vec::new() }),
-    <l:@L> "{" <elements:Comma<Expr>> "}" <r:@R>
+    <l:@L> "{" <elements:CommaOpt<Expr>> "}" <r:@R>
         => Expr::Tuple(Tuple { span: span!(l, r), id: nid.next(), elements })
 };
 
@@ -848,8 +822,7 @@ MapExpr: Expr = {
 };
 
 MapTuple: Vec<MapField> = {
-    "{" "}" => Vec::new(),
-    "{" <Comma<MapField>> "}"
+    "{" <CommaOpt<MapField>> "}"
 };
 
 MapField: MapField = {
@@ -885,8 +858,7 @@ RecordExpr: Expr = {
 };
 
 RecordTuple: Vec<RecordField> = {
-    "{" "}" => Vec::new(),
-    "{" <Comma<RecordField>> "}"
+    "{" <CommaOpt<RecordField>> "}"
 };
 
 RecordField: RecordField = {
@@ -905,9 +877,7 @@ Constant: Expr = {
 
 
 ConstantTuple: Expr = {
-    <l:@L> "{" "}" <r:@R>
-        => Expr::Tuple(Tuple { span: span!(l, r), id: nid.next(), elements: Vec::new() }),
-    <l:@L> "{" <elements:Comma<Constant>> "}" <r:@R>
+    <l:@L> "{" <elements:CommaOpt<Constant>> "}" <r:@R>
         => Expr::Tuple(Tuple { span: span!(l, r), id: nid.next(), elements })
 };
 
@@ -932,8 +902,7 @@ ConstantMapExpr: Expr = {
 };
 
 ConstantMapTuple: Vec<MapField> = {
-    "{" "}" => Vec::new(),
-    "{" <Comma<ConstantMapField>> "}"
+    "{" <CommaOpt<ConstantMapField>> "}"
 };
 
 ConstantMapField: MapField = {
