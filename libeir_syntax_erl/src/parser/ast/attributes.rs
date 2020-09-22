@@ -216,6 +216,7 @@ pub enum Attribute {
     ExportType(SourceSpan, Vec<PartiallyResolvedFunctionName>),
     Export(SourceSpan, Vec<PartiallyResolvedFunctionName>),
     Import(SourceSpan, Ident, Vec<PartiallyResolvedFunctionName>),
+    Removed(SourceSpan, Vec<(PartiallyResolvedFunctionName, Ident)>),
     Compile(SourceSpan, Expr),
     Vsn(SourceSpan, Expr),
     Author(SourceSpan, Expr),
@@ -241,6 +242,7 @@ impl PartialEq for Attribute {
             (&Attribute::Import(_, ref x1, ref x2), &Attribute::Import(_, ref y1, ref y2)) => {
                 (x1 == y1) && (x2 == y2)
             }
+            (&Attribute::Removed(_, ref x), &Attribute::Removed(_, ref y)) => x == y,
             (&Attribute::Compile(_, ref x), &Attribute::Compile(_, ref y)) => x == y,
             (&Attribute::Vsn(_, ref x), &Attribute::Vsn(_, ref y)) => x == y,
             (&Attribute::Author(_, ref x), &Attribute::Author(_, ref y)) => x == y,

@@ -875,6 +875,33 @@ woo() -> 2.
     }
 
     #[test]
+    fn parse_multi_line_record() {
+        let _result: Module = parse(
+            ParseConfig::default(),
+            Arc::new(CodeMap::new()),
+            r#"-module(foo).
+
+-record(some_record,
+        {
+            woohoo
+        }).
+"#,
+        );
+    }
+
+    #[test]
+    fn parse_removed_attribute() {
+        let _result: Module = parse(
+            ParseConfig::default(),
+            Arc::new(CodeMap::new()),
+            r#"-module(foo).
+
+-removed([{foo, 0, "we don't support this anymore!"}]).
+"#,
+        );
+    }
+
+    #[test]
     fn parse_elixir_enum_erl() {
         use std::io::Read;
 

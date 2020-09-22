@@ -146,12 +146,32 @@ AttributeDefinition: Attribute = {
     TypeSpecAttribute,
     CallbackAttribute,
     DeprecatedAttribute,
+    RemovedAttribute,
     UserAttribute,
 };
 
 RecordDeclaration: Record = {
     <l:@L> "-" "record" "(" <name:atom> "," <fields:TypedRecordFields> ")" "." <r:@R>
         => Record { span: span!(l, r), id: nid.next(), name, fields },
+};
+
+RemovedAttribute: Attribute = {
+    <l:@L> "-" "removed" "(" "[" <rs:Comma<Removed>> "]" ")" "." <r:@R>
+        => Attribute::Removed(span!(l, r), rs),
+};
+
+Removed: (PartiallyResolvedFunctionName, Ident) = {
+    <l:@L> "{" <function:atom> "," <arity:arity> "," <descr:StringLiteral> "}" <r:@R> => {
+        let span = span!(l, r);
+        let f = PartiallyResolvedFunctionName {
+            span: span.clone(),
+            id: nid.next(),
+            function,
+            arity,
+        };
+
+        (f, descr)
+    },
 };
 
 TypeAttribute: Attribute = {
@@ -1111,6 +1131,7 @@ extern {
         "optional_callback" => Token::OptionalCallback,
         "import" => Token::Import,
         "export" => Token::Export,
+        "removed" => Token::Removed,
         "export_type" => Token::ExportType,
         "module" => Token::Module,
         "compile" => Token::Compile,

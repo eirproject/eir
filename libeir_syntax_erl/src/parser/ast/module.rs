@@ -57,6 +57,7 @@ pub struct Module {
     pub on_load: Option<LocalFunctionName>,
     pub imports: HashMap<LocalFunctionName, ResolvedFunctionName>,
     pub exports: HashSet<LocalFunctionName>,
+    pub removed: HashMap<LocalFunctionName, (SourceSpan, Ident)>,
     pub types: HashMap<LocalFunctionName, TypeDef>,
     pub exported_types: HashSet<LocalFunctionName>,
     pub behaviours: HashSet<Ident>,
@@ -100,6 +101,7 @@ impl Module {
             compile: None,
             imports: HashMap::new(),
             exports: HashSet::new(),
+            removed: HashMap::new(),
             types: HashMap::new(),
             exported_types: HashSet::new(),
             behaviours: HashSet::new(),
@@ -227,6 +229,24 @@ impl Module {
                                         ]),
                                 });
                             }
+                        }
+                    }
+                }
+                TopLevel::Attribute(Attribute::Removed(span, mut removed)) => {
+                    for (name, description) in removed.drain(..) {
+                        if let Some((prev_span, _)) = module.removed.get(&name.to_local()) {
+                            errs.error(ParserError::ShowDiagnostic {
+                                diagnostic: Diagnostic::warning()
+                                    .with_message("already marked as removed")
+                                    .with_labels(vec![
+                                        Label::primary(span.source_id(), span)
+                                            .with_message("duplicate entry occurs here"),
+                                        Label::secondary(prev_span.source_id(), prev_span.clone())
+                                            .with_message("function was marked here"),
+                                    ]),
+                            });
+                        } else {
+                            module.removed.insert(name.to_local(), (span, description));
                         }
                     }
                 }

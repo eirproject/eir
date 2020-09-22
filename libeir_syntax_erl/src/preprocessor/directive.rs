@@ -107,6 +107,7 @@ impl ReadFrom for Directive {
             "import" => unread_token!(reader, _hyphen.into(), name, Token::Import),
             "export" => unread_token!(reader, _hyphen.into(), name, Token::Export),
             "export_type" => unread_token!(reader, _hyphen.into(), name, Token::ExportType),
+            "removed" => unread_token!(reader, _hyphen.into(), name, Token::Removed),
             "vsn" => unread_token!(reader, _hyphen.into(), name, Token::Vsn),
             "author" => unread_token!(reader, _hyphen.into(), name, Token::Author),
             "on_load" => unread_token!(reader, _hyphen.into(), name, Token::OnLoad),
