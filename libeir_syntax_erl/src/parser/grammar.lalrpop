@@ -248,6 +248,7 @@ Deprecation: Deprecation = {
 };
 
 DeprecatedFlag: DeprecatedFlag = {
+    <l:@L> <s:StringLiteral> <r:@R> => DeprecatedFlag::Description(s),
     <l:@L> <flag:atom> <r:@R> => {
         match flag.as_str().get() {
             "eventually" => DeprecatedFlag::Eventually,
@@ -266,7 +267,7 @@ DeprecatedFlag: DeprecatedFlag = {
                 DeprecatedFlag::Eventually
             }
         }
-    }
+    },
 };
 
 UserAttribute: Attribute = {
@@ -933,8 +934,20 @@ Atomic: Expr = {
         => Expr::Literal(Literal::String(nid.next(), s)),
 };
 
-StringLiteral: Ident = <l:@L> <s:string> <r:@R>
-    => Ident::new(s, span!(l, r));
+StringLiteral: Ident = <l:@L> <s:string+> <r:@R> => {
+    let span = span!(l, r);
+    if s.len() == 1 {
+        Ident::new(s[0], span)
+    } else {
+        let mut buf = String::new();
+        for frag in s.iter() {
+            buf.push_str(&frag.as_str());
+        }
+        let symbol = Symbol::intern(&buf);
+
+        Ident::new(symbol, span)
+    }
+};
 
 DelayedSubstitution: Expr = {
     <l:@L> <subs: delayed_substitution> <r:@R> =>

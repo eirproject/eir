@@ -860,6 +860,21 @@ bar() -> 2.
     }
 
     #[test]
+    fn parse_multi_line_string() {
+        let _result: Module = parse(
+            ParseConfig::default(),
+            Arc::new(CodeMap::new()),
+            r#"-module(foo).
+
+-deprecated([{woo, 0,
+"testing testing"
+"testing testing"}]).
+woo() -> 2.
+"#,
+        );
+    }
+
+    #[test]
     fn parse_elixir_enum_erl() {
         use std::io::Read;
 

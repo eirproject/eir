@@ -193,6 +193,7 @@ pub enum DeprecatedFlag {
     Eventually,
     NextVersion,
     NextMajorRelease,
+    Description(Ident),
 }
 impl fmt::Display for DeprecatedFlag {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -200,6 +201,7 @@ impl fmt::Display for DeprecatedFlag {
             &DeprecatedFlag::Eventually => write!(f, "eventually"),
             &DeprecatedFlag::NextVersion => write!(f, "in the next version"),
             &DeprecatedFlag::NextMajorRelease => write!(f, "in the next major release"),
+            &DeprecatedFlag::Description(descr) => write!(f, "{}", descr.name),
         }
     }
 }
