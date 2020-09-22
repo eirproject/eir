@@ -5,7 +5,7 @@ use libeir_intern::Symbol;
 
 use crate::parser::ast::{Case, If};
 
-use crate::lower::expr::{lower_block, lower_block_same_scope, lower_single};
+use crate::lower::expr::{lower_block, lower_block_same_scope, lower_single_same_scope};
 use crate::lower::pattern::lower_clause;
 use crate::lower::scope::ScopeMerge;
 use crate::lower::LowerCtx;
@@ -19,7 +19,7 @@ pub(super) fn lower_case_expr(
     let span = case.span;
     let case_loc = ctx.current_location(b, span);
 
-    let match_val = map_block!(block, lower_single(ctx, b, block, &case.expr));
+    let match_val = map_block!(block, lower_single_same_scope(ctx, b, block, &case.expr));
 
     let no_match = b.block_insert();
     b.block_set_location(no_match, case_loc);
