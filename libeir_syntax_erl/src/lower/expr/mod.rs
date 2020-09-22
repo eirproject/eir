@@ -236,6 +236,18 @@ fn lower_expr(
         Expr::Match(mat) => {
             let match_val = map_block!(block, lower_single_same_scope(ctx, b, block, &mat.expr));
 
+            if let Expr::Var(Var(_id, var)) = *mat.pattern {
+                // This branch is not required, since the normal pattern match
+                // compilation path will cover it just fine.
+                // However, since this is a really really common path, we can save
+                // ourself a lot of work by just handling variable binding in a
+                // simpler way.
+                if ctx.scope.resolve(var).is_err() {
+                    ctx.bind(var, match_val);
+                    return (block, match_val);
+                }
+            }
+
             let no_match = b.block_insert();
             b.block_set_location(no_match, loc);
             {
