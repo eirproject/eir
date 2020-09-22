@@ -353,21 +353,6 @@ impl PartialOrd for Literal {
             }
 
             _ => unimplemented!(),
-            //(Literal::Integer(_, _, x), Literal::Integer(_, _, y)) => x.partial_cmp(y),
-            //(Literal::Integer(_, _, x), Literal::Float(_, _, y)) => x.partial_cmp(y),
-            //(Literal::Integer(_, _, x), Literal::Char(_, _, y)) => x.partial_cmp(y),
-            //(Literal::Float(_, _, x), Literal::Float(_, _, y)) => x.partial_cmp(y),
-            //(Literal::Float(_, _, x), Literal::Integer(_, _, y)) => {
-            //    PartialOrd::<&Integer>::partial_cmp(x, y)
-            //}
-            //(Literal::Float(_, _, x), Literal::Char(_, _, y)) => {
-            //    x.partial_cmp(&Float::new(((*y as i64) as f64)).unwrap())
-            //}
-            //(Literal::Char(_, _, x), Literal::Char(_, _, y)) => x.partial_cmp(y),
-            //(Literal::Char(_, _, x), Literal::Integer(_, _, y)) => x.partial_cmp(y),
-            //(Literal::Char(_, _, x), Literal::Float(_, _, y)) => {
-            //    Float::new((*x as i64) as f64).unwrap().partial_cmp(y)
-            //}
         }
     }
 }

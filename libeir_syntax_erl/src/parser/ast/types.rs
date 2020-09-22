@@ -106,7 +106,10 @@ pub enum Type {
     Binary(SourceSpan, Box<Type>, Box<Type>),
     Integer(SourceSpan, Integer),
     Char(SourceSpan, char),
-    AnyFun(SourceSpan),
+    AnyFun {
+        span: SourceSpan,
+        ret: Option<Box<Type>>,
+    },
     Fun {
         span: SourceSpan,
         params: Vec<Type>,
@@ -150,7 +153,7 @@ impl Type {
             &Type::Binary(_, _, _) => true,
             &Type::Integer(_, _) => true,
             &Type::Char(_, _) => true,
-            &Type::AnyFun(_) => true,
+            &Type::AnyFun { .. } => true,
             &Type::Fun { .. } => true,
             &Type::KeyValuePair(_, _, _) => true,
             &Type::Field(_, _, _) => true,
@@ -264,7 +267,7 @@ impl PartialEq for Type {
             }
             (Type::Integer(_, x), Type::Integer(_, y)) => x == y,
             (Type::Char(_, x), Type::Char(_, y)) => x == y,
-            (Type::AnyFun(_), Type::AnyFun(_)) => true,
+            (Type::AnyFun { ret: x, .. }, Type::AnyFun { ret: y, .. }) => x == y,
             (
                 Type::Fun {
                     params: ref x1,

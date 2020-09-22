@@ -441,8 +441,10 @@ BinaryType: Type = {
 };
 
 FunType: Type = {
-    <l:@L> "fun" "(" "..." ")" <r:@R>
-        => Type::AnyFun(span!(l, r)),
+    <l:@L> "fun" "(" ")" <r:@R>
+        => Type::AnyFun { span: span!(l, r), ret: None },
+    <l:@L> "fun" "(" "(" "..." ")" "->" <ret:TopType> ")" <r:@R>
+        => Type::AnyFun { span: span!(l, r), ret: Some(Box::new(ret)) },
     <l:@L> "fun" "(" "(" ")" "->" <ret:TopType> ")" <r:@R>
         => Type::Fun { span: span!(l, r), params: Vec::new(), ret: Box::new(ret) },
     <l:@L> "fun" "(" "(" <params:Comma<TopType>> ")" "->" <ret:TopType> ")" <r:@R>
