@@ -1118,6 +1118,7 @@ impl CompileOptions {
             // e.g. -compile(export_all).
             &Expr::Literal(Literal::Atom(id, ref option_name)) => {
                 match option_name.as_str().get() {
+                    "no_native" => (), // Disables hipe compilation, not relevant for us
                     "export_all" => self.export_all = true,
                     "nowarn_export_all" => self.warn_export_all = false,
                     "nowarn_shadow_vars" => self.warn_shadow_vars = false,
