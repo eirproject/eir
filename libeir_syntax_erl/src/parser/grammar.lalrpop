@@ -457,14 +457,14 @@ FunType: Type = {
 };
 
 MapFieldType: Type = {
-    <l:@L> <key:TopType100> "=>" <val:TopType100> <r:@R>
+    <l:@L> <key:TopType> "=>" <val:TopType> <r:@R>
         => Type::KeyValuePair(span!(l, r), Box::new(key), Box::new(val)),
-    <l:@L> <key:TopType100> ":=" <val:TopType100> <r:@R>
+    <l:@L> <key:TopType> ":=" <val:TopType> <r:@R>
         => Type::KeyValuePair(span!(l, r), Box::new(key), Box::new(val)),
 };
 
 RecordFieldType: Type = {
-    <l:@L> <key:atom> "::" <val:TopType100> <r:@R>
+    <l:@L> <key:atom> "::" <val:TopType> <r:@R>
         => Type::Field(span!(l, r), key, Box::new(val)),
 };
 
