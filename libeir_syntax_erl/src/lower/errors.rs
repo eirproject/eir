@@ -1,17 +1,22 @@
-use libeir_diagnostics::{Diagnostic, Label, SourceSpan, ToDiagnostic};
+use libeir_diagnostics::{Diagnostic, Label, SourceIndex, SourceSpan, ToDiagnostic};
 
 use super::expr::BinaryTypeName;
+use crate::lower::strings::StringError;
 
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 pub enum LowerError {
     #[snafu(display("illegal expression"))]
-    IllegalExpression { span: SourceSpan },
+    IllegalExpression {
+        span: SourceSpan,
+    },
 
     /// An invalid expression occurred in a pattern
     #[snafu(display("an invalid expression occurred in a pattern"))]
-    NotAllowedInPattern { span: SourceSpan },
+    NotAllowedInPattern {
+        span: SourceSpan,
+    },
 
     /// Equality in a pattern caused two nodes to be merged.
     /// It has been shown to be unmatchable.
@@ -46,24 +51,39 @@ pub enum LowerError {
     /// When parsing a string, an invalid character escape
     /// was encountered.
     #[snafu(display("invalid character escape in string"))]
-    InvalidStringEscape { span: SourceSpan },
+    InvalidStringEscape {
+        span: SourceSpan,
+    },
 
     /// Unable to resolve a variable in scope.
     #[snafu(display("could not resolve variable"))]
-    UnresolvedVariable { span: SourceSpan },
+    UnresolvedVariable {
+        span: SourceSpan,
+    },
 
     /// Unable to bind a variable in a scope, it is already bound.
     #[snafu(display("variable was already bound in scope"))]
-    AlreadyBound { new: SourceSpan, old: SourceSpan },
+    AlreadyBound {
+        new: SourceSpan,
+        old: SourceSpan,
+    },
     /// Variable binding shadowed other binding
     #[snafu(display("binding shadowed previously bound variable"))]
-    ShadowingBind { new: SourceSpan, old: SourceSpan },
+    ShadowingBind {
+        new: SourceSpan,
+        old: SourceSpan,
+    },
 
     // Binary specifier parsing
     #[snafu(display("unknown specifier in binary entry"))]
-    BinaryUnknownSpecifier { span: SourceSpan },
+    BinaryUnknownSpecifier {
+        span: SourceSpan,
+    },
     #[snafu(display("conflicting specifiers in binary entry"))]
-    BinaryConflictingSpecifier { new: SourceSpan, old: SourceSpan },
+    BinaryConflictingSpecifier {
+        new: SourceSpan,
+        old: SourceSpan,
+    },
     #[snafu(display("invalid specifier for {} in binary entry", typ))]
     BinaryInvalidSpecifier {
         span: SourceSpan,
@@ -74,18 +94,42 @@ pub enum LowerError {
         span: SourceSpan,
         typ: BinaryTypeName,
     },
+    #[snafu(display("binary construction can never succeed"))]
+    BinaryConstructEntryTypeWarning {
+        span: SourceSpan,
+    },
+
+    String {
+        source: StringError,
+    },
 
     // Records
     #[snafu(display("record field specified more than once"))]
-    DuplicateRecordField { new: SourceSpan, old: SourceSpan },
+    DuplicateRecordField {
+        new: SourceSpan,
+        old: SourceSpan,
+    },
     #[snafu(display("record is not defined"))]
-    UndefinedRecord { span: SourceSpan },
+    UndefinedRecord {
+        span: SourceSpan,
+    },
 
     // Maps
     #[snafu(display("only map put (=>) allowed in map construction"))]
-    MapUpdateInConstruction { map: SourceSpan, field: SourceSpan },
+    MapUpdateInConstruction {
+        map: SourceSpan,
+        field: SourceSpan,
+    },
     #[snafu(display("map update performed on a non map"))]
-    MapUpdateOnNonMap { map: SourceSpan },
+    MapUpdateOnNonMap {
+        map: SourceSpan,
+    },
+}
+
+impl From<StringError> for LowerError {
+    fn from(err: StringError) -> LowerError {
+        LowerError::String { source: err }
+    }
 }
 
 impl ToDiagnostic for LowerError {
@@ -188,6 +232,12 @@ impl ToDiagnostic for LowerError {
                 .with_labels(vec![Label::primary(span.source_id(), *span).with_message(
                     format!("size specifier not valid for {} binary entries", typ),
                 )]),
+            LowerError::BinaryConstructEntryTypeWarning { span } => Diagnostic::error()
+                .with_message(msg)
+                .with_labels(vec![
+                    Label::primary(span.source_id(), *span).with_message("can never succeed")
+                ]),
+            LowerError::String { source } => source.to_diagnostic(),
             LowerError::DuplicateRecordField { new, old } => {
                 Diagnostic::error().with_message(msg).with_labels(vec![
                     Label::primary(new.source_id(), *old)

@@ -1,3 +1,6 @@
+use std::convert::TryInto;
+
+pub use libeir_ir::binary::{BinaryEntrySpecifier, Endianness};
 use libeir_ir::{
     operation::binary_construct::{
         BinaryConstructFinish, BinaryConstructPush, BinaryConstructStart,
@@ -5,11 +8,12 @@ use libeir_ir::{
     Block as IrBlock, FunctionBuilder, Value as IrValue,
 };
 
-pub use libeir_ir::binary::{BinaryEntrySpecifier, Endianness};
-
 use crate::parser::ast::{Binary, BinaryElement, BitType, Expr, Literal};
 
 use crate::lower::expr::lower_single_same_scope;
+use crate::lower::strings::{
+    string_to_binary, tokenize_string, Encoding as SEncoding, Endianness as SEndianness,
+};
 use crate::lower::{LowerCtx, LowerError};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -224,241 +228,143 @@ pub fn specifier_from_parsed(parsed: &[BitType]) -> Result<BinaryEntrySpecifier,
     Ok(spec)
 }
 
-pub(crate) fn lower_binary_value(
+fn make_size(
     ctx: &mut LowerCtx,
     b: &mut FunctionBuilder,
-    mut block: IrBlock,
-    elem: &BinaryElement,
-) -> (IrBlock, IrValue) {
-    let elem_expr_val = match &elem.bit_expr {
-        Expr::Literal(Literal::String(_id, string)) => {
-            let tokenized = crate::lower::expr::literal::tokenize_string(*string);
-            match tokenized {
-                Ok(chars) => {
-                    let bin = chars.iter().map(|ch| (ch & 0xff) as u8).collect::<Vec<_>>();
-                    let cons = b.cons_mut().from(bin);
-                    b.value(cons)
-                }
-                Err(err) => {
-                    ctx.error(err);
-                    let cons = b.cons_mut().from(vec![]);
-                    b.value(cons)
-                }
-            }
-        }
-        _ => map_block!(
-            block,
-            lower_single_same_scope(ctx, b, block, &elem.bit_expr)
-        ),
-    };
+    block: &mut IrBlock,
+    bit_size: &Option<Expr>,
+    spec: BinaryEntrySpecifier,
+) -> Option<IrValue> {
+    let spec_typ = specifier_to_typename(&spec);
 
-    (block, elem_expr_val)
+    if let Some(size_expr) = bit_size {
+        if !specifier_can_have_size(&spec) {
+            ctx.error(LowerError::BinaryInvalidSize {
+                span: size_expr.span(),
+                typ: spec_typ,
+            });
+            None
+        } else {
+            Some(map_block!(
+                *block,
+                lower_single_same_scope(ctx, b, *block, size_expr)
+            ))
+        }
+    } else {
+        match spec_typ {
+            TypeName::Integer => Some(b.value(8)),
+            TypeName::Float => Some(b.value(64)),
+            _ => None,
+        }
+    }
 }
 
+/// Lowers a single entry of a binary construction element.
+///
+/// A couple of gotchas with the syntax:
+/// - `<<"abc">>.`: obviously valid, creates a binary of the ascii characters
+/// - `<<"™">>.`: also valid, encodes each CODEPOINT in the string as a byte,
+///   truncated. This evaluates to `<<34>>`.
+/// - `<<[97, 98, 99]>>.` not valid, while a string binary element is handled
+///   as a special case, this does not apply to char lists.
+/// - `<<"abc":10/integer>>` valid! a string literal is desugared to a list of
+///   individual integers in the binary entry, each with the specifier on it.
 pub(crate) fn lower_binary_elem(
     ctx: &mut LowerCtx,
     b: &mut FunctionBuilder,
     mut block: IrBlock,
     bin_ref: &mut IrValue,
-    bin_val: IrValue,
     elem: &BinaryElement,
 ) -> IrBlock {
-    let spec = elem.bit_type.as_ref().map(|b| specifier_from_parsed(&*b));
+    let opt_spec = elem.bit_type.as_ref().map(|b| specifier_from_parsed(&*b));
 
-    let (spec, size_val) = match &elem.bit_expr {
-        Expr::Literal(Literal::String(_id, _string)) => {
-            let spec = match spec {
-                None => BinaryEntrySpecifier::Bytes { unit: 1 },
-                Some(Ok(inner)) => inner,
-                Some(Err(err)) => {
-                    ctx.error(err);
-                    return block;
-                }
-            };
-            let spec_typ = specifier_to_typename(&spec);
-
-            let size_val = if let Some(size_expr) = &elem.bit_size {
-                if !specifier_can_have_size(&spec) {
-                    ctx.error(LowerError::BinaryInvalidSize {
-                        span: size_expr.span(),
-                        typ: spec_typ,
-                    });
-                    None
-                } else {
-                    Some(map_block!(
-                        block,
-                        lower_single_same_scope(ctx, b, block, size_expr)
-                    ))
-                }
-            } else {
-                match spec_typ {
-                    TypeName::Integer => Some(b.value(8)),
-                    TypeName::Float => Some(b.value(64)),
-                    _ => None,
-                }
-            };
-
-            (spec, size_val)
-        }
-        _ => {
-            let spec = match spec {
-                None => default_specifier(),
-                Some(Ok(inner)) => inner,
-                Some(Err(err)) => {
-                    ctx.error(err);
-                    return block;
-                }
-            };
-            let spec_typ = specifier_to_typename(&spec);
-
-            let size_val = if let Some(size_expr) = &elem.bit_size {
-                if !specifier_can_have_size(&spec) {
-                    ctx.error(LowerError::BinaryInvalidSize {
-                        span: size_expr.span(),
-                        typ: spec_typ,
-                    });
-                    None
-                } else {
-                    Some(map_block!(
-                        block,
-                        lower_single_same_scope(ctx, b, block, size_expr)
-                    ))
-                }
-            } else {
-                match spec_typ {
-                    TypeName::Integer => Some(b.value(8)),
-                    TypeName::Float => Some(b.value(64)),
-                    _ => None,
-                }
-            };
-
-            (spec, size_val)
+    let mut spec = match opt_spec {
+        None => match &elem.bit_expr {
+            Expr::Literal(Literal::String(_id, string)) => BinaryEntrySpecifier::Bytes { unit: 1 },
+            _ => default_specifier(),
+        },
+        Some(Ok(inner)) => inner,
+        Some(Err(err)) => {
+            ctx.error(err);
+            return block;
         }
     };
 
-    let (ok_cont, err_cont) =
-        BinaryConstructPush::build(b, block, *bin_ref, bin_val, spec, size_val);
-    *bin_ref = b.block_args(ok_cont)[0];
-    block = ok_cont;
+    let size_val = make_size(ctx, b, &mut block, &elem.bit_size, spec);
 
-    //let err_cont = map_block!(block, b.op_binary_push(
-    //    block, spec, bin, bit_val, size_val));
-    //let res_arg = b.block_args(block)[0];
+    let elem_val = match &elem.bit_expr {
+        Expr::Literal(Literal::String(_id, string)) if !spec.is_native_endian() => {
+            let decoded_spec = match spec {
+                BinaryEntrySpecifier::Integer {
+                    signed: false,
+                    endianness,
+                    unit: 8,
+                } => Some((SEncoding::Latin1, endianness.try_into().unwrap())),
+                BinaryEntrySpecifier::Integer { .. } => None,
 
-    // TODO: Proper error
-    b.op_unreachable(elem.span, err_cont);
+                BinaryEntrySpecifier::Utf8 => Some((SEncoding::Utf8, SEndianness::Big)),
+                BinaryEntrySpecifier::Utf16 { endianness } => {
+                    Some((SEncoding::Utf16, endianness.try_into().unwrap()))
+                }
+                BinaryEntrySpecifier::Utf32 { endianness } => {
+                    Some((SEncoding::Utf32, endianness.try_into().unwrap()))
+                }
+
+                _ => {
+                    ctx.warn(LowerError::BinaryConstructEntryTypeWarning { span: elem.span });
+                    None
+                }
+            };
+
+            // TODO: Handle more cases statically here in the frontend?
+
+            match decoded_spec {
+                Some((str_enc, str_end)) => match string_to_binary(*string, str_enc, str_end) {
+                    Ok(bin) => {
+                        spec = BinaryEntrySpecifier::Bytes { unit: 8 };
+                        Some(b.value(bin))
+                    }
+                    Err(err) => {
+                        ctx.error(err);
+                        Some(ctx.sentinel())
+                    }
+                },
+                None => {
+                    tokenize_string(*string, &mut |cp, _idx| {
+                        let elem_val = b.value(cp);
+                        let (ok_cont, err_cont) = BinaryConstructPush::build(
+                            b, block, *bin_ref, elem_val, spec, size_val,
+                        );
+                        *bin_ref = b.block_args(ok_cont)[0];
+                        block = ok_cont;
+
+                        // TODO: Proper error
+                        b.op_unreachable(elem.span, err_cont);
+
+                        Ok(())
+                    });
+                    None
+                }
+            }
+        }
+        _ => Some(map_block!(
+            block,
+            lower_single_same_scope(ctx, b, block, &elem.bit_expr)
+        )),
+    };
+
+    if let Some(elem_val) = elem_val {
+        let (ok_cont, err_cont) =
+            BinaryConstructPush::build(b, block, *bin_ref, elem_val, spec, size_val);
+        *bin_ref = b.block_args(ok_cont)[0];
+        block = ok_cont;
+
+        // TODO: Proper error
+        b.op_unreachable(elem.span, err_cont);
+    }
 
     block
 }
-
-//pub(crate) fn lower_binary_elem(
-//    ctx: &mut LowerCtx,
-//    b: &mut FunctionBuilder,
-//    mut block: IrBlock,
-//    bin: IrValue,
-//    elem: &BinaryElement,
-//) -> (IrBlock, IrValue)
-//{
-//    let spec = elem.bit_type.as_ref()
-//        .map(|b| specifier_from_parsed(&*b));
-//
-//    let (spec, bit_val, size_val) = match &elem.bit_expr {
-//        Expr::Literal(Literal::String(_id, string)) => {
-//            let spec = match spec {
-//                None => BinaryEntrySpecifier::Bytes {
-//                    unit: 1,
-//                },
-//                Some(Ok(inner)) => inner,
-//                Some(Err(err)) => {
-//                    ctx.error(err);
-//                    return (block, ctx.sentinel());
-//                },
-//            };
-//            let spec_typ = specifier_to_typename(&spec);
-//
-//            let tokenized = crate::lower::expr::literal::tokenize_string(*string);
-//            let bit_val = match tokenized {
-//                Ok(chars) => {
-//                    let bin = chars.iter()
-//                        .map(|ch| (ch & 0xff) as u8)
-//                        .collect::<Vec<_>>();
-//                    let cons = b.cons_mut().from(bin);
-//                    b.value(cons)
-//                }
-//                Err(err) => {
-//                    ctx.error(err);
-//                    let cons = b.cons_mut().from(vec![]);
-//                    b.value(cons)
-//                }
-//            };
-//
-//            let size_val = if let Some(size_expr) = &elem.bit_size {
-//                if !specifier_can_have_size(&spec) {
-//                    ctx.error(LowerError::BinaryInvalidSize {
-//                        span: size_expr.span(),
-//                        typ: spec_typ,
-//                    });
-//                    None
-//                } else {
-//                    Some(map_block!(block, lower_single_same_scope(
-//                        ctx, b, block, size_expr)))
-//                }
-//            } else {
-//                match spec_typ {
-//                    TypeName::Integer => Some(b.value(8)),
-//                    TypeName::Float => Some(b.value(64)),
-//                    _ => None,
-//                }
-//            };
-//
-//            (spec, bit_val, size_val)
-//        }
-//        _ => {
-//            let spec = match spec {
-//                None => default_specifier(),
-//                Some(Ok(inner)) => inner,
-//                Some(Err(err)) => {
-//                    ctx.error(err);
-//                    return (block, ctx.sentinel());
-//                },
-//            };
-//            let spec_typ = specifier_to_typename(&spec);
-//
-//            let bit_val = map_block!(block, lower_single_same_scope(
-//                ctx, b, block, &elem.bit_expr));
-//
-//            let size_val = if let Some(size_expr) = &elem.bit_size {
-//                if !specifier_can_have_size(&spec) {
-//                    ctx.error(LowerError::BinaryInvalidSize {
-//                        span: size_expr.span(),
-//                        typ: spec_typ,
-//                    });
-//                    None
-//                } else {
-//                    Some(map_block!(block, lower_single_same_scope(
-//                        ctx, b, block, size_expr)))
-//                }
-//            } else {
-//                match spec_typ {
-//                    TypeName::Integer => Some(b.value(8)),
-//                    TypeName::Float => Some(b.value(64)),
-//                    _ => None,
-//                }
-//            };
-//
-//            (spec, bit_val, size_val)
-//        }
-//    };
-//
-//    let err_cont = map_block!(block, b.op_binary_push(
-//        block, spec, bin, bit_val, size_val));
-//    let res_arg = b.block_args(block)[0];
-//
-//    // TODO: Proper error
-//    b.op_unreachable(err_cont);
-//
-//    (block, res_arg)
-//}
 
 pub(super) fn lower_binary_expr(
     ctx: &mut LowerCtx,
@@ -467,22 +373,8 @@ pub(super) fn lower_binary_expr(
     bin: Option<IrValue>,
     binary: &Binary,
 ) -> (IrBlock, IrValue) {
-    // Lower all values first
-    //let mut values = Vec::with_capacity(binary.elems.len());
-    //for elem in binary.elements.iter() {
-    //    let elem_val = map_block!(block, lower_binary_value(ctx, b, block, elem));
-    //    values.push(elem_val);
-    //}
-
     block = BinaryConstructStart::build(b, block);
     let mut bin_ref = b.block_args(block)[0];
-
-    //let block_n = b.block_insert();
-    //let mut bin_start_b = b.op_intrinsic_build(Symbol::intern("binary_start"));
-    //bin_start_b.push_value(block_n);
-    //bin_start_b.block = Some(block);
-    //bin_start_b.finish(b);
-    //block = block_n;
 
     if let Some(bin) = bin {
         let spec = BinaryEntrySpecifier::Bytes { unit: 1 };
@@ -494,12 +386,7 @@ pub(super) fn lower_binary_expr(
     }
 
     for elem in binary.elements.iter() {
-        let bin_val = map_block!(block, lower_binary_value(ctx, b, block, elem));
-        block = lower_binary_elem(ctx, b, block, &mut bin_ref, bin_val, elem);
-
-        //let (bl, val) = lower_binary_elem(ctx, b, block, res_arg, elem);
-        //res_arg = val;
-        //block = bl;
+        block = lower_binary_elem(ctx, b, block, &mut bin_ref, elem);
     }
 
     block = BinaryConstructFinish::build(b, block, bin_ref);

@@ -121,48 +121,7 @@ impl Expr {
             Expr::Fun(fun) => fun.id(),
         }
     }
-
-    pub fn from_binary(bin: Binary) -> Self {
-        if bin.elements.len() != 1 {
-            return Expr::Binary(bin);
-        }
-
-        let element = &bin.elements[0];
-        if let Expr::Literal(Literal::String(n, i)) = element.bit_expr {
-            // This is a constant binary
-            return Expr::Literal(Literal::Binary(n, i));
-        }
-
-        Expr::Binary(bin)
-    }
 }
-//impl PartialOrd for Expr {
-//    // number < atom < reference < fun < port < pid < tuple < map < nil < list < bit string
-//    fn partial_cmp(&self, other: &Expr) -> Option<Ordering> {
-//        match (self, other) {
-//            (&Expr::Binary(_), &Expr::Binary(_)) => None,
-//            (&Expr::Binary(_), _) => Some(Ordering::Greater),
-//            (_, &Expr::Binary(_)) => Some(Ordering::Less),
-//            (&Expr::Cons(ref lhs), &Expr::Cons(ref rhs)) => lhs.partial_cmp(rhs),
-//            (&Expr::Cons(_), _) => Some(Ordering::Greater),
-//            (_, &Expr::Cons(_)) => Some(Ordering::Less),
-//            (&Expr::Nil(_), &Expr::Nil(_)) => Some(Ordering::Equal),
-//            (&Expr::Nil(_), _) => Some(Ordering::Greater),
-//            (_, &Expr::Nil(_)) => Some(Ordering::Less),
-//            (&Expr::Map(ref lhs), &Expr::Map(ref rhs)) => lhs.partial_cmp(rhs),
-//            (&Expr::Map(_), _) => Some(Ordering::Greater),
-//            (_, &Expr::Map(_)) => Some(Ordering::Less),
-//            (&Expr::Tuple(ref lhs), &Expr::Tuple(ref rhs)) => lhs.partial_cmp(rhs),
-//            (&Expr::Tuple(_), _) => Some(Ordering::Greater),
-//            (_, &Expr::Tuple(_)) => Some(Ordering::Less),
-//            (&Expr::Fun(_), &Expr::Fun(_)) => None,
-//            (&Expr::Fun(_), _) => Some(Ordering::Greater),
-//            (_, &Expr::Fun(_)) => Some(Ordering::Less),
-//            (&Expr::Literal(ref lhs), &Expr::Literal(ref rhs)) => lhs.partial_cmp(rhs),
-//            _ => None,
-//        }
-//    }
-//}
 
 #[derive(Debug, Clone)]
 pub struct Var(pub NodeId, pub Ident);
@@ -275,7 +234,6 @@ impl PartialEq for MapProjection {
 pub enum Literal {
     Atom(NodeId, Ident),
     String(NodeId, Ident),
-    Binary(NodeId, Ident),
     Char(SourceSpan, NodeId, char),
     Integer(SourceSpan, NodeId, Integer),
     Float(SourceSpan, NodeId, Float),
@@ -285,7 +243,6 @@ impl Literal {
         match self {
             &Literal::Atom(_, Ident { ref span, .. }) => span.clone(),
             &Literal::String(_, Ident { ref span, .. }) => span.clone(),
-            &Literal::Binary(_, Ident { ref span, .. }) => span.clone(),
             &Literal::Char(span, _, _) => span.clone(),
             &Literal::Integer(span, _, _) => span.clone(),
             &Literal::Float(span, _, _) => span.clone(),
@@ -295,7 +252,6 @@ impl Literal {
         match self {
             Literal::Atom(id, _) => *id,
             Literal::String(id, _) => *id,
-            Literal::Binary(id, _) => *id,
             Literal::Char(_, id, _) => *id,
             Literal::Integer(_, id, _) => *id,
             Literal::Float(_, id, _) => *id,
@@ -311,9 +267,6 @@ impl PartialEq for Literal {
             (&Literal::String(_, ref lhs), &Literal::String(_, ref rhs)) => lhs == rhs,
             (&Literal::String(_, _), _) => false,
             (_, &Literal::String(_, _)) => false,
-            (&Literal::Binary(_, ref lhs), &Literal::Binary(_, ref rhs)) => lhs == rhs,
-            (&Literal::Binary(_, _), _) => false,
-            (_, &Literal::Binary(_, _)) => false,
             (x, y) => x.partial_cmp(y) == Some(Ordering::Equal),
         }
     }
@@ -325,9 +278,6 @@ impl PartialOrd for Literal {
             (Literal::String(_, ref lhs), Literal::String(_, ref rhs)) => lhs.partial_cmp(rhs),
             (Literal::String(_, _), _) => Some(Ordering::Greater),
             (_, Literal::String(_, _)) => Some(Ordering::Less),
-            (Literal::Binary(_, ref lhs), Literal::Binary(_, ref rhs)) => lhs.partial_cmp(rhs),
-            (Literal::Binary(_, _), _) => Some(Ordering::Greater),
-            (_, Literal::Binary(_, _)) => Some(Ordering::Less),
             (Literal::Atom(_, ref lhs), Literal::Atom(_, ref rhs)) => lhs.partial_cmp(rhs),
             (Literal::Atom(_, _), _) => Some(Ordering::Greater),
             (_, Literal::Atom(_, _)) => Some(Ordering::Less),

@@ -28,8 +28,13 @@ fn pattern_to_tree_node_append_tail(
 ) -> TreeNode {
     match expr {
         Expr::Literal(Literal::String(_id, ident)) => {
-            let tokens = match crate::lower::expr::literal::tokenize_string(*ident) {
-                Ok(tok) => tok,
+            let mut tokens = Vec::new();
+            let ret = crate::lower::strings::tokenize_string(*ident, &mut |cp, _si| {
+                tokens.push(cp);
+                Ok(())
+            });
+            match ret {
+                Ok(()) => (),
                 Err(err) => {
                     ctx.error(err);
                     return t.nodes.push(TreeNodeKind::Wildcard(span));
@@ -190,25 +195,14 @@ fn pattern_to_tree_node(
                 Literal::Char(_span, _id, c) => b.cons_mut().from(*c).into(),
                 Literal::Integer(_span, _id, num) => b.cons_mut().from(num.clone()).into(),
                 Literal::Float(_span, _id, num) => b.cons_mut().from(*num).into(),
-                Literal::Binary(_id, ident) => {
-                    match crate::lower::expr::literal::tokenize_string(*ident) {
-                        Ok(chars) => {
-                            let cons = b.cons_mut();
-                            let bytes = chars.iter().copied().map(|i| i as u8).collect::<Vec<_>>();
-                            let bin = BinaryTerm(bytes);
-                            let bin_const = cons.from(bin);
-                            let node = t.nodes.push(TreeNodeKind::Atomic(ident.span, bin_const));
-                            return node;
-                        }
-                        Err(err) => {
-                            ctx.error(err);
-                            return t.nodes.push(TreeNodeKind::Wildcard(lit.span()));
-                        }
-                    }
-                }
                 Literal::String(_id, ident) => {
-                    match crate::lower::expr::literal::tokenize_string(*ident) {
-                        Ok(chars) => {
+                    let mut chars = Vec::new();
+                    let ret = crate::lower::strings::tokenize_string(*ident, &mut |cp, _si| {
+                        chars.push(cp);
+                        Ok(())
+                    });
+                    match ret {
+                        Ok(()) => {
                             let nil_const = b.cons_mut().from(NilTerm);
                             let mut node =
                                 t.nodes.push(TreeNodeKind::Atomic(ident.span, nil_const));
@@ -333,9 +327,14 @@ fn pattern_to_tree_node(
                     && elem.bit_type.as_ref().map(|v| v.len() == 0).unwrap_or(true)
                 {
                     if let Expr::Literal(Literal::String(_id, string)) = &elem.bit_expr {
-                        let tokenized = crate::lower::expr::literal::tokenize_string(*string);
+                        let mut chars = Vec::new();
+                        let tokenized =
+                            crate::lower::strings::tokenize_string(*string, &mut |cp, _si| {
+                                chars.push(cp);
+                                Ok(())
+                            });
                         return match tokenized {
-                            Ok(chars) => {
+                            Ok(()) => {
                                 let bin =
                                     chars.iter().map(|ch| (ch & 0xff) as u8).collect::<Vec<_>>();
                                 let cons = b.cons_mut().from(bin);

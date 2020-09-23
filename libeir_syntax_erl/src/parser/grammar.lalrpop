@@ -763,7 +763,7 @@ ComprehensionExpr: Expr = {
 
 Binary: Expr = {
     <l:@L> "<<" <elements:CommaOpt<BinaryElement>> ">>" <r:@R>
-        => Expr::from_binary(Binary { span: span!(l, r), id: nid.next(), elements }),
+        => Expr::Binary(Binary { span: span!(l, r), id: nid.next(), elements }),
 };
 
 BinaryElement: BinaryElement = {

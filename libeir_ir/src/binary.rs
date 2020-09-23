@@ -43,6 +43,27 @@ impl BinaryEntrySpecifier {
             _ => true,
         }
     }
+    pub fn is_native_endian(&self) -> bool {
+        match self {
+            BinaryEntrySpecifier::Integer {
+                endianness: Endianness::Native,
+                ..
+            } => true,
+            BinaryEntrySpecifier::Float {
+                endianness: Endianness::Native,
+                ..
+            } => true,
+            BinaryEntrySpecifier::Utf16 {
+                endianness: Endianness::Native,
+                ..
+            } => true,
+            BinaryEntrySpecifier::Utf32 {
+                endianness: Endianness::Native,
+                ..
+            } => true,
+            _ => false,
+        }
+    }
 }
 
 impl Default for BinaryEntrySpecifier {

@@ -12,7 +12,7 @@ use libeir_util_parse::ErrorReceiver;
 use crate::parser::ast::{Function, FunctionClause, Module, NamedFunction};
 
 macro_rules! map_block {
-    ($block:ident, $call:expr) => {{
+    ($block:expr, $call:expr) => {{
         let (block, val) = $call;
         $block = block;
         val
@@ -36,6 +36,8 @@ use scope::ScopeToken;
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) mod strings;
 
 pub(crate) struct LowerCtx<'a> {
     codemap: Arc<CodeMap>,
