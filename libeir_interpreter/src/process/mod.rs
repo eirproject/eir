@@ -168,7 +168,7 @@ impl CallExecutor {
             ConstKind::Atomic(AtomicTerm::Atom(atom)) => Term::Atom(atom.0).into(),
             ConstKind::Atomic(AtomicTerm::Int(int)) => Term::Integer(int.0.into()).into(),
             ConstKind::Atomic(AtomicTerm::BigInt(int)) => Term::Integer(int.0.clone()).into(),
-            ConstKind::Atomic(AtomicTerm::Float(flt)) => Term::Float(flt.0.into()).into(),
+            ConstKind::Atomic(AtomicTerm::Float(flt)) => Term::Float(flt.0.inner().into()).into(),
             ConstKind::Atomic(AtomicTerm::Binary(bin)) => {
                 Term::Binary(Rc::new(bin.0.clone().into())).into()
             }
