@@ -190,7 +190,7 @@ where
             path: path.to_owned(),
             span: directive,
         })?;
-        let id = self.codemap.add(path, content);
+        let id = self.codemap.add_child(path, content, directive);
         let file = self.codemap.get(id).unwrap();
         let source = Source::new(file);
         let scanner = Scanner::new(source);

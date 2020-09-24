@@ -502,7 +502,7 @@ pub fn string_to_binary(
 mod tests {
     use libeir_intern::Ident;
 
-    use super::tokenize_string_to_vec;
+    use super::{string_to_binary, tokenize_string_to_vec, Encoding, Endianness};
 
     #[test]
     fn string_literal_parse() {
@@ -544,5 +544,13 @@ mod tests {
         assert!(tokenize_string_to_vec(Ident::from_str("\\x{ffff}")).unwrap() == vec![0xffff]);
 
         assert!(tokenize_string_to_vec(Ident::from_str("\\^a\\^z")).unwrap() == vec![1, 26]);
+    }
+
+    #[test]
+    fn test_string_to_binary() {
+        assert!(
+            string_to_binary(Ident::from_str("abcå"), Encoding::Utf8, Endianness::Big).unwrap()
+                == vec![0x61, 0x62, 0x63, 0xc3, 0xa5]
+        )
     }
 }

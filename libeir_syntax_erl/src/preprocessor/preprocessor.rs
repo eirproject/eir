@@ -204,6 +204,7 @@ where
     }
 
     fn expand_userdefined_macro(&self, call: MacroCall) -> PResult<VecDeque<LexicalToken>> {
+        let span = call.span();
         let definition = match self.macros.get(&call) {
             None => return Err(PreprocessorError::UndefinedMacro { call }),
             Some(def) => def,
@@ -211,15 +212,15 @@ where
         match *definition {
             MacroDef::Dynamic(ref replacement) => Ok(replacement.clone().into()),
             MacroDef::String(ref s) => Ok(vec![LexicalToken(
-                SourceIndex::UNKNOWN,
+                span.start(),
                 Token::String(s.clone()),
-                SourceIndex::UNKNOWN,
+                span.end(),
             )]
             .into()),
             MacroDef::Boolean(true) => Ok(vec![LexicalToken(
-                SourceIndex::UNKNOWN,
+                span.start(),
                 Token::Atom(symbols::True),
-                SourceIndex::UNKNOWN,
+                span.end(),
             )]
             .into()),
             MacroDef::Boolean(false) => Ok(VecDeque::new()),
@@ -252,9 +253,9 @@ where
                 Ok(expanded)
             }
             MacroDef::DelayedSubstitution(subst) => Ok(vec![LexicalToken(
-                call.span().start(),
+                span.start(),
                 Token::DelayedSubstitution(subst),
-                call.span().end(),
+                span.end(),
             )]
             .into()),
         }

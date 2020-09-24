@@ -40,18 +40,29 @@ impl CodeMap {
             let seen_ref = self
                 .seen
                 .entry(path.clone())
-                .or_insert_with(|| self.insert_file(name, source));
+                .or_insert_with(|| self.insert_file(name, source, None));
             *seen_ref.value()
         } else {
-            self.insert_file(name, source)
+            self.insert_file(name, source, None)
         }
     }
 
-    fn insert_file(&self, name: FileName, source: String) -> SourceId {
+    /// Add a file to the map with the given source span as a parent.
+    /// This will not deduplicate the file in the map.
+    pub fn add_child(
+        &self,
+        name: impl Into<FileName>,
+        source: String,
+        parent: SourceSpan,
+    ) -> SourceId {
+        self.insert_file(name.into(), source, Some(parent))
+    }
+
+    fn insert_file(&self, name: FileName, source: String, parent: Option<SourceSpan>) -> SourceId {
         let file_id = self.next_file_id();
         self.files.insert(
             file_id,
-            Arc::new(SourceFile::new(file_id, name.into(), source)),
+            Arc::new(SourceFile::new(file_id, name.into(), source, parent)),
         );
         file_id
     }
@@ -63,6 +74,10 @@ impl CodeMap {
         } else {
             self.files.get(&file_id).map(|r| r.value().clone())
         }
+    }
+
+    pub fn parent(&self, file_id: SourceId) -> Option<SourceSpan> {
+        self.get(file_id).and_then(|f| f.parent())
     }
 
     pub fn name(&self, file_id: SourceId) -> Option<FileName> {

@@ -31,9 +31,10 @@ pub struct SourceFile {
     name: FileName,
     source: String,
     line_starts: Vec<ByteIndex>,
+    parent: Option<SourceSpan>,
 }
 impl SourceFile {
-    crate fn new(id: SourceId, name: FileName, source: String) -> Self {
+    crate fn new(id: SourceId, name: FileName, source: String, parent: Option<SourceSpan>) -> Self {
         let line_starts = codespan_reporting::files::line_starts(source.as_str())
             .map(|i| ByteIndex::from(i as u32))
             .collect();
@@ -43,6 +44,7 @@ impl SourceFile {
             name,
             source,
             line_starts,
+            parent,
         }
     }
 
@@ -52,6 +54,10 @@ impl SourceFile {
 
     pub fn id(&self) -> SourceId {
         self.id
+    }
+
+    pub fn parent(&self) -> Option<SourceSpan> {
+        self.parent
     }
 
     pub fn line_start(

@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use codespan::{ByteIndex, ByteOffset, Span};
 
-use super::{SourceId, SourceIndex};
+use super::{CodeMap, SourceId, SourceIndex};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SourceSpan {
@@ -20,6 +20,7 @@ impl SourceSpan {
     #[inline]
     pub fn new(start: SourceIndex, end: SourceIndex) -> Self {
         let source_id = start.source_id();
+        println!("{} {}", start.index(), end.index());
         assert_eq!(
             source_id,
             end.source_id(),
@@ -32,6 +33,49 @@ impl SourceSpan {
             source_id,
             start,
             end,
+        }
+    }
+
+    pub fn new_align<F>(
+        start: SourceIndex,
+        end: SourceIndex,
+        get_codemap: &Fn(&mut dyn FnOnce(&CodeMap)),
+    ) -> SourceSpan {
+        let start_source = start.source_id();
+        let end_source = end.source_id();
+
+        if start_source == end_source {
+            Self::new(start, end)
+        } else {
+            let mut result = None;
+            get_codemap(&mut |codemap: &CodeMap| {
+                let mut idx = start_source;
+                loop {
+                    if let Some(parent) = codemap.parent(idx) {
+                        if idx == end_source {
+                            result = Some(Self::new(parent.start(), end));
+                            return;
+                        }
+                        idx = parent.source_id();
+                    } else {
+                        break;
+                    }
+                }
+
+                let mut idx = end_source;
+                loop {
+                    if let Some(parent) = codemap.parent(idx) {
+                        if idx == start_source {
+                            result = Some(Self::new(start, parent.end()));
+                            return;
+                        }
+                        idx = parent.source_id();
+                    } else {
+                        break;
+                    }
+                }
+            });
+            result.expect("source spans cannot be aligned!")
         }
     }
 
