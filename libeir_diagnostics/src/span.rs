@@ -20,7 +20,6 @@ impl SourceSpan {
     #[inline]
     pub fn new(start: SourceIndex, end: SourceIndex) -> Self {
         let source_id = start.source_id();
-        println!("{} {}", start.index(), end.index());
         assert_eq!(
             source_id,
             end.source_id(),
