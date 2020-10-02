@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use libeir_ir::FunctionBuilder;
 use libeir_ir::{Block, OpKind};
 use libeir_ir::{MangleTo, Mangler};
@@ -35,22 +37,36 @@ impl NaiveInlineClosuresPass {
     pub fn inline_closures(&mut self, b: &mut FunctionBuilder) {
         self.calls_buf.clear();
 
+        let live_block_graph = b.fun().live_block_graph();
+
+        let sccs = petgraph::algo::kosaraju_scc(&live_block_graph);
+
+        let mut in_big_scc = BTreeSet::new();
+        for scc in sccs.iter() {
+            if scc.len() > 1 {
+                for node in scc.iter() {
+                    in_big_scc.insert(*node);
+                }
+            }
+        }
+
         for block in b.fun().block_graph().dfs_post_order_iter() {
             // We perform inlining if the block satisfies the following
             // conditions:
             // 1. The block is a call operation
             // 2. The target of the call operation is another block
             // 3. There is at least one block argument to the block
+            // 4. The target block does not form a cycle to itself in the block graph
 
             // OP must be Call
             if let OpKind::Call(_) = b.fun().block_kind(block).unwrap() {
                 let reads = b.fun().block_reads(block);
 
                 // Call target must be block
-                let target = b.fun().value_block(reads[0]);
-                if target.is_none() {
-                    continue;
-                }
+                let target = match b.fun().value_block(reads[0]) {
+                    Some(t) => t,
+                    None => continue,
+                };
 
                 // Arguments must contain block
 
@@ -59,9 +75,15 @@ impl NaiveInlineClosuresPass {
                     continue;
                 }
 
-                // TODO: Check that the function itself is not called from the scope
+                // Check if the target block is in a SCC with other nodes than
+                // just itself. If this is the case, then it might call itself,
+                // and we can't do inlining naively.
+                // TODO: This might have false positives?
+                if in_big_scc.contains(&target) {
+                    continue;
+                }
 
-                self.calls_buf.push((block, target.unwrap()));
+                self.calls_buf.push((block, target));
             }
         }
 

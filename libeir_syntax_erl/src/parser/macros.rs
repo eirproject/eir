@@ -181,12 +181,12 @@ macro_rules! fun {
             NamedFunction {
                 span: SourceSpan::UNKNOWN,
                 id: $nid.next(),
-                name: ident!($name),
+                name: Name::Atom(ident!($name)),
                 arity,
                 clauses: vec![
                     FunctionClause{
                         span: SourceSpan::UNKNOWN,
-                        name: Some(ident!($name)),
+                        name: Some(Name::Atom(ident!($name))),
                         params,
                         guard: None,
                         body: vec![$body],
@@ -202,7 +202,7 @@ macro_rules! fun {
             $(
                 clauses.push(FunctionClause {
                     span: SourceSpan::UNKNOWN,
-                    name: Some(ident!($name)),
+                    name: Some(Name::Atom(ident!($name))),
                     params: vec![$($params),*],
                     guard: None,
                     body: vec![$body],
@@ -212,7 +212,7 @@ macro_rules! fun {
             NamedFunction {
                 span: SourceSpan::UNKNOWN,
                 id: $nid.next(),
-                name: ident!($name),
+                name: Name::Atom(ident!($name)),
                 arity,
                 clauses,
                 spec: None,

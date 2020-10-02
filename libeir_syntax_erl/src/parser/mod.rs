@@ -273,14 +273,14 @@ foo([H|T], Acc) -> foo(T, [H|Acc]).
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
             span: SourceSpan::UNKNOWN,
-            name: ident_opt!(foo),
+            name: ident_opt!(foo).map(Name::Atom),
             params: vec![nil!(nid), var!(nid, Acc)],
             guard: None,
             body: vec![var!(nid, Acc)],
         });
         clauses.push(FunctionClause {
             span: SourceSpan::UNKNOWN,
-            name: ident_opt!(foo),
+            name: ident_opt!(foo).map(Name::Atom),
             params: vec![cons!(nid, var!(nid, H), var!(nid, T)), var!(nid, Acc)],
             guard: None,
             body: vec![apply!(
@@ -294,7 +294,7 @@ foo([H|T], Acc) -> foo(T, [H|Acc]).
         body.push(TopLevel::Function(NamedFunction {
             span: SourceSpan::UNKNOWN,
             id: nid.next(),
-            name: ident!("foo"),
+            name: Name::Atom(ident!("foo")),
             arity: 2,
             clauses,
             spec: None,
@@ -332,21 +332,21 @@ unless(Value) ->
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
             span: SourceSpan::UNKNOWN,
-            name: ident_opt!(unless),
+            name: ident_opt!(unless).map(Name::Atom),
             params: vec![atom!(nid, false)],
             guard: None,
             body: vec![atom!(nid, true)],
         });
         clauses.push(FunctionClause {
             span: SourceSpan::UNKNOWN,
-            name: ident_opt!(unless),
+            name: ident_opt!(unless).map(Name::Atom),
             params: vec![atom!(nid, true)],
             guard: None,
             body: vec![atom!(nid, false)],
         });
         clauses.push(FunctionClause {
             span: SourceSpan::UNKNOWN,
-            name: ident_opt!(unless),
+            name: ident_opt!(unless).map(Name::Atom),
             params: vec![var!(nid, Value)],
             guard: None,
             body: vec![Expr::If(If {
@@ -393,7 +393,7 @@ unless(Value) ->
         body.push(TopLevel::Function(NamedFunction {
             span: SourceSpan::UNKNOWN,
             id: nid.next(),
-            name: ident!(unless),
+            name: Name::Atom(ident!(unless)),
             arity: 1,
             clauses,
             spec: None,
@@ -428,7 +428,7 @@ typeof(Value) ->
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
             span: SourceSpan::UNKNOWN,
-            name: ident_opt!(typeof),
+            name: ident_opt!(typeof).map(Name::Atom),
             params: vec![var!(nid, Value)],
             guard: None,
             body: vec![Expr::Case(Case {
@@ -474,7 +474,7 @@ typeof(Value) ->
         body.push(TopLevel::Function(NamedFunction {
             span: SourceSpan::UNKNOWN,
             id: nid.next(),
-            name: ident!(typeof),
+            name: Name::Atom(ident!(typeof)),
             arity: 1,
             clauses,
             spec: None,
@@ -512,7 +512,7 @@ loop(State, Timeout) ->
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
             span: SourceSpan::UNKNOWN,
-            name: ident_opt!(loop),
+            name: ident_opt!(loop).map(Name::Atom),
             params: vec![var!(nid, State), var!(nid, Timeout)],
             guard: None,
             body: vec![Expr::Receive(Receive {
@@ -576,7 +576,7 @@ loop(State, Timeout) ->
         body.push(TopLevel::Function(NamedFunction {
             span: SourceSpan::UNKNOWN,
             id: nid.next(),
-            name: ident!(loop),
+            name: Name::Atom(ident!(loop)),
             arity: 2,
             clauses,
             spec: None,
@@ -624,7 +624,7 @@ system_version() ->
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
             span: SourceSpan::UNKNOWN,
-            name: ident_opt!(env),
+            name: ident_opt!(env).map(Name::Atom),
             params: vec![],
             guard: None,
             body: vec![atom!(nid, test)],
@@ -632,7 +632,7 @@ system_version() ->
         let env_fun = NamedFunction {
             span: SourceSpan::UNKNOWN,
             id: nid.next(),
-            name: ident!(env),
+            name: Name::Atom(ident!(env)),
             arity: 0,
             clauses,
             spec: None,
@@ -642,7 +642,7 @@ system_version() ->
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
             span: SourceSpan::UNKNOWN,
-            name: ident_opt!(system_version),
+            name: ident_opt!(system_version).map(Name::Atom),
             params: vec![],
             guard: None,
             body: vec![int!(nid, 21.into())],
@@ -650,7 +650,7 @@ system_version() ->
         let system_version_fun = NamedFunction {
             span: SourceSpan::UNKNOWN,
             id: nid.next(),
-            name: ident!(system_version),
+            name: Name::Atom(ident!(system_version)),
             arity: 0,
             clauses,
             spec: None,
@@ -730,7 +730,7 @@ example(File) ->
         let mut clauses = Vec::new();
         clauses.push(FunctionClause {
             span: SourceSpan::UNKNOWN,
-            name: ident_opt!(example),
+            name: ident_opt!(example).map(Name::Atom),
             params: vec![var!(nid, File)],
             guard: None,
             body: vec![Expr::Try(Try {
@@ -779,7 +779,7 @@ example(File) ->
         body.push(TopLevel::Function(NamedFunction {
             span: SourceSpan::UNKNOWN,
             id: nid.next(),
-            name: ident!(example),
+            name: Name::Atom(ident!(example)),
             arity: 1,
             clauses,
             spec: None,

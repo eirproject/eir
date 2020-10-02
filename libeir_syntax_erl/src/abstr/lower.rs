@@ -6,6 +6,7 @@ use libeir_util_parse::MessageIgnore;
 
 use std::convert::TryInto;
 
+use crate::ast::Name;
 use crate::parser::ast;
 use libeir_util_parse_listing::ast as aast;
 
@@ -156,7 +157,7 @@ pub fn lower(root: &aast::Root) -> ast::Module {
                 toplevel.push(ast::TopLevel::Function(ast::NamedFunction {
                     span: tuple.span,
                     id: id_gen.next(),
-                    name: fun_name,
+                    name: Name::Atom(fun_name),
                     arity: fun_arity,
                     clauses: clauses,
                     spec: None,

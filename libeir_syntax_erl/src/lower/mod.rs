@@ -227,6 +227,9 @@ fn lower_function(ctx: &mut LowerCtx, b: &mut FunctionBuilder, fun: &Function) -
 
     match fun {
         Function::Named(named) => {
+            let entry_val = b.value(entry);
+            ctx.bind(named.name.var(), entry_val);
+
             lower_function_base(ctx, b, entry, named.span, named.arity, &named.clauses);
         }
         Function::Unnamed(lambda) => {
@@ -340,7 +343,7 @@ fn lower_top_function(ctx: &mut LowerCtx, b: &mut FunctionBuilder, function: &Na
     let entry = b.block_insert();
     b.block_set_entry(entry);
 
-    let fun_name = format!("{}/{}", function.name, function.arity);
+    let fun_name = format!("{}/{}", function.name.atom(), function.arity);
     assert!(ctx.functions.len() == 0);
     ctx.functions.push(fun_name);
 

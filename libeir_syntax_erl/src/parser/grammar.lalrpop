@@ -90,17 +90,14 @@ FunctionDefinition: NamedFunction = {
 };
 
 FunctionHead: FunctionClause = {
-    <l:@L> <a:atom> "(" ")" <g:Guards?> "->" <body:Comma<Expr>> <r:@R> => {
-        FunctionClause::new(span!(l, r), Some(a), Vec::new(), g, body)
-    },
-    <l:@L> <a:atom> "(" <params:Comma<Pattern>> ")" <g:Guards?> "->" <body:Comma<Expr>> <r:@R> => {
-        FunctionClause::new(span!(l, r), Some(a), params, g, body)
+    <l:@L> <a:atom> "(" <params:CommaOpt<Pattern>> ")" <g:Guards?> "->" <body:Comma<Expr>> <r:@R> => {
+        FunctionClause::new(span!(l, r), Some(Name::Atom(a)), params, g, body)
     }
 };
 
 FunctionClause: FunctionClause = {
-    <l:@L> <a:atom?> "(" <params:CommaOpt<Pattern>> ")" <g:Guards?> "->" <body:Comma<Expr>> <r:@R> => {
-        FunctionClause::new(span!(l, r), a, params, g, body)
+    <l:@L> <a:Ident?> "(" <params:CommaOpt<Pattern>> ")" <g:Guards?> "->" <body:Comma<Expr>> <r:@R> => {
+        FunctionClause::new(span!(l, r), a.map(Name::Var), params, g, body)
     }
 };
 

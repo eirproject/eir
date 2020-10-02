@@ -4,7 +4,7 @@ mod functions;
 mod module;
 mod types;
 
-use libeir_diagnostics::SourceIndex;
+use libeir_diagnostics::{SourceIndex, SourceSpan};
 
 pub use self::attributes::*;
 pub use self::expr::*;
@@ -33,6 +33,24 @@ impl Name {
         match self {
             Name::Atom(Ident { ref name, .. }) => name.clone(),
             Name::Var(Ident { ref name, .. }) => name.clone(),
+        }
+    }
+    pub fn span(&self) -> SourceSpan {
+        match self {
+            Name::Atom(Ident { ref span, .. }) => span.clone(),
+            Name::Var(Ident { ref span, .. }) => span.clone(),
+        }
+    }
+    pub fn atom(&self) -> Ident {
+        match self {
+            Name::Atom(ident) => *ident,
+            _ => panic!(),
+        }
+    }
+    pub fn var(&self) -> Ident {
+        match self {
+            Name::Var(ident) => *ident,
+            _ => panic!(),
         }
     }
 }

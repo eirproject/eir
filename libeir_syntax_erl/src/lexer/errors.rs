@@ -2,9 +2,10 @@ use std::hash::{Hash, Hasher};
 
 use snafu::Snafu;
 
-use libeir_diagnostics::{Diagnostic, Label, SourceIndex, SourceSpan};
+use libeir_diagnostics::{Diagnostic, Label, SourceIndex, SourceSpan, ToDiagnostic};
 
 use super::token::{Token, TokenType};
+use crate::lower::strings::escape::EscapeStmError;
 
 /// An enum of possible errors that can occur during lexing.
 #[derive(Clone, Debug, PartialEq, Snafu)]
@@ -25,9 +26,8 @@ pub enum LexicalError {
     #[snafu(display("Unclosed atom literal"))]
     UnclosedAtom { span: SourceSpan },
 
-    /// Occurs when an escape sequence is encountered but the code is unsupported or unrecognized
-    #[snafu(display("{}", reason))]
-    InvalidEscape { span: SourceSpan, reason: String },
+    #[snafu(display("{}", source))]
+    EscapeError { source: EscapeStmError<SourceIndex> },
 
     /// Occurs when we encounter an unexpected character
     #[snafu(display("Encountered unexpected character '{}'", found))]
@@ -40,30 +40,17 @@ impl Hash for LexicalError {
             LexicalError::InvalidRadix { .. } => 1,
             LexicalError::UnclosedString { .. } => 2,
             LexicalError::UnclosedAtom { .. } => 3,
-            LexicalError::InvalidEscape { .. } => 4,
+            LexicalError::EscapeError { .. } => 4,
             LexicalError::UnexpectedCharacter { .. } => 5,
         };
         id.hash(state);
     }
 }
-impl LexicalError {
-    /// Return the source span for this error
-    pub fn span(&self) -> SourceSpan {
-        match *self {
-            LexicalError::InvalidFloat { span, .. } => span,
-            LexicalError::InvalidRadix { span, .. } => span,
-            LexicalError::UnclosedString { span, .. } => span,
-            LexicalError::UnclosedAtom { span, .. } => span,
-            LexicalError::InvalidEscape { span, .. } => span,
-            LexicalError::UnexpectedCharacter { start, .. } => SourceSpan::new(start, start),
-        }
-    }
-
-    /// Get diagnostic for display
-    pub fn to_diagnostic(&self) -> Diagnostic {
+impl ToDiagnostic for LexicalError {
+    fn to_diagnostic(&self) -> Diagnostic {
         let span = self.span();
         let msg = self.to_string();
-        match *self {
+        match self {
             LexicalError::InvalidFloat { .. } => Diagnostic::error()
                 .with_message("invalid float literal")
                 .with_labels(vec![
@@ -74,11 +61,7 @@ impl LexicalError {
                 .with_labels(vec![
                     Label::primary(span.source_id(), span).with_message(msg)
                 ]),
-            LexicalError::InvalidEscape { .. } => Diagnostic::error()
-                .with_message("invalid escape sequence")
-                .with_labels(vec![
-                    Label::primary(span.source_id(), span).with_message(msg)
-                ]),
+            LexicalError::EscapeError { source } => source.to_diagnostic(),
             LexicalError::UnexpectedCharacter { .. } => Diagnostic::error()
                 .with_message("unexpected character")
                 .with_labels(vec![
@@ -87,6 +70,19 @@ impl LexicalError {
             _ => Diagnostic::error()
                 .with_message(msg)
                 .with_labels(vec![Label::primary(span.source_id(), span)]),
+        }
+    }
+}
+impl LexicalError {
+    /// Return the source span for this error
+    pub fn span(&self) -> SourceSpan {
+        match self {
+            LexicalError::InvalidFloat { span, .. } => *span,
+            LexicalError::InvalidRadix { span, .. } => *span,
+            LexicalError::UnclosedString { span, .. } => *span,
+            LexicalError::UnclosedAtom { span, .. } => *span,
+            LexicalError::EscapeError { source } => source.span(),
+            LexicalError::UnexpectedCharacter { start, .. } => SourceSpan::new(*start, *start),
         }
     }
 }

@@ -53,6 +53,7 @@ pub enum LowerError {
     #[snafu(display("invalid character escape in string"))]
     InvalidStringEscape {
         span: SourceSpan,
+        source: super::strings::escape::EscapeStmError<SourceIndex>,
     },
 
     /// Unable to resolve a variable in scope.
@@ -188,11 +189,7 @@ impl ToDiagnostic for LowerError {
                 dig.with_labels(labels)
             }
             LowerError::PatternConst { source, .. } => source.to_diagnostic(),
-            LowerError::InvalidStringEscape { span } => Diagnostic::error()
-                .with_message(msg)
-                .with_labels(vec![
-                    Label::primary(span.source_id(), *span).with_message("invalid string escape")
-                ]),
+            LowerError::InvalidStringEscape { source, .. } => source.to_diagnostic(),
             LowerError::UnresolvedVariable { span } => Diagnostic::error()
                 .with_message(msg)
                 .with_labels(vec![

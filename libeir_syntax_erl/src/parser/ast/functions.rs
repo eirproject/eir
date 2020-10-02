@@ -264,7 +264,7 @@ impl FunctionName {
             } => FunctionName::PartiallyResolved(PartiallyResolvedFunctionName {
                 span: span.clone(),
                 id: nid.next(),
-                function: name.clone(),
+                function: name.atom(),
                 arity: params.len(),
             }),
             _ => panic!("cannot create a FunctionName from an anonymous FunctionClause!"),
@@ -304,7 +304,7 @@ impl fmt::Display for FunctionName {
 pub struct NamedFunction {
     pub span: SourceSpan,
     pub id: NodeId,
-    pub name: Ident,
+    pub name: Name,
     pub arity: usize,
     pub clauses: Vec<FunctionClause>,
     pub spec: Option<TypeSpec>,
@@ -524,9 +524,8 @@ impl Function {
         clauses: Vec<FunctionClause>,
     ) -> Result<Self, ()> {
         debug_assert!(clauses.len() > 0);
-        let (head, _rest) = clauses.split_first().unwrap();
 
-        if head.name.is_some() {
+        if clauses[0].name.is_some() {
             Ok(Function::Named(NamedFunction::new(
                 errs, span, nid, clauses,
             )?))
@@ -539,7 +538,7 @@ impl Function {
 #[derive(Debug, Clone)]
 pub struct FunctionClause {
     pub span: SourceSpan,
-    pub name: Option<Ident>,
+    pub name: Option<Name>,
     pub params: Vec<Expr>,
     pub guard: Option<Vec<Guard>>,
     pub body: Vec<Expr>,
@@ -555,7 +554,7 @@ impl PartialEq for FunctionClause {
 impl FunctionClause {
     pub fn new(
         span: SourceSpan,
-        name: Option<Ident>,
+        name: Option<Name>,
         params: Vec<Expr>,
         guard: Option<Vec<Guard>>,
         body: Vec<Expr>,

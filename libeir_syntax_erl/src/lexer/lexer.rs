@@ -6,6 +6,8 @@ use libeir_diagnostics::{ByteOffset, SourceIndex, SourceSpan};
 use libeir_util_number::{Float, FloatError, Integer, ToPrimitive};
 use libeir_util_parse::{Scanner, Source};
 
+use crate::lower::strings::escape::{EscapeStm, EscapeStmAction};
+
 use super::errors::LexicalError;
 use super::token::*;
 use super::{Lexed, Symbol};
@@ -63,6 +65,9 @@ pub struct Lexer<S> {
     /// The location produces is a SourceIndex
     scanner: Scanner<S>,
 
+    /// Escape sequence state machine.
+    escape: EscapeStm<SourceIndex>,
+
     /// The most recent token to be lexed.
     /// At the start and end, this should be Token::EOF
     token: Token,
@@ -91,6 +96,7 @@ where
         let start = scanner.start();
         let mut lexer = Lexer {
             scanner,
+            escape: EscapeStm::new(),
             token: Token::EOF,
             token_start: start + ByteOffset(0),
             token_end: start + ByteOffset(0),
@@ -176,6 +182,11 @@ where
     }
 
     #[inline]
+    fn index(&mut self) -> SourceIndex {
+        self.scanner.read().0
+    }
+
+    #[inline]
     fn skip(&mut self) {
         self.pop();
     }
@@ -257,16 +268,11 @@ where
                 self.skip();
                 if self.read() == '\\' {
                     return match self.lex_escape_sequence() {
-                        Ok(Token::Char(c)) => Token::Char(c),
-                        Ok(Token::Integer(i)) => match std::char::from_u32(i.to_u32().unwrap()) {
+                        Ok(num) => match std::char::from_u32(num as u32) {
                             Some(c) => Token::Char(c),
-                            None => Token::Error(LexicalError::InvalidEscape {
-                                span: self.span(),
-                                reason: format!("the integer value '{}' is not a valid char", i),
-                            }),
+                            None => Token::Integer((num as i64).into()),
                         },
-                        Ok(_) => panic!("internal error: unhandled escape sequence in lexer"),
-                        Err(e) => Token::Error(e),
+                        Err(err) => Token::Error(err),
                     };
                 }
                 Token::Char(self.pop())
@@ -358,7 +364,7 @@ where
                     return self.tokenize();
                 }
                 return match self.lex_escape_sequence() {
-                    Ok(t) => t,
+                    Ok(t) => Token::Integer((t as i64).into()),
                     Err(e) => Token::Error(e),
                 };
             }
@@ -445,87 +451,114 @@ where
     }
 
     #[inline]
-    fn lex_escape_sequence(&mut self) -> Result<Token, LexicalError> {
-        let mut c = self.pop();
+    fn lex_escape_sequence(&mut self) -> Result<u64, LexicalError> {
+        let start_idx = self.index();
+
+        let mut c = self.read();
         debug_assert_eq!(c, '\\');
 
-        match self.pop() {
-            'n' => Ok(Token::Char('\n')),
-            'r' => Ok(Token::Char('\r')),
-            't' => Ok(Token::Char('\t')),
-            'b' => Ok(Token::Char('\x08')),
-            // TODO: Figure out why Erlang lexes this as an escape: 'd' => Some('\d'),
-            'e' => Ok(Token::Char('\x1B')),
-            'f' => Ok(Token::Char('\x0C')),
-            's' => Ok(Token::Char(' ')),
-            'v' => Ok(Token::Char('\x0B')),
-            '\'' => Ok(Token::Char('\'')),
-            '"' => Ok(Token::Char('"')),
-            '\\' => Ok(Token::Char('\\')),
-            // Possible octal escape
-            '0' => {
-                c = self.read();
-                if c.is_digit(8) {
-                    let mut num = String::new();
-                    while self.read().is_digit(8) {
-                        num.push(self.pop());
+        self.escape.reset();
+
+        let mut byte_idx = 0;
+
+        loop {
+            let c = self.read();
+            let idx = start_idx + byte_idx;
+
+            let c = if c == '\0' { None } else { Some(c) };
+            let res = self.escape.transition(c, idx);
+
+            println!("{:?} {:?}", c, res);
+
+            match res {
+                Ok((action, result)) => {
+                    if let EscapeStmAction::Next = action {
+                        byte_idx += c.map(|c| c.len_utf8()).unwrap_or(0);
+                        self.pop();
                     }
-                    return Ok(to_integer_literal(&num, 8));
-                } else {
-                    Ok(Token::Char('\0'))
+
+                    if let Some(result) = result {
+                        return Ok(result.cp);
+                    }
                 }
+                Err(err) => Err(LexicalError::EscapeError { source: err })?,
             }
-            // Hex escape
-            'x' => {
-                c = self.read();
-                // \xXY
-                if c.is_digit(16) {
-                    let mut num = String::new();
-                    num.push(self.pop());
-                    c = self.read();
-                    if c.is_digit(16) {
-                        num.push(self.pop());
-                        return Ok(to_integer_literal(&num, 16));
-                    } else {
-                        return Err(LexicalError::InvalidEscape {
-                            span: self.span(),
-                            reason: "invalid hex escape, expected hex digit".to_string(),
-                        });
-                    }
-                } else if c == '{' {
-                    self.skip();
-                    let mut num = String::new();
-                    while self.read().is_digit(16) {
-                        num.push(self.pop());
-                    }
-                    if self.read() == '}' {
-                        self.skip();
-                        if num.len() == 0 {
-                            return Err(LexicalError::InvalidEscape {
-                                span: self.span(),
-                                reason: "invalid hex escape, must be at least one digit"
-                                    .to_string(),
-                            });
-                        }
-                        return Ok(to_integer_literal(&num, 16));
-                    } else {
-                        Err(LexicalError::InvalidEscape {
-                            span: self.span(),
-                            reason: "invalid hex escape, no closing '}'".to_string(),
-                        })
-                    }
-                } else {
-                    Err(LexicalError::InvalidEscape {
-                        span: self.span(),
-                        reason: "invalid hex escape, expected hex digit or '{'".to_string(),
-                    })
-                }
-            }
-            _ => Err(LexicalError::InvalidEscape {
-                span: self.span(),
-                reason: "invalid escape, unrecognized sequence".to_string(),
-            }),
         }
+
+        //match self.pop() {
+        //    'b' => Ok(Token::Char('\x08')),
+        //    'd' => Ok(Token::Char('\x7f')),
+        //    'e' => Ok(Token::Char('\x1b')),
+        //    'f' => Ok(Token::Char('\x0c')),
+        //    'n' => Ok(Token::Char('\n')),
+        //    'r' => Ok(Token::Char('\r')),
+        //    's' => Ok(Token::Char(' ')),
+        //    't' => Ok(Token::Char('\t')),
+        //    'v' => Ok(Token::Char('\x0b')),
+        //    '\'' => Ok(Token::Char('\'')),
+        //    '"' => Ok(Token::Char('"')),
+        //    '\\' => Ok(Token::Char('\\')),
+        //    '$' => Ok(Token::Char('$')),
+        //    // Octal escape
+        //    n @ '0'..='7' => {
+        //        c = n;
+        //        let mut num = String::new();
+        //        while self.read().is_digit(8) {
+        //            num.push(self.pop());
+        //        }
+        //        return Ok(to_integer_literal(&num, 8));
+        //    }
+        //    // Hex escape
+        //    'x' => {
+        //        c = self.read();
+        //        // \xXY
+        //        if c.is_digit(16) {
+        //            let mut num = String::new();
+        //            num.push(self.pop());
+        //            c = self.read();
+        //            if c.is_digit(16) {
+        //                num.push(self.pop());
+        //                return Ok(to_integer_literal(&num, 16));
+        //            } else {
+        //                return Err(LexicalError::InvalidEscape {
+        //                    span: self.span(),
+        //                    reason: "invalid hex escape, expected hex digit".to_string(),
+        //                });
+        //            }
+        //        } else if c == '{' {
+        //            self.skip();
+        //            let mut num = String::new();
+        //            while self.read().is_digit(16) {
+        //                num.push(self.pop());
+        //            }
+        //            if self.read() == '}' {
+        //                self.skip();
+        //                if num.len() == 0 {
+        //                    return Err(LexicalError::InvalidEscape {
+        //                        span: self.span(),
+        //                        reason: "invalid hex escape, must be at least one digit"
+        //                            .to_string(),
+        //                    });
+        //                }
+        //                return Ok(to_integer_literal(&num, 16));
+        //            } else {
+        //                Err(LexicalError::InvalidEscape {
+        //                    span: self.span(),
+        //                    reason: "invalid hex escape, no closing '}'".to_string(),
+        //                })
+        //            }
+        //        } else {
+        //            Err(LexicalError::InvalidEscape {
+        //                span: self.span(),
+        //                reason: "invalid hex escape, expected hex digit or '{'".to_string(),
+        //            })
+        //        }
+        //    }
+        //    _ => Err(LexicalError::InvalidEscape {
+        //        span: self.span(),
+        //        reason: "invalid escape, unrecognized sequence".to_string(),
+        //    }),
+        //}
     }
 
     #[inline]
@@ -988,15 +1021,19 @@ mod test {
         ]);
 
         // Octal
-        assert_lex!(r#"\00"#, |_| vec![Ok(Token::Integer(0.into()))]);
-        assert_lex!(r#"\0624"#, |_| vec![Ok(Token::Integer(0o624.into()))]);
+        assert_lex!(r#"\0"#, |_| vec![Ok(Token::Integer(0.into()))]);
+        assert_lex!(r#"\624"#, |_| vec![Ok(Token::Integer(0o624.into()))]);
+        assert_lex!(r#"\6244"#, |_| vec![
+            Ok(Token::Integer(0o624.into())),
+            Ok(Token::Integer(4.into()))
+        ]);
 
         // Octal integer literal followed by non-octal digits.
         assert_lex!(r#"\008"#, |_| vec![
             Ok(Token::Integer(0.into())),
             Ok(Token::Integer(8.into()))
         ]);
-        assert_lex!(r#"\01238"#, |_| vec![
+        assert_lex!(r#"\1238"#, |_| vec![
             Ok(Token::Integer(0o123.into())),
             Ok(Token::Integer(8.into()))
         ]);

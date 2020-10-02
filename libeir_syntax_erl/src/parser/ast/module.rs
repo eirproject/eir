@@ -6,6 +6,7 @@ use libeir_diagnostics::{Diagnostic, Label, SourceSpan};
 use libeir_util_number::ToPrimitive;
 use libeir_util_parse::ErrorReceiver;
 
+use super::Name;
 use super::NodeIdGenerator;
 use super::ParserError;
 use super::{Apply, Cons, Nil, Remote, Tuple, Var};
@@ -655,10 +656,10 @@ impl Module {
                 TopLevel::Function(mut function @ NamedFunction { .. }) => {
                     let name = &function.name;
                     let resolved_name = ResolvedFunctionName {
-                        span: name.span.clone(),
+                        span: name.span(),
                         id: nid.next(),
                         module: module.name.clone(),
-                        function: name.clone(),
+                        function: name.atom(),
                         arity: function.arity,
                     };
                     let warn_missing_specs = module
@@ -1006,7 +1007,7 @@ impl Module {
             span: f.span.clone(),
             id: f.id,
             module: self.name.clone(),
-            function: f.name.clone(),
+            function: f.name.atom(),
             arity: f.arity,
         };
         self.functions.insert(name.to_local(), f);

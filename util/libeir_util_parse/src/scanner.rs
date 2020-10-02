@@ -6,6 +6,15 @@ use libeir_diagnostics::*;
 use super::source::Source;
 
 /// An implementation of `Scanner` for general use
+///
+/// source -> pending -> current
+///
+/// ## pending
+/// `peek` returns pending without advancing
+///
+/// ## current
+/// `pop` returns current and advances
+/// `read` returns current without advances
 pub struct Scanner<S> {
     source: S,
     current: (SourceIndex, char),
@@ -36,6 +45,9 @@ where
         self.start
     }
 
+    /// Advance scanner pipeline by a single character.
+    ///
+    /// Current becomes pending, pending becomes next character from source.
     #[inline]
     pub fn advance(&mut self) {
         self.current = self.pending;
@@ -45,6 +57,7 @@ where
         };
     }
 
+    /// Get current character and advance.
     #[inline]
     pub fn pop(&mut self) -> (SourceIndex, char) {
         let current = self.current;
@@ -52,11 +65,13 @@ where
         current
     }
 
+    /// Get pending character.
     #[inline]
     pub fn peek(&self) -> (SourceIndex, char) {
         self.pending
     }
 
+    /// Get the next character from the source.
     #[inline]
     pub fn peek_next(&mut self) -> (SourceIndex, char) {
         match self.source.peek() {
@@ -65,6 +80,7 @@ where
         }
     }
 
+    /// Get current character.
     #[inline]
     pub fn read(&self) -> (SourceIndex, char) {
         self.current
