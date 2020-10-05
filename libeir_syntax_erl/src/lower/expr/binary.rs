@@ -279,10 +279,11 @@ pub(crate) fn lower_binary_elem(
     let opt_spec = elem.bit_type.as_ref().map(|b| specifier_from_parsed(&*b));
 
     let mut spec = match opt_spec {
-        None => match &elem.bit_expr {
-            Expr::Literal(Literal::String(_id, string)) => BinaryEntrySpecifier::Bytes { unit: 1 },
-            _ => default_specifier(),
-        },
+        //None => match &elem.bit_expr {
+        //    Expr::Literal(Literal::String(_id, string)) => BinaryEntrySpecifier::Bytes { unit: 1 },
+        //    _ => default_specifier(),
+        //},
+        None => default_specifier(),
         Some(Ok(inner)) => inner,
         Some(Err(err)) => {
             ctx.error(err);
@@ -311,6 +312,7 @@ pub(crate) fn lower_binary_elem(
                 }
 
                 _ => {
+                    println!("{:?}", spec);
                     ctx.warn(LowerError::BinaryConstructEntryTypeWarning { span: elem.span });
                     None
                 }

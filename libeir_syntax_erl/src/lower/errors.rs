@@ -229,7 +229,7 @@ impl ToDiagnostic for LowerError {
                 .with_labels(vec![Label::primary(span.source_id(), *span).with_message(
                     format!("size specifier not valid for {} binary entries", typ),
                 )]),
-            LowerError::BinaryConstructEntryTypeWarning { span } => Diagnostic::error()
+            LowerError::BinaryConstructEntryTypeWarning { span } => Diagnostic::warning()
                 .with_message(msg)
                 .with_labels(vec![
                     Label::primary(span.source_id(), *span).with_message("can never succeed")
