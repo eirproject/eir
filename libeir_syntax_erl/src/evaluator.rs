@@ -8,7 +8,7 @@ use crate::lexer::symbols;
 use crate::parser::ast::{BinaryOp, Expr, Literal, UnaryOp};
 
 use libeir_diagnostics::{Diagnostic, Label, SourceSpan, ToDiagnostic};
-use libeir_intern::Symbol;
+use libeir_intern::{Ident, Symbol};
 use libeir_ir::ToPrimitive;
 use libeir_util_number::{Float, Integer, Number};
 
@@ -34,6 +34,12 @@ pub enum EvalError {
 
     #[snafu(display("attempted too large bitshift"))]
     TooLargeShift { span: SourceSpan },
+
+    #[snafu(display("no record with name"))]
+    NoRecord { span: SourceSpan },
+
+    #[snafu(display("field doesn't exist in record"))]
+    NoRecordField { span: SourceSpan },
 }
 
 impl ToDiagnostic for EvalError {
@@ -57,6 +63,12 @@ impl ToDiagnostic for EvalError {
                 .with_message(msg)
                 .with_labels(vec![Label::primary(span.source_id(), *span)]),
             EvalError::TooLargeShift { span } => Diagnostic::error()
+                .with_message(msg)
+                .with_labels(vec![Label::primary(span.source_id(), *span)]),
+            EvalError::NoRecord { span } => Diagnostic::error()
+                .with_message(msg)
+                .with_labels(vec![Label::primary(span.source_id(), *span)]),
+            EvalError::NoRecordField { span } => Diagnostic::error()
                 .with_message(msg)
                 .with_labels(vec![Label::primary(span.source_id(), *span)]),
         }
@@ -149,7 +161,15 @@ impl Term {
     }
 }
 
-pub fn eval_expr(expr: &Expr) -> Result<Term, EvalError> {
+pub enum ResolveRecordIndexError {
+    NoRecord,
+    NoField,
+}
+
+pub fn eval_expr(
+    expr: &Expr,
+    resolve_record_index: Option<&dyn Fn(Ident, Ident) -> Result<usize, ResolveRecordIndexError>>,
+) -> Result<Term, EvalError> {
     let span = expr.span();
     let invalid_expr = InvalidConstExpression { span };
     let float_err = FloatError { span };
@@ -165,26 +185,37 @@ pub fn eval_expr(expr: &Expr) -> Result<Term, EvalError> {
 
         Expr::Nil(_) => Term::Nil,
         Expr::Cons(cons) => {
-            let head = eval_expr(&cons.head)?;
-            let tail = eval_expr(&cons.tail)?;
+            let head = eval_expr(&cons.head, resolve_record_index)?;
+            let tail = eval_expr(&cons.tail, resolve_record_index)?;
             Term::Cons(Box::new(head), Box::new(tail))
         }
 
         Expr::Tuple(tup) => Term::Tuple(
             tup.elements
                 .iter()
-                .map(eval_expr)
+                .map(|e| eval_expr(e, resolve_record_index))
                 .collect::<Result<Vec<_>, _>>()?,
         ),
         Expr::Map(_) => unimplemented!(),
         Expr::Binary(_) => unimplemented!(),
         Expr::Record(_) => unimplemented!(),
+        Expr::RecordIndex(rec_idx) if resolve_record_index.is_some() => {
+            match resolve_record_index.unwrap()(rec_idx.name, rec_idx.field) {
+                Ok(index) => Term::Number(index.into()),
+                Err(ResolveRecordIndexError::NoRecord) => {
+                    Err(EvalError::NoRecord { span: rec_idx.span })?
+                }
+                Err(ResolveRecordIndexError::NoField) => {
+                    Err(EvalError::NoRecordField { span: rec_idx.span })?
+                }
+            }
+        }
 
         Expr::BinaryExpr(bin_expr) => {
             use BinaryOp as B;
 
-            let lhs = eval_expr(&bin_expr.lhs)?;
-            let rhs = eval_expr(&bin_expr.rhs)?;
+            let lhs = eval_expr(&bin_expr.lhs, resolve_record_index)?;
+            let rhs = eval_expr(&bin_expr.rhs, resolve_record_index)?;
 
             match (bin_expr.op, lhs, rhs) {
                 (B::Add, Term::Number(l), Term::Number(r)) => (&l + &r).context(float_err)?.into(),
@@ -248,7 +279,7 @@ pub fn eval_expr(expr: &Expr) -> Result<Term, EvalError> {
         Expr::UnaryExpr(un_expr) => {
             use UnaryOp as U;
 
-            let operand = eval_expr(&un_expr.operand)?;
+            let operand = eval_expr(&un_expr.operand, resolve_record_index)?;
 
             match (un_expr.op, operand) {
                 (UnaryOp::Plus, Term::Number(o)) => o.plus().into(),

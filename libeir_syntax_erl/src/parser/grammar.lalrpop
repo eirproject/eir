@@ -296,7 +296,7 @@ TypedRecordFields: Vec<RecordField> = {
 };
 
 TypedRecordField: RecordField = {
-    <l:@L> <name:atom> <value:("=" <Expr>)?> <ty:("::" <TopType100>)?> <r:@R>
+    <l:@L> <name:atom> <value:("=" <Expr>)?> <ty:("::" <TopType>)?> <r:@R>
         => RecordField { span: span!(l, r), id: nid.next(), name: name, value, ty },
 };
 
@@ -308,7 +308,7 @@ TypeDef: TypeDef = {
 };
 
 TypeDef100: TypeDef = {
-    <l:@L> <name:atom> "(" <params:CommaOpt<atom_or_var>> ")" "::" <ty:TopType100> "." <r:@R>
+    <l:@L> <name:atom> "(" <params:CommaOpt<atom_or_var>> ")" "::" <ty:TopType> "." <r:@R>
         => TypeDef { span: span!(l, r), name, params, ty, opaque: false },
 };
 
@@ -344,19 +344,19 @@ TypeGuard: TypeGuard = {
             }
         }
     },
-    <l:@L> <var:TypeName> "::" <ty:TopType100> <r:@R>
+    <l:@L> <var:TypeName> "::" <ty:TopType> <r:@R>
         => TypeGuard { span: span!(l, r), var, ty },
 };
 
 TopType: Type = {
-    <l:@L> <name:atom_or_var> "::" <ty:TopType100> <r:@R>
-        => Type::Annotated { span: span!(l, r), name, ty: Box::new(ty)  },
-    TopType100,
+    <l:@L> <lhs:TopType> "|" <rhs:Type200> <r:@R>
+        => Type::union(span!(l, r), lhs, rhs),
+    Type100,
 };
 
-TopType100: Type = {
-    <l:@L> <lhs:Type200> "|" <rhs:TopType100> <r:@R>
-        => Type::union(span!(l, r), lhs, rhs),
+Type100: Type = {
+    <l:@L> <name:atom_or_var> "::" <ty:Type200> <r:@R>
+        => Type::Annotated { span: span!(l, r), name, ty: Box::new(ty)  },
     Type200,
 };
 
@@ -387,16 +387,8 @@ Type500: Type = {
 Type600: Type = {
     <l:@L> <fun:atom> "(" <params:CommaOpt<TopType>> ")" <r:@R>
         => Type::Generic { span: span!(l, r), fun, params },
-    Type700,
-};
-
-Type700: Type = {
     <l:@L> <module:atom> ":" <fun:atom> "(" <args:CommaOpt<TopType>> ")" <r:@R>
         => Type::Remote { span: span!(l, r), module, fun, args },
-    Type800,
-};
-
-Type800: Type = {
     TypeMax,
 };
 

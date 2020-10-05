@@ -117,8 +117,8 @@ pub mod escape {
             self.state = EscapeStmState::Norm;
         }
 
-        pub fn is_norm(&self) {
-            self.state == EscapeStmState::Norm;
+        pub fn is_norm(&self) -> bool {
+            self.state == EscapeStmState::Norm
         }
 
         pub fn transition(

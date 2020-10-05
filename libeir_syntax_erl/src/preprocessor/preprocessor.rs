@@ -473,7 +473,7 @@ where
             //);
             Expr::parse_tokens(&mut adapter, pp)
         };
-        match evaluator::eval_expr(&result?) {
+        match evaluator::eval_expr(&result?, None) {
             Ok(evaluator::Term::Atom(atom)) if atom == symbols::True => Ok(true),
             Ok(evaluator::Term::Atom(atom)) if atom == symbols::False => Ok(false),
             Err(err) => {

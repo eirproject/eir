@@ -8,10 +8,11 @@ use libeir_ir::{
 };
 
 use libeir_diagnostics::SourceSpan;
+use libeir_intern::Ident;
 
 use libeir_util_number::bigint::BigInt;
 
-use crate::evaluator::{eval_expr, Term};
+use crate::evaluator::{eval_expr, ResolveRecordIndexError, Term};
 use crate::lower::{lower_single, LowerCtx, LowerError};
 use crate::parser::ast::{Binary, BinaryExpr, BinaryOp, Expr, Literal, UnaryExpr, UnaryOp, Var};
 
@@ -427,7 +428,19 @@ fn pattern_to_tree_node(
             })
         }
         expr => {
-            match eval_expr(expr) {
+            let resolve_rec_idx = |name: Ident, field: Ident| {
+                let rec = ctx
+                    .module
+                    .records
+                    .get(&name.name)
+                    .ok_or(ResolveRecordIndexError::NoRecord)?;
+                let idx = rec
+                    .field_idx_map
+                    .get(&field)
+                    .ok_or(ResolveRecordIndexError::NoField)?;
+                Ok(*idx)
+            };
+            match eval_expr(expr, Some(&resolve_rec_idx)) {
                 Ok(term) => {
                     let constant = match term {
                         Term::Number(num) => b.cons_mut().from(num),

@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use petgraph::visit::{Dfs, DfsPostOrder};
-use petgraph::visit::{GraphBase, IntoNeighbors, IntoNeighborsDirected, Visitable};
+use petgraph::visit::{
+    GraphBase, IntoNeighbors, IntoNeighborsDirected, IntoNodeIdentifiers, Visitable,
+};
 use petgraph::Direction;
 
 use itertools::Either;
@@ -131,6 +133,24 @@ impl<'a> Visitable for &'a LiveBlockGraph<'a> {
     #[inline]
     fn reset_map(&self, map: &mut EntityVisitMap<Block>) {
         Visitable::reset_map(&self.graph, map)
+    }
+}
+
+pub struct NodeIterator(Vec<Block>, usize);
+impl Iterator for NodeIterator {
+    type Item = Block;
+    fn next(&mut self) -> Option<Block> {
+        let val = self.0.get(self.1).cloned();
+        self.1 += 1;
+        val
+    }
+}
+
+impl<'a> IntoNodeIdentifiers for &'a LiveBlockGraph<'a> {
+    type NodeIdentifiers = NodeIterator;
+    fn node_identifiers(self) -> Self::NodeIdentifiers {
+        let live = self.live.iter().cloned().collect::<Vec<_>>();
+        NodeIterator(live, 0)
     }
 }
 

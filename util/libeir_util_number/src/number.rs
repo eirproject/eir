@@ -80,6 +80,11 @@ impl From<Integer> for Number {
         Number::Integer(int)
     }
 }
+impl From<usize> for Number {
+    fn from(int: usize) -> Number {
+        Number::Integer(int.into())
+    }
+}
 impl From<Float> for Number {
     fn from(float: Float) -> Number {
         Number::Float(float)

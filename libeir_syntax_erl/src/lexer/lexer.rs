@@ -468,8 +468,6 @@ where
             let c = if c == '\0' { None } else { Some(c) };
             let res = self.escape.transition(c, idx);
 
-            println!("{:?} {:?}", c, res);
-
             match res {
                 Ok((action, result)) => {
                     if let EscapeStmAction::Next = action {
@@ -484,81 +482,6 @@ where
                 Err(err) => Err(LexicalError::EscapeError { source: err })?,
             }
         }
-
-        //match self.pop() {
-        //    'b' => Ok(Token::Char('\x08')),
-        //    'd' => Ok(Token::Char('\x7f')),
-        //    'e' => Ok(Token::Char('\x1b')),
-        //    'f' => Ok(Token::Char('\x0c')),
-        //    'n' => Ok(Token::Char('\n')),
-        //    'r' => Ok(Token::Char('\r')),
-        //    's' => Ok(Token::Char(' ')),
-        //    't' => Ok(Token::Char('\t')),
-        //    'v' => Ok(Token::Char('\x0b')),
-        //    '\'' => Ok(Token::Char('\'')),
-        //    '"' => Ok(Token::Char('"')),
-        //    '\\' => Ok(Token::Char('\\')),
-        //    '$' => Ok(Token::Char('$')),
-        //    // Octal escape
-        //    n @ '0'..='7' => {
-        //        c = n;
-        //        let mut num = String::new();
-        //        while self.read().is_digit(8) {
-        //            num.push(self.pop());
-        //        }
-        //        return Ok(to_integer_literal(&num, 8));
-        //    }
-        //    // Hex escape
-        //    'x' => {
-        //        c = self.read();
-        //        // \xXY
-        //        if c.is_digit(16) {
-        //            let mut num = String::new();
-        //            num.push(self.pop());
-        //            c = self.read();
-        //            if c.is_digit(16) {
-        //                num.push(self.pop());
-        //                return Ok(to_integer_literal(&num, 16));
-        //            } else {
-        //                return Err(LexicalError::InvalidEscape {
-        //                    span: self.span(),
-        //                    reason: "invalid hex escape, expected hex digit".to_string(),
-        //                });
-        //            }
-        //        } else if c == '{' {
-        //            self.skip();
-        //            let mut num = String::new();
-        //            while self.read().is_digit(16) {
-        //                num.push(self.pop());
-        //            }
-        //            if self.read() == '}' {
-        //                self.skip();
-        //                if num.len() == 0 {
-        //                    return Err(LexicalError::InvalidEscape {
-        //                        span: self.span(),
-        //                        reason: "invalid hex escape, must be at least one digit"
-        //                            .to_string(),
-        //                    });
-        //                }
-        //                return Ok(to_integer_literal(&num, 16));
-        //            } else {
-        //                Err(LexicalError::InvalidEscape {
-        //                    span: self.span(),
-        //                    reason: "invalid hex escape, no closing '}'".to_string(),
-        //                })
-        //            }
-        //        } else {
-        //            Err(LexicalError::InvalidEscape {
-        //                span: self.span(),
-        //                reason: "invalid hex escape, expected hex digit or '{'".to_string(),
-        //            })
-        //        }
-        //    }
-        //    _ => Err(LexicalError::InvalidEscape {
-        //        span: self.span(),
-        //        reason: "invalid escape, unrecognized sequence".to_string(),
-        //    }),
-        //}
     }
 
     #[inline]
