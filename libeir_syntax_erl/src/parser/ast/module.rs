@@ -1066,6 +1066,9 @@ pub struct CompileOptions {
     pub compile_info: HashMap<Symbol, Expr>,
     // Used to override the filename used in errors/warnings
     pub file: Option<String>,
+    pub verbose: bool,
+    pub report_errors: bool,
+    pub report_warnings: bool,
     // Treats all warnings as errors
     pub warnings_as_errors: bool,
     // Disables warnings
@@ -1092,8 +1095,18 @@ pub struct CompileOptions {
     pub warn_unused_var: bool,
     // Warns about unused records
     pub warn_unused_record: bool,
+    pub warn_untyped_record: bool,
+    pub warn_unused_type: bool,
+    pub warn_removed: bool,
+    pub warn_nif_inline: bool,
+    pub warn_bif_clash: bool,
     // Warns about missing type specs
     pub warn_missing_spec: bool,
+    pub warn_missing_spec_all: bool,
+    pub warn_deprecated_function: bool,
+    pub warn_deprecated_type: bool,
+    pub warn_obsolete_guard: bool,
+    pub inline: bool,
     // Inlines the given functions
     pub inline_functions: HashSet<ResolvedFunctionName>,
 }
@@ -1102,11 +1115,18 @@ impl Default for CompileOptions {
         CompileOptions {
             compile_info: HashMap::new(),
             file: None,
+            verbose: true,
+            report_errors: true,
+            report_warnings: true,
             warnings_as_errors: false,
             no_warn: false,
             export_all: false,
             no_auto_import: false,
             no_auto_imports: HashSet::new(),
+            inline: false,
+            inline_functions: HashSet::new(),
+
+            // Warning toggles
             warn_export_all: true,
             warn_export_vars: true,
             warn_shadow_vars: true,
@@ -1115,8 +1135,16 @@ impl Default for CompileOptions {
             warn_unused_import: true,
             warn_unused_var: true,
             warn_unused_record: true,
+            warn_untyped_record: false,
+            warn_unused_type: true,
+            warn_removed: true,
+            warn_nif_inline: true,
+            warn_bif_clash: true,
             warn_missing_spec: false,
-            inline_functions: HashSet::new(),
+            warn_missing_spec_all: false,
+            warn_deprecated_function: true,
+            warn_deprecated_type: true,
+            warn_obsolete_guard: true,
         }
     }
 }
@@ -1140,12 +1168,16 @@ impl CompileOptions {
             &Expr::Literal(Literal::Atom(id, ref option_name)) => {
                 match option_name.as_str().get() {
                     "no_native" => (), // Disables hipe compilation, not relevant for us
+                    "inline" => self.inline = true,
+
                     "export_all" => self.export_all = true,
-                    "nowarn_export_all" => self.warn_export_all = false,
-                    "nowarn_shadow_vars" => self.warn_shadow_vars = false,
-                    "nowarn_unused_function" => self.warn_unused_function = false,
-                    "nowarn_unused_vars" => self.warn_unused_var = false,
+
                     "no_auto_import" => self.no_auto_import = true,
+
+                    "report_errors" => self.report_errors = true,
+                    "report_warnings" => self.report_errors = true,
+                    "verbose" => self.verbose = true,
+
                     "inline_list_funcs" => {
                         let funs = [
                             ("lists", "all", 2),
@@ -1169,6 +1201,59 @@ impl CompileOptions {
                             });
                         }
                     }
+
+                    // Warning toggles
+                    "warn_export_all" => self.warn_export_all = true,
+                    "nowarn_export_all" => self.warn_export_all = false,
+
+                    "warn_shadow_vars" => self.warn_shadow_vars = true,
+                    "nowarn_shadow_vars" => self.warn_shadow_vars = false,
+
+                    "warn_unused_function" => self.warn_unused_function = true,
+                    "nowarn_unused_function" => self.warn_unused_function = false,
+
+                    "warn_unused_import" => self.warn_unused_import = true,
+                    "nowarn_unused_import" => self.warn_unused_import = false,
+
+                    "warn_unused_type" => self.warn_unused_type = true,
+                    "nowarn_unused_type" => self.warn_unused_type = false,
+
+                    "warn_export_vars" => self.warn_export_vars = true,
+                    "nowarn_export_vars" => self.warn_export_vars = false,
+
+                    "warn_unused_vars" => self.warn_unused_var = true,
+                    "nowarn_unused_vars" => self.warn_unused_var = false,
+
+                    "warn_bif_clash" => self.warn_bif_clash = true,
+                    "nowarn_bif_clash" => self.warn_bif_clash = false,
+
+                    "warn_unused_record" => self.warn_unused_record = true,
+                    "nowarn_unused_record" => self.warn_unused_record = false,
+
+                    "warn_deprecated_function" => self.warn_deprecated_function = true,
+                    "nowarn_deprecated_function" => self.warn_deprecated_function = false,
+
+                    "warn_deprecated_type" => self.warn_deprecated_type = true,
+                    "nowarn_deprecated_type" => self.warn_deprecated_type = false,
+
+                    "warn_obsolete_guard" => self.warn_obsolete_guard = true,
+                    "nowarn_obsolete_guard" => self.warn_obsolete_guard = false,
+
+                    "warn_untyped_record" => self.warn_untyped_record = true,
+                    "nowarn_untyped_record" => self.warn_untyped_record = false,
+
+                    "warn_missing_spec" => self.warn_missing_spec = true,
+                    "nowarn_missing_spec" => self.warn_missing_spec = false,
+
+                    "warn_missing_spec_all" => self.warn_missing_spec_all = true,
+                    "nowarn_missing_spec_all" => self.warn_missing_spec_all = false,
+
+                    "warn_removed" => self.warn_removed = true,
+                    "nowarn_removed" => self.warn_removed = false,
+
+                    "warn_nif_inline" => self.warn_nif_inline = true,
+                    "nowarn_nif_inline" => self.warn_nif_inline = false,
+
                     _name => {
                         diagnostics.push(
                             Diagnostic::warning()
