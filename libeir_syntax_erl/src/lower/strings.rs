@@ -205,29 +205,11 @@ pub mod escape {
                         Some('^') => {
                             self.state = S::Control;
                         }
-                        Some('\'') => {
+                        Some(c) => {
                             self.state = S::Norm;
-                            out = Some('\'' as u64);
-                        }
-                        Some('"') => {
-                            self.state = S::Norm;
-                            out = Some('"' as u64);
-                        }
-                        Some('\\') => {
-                            self.state = S::Norm;
-                            out = Some('\\' as u64);
-                        }
-                        Some('$') => {
-                            self.state = S::Norm;
-                            out = Some('$' as u64);
+                            out = Some(c as u64);
                         }
                         None => return Err(EscapeStmError::UnexpectedEof { range }),
-                        Some(c) => {
-                            return Err(EscapeStmError::UnknownEscape {
-                                range,
-                                escape_char: c,
-                            });
-                        }
                     }
                     A::Next
                 }
