@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use bumpalo::{collections::Vec as BVec, Bump};
+use bumpalo::Bump;
 
 use libeir_diagnostics::SourceSpan;
 
@@ -382,7 +382,7 @@ impl Mangler {
                     .map(|spans| spans.first().copied().unwrap_or(SourceSpan::UNKNOWN))
                     .unwrap_or(SourceSpan::UNKNOWN);
 
-                let mut buf = BVec::new_in(bump);
+                let mut buf = Vec::new_in(bump);
                 {
                     let fun = prim.fun(recv);
                     buf.extend(fun.primop_reads(prim.inner()).iter().cloned())

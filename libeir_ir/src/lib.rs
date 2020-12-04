@@ -1,4 +1,4 @@
-#![feature(specialization, raw)]
+#![feature(specialization, raw, allocator_api)]
 //#![deny(warnings)]
 
 use std::cmp::Ordering;

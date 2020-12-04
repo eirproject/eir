@@ -66,7 +66,7 @@ impl<K, V, C, S> AuxHashMap<K, V, C, S> {
     pub fn with_hasher(hash_builder: S) -> Self {
         Self {
             hash_builder,
-            table: RawTable::new(Global),
+            table: RawTable::new_in(Global),
             aux: PhantomData,
         }
     }
