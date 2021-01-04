@@ -1,4 +1,5 @@
 #![deny(warnings)]
+#![feature(allocator_api)]
 
 use log::{info, trace};
 

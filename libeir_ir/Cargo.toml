@@ -44,7 +44,7 @@ lalrpop-util = "0.17"
 snafu = "0.5"
 
 fnv = "1.0.3"
-hashbrown = { git = "https://github.com/rust-lang/hashbrown.git" }
+hashbrown = { git = "https://github.com/rust-lang/hashbrown.git", features = ["raw", "nightly"] }
 
 [dev-dependencies]
 pretty_assertions = "0.6"

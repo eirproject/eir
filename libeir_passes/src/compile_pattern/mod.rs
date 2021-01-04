@@ -1,4 +1,4 @@
-use bumpalo::{collections::Vec as BVec, Bump};
+use bumpalo::Bump;
 use hashbrown::HashMap;
 
 use fnv::FnvBuildHasher;
@@ -53,7 +53,7 @@ impl CompilePatternPass {
             let case_blocks = {
                 let fun = b.fun();
 
-                let mut case_blocks = BVec::new_in(&bump);
+                let mut case_blocks = Vec::new_in(&bump);
 
                 let graph = fun.block_graph();
                 for block in graph.dfs_iter() {
@@ -67,11 +67,11 @@ impl CompilePatternPass {
 
             for block in case_blocks.iter().cloned() {
                 let no_match;
-                let mut guards = BVec::new_in(&bump);
-                let mut bodies = BVec::new_in(&bump);
+                let mut guards = Vec::new_in(&bump);
+                let mut bodies = Vec::new_in(&bump);
                 let match_val;
-                let mut values = BVec::new_in(&bump);
-                //let mut clauses = BVec::new_in(&bump);
+                let mut values = Vec::new_in(&bump);
+                //let mut clauses = Vec::new_in(&bump);
 
                 let case = b
                     .fun()

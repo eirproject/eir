@@ -1,4 +1,4 @@
-use bumpalo::{collections::Vec as BVec, Bump};
+use bumpalo::Bump;
 
 use libeir_ir::pattern::{PatternClause, PatternContainer, PatternNode};
 use libeir_ir::FunctionBuilder;
@@ -13,8 +13,8 @@ use super::BFnvHashMap;
 
 pub struct DecisionTreeDestinations<'bump> {
     pub fail: Value,
-    pub guards: BVec<'bump, Value>,
-    pub bodies: BVec<'bump, Value>,
+    pub guards: Vec<Value, &'bump Bump>,
+    pub bodies: Vec<Value, &'bump Bump>,
 }
 
 struct LowerCtx<'a, 'b, 'bump> {

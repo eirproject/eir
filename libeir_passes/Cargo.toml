@@ -14,7 +14,7 @@ petgraph = "0.4"
 bumpalo = { git = "https://github.com/hansihe/bumpalo", branch = "master", features = ["nightly"] }
 fnv = "1.0.3"
 log = "0.4"
-hashbrown = { git = "https://github.com/rust-lang/hashbrown.git" }
+hashbrown = { git = "https://github.com/rust-lang/hashbrown.git", features = ["raw", "nightly"] }
 
 libeir_ir = { path = "../libeir_ir" }
 libeir_intern = { path = "../libeir_intern" }

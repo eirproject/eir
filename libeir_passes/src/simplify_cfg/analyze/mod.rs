@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use bumpalo::{collections::Vec as BVec, Bump};
+use bumpalo::Bump;
 
 use libeir_util_datastructures::pooled_entity_set::{EntitySet, EntitySetPool};
 
@@ -127,7 +127,7 @@ pub struct EntryEdgeAnalysis<'bump> {
 
     // The arguments that should be used when calling the target block.
     // These need to be called with `map_value` in case the value is a primop.
-    pub args: BVec<'bump, PhiSource>,
+    pub args: Vec<PhiSource, &'bump Bump>,
     //pub looping_vars: BTreeSet<Value>,
 }
 
