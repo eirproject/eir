@@ -209,9 +209,16 @@ where
             None => return Err(PreprocessorError::UndefinedMacro { call }),
             Some(def) => def,
         };
-        match *definition {
-            MacroDef::Dynamic(ref replacement) => Ok(replacement.clone().into()),
-            MacroDef::String(ref s) => Ok(vec![LexicalToken(
+        match definition {
+            MacroDef::Dynamic(replacement) => {
+                let mut replacement = replacement.clone();
+                for token in replacement.iter_mut() {
+                    token.0 = span.start();
+                    token.2 = span.end();
+                }
+                Ok(replacement.into())
+            },
+            MacroDef::String(s) => Ok(vec![LexicalToken(
                 span.start(),
                 Token::String(s.clone()),
                 span.end(),
@@ -224,7 +231,7 @@ where
             )]
             .into()),
             MacroDef::Boolean(false) => Ok(VecDeque::new()),
-            MacroDef::Static(ref def) => {
+            MacroDef::Static(def) => {
                 let arity = def.variables.as_ref().map(|v| v.len()).unwrap_or(0);
                 let argc = call.args.as_ref().map(|a| a.len()).unwrap_or(0);
                 if arity != argc {
@@ -249,12 +256,16 @@ where
                             .flat_map(|i| i.iter().map(|a| &a.tokens[..])),
                     )
                     .collect::<HashMap<_, _>>();
-                let expanded = self.expand_replacement(bindings, &def.replacement)?;
+                let mut expanded = self.expand_replacement(bindings, &def.replacement)?;
+                for token in expanded.iter_mut() {
+                    token.0 = span.start();
+                    token.2 = span.end();
+                }
                 Ok(expanded)
             }
             MacroDef::DelayedSubstitution(subst) => Ok(vec![LexicalToken(
                 span.start(),
-                Token::DelayedSubstitution(subst),
+                Token::DelayedSubstitution(*subst),
                 span.end(),
             )]
             .into()),
