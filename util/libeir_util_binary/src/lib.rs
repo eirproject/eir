@@ -17,6 +17,9 @@ pub use self::bitvec::BitVec;
 mod integer;
 pub use self::integer::{carrier_to_integer, integer_to_carrier, Endian};
 
+mod extend;
+pub use self::extend::{ExtendWords, Extend};
+
 /// A primitive data type that can be used to store bits.
 /// Must be sized, copyable, and implement a set of
 /// elemental operations.
@@ -38,12 +41,14 @@ pub trait BitTransport:
 
     const ZERO: Self;
     const ONE: Self;
+    const MAX: Self;
 }
 
 impl BitTransport for u8 {
     const SIZE: usize = 1;
     const ZERO: u8 = 0;
     const ONE: u8 = 0;
+    const MAX: u8 = 0xff;
 }
 
 /// The base trait for bit carriers.
@@ -66,6 +71,27 @@ pub trait BitCarrier {
         } else {
             rem
         }
+    }
+
+    fn extend_words_pad(self, extend: Self::T, head_words: usize, tail_words: usize) -> ExtendWords<Self>
+    where
+        Self: Sized,
+    {
+        crate::extend::extend_words_pad(self, extend, head_words, tail_words)
+    }
+
+    fn slice_bits(self, offset: usize, length: usize) -> BitSlice<Self>
+    where
+        Self: Sized,
+    {
+        BitSlice::with_offset_length(self, offset, length)
+    }
+
+    fn extend_bits(self, extend: Self::T, head_bits: usize, tail_bits: usize) -> Extend<Self>
+    where
+        Self: Sized,
+    {
+        crate::extend::extend_bits(self, extend, head_bits, tail_bits)
     }
 }
 

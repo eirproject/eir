@@ -1,11 +1,11 @@
 [package]
-name = "libeir_util_prof"
+name = "any_map"
 version = "0.1.0"
 authors = ["Hans Elias B. Josephsen <me@hansihe.com>"]
 edition = "2018"
-license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bumpalo = { git = "https://github.com/hansihe/bumpalo", features = ["nightly"] }
+fnv = "1.0.3"
+hashbrown = { git = "https://github.com/rust-lang/hashbrown.git", features = ["raw", "nightly"] }

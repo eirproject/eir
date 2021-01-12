@@ -1,6 +1,5 @@
 //#![deny(warnings)]
-#![feature(trait_alias)]
-#![feature(or_patterns)]
+#![feature(trait_alias, or_patterns, never_type)]
 
 mod abstr;
 mod evaluator;
@@ -8,6 +7,7 @@ mod lexer;
 mod lower;
 mod parser;
 mod preprocessor;
+mod util;
 
 pub use self::abstr::lower as lower_abstr;
 pub use self::lexer::*;

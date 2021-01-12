@@ -70,7 +70,7 @@ where
     pub fn with_offset_length(inner: I, bit_offset: usize, bit_len: usize) -> Self {
         assert!(bit_offset + bit_len <= inner.bit_len());
         BitSlice {
-            inner: inner,
+            inner,
             word_offset: bit_offset / I::T::BIT_SIZE,
             bit_offset: (bit_offset % I::T::BIT_SIZE) as u32,
             bit_length: bit_len,

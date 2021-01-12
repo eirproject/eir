@@ -10,6 +10,8 @@ pub use float::{Float, FloatError};
 mod number;
 pub use number::Number;
 
+mod binary;
+
 pub use num_bigint as bigint;
 pub use num_bigint::BigInt;
 pub use num_traits as traits;

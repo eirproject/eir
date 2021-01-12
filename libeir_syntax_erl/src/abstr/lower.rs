@@ -1,6 +1,7 @@
 use libeir_diagnostics::SourceSpan;
 use libeir_intern::Ident;
 use libeir_ir::ToPrimitive;
+use libeir_ir::binary::BinaryEntrySpecifier;
 use libeir_util_number::Float;
 use libeir_util_parse::MessageIgnore;
 
@@ -159,7 +160,7 @@ pub fn lower(root: &aast::Root) -> ast::Module {
                     id: id_gen.next(),
                     name: Name::Atom(fun_name),
                     arity: fun_arity,
-                    clauses: clauses,
+                    clauses,
                     spec: None,
                 }));
             }
@@ -565,11 +566,11 @@ fn lower_expr(gen: &mut ast::NodeIdGenerator, expr: &aast::Item) -> ast::Expr {
                     };
 
                     let bit_type_v = &tup.entries[4];
-                    let bit_type = if let Some(atom) = bit_type_v.atom() {
+                    let specifier = if let Some(atom) = bit_type_v.atom() {
                         assert!(&*atom.as_str() == "default");
                         None
                     } else {
-                        let list = bit_type_v
+                        let list: Vec<_> = bit_type_v
                             .list_iter()
                             .unwrap()
                             .map(|item| {
@@ -580,7 +581,7 @@ fn lower_expr(gen: &mut ast::NodeIdGenerator, expr: &aast::Item) -> ast::Expr {
                                 }
                             })
                             .collect();
-                        Some(list)
+                        Some(crate::parser::binary::specifier_from_parsed(&list, bit_size.is_some()).unwrap())
                     };
 
                     ast::BinaryElement {
@@ -588,7 +589,7 @@ fn lower_expr(gen: &mut ast::NodeIdGenerator, expr: &aast::Item) -> ast::Expr {
                         id: gen.next(),
                         bit_expr,
                         bit_size,
-                        bit_type,
+                        specifier,
                     }
                 })
                 .collect();

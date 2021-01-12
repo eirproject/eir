@@ -3,6 +3,9 @@ use libeir_diagnostics::*;
 
 use libeir_util_number::{Integer, ToPrimitive, Float};
 
+use libeir_ir::binary::BinaryEntrySpecifier;
+use crate::parser::binary::specifier_from_parsed;
+
 use crate::lexer::{Token, DelayedSubstitution, Symbol, Ident};
 use crate::preprocessor::PreprocessorError;
 
@@ -756,8 +759,17 @@ Binary: Expr = {
 };
 
 BinaryElement: BinaryElement = {
-    <l:@L> <be:BitExpr> <bs:BitSize?> <bt:BitTypeList?> <r:@R>
-        => BinaryElement { span: span!(l, r), id: nid.next(), bit_expr: be, bit_size: bs, bit_type: bt },
+    <l:@L> <be:BitExpr> <bs:BitSize?> <bts:BitTypeList?> <r:@R> => {
+        let spec = bts.as_ref().map(|b| match specifier_from_parsed(b, bs.is_some()) {
+            Ok(specifier) => specifier,
+            Err(error) => {
+                // TODO
+                errs.error(error.to_diagnostic().into());
+                BinaryEntrySpecifier::default()
+            },
+        });
+        BinaryElement { span: span!(l, r), id: nid.next(), bit_expr: be, bit_size: bs, specifier: spec }
+    }
 };
 
 BitExpr: Expr = {

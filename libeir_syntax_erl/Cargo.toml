@@ -15,6 +15,7 @@ libeir_ir = { path = "../libeir_ir" }
 libeir_intern = { path = "../libeir_intern" }
 libeir_util_datastructures = { path = "../util/libeir_util_datastructures" }
 libeir_util_number = { path = "../util/libeir_util_number" }
+libeir_util_binary = { path = "../util/libeir_util_binary" }
 libeir_util_parse = { path = "../util/libeir_util_parse" }
 libeir_util_parse_listing = { path = "../util/libeir_util_parse_listing" }
 
@@ -29,7 +30,7 @@ itertools = "0.8"
 lazy_static = "1.2"
 either = "1.5"
 
-bumpalo = { git = "https://github.com/hansihe/bumpalo", branch = "master", features = ["nightly"] }
+bumpalo = { git = "https://github.com/hansihe/bumpalo", features = ["nightly"] }
 
 # [dependencies.rug]
 # version = "1.2"

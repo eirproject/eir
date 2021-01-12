@@ -15,6 +15,7 @@ libeir_diagnostics = { path = "../libeir_diagnostics" }
 libeir_util_datastructures = { path = "../util/libeir_util_datastructures" }
 libeir_util_parse = { path = "../util/libeir_util_parse" }
 libeir_util_number = { path = "../util/libeir_util_number" }
+libeir_util_binary = { path = "../util/libeir_util_binary" }
 libeir_util_dot_graph = { path = "../util/libeir_util_dot_graph" }
 meta_table = { path = "../util/meta_table" }
 

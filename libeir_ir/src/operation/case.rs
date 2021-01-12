@@ -287,16 +287,9 @@ fn parse_case_body(ctx: &mut ParseCtx) -> Result<(), DynParserError> {
 }
 
 pub fn register(dialect: &mut Dialect) {
-    let case = Case {
-        inner: Box::new(Inner {
-            container: PatternContainer::new(),
-            clauses: Vec::new(),
-        }),
-    };
-
     dialect.register_op::<Case>();
-    dialect.register_op_branches_impl(&case);
-    dialect.register_op_printer_impl(&case);
+    dialect.register_op_branches_impl::<Case>();
+    dialect.register_op_printer_impl::<Case>();
     dialect.register_op_parser(Symbol::intern("casen"), Box::new(CaseParser));
 }
 

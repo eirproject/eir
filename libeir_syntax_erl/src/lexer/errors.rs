@@ -5,7 +5,7 @@ use snafu::Snafu;
 use libeir_diagnostics::{Diagnostic, Label, SourceIndex, SourceSpan, ToDiagnostic};
 
 use super::token::{Token, TokenType};
-use crate::lower::strings::escape::EscapeStmError;
+use crate::util::escape_stm::EscapeStmError;
 
 /// An enum of possible errors that can occur during lexing.
 #[derive(Clone, Debug, PartialEq, Snafu)]

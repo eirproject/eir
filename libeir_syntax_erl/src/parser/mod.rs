@@ -38,6 +38,8 @@ mod macros;
 pub mod ast;
 mod errors;
 
+pub mod binary;
+
 use std::collections::VecDeque;
 use std::path::PathBuf;
 

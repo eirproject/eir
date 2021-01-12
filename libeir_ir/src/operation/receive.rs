@@ -295,14 +295,14 @@ impl OpBuild for ReceiveDone {
 
 pub fn register(dialect: &mut Dialect) {
     dialect.register_op::<ReceiveStart>();
-    dialect.register_op_branches_impl(&ReceiveStart);
+    dialect.register_op_branches_impl::<ReceiveStart>();
     //dialect.register_op_printer_impl(&ReceiveStart);
 
     dialect.register_op::<ReceiveWait>();
-    dialect.register_op_branches_impl(&ReceiveWait);
+    dialect.register_op_branches_impl::<ReceiveWait>();
     //dialect.register_op_printer_impl(&ReceiveWait);
 
     dialect.register_op::<ReceiveDone>();
-    dialect.register_op_branches_impl(&ReceiveDone);
+    dialect.register_op_branches_impl::<ReceiveDone>();
     //dialect.register_op_printer_impl(&ReceiveDone);
 }

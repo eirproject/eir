@@ -71,7 +71,7 @@ impl Default for BinaryEntrySpecifier {
         BinaryEntrySpecifier::Integer {
             signed: false,
             endianness: Endianness::Big,
-            unit: 8,
+            unit: 1,
         }
     }
 }

@@ -31,6 +31,10 @@ impl BitVec {
         self.bit_size = 0;
     }
 
+    pub fn empty(&mut self) -> bool {
+        self.bit_size == 0
+    }
+
     pub fn try_as_byte_aligned_slice(&self) -> Option<&[u8]> {
         if self.bit_size % 8 == 0 {
             Some(&self.buf)
@@ -41,6 +45,10 @@ impl BitVec {
 
     pub fn len(&self) -> usize {
         self.buf.len()
+    }
+
+    pub fn as_ref(&self) -> &[u8] {
+        &self.buf
     }
 
     pub fn get(&self, n: usize) -> Option<u8> {

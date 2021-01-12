@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::hash::{Hash, Hasher};
 
 use libeir_util_number::{cast, BigInt, Float, NumCast, Number};
+use libeir_util_binary::BitVec;
 
 use libeir_intern::Symbol;
 
@@ -186,10 +187,10 @@ impl Display for AtomTerm {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct BinaryTerm(pub Vec<u8>);
+pub struct BinaryTerm(pub BitVec);
 impl BinaryTerm {
     #[inline]
-    pub fn value(&self) -> &[u8] {
+    pub fn value(&self) -> &BitVec {
         &self.0
     }
 }
@@ -200,6 +201,11 @@ impl From<BinaryTerm> for AtomicTerm {
 }
 impl From<Vec<u8>> for AtomicTerm {
     fn from(data: Vec<u8>) -> Self {
+        AtomicTerm::Binary(BinaryTerm(data.into()))
+    }
+}
+impl From<BitVec> for AtomicTerm {
+    fn from(data: BitVec) -> Self {
         AtomicTerm::Binary(BinaryTerm(data))
     }
 }

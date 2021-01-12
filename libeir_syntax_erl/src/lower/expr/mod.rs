@@ -27,7 +27,6 @@ mod case;
 mod catch;
 mod comprehension;
 mod record;
-pub use binary::TypeName as BinaryTypeName;
 mod map;
 mod receive;
 

@@ -10,6 +10,7 @@ use libeir_intern::{Ident, Symbol};
 use libeir_util_parse::ErrorReceiver;
 
 use crate::parser::ast::{Function, FunctionClause, Module, NamedFunction};
+use crate::evaluator::ResolveRecordIndexError;
 
 macro_rules! map_block {
     ($block:expr, $call:expr) => {{
@@ -36,8 +37,6 @@ use scope::ScopeToken;
 
 #[cfg(test)]
 mod tests;
-
-pub(crate) mod strings;
 
 pub(crate) struct LowerCtx<'a> {
     codemap: Arc<CodeMap>,
@@ -81,6 +80,20 @@ impl<'a> LowerCtx<'a> {
 
     pub fn failed(&self) -> bool {
         self.errors.is_failed()
+    }
+
+    /// Resolves the index of a field in a record.
+    pub fn resolve_rec_idx(&self, name: Ident, field: Ident) -> Result<usize, crate::evaluator::ResolveRecordIndexError> {
+        let rec = self
+            .module
+            .records
+            .get(&name.name)
+            .ok_or(ResolveRecordIndexError::NoRecord)?;
+        let idx = rec
+            .field_idx_map
+            .get(&field)
+            .ok_or(ResolveRecordIndexError::NoField)?;
+        Ok(*idx)
     }
 
     pub fn resolve(&mut self, ident: Ident) -> IrValue {

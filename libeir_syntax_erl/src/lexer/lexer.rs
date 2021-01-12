@@ -6,7 +6,7 @@ use libeir_diagnostics::{ByteOffset, SourceIndex, SourceSpan};
 use libeir_util_number::{Float, FloatError, Integer, ToPrimitive};
 use libeir_util_parse::{Scanner, Source};
 
-use crate::lower::strings::escape::{EscapeStm, EscapeStmAction};
+use crate::util::escape_stm::{EscapeStm, EscapeStmAction};
 
 use super::errors::LexicalError;
 use super::token::*;

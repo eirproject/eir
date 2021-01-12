@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 
 use libeir_diagnostics::SourceSpan;
 use libeir_util_number::{Float, Integer, Number};
+use libeir_ir::binary::BinaryEntrySpecifier;
 
 use super::NodeId;
 use super::{BinaryOp, Ident, UnaryOp};
@@ -458,13 +459,13 @@ pub struct BinaryElement {
     pub id: NodeId,
     pub bit_expr: Expr,
     pub bit_size: Option<Expr>,
-    pub bit_type: Option<Vec<BitType>>,
+    pub specifier: Option<BinaryEntrySpecifier>,
 }
 impl PartialEq for BinaryElement {
     fn eq(&self, other: &Self) -> bool {
         (self.bit_expr == other.bit_expr)
             && (self.bit_size == other.bit_size)
-            && (self.bit_type == other.bit_type)
+            && (self.specifier == other.specifier)
     }
 }
 

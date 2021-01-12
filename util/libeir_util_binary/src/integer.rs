@@ -2,7 +2,7 @@
 //use rug::integer::Order;
 use num_bigint::{BigInt, Sign};
 
-use super::{BitRead, BitSlice, BitWrite};
+use super::{BitRead, BitSlice, BitWrite, BitCarrier};
 
 #[derive(Debug, Copy, Clone)]
 pub enum Endian {
@@ -17,6 +17,18 @@ pub enum Endian {
 //        }
 //    }
 //}
+
+impl BitCarrier for BigInt {
+    type T = u8;
+    fn bit_len(&self) -> usize {
+        let bits = self.bits() as usize;
+        if self < &0 {
+            bits + 1
+        } else {
+            bits
+        }
+    }
+}
 
 pub fn integer_to_carrier(mut int: BigInt, bits: usize, endian: Endian) -> BitSlice<Vec<u8>> {
     let negative = int < 0;

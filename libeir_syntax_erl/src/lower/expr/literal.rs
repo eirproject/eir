@@ -4,7 +4,8 @@ use libeir_ir::{Block as IrBlock, FunctionBuilder, Value as IrValue};
 use libeir_diagnostics::{SourceIndex, SourceSpan};
 use libeir_intern::Ident;
 
-use super::super::{strings::tokenize_string, LowerCtx, LowerError};
+use crate::util::string_tokenizer::StringTokenizer;
+use crate::lower::{LowerCtx, LowerError};
 
 use crate::parser::ast::Literal;
 
@@ -32,10 +33,12 @@ pub(super) fn lower_literal(
 
 pub fn intern_string_const(ident: Ident, c: &mut ConstantContainer) -> Result<Const, LowerError> {
     let mut chars = Vec::new();
-    tokenize_string(ident, &mut |cp, _si| {
+
+    let tokenizer = StringTokenizer::new(ident);
+    for elem in tokenizer {
+        let (cp, _span) = elem?;
         chars.push(cp);
-        Ok(())
-    })?;
+    }
 
     let mut cons = c.from(NilTerm);
     for elem in chars.iter().rev() {

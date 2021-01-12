@@ -8,3 +8,5 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 num-traits = "0.2.8"
 num-bigint = { git = "https://github.com/hansihe/num-bigint.git" }
+
+libeir_util_binary = { path = "../libeir_util_binary" }

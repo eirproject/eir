@@ -37,25 +37,14 @@ macro_rules! impl_meta_entry {
 /// # Examples
 ///
 /// ```
-/// use meta_table::CastFrom;
+/// use meta_table::{CastFrom, impl_cast_from};
 ///
 /// trait Foo {
 ///     fn foo1(&self);
 ///     fn foo2(&mut self, x: i32) -> i32;
 /// }
 ///
-/// unsafe impl<T> CastFrom<T> for dyn Foo
-/// where
-///     T: Foo + 'static,
-/// {
-///     fn cast(t: &T) -> &(dyn Foo + 'static) {
-///         t
-///     }
-///
-///     fn cast_mut(t: &mut T) -> &mut (dyn Foo + 'static) {
-///         t
-///     }
-/// }
+/// impl_cast_from!(Foo);
 /// ```
 pub unsafe trait CastFrom<T> {
     /// Casts an immutable `T` reference to a trait object.
@@ -63,6 +52,8 @@ pub unsafe trait CastFrom<T> {
 
     /// Casts a mutable `T` reference to a trait object.
     fn cast_mut(t: &mut T) -> &mut Self;
+
+    fn vtable() -> Fat;
 }
 #[macro_export]
 macro_rules! impl_cast_from {
@@ -78,19 +69,26 @@ macro_rules! impl_cast_from {
             fn cast_mut(t: &mut T) -> &mut (dyn $typ + 'static) {
                 t
             }
+
+            fn vtable() -> $crate::Fat {
+                let from: *const T = std::ptr::null();
+                let object_ptr: *const Self = from;
+
+                unsafe { $crate::Fat::from_ptr(object_ptr) }
+            }
         }
     };
 }
 
-struct Fat(usize);
+pub struct Fat(usize);
 
 impl Fat {
-    pub unsafe fn from_ptr<T: ?Sized>(t: &T) -> Self {
+    pub unsafe fn from_ptr<T: ?Sized>(t: *const T) -> Self {
         use std::ptr::read;
 
         assert_unsized::<T>();
 
-        let fat_ptr = &t as *const &T as *const usize;
+        let fat_ptr = &t as *const *const T as *const usize;
         // Memory layout:
         // [object pointer, vtable pointer]
         //  ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^
@@ -105,6 +103,12 @@ impl Fat {
         let fat_ptr: (*const (), usize) = (ptr, self.0);
 
         *(&fat_ptr as *const (*const (), usize) as *const *const T)
+    }
+
+    pub unsafe fn create_mut_ptr<T: ?Sized>(&self, ptr: *mut ()) -> *mut T {
+        let fat_ptr: (*mut (), usize) = (ptr, self.0);
+
+        *(&fat_ptr as *const (*mut (), usize) as *const *mut T)
     }
 }
 
@@ -155,11 +159,11 @@ impl Fat {
 /// }
 ///
 /// let mut table = MetaTable::<dyn Object>::new();
-/// table.register(&ImplementorA(31415)); // Can just be some instance of type `&ImplementorA`.
-/// table.register(&ImplementorB(27182));
+/// table.register::<ImplementorA>();
+/// table.register::<ImplementorB>();
 ///
 /// assert!(table.get(&ImplementorA(12)).unwrap().method1() == 12);
-/// assert!(table.get(&ImplementorB(12)).unwrap().method1() == 12);
+/// assert!(table.get(&ImplementorB(13)).unwrap().method1() == 13);
 /// ```
 pub struct MetaTable<T: ?Sized> {
     fat: Vec<Fat>,
@@ -178,27 +182,15 @@ impl<T: ?Sized> MetaTable<T> {
     }
 
     /// Registers a resource `R` that implements the trait `T`.
-    /// This just needs some instance of type `R` to retrieve the vtable.
-    /// It doesn't have to be the same object you're calling `get` with later.
-    pub fn register<R>(&mut self, r: &R)
+    pub fn register<R>(&mut self)
     where
         R: MetaEntry,
         T: CastFrom<R> + 'static,
     {
         use hashbrown::hash_map::Entry;
 
-        let thin_ptr = r as *const R as usize;
-        let casted_ptr = <T as CastFrom<R>>::cast(r);
-        let thin_casted_ptr = casted_ptr as *const T as *const () as usize;
-
-        assert_eq!(
-            thin_ptr, thin_casted_ptr,
-            "Bug: `CastFrom` did not cast `self`"
-        );
-
-        let fat = unsafe { Fat::from_ptr(casted_ptr) };
-
-        let ty_id = r.get_type_id();
+        let fat = T::vtable();
+        let ty_id = std::any::TypeId::of::<R>();
 
         // Important: ensure no entry exists twice!
         let len = self.indices.len();
@@ -231,11 +223,11 @@ impl<T: ?Sized> MetaTable<T> {
     /// Tries to convert `world` to a trait object of type `&mut T`.
     /// If `world` doesn't have an implementation for `T` (or it wasn't
     /// registered), this will return `None`.
-    pub fn get_mut<'a>(&self, res: &'a dyn MetaEntry) -> Option<&'a mut T> {
+    pub fn get_mut<'a>(&self, res: &'a mut dyn MetaEntry) -> Option<&'a mut T> {
         unsafe {
-            self.indices.get(&res.get_type_id()).map(move |&ind| {
-                &mut *(self.fat[ind].create_ptr::<T>(res as *const _ as *const ()) as *mut T)
-            })
+            self.indices
+                .get(&res.get_type_id())
+                .map(move |&ind| &mut *self.fat[ind].create_mut_ptr(res as *mut _ as *mut ()))
         }
     }
 }
@@ -254,7 +246,7 @@ where
     }
 }
 
-fn assert_unsized<T: ?Sized>() {
+pub fn assert_unsized<T: ?Sized>() {
     use std::mem::size_of;
 
     assert_eq!(size_of::<&T>(), 2 * size_of::<usize>());
@@ -270,18 +262,7 @@ mod tests {
         fn method2(&mut self, x: i32);
     }
 
-    unsafe impl<T> CastFrom<T> for dyn Object
-    where
-        T: Object + 'static,
-    {
-        fn cast(t: &T) -> &Self {
-            t
-        }
-
-        fn cast_mut(t: &mut T) -> &mut Self {
-            t
-        }
-    }
+    impl_cast_from!(Object);
 
     struct ImplementorA(i32);
 
@@ -393,8 +374,8 @@ mod tests {
     #[test]
     fn get() {
         let mut table = MetaTable::<dyn Object>::new();
-        table.register(&ImplementorC);
-        table.register(&ImplementorD);
+        table.register::<ImplementorC>();
+        table.register::<ImplementorD>();
 
         let t1 = ImplementorC;
         let t1d: &dyn MetaEntry = &t1;

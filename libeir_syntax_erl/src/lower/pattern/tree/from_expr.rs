@@ -12,8 +12,11 @@ use libeir_intern::Ident;
 
 use libeir_util_number::bigint::BigInt;
 
+use snafu::ResultExt;
+
 use crate::evaluator::{eval_expr, ResolveRecordIndexError, Term};
 use crate::lower::{lower_single, LowerCtx, LowerError};
+use crate::util::string_tokenizer::StringTokenizer;
 use crate::parser::ast::{Binary, BinaryExpr, BinaryOp, Expr, Literal, UnaryExpr, UnaryOp, Var};
 
 use super::{Tree, TreeNode, TreeNodeKind};
@@ -30,17 +33,19 @@ fn pattern_to_tree_node_append_tail(
     match expr {
         Expr::Literal(Literal::String(_id, ident)) => {
             let mut tokens = Vec::new();
-            let ret = crate::lower::strings::tokenize_string(*ident, &mut |cp, _si| {
-                tokens.push(cp);
-                Ok(())
-            });
-            match ret {
-                Ok(()) => (),
-                Err(err) => {
-                    ctx.error(err);
-                    return t.nodes.push(TreeNodeKind::Wildcard(span));
+
+            let tokenizer = StringTokenizer::new(*ident);
+            for elem in tokenizer {
+                match elem {
+                    Ok((cp, _span)) => {
+                        tokens.push(cp);
+                    },
+                    Err(err) => {
+                        ctx.error(err.into());
+                        return t.nodes.push(TreeNodeKind::Wildcard(span));
+                    },
                 }
-            };
+            }
 
             let mut node = tail;
             for c in tokens.iter().rev() {
@@ -48,7 +53,7 @@ fn pattern_to_tree_node_append_tail(
                     .nodes
                     .push(TreeNodeKind::Atomic(span, b.cons_mut().from(*c)));
                 node = t.nodes.push(TreeNodeKind::Cons {
-                    span: span,
+                    span,
                     head,
                     tail: node,
                 });
@@ -63,107 +68,14 @@ fn pattern_to_tree_node_append_tail(
             let head = pattern_to_tree_node(ctx, b, pre_block, t, &cons.head);
 
             t.nodes.push(TreeNodeKind::Cons {
-                span: span,
-                head: head,
-                tail: tail,
+                span,
+                head,
+                tail,
             })
         }
         _ => unimplemented!("{:?}", expr),
     }
 }
-
-//fn eval_const_expr(
-//    ctx: &mut LowerCtx,
-//    b: &mut FunctionBuilder,
-//    pre_block: &mut Block,
-//    expr: &Expr,
-//) -> Option<AtomicTerm> {
-//    use libeir_util_number::Integer;
-//    macro_rules! toi {
-//        ($int:expr) => {{
-//            let r: Integer = ($int).into();
-//            r
-//        }};
-//    }
-//
-//    let res = match expr {
-//        Expr::Literal(lit) => match lit {
-//            Literal::Integer(_span, _id, int) => int.clone().into(),
-//            Literal::Float(_span, _id, float) => (*float).into(),
-//
-//            _ => {
-//                ctx.error(LowerError::InvalidPatternConstExpression {
-//                    span: bin_expr.span,
-//                });
-//                return None;
-//            }
-//        },
-//        Expr::UnaryExpr(
-//            unary @ UnaryExpr {
-//                op: UnaryOp::Minus, ..
-//            },
-//        ) => match eval_const_expr(ctx, b, pre_block, &unary.operand)? {
-//            AtomicTerm::Int(IntTerm(int)) => AtomicTerm::Int(IntTerm(-int)),
-//            val => unimplemented!("{:?}", val),
-//        },
-//        Expr::BinaryExpr(bin_expr) => {
-//            use AtomicTerm as A;
-//            use BinaryOp as B;
-//
-//            let lhs = eval_const_expr(ctx, b, pre_block, &bin_expr.lhs)?;
-//            let rhs = eval_const_expr(ctx, b, pre_block, &bin_expr.rhs)?;
-//
-//            match (bin_expr.op, lhs, rhs) {
-//                (B::Add, A::Int(IntTerm(l)), A::Int(IntTerm(r))) => (toi!(l) + &toi!(r)).into(),
-//                (B::Add, A::Int(IntTerm(l)), A::Float(FloatTerm(r))) => (l as f64 + r).into(),
-//                (B::Add, A::Float(FloatTerm(l)), A::Int(IntTerm(r))) => (l + r as f64).into(),
-//                (B::Add, A::Float(FloatTerm(l)), A::Float(FloatTerm(r))) => (l + r).into(),
-//
-//                (B::Sub, A::Int(IntTerm(l)), A::Int(IntTerm(r))) => (toi!(l) - &toi!(r)).into(),
-//                (B::Sub, A::Int(IntTerm(l)), A::Float(FloatTerm(r))) => (l as f64 - r).into(),
-//                (B::Sub, A::Float(FloatTerm(l)), A::Int(IntTerm(r))) => (l - r as f64).into(),
-//                (B::Sub, A::Float(FloatTerm(l)), A::Float(FloatTerm(r))) => (l - r).into(),
-//
-//                _ => {
-//                    ctx.error(LowerError::InvalidPatternConstExpression {
-//                        span: bin_expr.span,
-//                    });
-//                    return None;
-//                }
-//            }
-//        }
-//        Expr::BinaryExpr(
-//            binary @ BinaryExpr {
-//                op: BinaryOp::Add, ..
-//            },
-//        ) => {
-//            let lhs = eval_const_expr(ctx, b, pre_block, &binary.lhs)?;
-//            let rhs = eval_const_expr(ctx, b, pre_block, &binary.rhs)?;
-//            match (lhs, rhs) {
-//                (AtomicTerm::Int(IntTerm(l)), AtomicTerm::Int(IntTerm(r))) => {
-//                    AtomicTerm::Int(IntTerm(l + r))
-//                }
-//                val => unimplemented!("{:?}", val),
-//            }
-//        }
-//        Expr::BinaryExpr(
-//            binary @ BinaryExpr {
-//                op: BinaryOp::Bsl, ..
-//            },
-//        ) => {
-//            let lhs = eval_const_expr(ctx, b, pre_block, &binary.lhs)?;
-//            let rhs = eval_const_expr(ctx, b, pre_block, &binary.rhs)?;
-//            match (lhs, rhs) {
-//                (AtomicTerm::Int(IntTerm(l)), AtomicTerm::Int(IntTerm(r))) => {
-//                    AtomicTerm::BigInt(BigIntTerm(BigInt::from(l) << r.try_into().unwrap()))
-//                }
-//                val => unimplemented!("{:?}", val),
-//            }
-//        }
-//        _ => unimplemented!("{:?}", expr),
-//    };
-//    Some(res)
-//}
 
 impl Tree {
     pub(crate) fn add_root(
@@ -198,35 +110,37 @@ fn pattern_to_tree_node(
                 Literal::Float(_span, _id, num) => b.cons_mut().from(*num).into(),
                 Literal::String(_id, ident) => {
                     let mut chars = Vec::new();
-                    let ret = crate::lower::strings::tokenize_string(*ident, &mut |cp, _si| {
-                        chars.push(cp);
-                        Ok(())
-                    });
-                    match ret {
-                        Ok(()) => {
-                            let nil_const = b.cons_mut().from(NilTerm);
-                            let mut node =
-                                t.nodes.push(TreeNodeKind::Atomic(ident.span, nil_const));
 
-                            for c in chars.iter().rev() {
-                                let char_const = b.cons_mut().from(*c);
-                                let head =
-                                    t.nodes.push(TreeNodeKind::Atomic(ident.span, char_const));
-
-                                node = t.nodes.push(TreeNodeKind::Cons {
-                                    span: ident.span,
-                                    head: head,
-                                    tail: node,
-                                });
-                            }
-
-                            return node;
-                        }
-                        Err(err) => {
-                            ctx.error(err);
-                            return t.nodes.push(TreeNodeKind::Wildcard(lit.span()));
+                    let tokenizer = StringTokenizer::new(*ident);
+                    for elem in tokenizer {
+                        match elem {
+                            Ok((cp, _span)) => {
+                                chars.push(cp);
+                            },
+                            Err(err) => {
+                                ctx.error(err.into());
+                                return t.nodes.push(TreeNodeKind::Wildcard(ident.span));
+                            },
                         }
                     }
+
+                    let nil_const = b.cons_mut().from(NilTerm);
+                    let mut node =
+                        t.nodes.push(TreeNodeKind::Atomic(ident.span, nil_const));
+
+                    for c in chars.iter().rev() {
+                        let char_const = b.cons_mut().from(*c);
+                        let head =
+                            t.nodes.push(TreeNodeKind::Atomic(ident.span, char_const));
+
+                        node = t.nodes.push(TreeNodeKind::Cons {
+                            span: ident.span,
+                            head,
+                            tail: node,
+                        });
+                    }
+
+                    return node;
                 }
             };
             t.nodes.push(TreeNodeKind::Atomic(lit.span(), cons))
@@ -316,36 +230,32 @@ fn pattern_to_tree_node(
             pattern_to_tree_node_append_tail(ctx, b, pre_block, t, lhs, tail, *span)
         }
         Expr::Binary(Binary { span, elements, .. }) => {
-            use crate::lower::expr::binary::{
-                default_specifier, specifier_can_have_size, specifier_from_parsed,
-                specifier_to_typename, TypeName,
-            };
+            use crate::parser::binary::{default_specifier, specifier_can_have_size, specifier_to_typename, TypeName};
 
             // Desugar <<"binary string">>
             if elements.len() == 1 {
                 let elem = &elements[0];
-                if elem.bit_size.is_none()
-                    && elem.bit_type.as_ref().map(|v| v.len() == 0).unwrap_or(true)
-                {
+                if elem.bit_size.is_none() && elem.specifier.is_none() {
                     if let Expr::Literal(Literal::String(_id, string)) = &elem.bit_expr {
                         let mut chars = Vec::new();
-                        let tokenized =
-                            crate::lower::strings::tokenize_string(*string, &mut |cp, _si| {
-                                chars.push(cp);
-                                Ok(())
-                            });
-                        return match tokenized {
-                            Ok(()) => {
-                                let bin =
-                                    chars.iter().map(|ch| (ch & 0xff) as u8).collect::<Vec<_>>();
-                                let cons = b.cons_mut().from(bin);
-                                t.nodes.push(TreeNodeKind::Atomic(*span, cons))
+
+                        let tokenizer = StringTokenizer::new(*string);
+                        for elem in tokenizer {
+                            match elem {
+                                Ok((cp, _span)) => {
+                                    chars.push(cp);
+                                },
+                                Err(err) => {
+                                    ctx.error(err.into());
+                                    return t.nodes.push(TreeNodeKind::Wildcard(string.span));
+                                },
                             }
-                            Err(err) => {
-                                ctx.error(err);
-                                t.nodes.push(TreeNodeKind::Wildcard(*span))
-                            }
-                        };
+                        }
+
+                        let bin =
+                            chars.iter().map(|ch| (ch & 0xff) as u8).collect::<Vec<_>>();
+                        let cons = b.cons_mut().from(bin);
+                        return t.nodes.push(TreeNodeKind::Atomic(*span, cons));
                     }
                 }
             }
@@ -357,18 +267,9 @@ fn pattern_to_tree_node(
 
             for (_idx, elem) in elements.iter().enumerate().rev() {
                 let spec = elem
-                    .bit_type
-                    .as_ref()
-                    .map(|b| specifier_from_parsed(&*b))
-                    .unwrap_or(Ok(default_specifier()));
+                    .specifier
+                    .unwrap_or(default_specifier());
 
-                let spec = match spec {
-                    Ok(inner) => inner,
-                    Err(err) => {
-                        ctx.error(err);
-                        continue;
-                    }
-                };
                 let spec_typ = specifier_to_typename(&spec);
 
                 let bit_val = pattern_to_tree_node(ctx, b, pre_block, t, &elem.bit_expr);
@@ -429,16 +330,7 @@ fn pattern_to_tree_node(
         }
         expr => {
             let resolve_rec_idx = |name: Ident, field: Ident| {
-                let rec = ctx
-                    .module
-                    .records
-                    .get(&name.name)
-                    .ok_or(ResolveRecordIndexError::NoRecord)?;
-                let idx = rec
-                    .field_idx_map
-                    .get(&field)
-                    .ok_or(ResolveRecordIndexError::NoField)?;
-                Ok(*idx)
+                ctx.resolve_rec_idx(name, field)
             };
             match eval_expr(expr, Some(&resolve_rec_idx)) {
                 Ok(term) => {

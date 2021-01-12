@@ -44,6 +44,15 @@ pub enum ParserError {
         expected: Vec<String>,
     },
 }
+
+impl From<Diagnostic> for ParserError {
+    fn from(err: Diagnostic) -> Self {
+        ParserError::ShowDiagnostic {
+            diagnostic: err,
+        }
+    }
+}
+
 impl From<ParseError> for ParserError {
     fn from(err: ParseError) -> Self {
         use lalrpop_util::ParseError::*;

@@ -1,7 +1,12 @@
+use libeir_ir::binary::BinaryEntrySpecifier;
 use libeir_ir::constant::NilTerm;
+use libeir_ir::operation::binary_construct::{
+    BinaryConstructFinish, BinaryConstructPush, BinaryConstructStart,
+};
 use libeir_ir::operation::case::Case;
 use libeir_ir::BinOp;
 use libeir_ir::{Block as IrBlock, FunctionBuilder, Value as IrValue};
+use libeir_ir::pattern::{PatternContainer, PatternClause};
 
 use libeir_intern::{Ident, Symbol};
 
@@ -11,6 +16,18 @@ use crate::lower::expr::binary::lower_binary_expr;
 use crate::lower::expr::{lower_single, lower_single_same_scope};
 use crate::lower::pattern::lower_clause;
 use crate::lower::LowerCtx;
+
+fn make_structural_bin_pattern(
+    pat: &mut PatternContainer,
+    expr: &Expr,
+) -> PatternClause {
+    match expr {
+        Expr::Binary(bin) => {
+            unimplemented!()
+        }
+        _ => unimplemented!(),
+    }
+}
 
 fn lower_qual<F>(
     ctx: &mut LowerCtx,
@@ -127,7 +144,37 @@ where
                     Err(_) => unimplemented!(), // TODO warn/error unreachable pattern
                 }
             }
-            Expr::BinaryGenerator(_gen) => unimplemented!(),
+            Expr::BinaryGenerator(gen) => {
+                let gen_span = gen.span;
+
+                //     loop_block(bin_val, acc)
+                // loop_block(loop_bin_arg, loop_acc_arg):
+                //     do match on loop_bin_arg
+                //         1. full pattern, append acc and continue
+                //         2. structural pattern, continue
+                //         3. wildcard, break
+
+                let bin_val = map_block!(block, lower_single(ctx, b, block, &gen.expr));
+
+                // Loop entry block
+                let loop_block = b.block_insert();
+                let loop_bin_arg = b.block_arg_insert(loop_block);
+                let loop_acc_arg = b.block_arg_insert(loop_block);
+
+                let pattern_span = gen.pattern.span();
+
+                // No match block, break
+                let no_match = b.block_insert();
+
+                let mut case_b = Case::builder();
+                case_b.set_span(pattern_span);
+                case_b.match_on = Some(loop_bin_arg);
+                case_b.no_match = Some(b.value(no_match));
+
+                let structual_pattern = make_structural_bin_pattern(&mut case_b.container, &gen.expr);
+
+                (no_match, loop_acc_arg)
+            },
             expr => {
                 let bool_val = map_block!(block, lower_single_same_scope(ctx, b, block, expr));
                 let span = expr.span();
@@ -183,24 +230,28 @@ pub(super) fn lower_binary_comprehension_expr(
     compr: &BinaryComprehension,
 ) -> (IrBlock, IrValue) {
     let inner =
-        |ctx: &mut LowerCtx, b: &mut FunctionBuilder, block: IrBlock, acc: IrValue| match &*compr
-            .body
-        {
-            Expr::Binary(bin) => lower_binary_expr(ctx, b, block, Some(acc), bin),
-            _ => panic!(),
+        |ctx: &mut LowerCtx, b: &mut FunctionBuilder, mut block: IrBlock, bin_ref: IrValue| {
+            let val = map_block!(block, lower_single(ctx, b, block, &compr.body));
+            let spec = BinaryEntrySpecifier::Bytes { unit: 1 };
+            let (ok_cont, err_cont) =
+                BinaryConstructPush::build(b, block, bin_ref, val, spec, None);
+
+            b.op_unreachable(compr.span, err_cont);
+
+            let bin_ref = b.block_args(ok_cont)[0];
+            (ok_cont, bin_ref)
         };
 
-    let nil = b.value(Vec::<u8>::new());
-    let val = map_block!(
+    block = BinaryConstructStart::build(b, block);
+    let mut bin_ref = b.block_args(block)[0];
+
+    bin_ref = map_block!(
         block,
-        lower_qual(ctx, b, &inner, &compr.qualifiers, block, nil)
+        lower_qual(ctx, b, &inner, &compr.qualifiers, block, bin_ref)
     );
-    ctx.call_function(
-        b,
-        block,
-        compr.span,
-        Ident::from_str("lists"),
-        Ident::from_str("reverse"),
-        &[val],
-    )
+
+    block = BinaryConstructFinish::build(b, block, bin_ref);
+    let res = b.block_args(block)[0];
+
+    (block, res)
 }

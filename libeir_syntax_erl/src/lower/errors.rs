@@ -1,11 +1,12 @@
 use libeir_diagnostics::{Diagnostic, Label, SourceIndex, SourceSpan, ToDiagnostic};
 
-use super::expr::BinaryTypeName;
-use crate::lower::strings::StringError;
+use crate::parser::binary::TypeName as BinaryTypeName;
+use crate::util::encoding::StringError;
 
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
+#[snafu(visibility = "pub(crate)")]
 pub enum LowerError {
     #[snafu(display("illegal expression"))]
     IllegalExpression {
@@ -48,12 +49,8 @@ pub enum LowerError {
         span: SourceSpan,
     },
 
-    /// When parsing a string, an invalid character escape
-    /// was encountered.
-    #[snafu(display("invalid character escape in string"))]
-    InvalidStringEscape {
-        span: SourceSpan,
-        source: super::strings::escape::EscapeStmError<SourceIndex>,
+    StringTokenizeError {
+        source: crate::util::string_tokenizer::StringTokenizeError,
     },
 
     /// Unable to resolve a variable in scope.
@@ -76,20 +73,6 @@ pub enum LowerError {
     },
 
     // Binary specifier parsing
-    #[snafu(display("unknown specifier in binary entry"))]
-    BinaryUnknownSpecifier {
-        span: SourceSpan,
-    },
-    #[snafu(display("conflicting specifiers in binary entry"))]
-    BinaryConflictingSpecifier {
-        new: SourceSpan,
-        old: SourceSpan,
-    },
-    #[snafu(display("invalid specifier for {} in binary entry", typ))]
-    BinaryInvalidSpecifier {
-        span: SourceSpan,
-        typ: BinaryTypeName,
-    },
     #[snafu(display("{} does not support size in binary entry", typ))]
     BinaryInvalidSize {
         span: SourceSpan,
@@ -127,6 +110,11 @@ pub enum LowerError {
     },
 }
 
+impl From<crate::util::string_tokenizer::StringTokenizeError> for LowerError {
+    fn from(err: crate::util::string_tokenizer::StringTokenizeError) -> Self {
+        LowerError::StringTokenizeError { source: err }
+    }
+}
 impl From<StringError> for LowerError {
     fn from(err: StringError) -> LowerError {
         LowerError::String { source: err }
@@ -189,7 +177,7 @@ impl ToDiagnostic for LowerError {
                 dig.with_labels(labels)
             }
             LowerError::PatternConst { source, .. } => source.to_diagnostic(),
-            LowerError::InvalidStringEscape { source, .. } => source.to_diagnostic(),
+            LowerError::StringTokenizeError { source } => source.to_diagnostic(),
             LowerError::UnresolvedVariable { span } => Diagnostic::error()
                 .with_message(msg)
                 .with_labels(vec![
@@ -209,21 +197,6 @@ impl ToDiagnostic for LowerError {
                     Label::secondary(old.source_id(), *old).with_message("previously bound here"),
                 ])
             }
-            LowerError::BinaryUnknownSpecifier { span } => Diagnostic::error()
-                .with_message(msg)
-                .with_labels(vec![
-                    Label::primary(span.source_id(), *span).with_message("specifier is not known")
-                ]),
-            LowerError::BinaryConflictingSpecifier { new, old } => {
-                Diagnostic::error().with_message(msg).with_labels(vec![
-                    Label::primary(new.source_id(), *new).with_message("specifier 1"),
-                    Label::primary(old.source_id(), *old).with_message("specifier 2"),
-                ])
-            }
-            LowerError::BinaryInvalidSpecifier { span, typ } => Diagnostic::error()
-                .with_message(msg)
-                .with_labels(vec![Label::primary(span.source_id(), *span)
-                    .with_message(format!("specifier is not valid for {} entries", typ))]),
             LowerError::BinaryInvalidSize { span, typ } => Diagnostic::error()
                 .with_message(msg)
                 .with_labels(vec![Label::primary(span.source_id(), *span).with_message(

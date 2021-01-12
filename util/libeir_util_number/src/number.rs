@@ -38,6 +38,13 @@ impl Number {
             (Number::Float(_), Number::Integer(_)) => rhs.equals(self, exact),
         }
     }
+
+    pub fn to_efloat(&self) -> Result<Float, FloatError> {
+        match self {
+            Number::Integer(integer) => integer.to_efloat(),
+            Number::Float(float) => Ok(*float),
+        }
+    }
 }
 
 impl PartialEq for Number {

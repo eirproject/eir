@@ -248,11 +248,11 @@ impl OpBuild for BinaryConstructFinish {
 
 pub fn register(dialect: &mut Dialect) {
     dialect.register_op::<BinaryConstructStart>();
-    dialect.register_op_branches_impl(&BinaryConstructStart);
+    dialect.register_op_branches_impl::<BinaryConstructStart>();
 
     dialect.register_op::<BinaryConstructPush>();
-    dialect.register_op_branches_impl(&BinaryConstructPush::default());
+    dialect.register_op_branches_impl::<BinaryConstructPush>();
 
     dialect.register_op::<BinaryConstructFinish>();
-    dialect.register_op_branches_impl(&BinaryConstructFinish);
+    dialect.register_op_branches_impl::<BinaryConstructPush>();
 }

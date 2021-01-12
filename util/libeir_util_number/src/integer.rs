@@ -69,6 +69,14 @@ impl Integer {
         let bi = BigInt::parse_bytes(string.as_bytes(), radix)?;
         Some(Integer::Big(bi))
     }
+
+    pub fn to_u64(&self) -> Option<u64> {
+        ToPrimitive::to_u64(self)
+    }
+
+    pub fn to_usize(&self) -> Option<usize> {
+        ToPrimitive::to_usize(self)
+    }
 }
 
 impl Display for Integer {
@@ -374,6 +382,11 @@ impl FromPrimitive for Integer {
 impl From<i64> for Integer {
     fn from(i: i64) -> Integer {
         Integer::from_i64(i).unwrap()
+    }
+}
+impl From<u64> for Integer {
+    fn from(i: u64) -> Integer {
+        Integer::from_u64(i).unwrap()
     }
 }
 impl From<i32> for Integer {

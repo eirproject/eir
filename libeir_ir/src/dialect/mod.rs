@@ -57,18 +57,18 @@ impl Dialect {
         self.operations.insert(TypeId::of::<T>());
     }
 
-    pub fn register_op_branches_impl<T: MetaEntry + OpBranches>(&mut self, instance: &T) {
+    pub fn register_op_branches_impl<T: MetaEntry + OpBranches>(&mut self) {
         assert!(self.operations.contains(&TypeId::of::<T>()));
-        self.op_branches.register(instance);
+        self.op_branches.register::<T>();
     }
 
     pub fn get_op_branches<'a>(&self, obj: &'a dyn Op) -> Option<&'a dyn OpBranches> {
         self.op_branches.get(obj.meta_entry())
     }
 
-    pub fn register_op_printer_impl<T: MetaEntry + OpPrinter>(&mut self, instance: &T) {
+    pub fn register_op_printer_impl<T: MetaEntry + OpPrinter>(&mut self) {
         assert!(self.operations.contains(&TypeId::of::<T>()));
-        self.op_printer.register(instance);
+        self.op_printer.register::<T>();
     }
 
     pub fn get_op_printer<'a>(&self, obj: &'a dyn Op) -> Option<&'a dyn OpPrinter> {
