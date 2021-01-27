@@ -260,10 +260,11 @@ fn pattern_to_tree_node(
                 }
             }
 
-            let mut bin_node = t.nodes.push(TreeNodeKind::Atomic(
-                span.clone(),
-                b.cons_mut().from(Vec::<u8>::new()),
-            ));
+            let mut bin_node = None;
+            //let mut bin_node = t.nodes.push(TreeNodeKind::Atomic(
+            //    span.clone(),
+            //    b.cons_mut().from(Vec::<u8>::new()),
+            //));
 
             for (_idx, elem) in elements.iter().enumerate().rev() {
                 let spec = elem
@@ -301,17 +302,22 @@ fn pattern_to_tree_node(
                     .map(Either::Right)
                 };
 
-                bin_node = t.nodes.push(TreeNodeKind::Binary {
+                bin_node = Some(t.nodes.push(TreeNodeKind::Binary {
                     span: *span,
                     specifier: spec,
                     size: size_val,
                     size_resolved: None,
                     value: bit_val,
                     tail: bin_node,
-                });
+                }));
             }
 
-            bin_node
+            bin_node.unwrap_or_else(|| {
+                t.nodes.push(TreeNodeKind::Atomic(
+                    span.clone(),
+                    b.cons_mut().from(Vec::<u8>::new()),
+                ))
+            })
         }
         Expr::Map(map) => {
             let mut entries = Vec::new();

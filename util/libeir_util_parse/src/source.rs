@@ -40,7 +40,7 @@ pub enum SourceError {
 impl SourceError {
     pub fn to_diagnostic(&self) -> Diagnostic {
         match self {
-            SourceError::RootFileIO { source, path } => {
+            SourceError::RootFileIO { source, path: _ } => {
                 Diagnostic::error().with_message(source.to_string())
             }
             SourceError::InvalidPath { reason } => {

@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use crate::Integer;
 use libeir_util_binary::{Endian, BitCarrier, BitRead, BitSlice, integer_to_carrier};
 
@@ -14,8 +13,8 @@ impl BitCarrier for Integer {
 
 #[derive(Debug)]
 pub enum IntegerBits {
-    SmallBE(SmallIntCarrierBE),
-    SmallLE(SmallIntCarrierLE),
+    //SmallBE(SmallIntCarrierBE),
+    //SmallLE(SmallIntCarrierLE),
     Big(BitSlice<Vec<u8>>),
 }
 
@@ -23,8 +22,8 @@ impl BitCarrier for IntegerBits {
     type T = u8;
     fn bit_len(&self) -> usize {
         match self {
-            Self::SmallBE(si) => si.bit_len(),
-            Self::SmallLE(si) => si.bit_len(),
+            //Self::SmallBE(si) => si.bit_len(),
+            //Self::SmallLE(si) => si.bit_len(),
             Self::Big(bi) => bi.bit_len(),
         }
     }
@@ -32,8 +31,8 @@ impl BitCarrier for IntegerBits {
 impl BitRead for IntegerBits {
     fn read_word(&self, n: usize) -> u8 {
         match self {
-            Self::SmallBE(si) => si.read_word(n),
-            Self::SmallLE(si) => si.read_word(n),
+            //Self::SmallBE(si) => si.read_word(n),
+            //Self::SmallLE(si) => si.read_word(n),
             Self::Big(bi) => bi.read_word(n),
         }
     }
@@ -105,70 +104,70 @@ impl Integer {
 //    }
 //}
 
-#[derive(Debug)]
-pub struct SmallIntCarrierBE {
-    data: u64,
-    bits: usize,
-    padding: u8,
-    bytes: usize,
-}
-impl BitCarrier for SmallIntCarrierBE {
-    type T = u8;
-    fn bit_len(&self) -> usize {
-        self.bits
-    }
-}
-impl BitRead for SmallIntCarrierBE {
-    fn read_word(&self, n: usize) -> u8 {
-        if n >= self.bytes {
-            return self.padding;
-        }
-
-        let inv = self.bytes - n - 1;
-        println!("inv: {:?}", inv);
-
-        if inv >= 8 {
-            self.padding
-        } else {
-            let d1 = self.data.read_word(7 - inv);
-            let d2 = if inv == 7 {
-                self.padding
-            } else {
-                self.data.read_word(n)
-            };
-
-            self.data.read_word(7 - inv)
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct SmallIntCarrierLE {
-    data: u64,
-    bits: usize,
-    padding: u8,
-}
-impl BitCarrier for SmallIntCarrierLE {
-    type T = u8;
-    fn bit_len(&self) -> usize {
-        self.bits
-    }
-}
-impl BitRead for SmallIntCarrierLE {
-    fn read_word(&self, n: usize) -> u8 {
-        if n >= 8 {
-            self.padding
-        } else {
-            let offset = self.bits % 8;
-            let d = self.data.read_word(7 - n);
-            if offset == 0 {
-                d
-            } else {
-                d << (8 - offset)
-            }
-        }
-    }
-}
+//#[derive(Debug)]
+//pub struct SmallIntCarrierBE {
+//    data: u64,
+//    bits: usize,
+//    padding: u8,
+//    bytes: usize,
+//}
+//impl BitCarrier for SmallIntCarrierBE {
+//    type T = u8;
+//    fn bit_len(&self) -> usize {
+//        self.bits
+//    }
+//}
+//impl BitRead for SmallIntCarrierBE {
+//    fn read_word(&self, n: usize) -> u8 {
+//        if n >= self.bytes {
+//            return self.padding;
+//        }
+//
+//        let inv = self.bytes - n - 1;
+//        println!("inv: {:?}", inv);
+//
+//        if inv >= 8 {
+//            self.padding
+//        } else {
+//            let d1 = self.data.read_word(7 - inv);
+//            let d2 = if inv == 7 {
+//                self.padding
+//            } else {
+//                self.data.read_word(n)
+//            };
+//
+//            self.data.read_word(7 - inv)
+//        }
+//    }
+//}
+//
+//#[derive(Debug)]
+//pub struct SmallIntCarrierLE {
+//    data: u64,
+//    bits: usize,
+//    padding: u8,
+//}
+//impl BitCarrier for SmallIntCarrierLE {
+//    type T = u8;
+//    fn bit_len(&self) -> usize {
+//        self.bits
+//    }
+//}
+//impl BitRead for SmallIntCarrierLE {
+//    fn read_word(&self, n: usize) -> u8 {
+//        if n >= 8 {
+//            self.padding
+//        } else {
+//            let offset = self.bits % 8;
+//            let d = self.data.read_word(7 - n);
+//            if offset == 0 {
+//                d
+//            } else {
+//                d << (8 - offset)
+//            }
+//        }
+//    }
+//}
 
 // <<20::big-size(12)>> -> <<1, 4::size(4)>>
 // <<20::little-size(12)>> -> <<20, 0::size(4)>>

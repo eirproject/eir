@@ -45,6 +45,7 @@ pub enum NodeKind {
     Binary {
         specifier: BinaryEntrySpecifier,
         size: Option<ValueOrConst>,
+        has_tail: bool,
     },
     /// Tuple is matched its length
     TupleSize(usize),
@@ -73,7 +74,8 @@ impl NodeKind {
             NodeKind::MapItem(_) => 1,
             NodeKind::ValueList => panic!(),
             NodeKind::Wildcard => 0,
-            NodeKind::Binary { .. } => 2,
+            NodeKind::Binary { has_tail: true, .. } => 2,
+            NodeKind::Binary { has_tail: false, .. } => 1,
         }
     }
 }
@@ -141,7 +143,7 @@ impl<'a> ErlangPatternProvider<'a> {
 
     pub fn add_child(&mut self, node: Node, kind: NodeKind, pat_node: PatternNode) -> Node {
         let next = self.nodes.push(NodeData {
-            kind: kind,
+            kind,
             children: EntityList::new(),
         });
         self.nodes[node].children.push(next, &mut self.node_pool);
@@ -328,9 +330,10 @@ impl<'a> PatternProvider for ErlangPatternProvider<'a> {
 
                 for node_id in clause_nodes {
                     let node = &self.nodes[node_id];
+                    println!("{:?}", node);
                     let children = node.children.as_slice(&self.node_pool);
 
-                    assert!(children.len() == expected_children);
+                    assert_eq!(children.len(), expected_children);
                     for child in children {
                         exp.nodes.push(*child);
                     }
@@ -438,20 +441,23 @@ fn pattern_node_to_provider(
                 NodeKind::Binary {
                     specifier: *specifier,
                     size: size_val,
+                    has_tail: remaining.is_some(),
                 },
                 node,
             );
 
             pattern_node_to_provider(fun, pat, value_map, provider, *value, binary_entry, n + 1);
-            pattern_node_to_provider(
-                fun,
-                pat,
-                value_map,
-                provider,
-                *remaining,
-                binary_entry,
-                n + 1,
-            );
+            if let Some(remaining) = *remaining {
+                pattern_node_to_provider(
+                    fun,
+                    pat,
+                    value_map,
+                    provider,
+                    remaining,
+                    binary_entry,
+                    n + 1,
+                );
+            }
 
             binary_entry
         }

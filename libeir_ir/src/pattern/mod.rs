@@ -91,7 +91,7 @@ pub enum PatternNodeKind {
         value: PatternNode,
         size: Option<PatternValue>,
 
-        remaining: PatternNode,
+        remaining: Option<PatternNode>,
     },
     Tuple(EntityList<PatternNode>),
     List {
@@ -158,7 +158,7 @@ impl PatternContainer {
         specifier: BinaryEntrySpecifier,
         value: PatternNode,
         size: Option<PatternValue>,
-        remaining: PatternNode,
+        remaining: Option<PatternNode>,
     ) {
         let mut data = &mut self.nodes[node];
         assert!(data.kind.is_none());
@@ -673,5 +673,186 @@ impl PatternContainer {
             }),
             (a, b) => unimplemented!("{:?} {:?}", a, b),
         }
+    }
+
+    /// Makes a structural variant of the given pattern clause.
+    ///
+    /// A structural pattern is a pattern which matches on a term of the same
+    /// structure, but with all atomic matches removed.
+    ///
+    /// This is currently only defined for binary nodes, and will panic if
+    /// any other pattern is given.
+    pub fn make_structural(&mut self, clause: PatternClause) -> PatternClause {
+        use PatternNodeKind as PNK;
+       
+        let clause_data = &self.clauses[clause];
+
+        let mut bind_mapping: HashMap<PatternNode, PatternNode> = HashMap::new();
+        for bind in clause_data.binds.as_slice(&self.node_pool).iter() {
+            bind_mapping.insert(*bind, *bind);
+        }
+        for bind in clause_data.node_binds_keys.as_slice(&self.node_pool).iter() {
+            bind_mapping.insert(*bind, *bind);
+        }
+
+        let mut value_mapping: HashMap<PatternValue, PatternValue> = HashMap::new();
+        let values = &mut self.values;
+        let mut map_value = |val: PatternValue| -> PatternValue {
+            *value_mapping.entry(val).or_insert_with(|| values.push(()))
+        };
+
+        let mut root_nodes: Vec<_> = clause_data
+            .root_nodes
+            .as_slice(&self.node_pool)
+            .iter()
+            .cloned()
+            .collect();
+
+        fn make_node_structural(
+            nodes: &mut PrimaryMap<PatternNode, PatternNodeData>,
+            node_pool: &mut ListPool<PatternNode>,
+            value_pool: &mut ListPool<PatternValue>,
+            bind_mapping: &mut HashMap<PatternNode, PatternNode>,
+            mut map_value: &mut impl FnMut(PatternValue) -> PatternValue,
+            node: PatternNode,
+        ) -> PatternNode {
+            let mut node_data = nodes[node].clone();
+            assert!(node_data.finished);
+
+            println!("{:?}", node_data.kind);
+            let new_kind = match node_data.kind.unwrap() {
+                PNK::Wildcard => PNK::Wildcard,
+                PNK::Const(_) => PNK::Wildcard,
+                PNK::Value(_) => PNK::Wildcard,
+                PNK::Binary{
+                    specifier,
+                    value,
+                    size,
+                    remaining,
+                } => {
+                    let remaining = remaining.map(|n| make_node_structural(nodes, node_pool, value_pool, bind_mapping, map_value, n));
+                    PNK::Binary {
+                        specifier,
+                        value: make_node_structural(nodes, node_pool, value_pool, bind_mapping, map_value, value),
+                        size: size.map(&mut map_value),
+                        remaining,
+                    }
+                },
+                PNK::Tuple(nodes_list) => {
+                    let mut nodes_buf: Vec<_> = nodes_list.as_slice(node_pool).iter().cloned().collect();
+                    for node in nodes_buf.iter_mut() {
+                        *node = make_node_structural(nodes, node_pool, value_pool, bind_mapping, map_value, *node);
+                    }
+
+                    let mut nodes_new = EntityList::new();
+                    for node in nodes_buf.iter() {
+                        nodes_new.push(*node, node_pool);
+                    }
+
+                    PNK::Tuple(nodes_new)
+                },
+                PNK::List { head, tail } => {
+                    PNK::List {
+                        head: make_node_structural(nodes, node_pool, value_pool, bind_mapping, map_value, head),
+                        tail: make_node_structural(nodes, node_pool, value_pool, bind_mapping, map_value, tail),
+                    }
+                },
+                PNK::Map { keys, values } => {
+                    let keys_buf: Vec<_> = keys.as_slice(value_pool).iter().cloned().collect();
+                    let mut keys_new = EntityList::new();
+                    for value in keys_buf.iter() {
+                        keys_new.push(map_value(*value), value_pool);
+                    }
+
+                    let mut values_buf: Vec<_> = values.as_slice(node_pool).iter().cloned().collect();
+                    for node in values_buf.iter_mut() {
+                        *node = make_node_structural(nodes, node_pool, value_pool, bind_mapping, map_value, *node);
+                    }
+
+                    let mut values_new = EntityList::new();
+                    for node in values_buf.iter() {
+                        values_new.push(*node, node_pool);
+                    }
+
+                    PNK::Map {
+                        keys,
+                        values: values_new,
+                    }
+                }
+            };
+            node_data.kind = Some(new_kind);
+
+            let new_node = nodes.push(node_data);
+            if let Some(entry) = bind_mapping.get_mut(&node) {
+                *entry = new_node;
+            }
+
+            new_node
+        }
+
+        for node in root_nodes.iter_mut() {
+            *node = make_node_structural(&mut self.nodes, &mut self.node_pool, &mut self.value_pool,
+                                         &mut bind_mapping, &mut map_value, *node);
+        }
+        let mut root_nodes_new = EntityList::new();
+        for node in root_nodes.iter() {
+            root_nodes_new.push(*node, &mut self.node_pool);
+        }
+
+        let new_data = PatternClauseData {
+            span: clause_data.span,
+            root_nodes: root_nodes_new,
+
+            node_binds_keys: {
+                let mut new = EntityList::new();
+
+                let len = clause_data.node_binds_keys.as_slice(&self.node_pool).len();
+                for idx in 0..len {
+                    let node = clause_data.node_binds_keys.as_slice(&self.node_pool)[idx];
+                    new.push(bind_mapping[&node], &mut self.node_pool);
+                }
+
+                new
+            },
+            node_binds_vals: {
+                let mut new = EntityList::new();
+
+                let len = clause_data.node_binds_vals.as_slice(&self.value_pool).len();
+                for idx in 0..len {
+                    let value = clause_data.node_binds_vals.as_slice(&self.value_pool)[idx];
+                    new.push(map_value(value), &mut self.value_pool);
+                }
+
+                new
+            },
+
+            binds: {
+                let mut new = EntityList::new();
+
+                let len = clause_data.binds.as_slice(&self.node_pool).len();
+                for idx in 0..len {
+                    let node = clause_data.binds.as_slice(&self.node_pool)[idx];
+                    new.push(bind_mapping[&node], &mut self.node_pool);
+                }
+
+                new
+            },
+
+            values: {
+                let mut new = EntityList::new();
+
+                let len = clause_data.values.as_slice(&self.value_pool).len();
+                for idx in 0..len {
+                    let value = clause_data.values.as_slice(&self.value_pool)[idx];
+                    new.push(map_value(value), &mut self.value_pool);
+                }
+
+                new
+            },
+
+            finished: true,
+        };
+
+        self.clauses.push(new_data)
     }
 }

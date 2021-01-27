@@ -1,3 +1,5 @@
+use snafu::Snafu;
+
 use libeir_ir::binary::BinaryEntrySpecifier;
 use libeir_ir::constant::NilTerm;
 use libeir_ir::operation::binary_construct::{
@@ -9,13 +11,70 @@ use libeir_ir::{Block as IrBlock, FunctionBuilder, Value as IrValue};
 use libeir_ir::pattern::{PatternContainer, PatternClause};
 
 use libeir_intern::{Ident, Symbol};
+use libeir_diagnostics::SourceSpan;
 
-use crate::parser::ast::{BinaryComprehension, Expr, ListComprehension};
+use crate::parser::ast::{BinaryComprehension, Binary, BinaryElement, Expr, ListComprehension, NodeId, Var};
 
 use crate::lower::expr::binary::lower_binary_expr;
 use crate::lower::expr::{lower_single, lower_single_same_scope};
 use crate::lower::pattern::lower_clause;
 use crate::lower::LowerCtx;
+
+#[derive(Debug, Snafu)]
+pub enum ComprehensionError {
+    InvalidUnsizedBinaryElement {
+        span: SourceSpan,
+    },
+}
+
+/// Makes a pattern that matches on a single iteration of a binary generator.
+fn make_head_pattern(
+    ctx: &mut LowerCtx,
+    b: &mut FunctionBuilder,
+    expr: &Expr,
+) -> Result<(Expr, Ident), ComprehensionError> {
+    match expr {
+        Expr::Binary(binary) => {
+            let mut elements = binary.elements.clone();
+
+            let tail = Ident::from_str(&format!("$generatortail{}", ctx.make_unique()));
+
+            // Validate that all elements in binary pattern are actually sized
+            for elem in elements.iter() {
+                match elem.specifier {
+                    Some(BinaryEntrySpecifier::Bytes { .. }) if elem.bit_size.is_none() => {
+                        return Err(ComprehensionError::InvalidUnsizedBinaryElement {
+                            span: elem.span,
+                        });
+                    },
+                    Some(BinaryEntrySpecifier::Bits { .. }) if elem.bit_size.is_none() => {
+                        return Err(ComprehensionError::InvalidUnsizedBinaryElement {
+                            span: elem.span,
+                        });
+                    },
+                    _ => (),
+                }
+            }
+
+            elements.push(BinaryElement {
+                span: binary.span,
+                id: NodeId(0),
+                bit_expr: Expr::Var(Var(NodeId(0), tail)),
+                bit_size: None,
+                specifier: Some(BinaryEntrySpecifier::Bytes { unit: 1 }),
+            });
+
+            let pattern = Expr::Binary(Binary {
+                span: binary.span,
+                id: NodeId(0),
+                elements,
+            });
+
+            Ok((pattern, tail))
+        },
+        _ => unreachable!(),
+    }
+}
 
 fn make_structural_bin_pattern(
     pat: &mut PatternContainer,
@@ -154,26 +213,112 @@ where
                 //         2. structural pattern, continue
                 //         3. wildcard, break
 
+                let nil = b.value(NilTerm);
+
                 let bin_val = map_block!(block, lower_single(ctx, b, block, &gen.expr));
+
+                let break_block = b.block_insert();
+                let break_arg = b.block_arg_insert(break_block);
 
                 // Loop entry block
                 let loop_block = b.block_insert();
+                let mut loop_block_head = loop_block;
                 let loop_bin_arg = b.block_arg_insert(loop_block);
                 let loop_acc_arg = b.block_arg_insert(loop_block);
 
                 let pattern_span = gen.pattern.span();
 
+                b.op_call_flow(block, loop_block, &[bin_val, acc]);
+
                 // No match block, break
                 let no_match = b.block_insert();
+                b.op_call_flow(no_match, break_block, &[nil]);
 
                 let mut case_b = Case::builder();
                 case_b.set_span(pattern_span);
                 case_b.match_on = Some(loop_bin_arg);
                 case_b.no_match = Some(b.value(no_match));
 
-                let structual_pattern = make_structural_bin_pattern(&mut case_b.container, &gen.expr);
+                let (head_pattern, tail_ident) = make_head_pattern(ctx, b, &gen.pattern).unwrap();
 
-                (no_match, loop_acc_arg)
+                match lower_clause(
+                    ctx,
+                    &mut case_b.container,
+                    b,
+                    &mut loop_block_head,
+                    false,
+                    pattern_span,
+                    [&head_pattern].iter().map(|v| *v),
+                    None,
+                ) {
+                    Ok(lowered) => {
+                        // Main body
+                        {
+                            let (scope_token, body) = lowered.make_body(ctx, b);
+
+                            // Add to case
+                            let body_val = b.value(body);
+                            case_b.push_clause(lowered.clause, lowered.guard, body_val, b);
+                            for value in lowered.values.iter() {
+                                case_b.push_value(*value, b);
+                            }
+
+                            let tail_val = ctx.resolve(tail_ident);
+
+                            let (cont, cont_val) =
+                                lower_qual(ctx, b, inner, &quals[1..], body, loop_acc_arg);
+                            b.op_call_flow(cont, loop_block, &[tail_val, cont_val]);
+
+                            // Pop scope pushed in lower_clause
+                            ctx.scope.pop(scope_token);
+                        }
+
+                        // Structural body
+                        {
+                            let (scope_token, body) = lowered.make_body(ctx, b);
+
+                            // Make an always succeeding dummy guard
+                            let dummy_guard = {
+                                let dummy_guard = b.block_insert();
+                                let guard_ret_cont = b.block_arg_insert(dummy_guard);
+                                let _guard_throw_cont = b.block_arg_insert(dummy_guard);
+                                for _bind in lowered.binds.iter() {
+                                    b.block_arg_insert(dummy_guard);
+                                }
+                                let true_val = b.value(true);
+                                b.op_call_flow(dummy_guard, guard_ret_cont, &[true_val]);
+                                dummy_guard
+                            };
+                            let dummy_guard_val = b.value(dummy_guard);
+
+                            let structural_clause = case_b.container.make_structural(lowered.clause);
+
+                            // Add to case
+                            let body_val = b.value(body);
+                            case_b.push_clause(structural_clause, dummy_guard_val, body_val, b);
+                            for value in lowered.values.iter() {
+                                case_b.push_value(*value, b);
+                            }
+
+                            let tail_val = ctx.resolve(tail_ident);
+
+                            // Match on structural means full match failed.
+                            // We consume the matched binary chunk and proceed
+                            // to the next iteration.
+                            b.op_call_flow(body, loop_block, &[tail_val, loop_acc_arg]);
+
+                            // Pop scope pushed in lower_clause
+                            ctx.scope.pop(scope_token);
+                        }
+                    },
+                    Err(_) => unimplemented!(),
+                }
+
+                case_b.finish(loop_block_head, b);
+
+                //let structual_pattern = make_structural_bin_pattern(&mut case_b.container, &gen.expr);
+
+                (break_block, break_arg)
             },
             expr => {
                 let bool_val = map_block!(block, lower_single_same_scope(ctx, b, block, expr));

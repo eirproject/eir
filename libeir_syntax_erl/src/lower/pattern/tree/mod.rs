@@ -112,7 +112,7 @@ pub(crate) enum TreeNodeKind {
         size: Option<Either<Ident, IrValue>>,
         size_resolved: Option<Either<TreeNode, IrValue>>,
         value: TreeNode,
-        tail: TreeNode,
+        tail: Option<TreeNode>,
     },
     Map {
         span: SourceSpan,

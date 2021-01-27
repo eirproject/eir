@@ -330,3 +330,58 @@ perms(L) -> [[H|T] || H <- L, T <- perms(L--[H])].
         assert!(res.erl_eq(&out));
     }
 }
+
+#[ignore]
+#[test]
+fn test_binary_comprehension() {
+    let _ = env_logger::try_init();
+
+    let mut eir_mod = lower(
+        "
+-module(woo).
+
+woo(N) -> [X || <<X>> <= <<1, 2, 3>>].
+",
+        ParseConfig::default(),
+    )
+    .unwrap();
+
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
+        let mut out = Vec::new();
+        fun.validate(&mut out);
+        assert!(out.len() == 0);
+    }
+
+    let mut pass_manager = PassManager::default();
+    pass_manager.run(&mut eir_mod);
+
+    for fun_def in eir_mod.function_iter() {
+        let fun = fun_def.function();
+        let mut out = Vec::new();
+        fun.validate(&mut out);
+        assert!(out.len() == 0);
+    }
+
+    let fun = FunctionIdent {
+        module: Ident::from_str("woo"),
+        name: Ident::from_str("woo"),
+        arity: 1,
+    };
+
+    println!("{}", eir_mod.to_text_standard());
+
+    let mut vm = VMState::new();
+    vm.add_builtin_modules();
+    vm.add_erlang_module(eir_mod);
+
+    assert!(vm.call(&fun, &[Term::Nil]).unwrap().erl_eq(&Term::Nil));
+
+    {
+        let out = Term::slice_to_list(&[Term::Integer(1.into()).into()], Term::Nil.into());
+        assert!(vm
+            .call(&fun, &[Term::Integer(1.into())])
+            .unwrap()
+            .erl_eq(&*out));
+    }
+}

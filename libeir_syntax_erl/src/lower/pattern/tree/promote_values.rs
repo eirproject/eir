@@ -243,10 +243,15 @@ fn promote_values_node(
 
             prom.binds_scope.push();
             process_constants_node(b, prom, t, value, true);
-            process_constants_node(b, prom, t, tail, false);
+            if let Some(tail_node) = tail {
+                process_constants_node(b, prom, t, tail_node, false);
+            }
 
             promote_values_node(b, prom, t, value);
-            promote_values_node(b, prom, t, tail);
+            if let Some(tail_node) = tail {
+                promote_values_node(b, prom, t, tail_node);
+            }
+
             prom.binds_scope.pop();
         }
         TreeNodeKind::Map { entries, .. } => {

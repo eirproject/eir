@@ -186,17 +186,32 @@ fn lower_cfg_rec(
                         assert!(wildcard_node.is_none());
                         wildcard_node = Some(outgoing);
                     }
-                    NodeKind::Binary { specifier, size } => {
-                        assert!(weight.variable_binds.len() == 2);
+                    NodeKind::Binary { specifier, size, has_tail } => {
+                        if has_tail {
+                            assert!(weight.variable_binds.len() == 2);
+                        } else {
+                            assert!(weight.variable_binds.len() == 1);
+                        }
+
                         let size =
                             size.map(|v| ctx.value_or_const_to_value(v, outgoing.target(), b, cfg));
-                        let ok = match_builder.push_binary(specifier, size, b);
+                        let mut ok = match_builder.push_binary(specifier, size, b);
 
                         let args = b.block_args(ok);
                         assert!(args.len() == 2);
+                        let arg0 = args[0];
+                        let arg1 = args[1];
 
-                        ctx.bind(weight.variable_binds[0], args[0]);
-                        ctx.bind(weight.variable_binds[1], args[1]);
+                        ctx.bind(weight.variable_binds[0], arg0);
+                        if has_tail {
+                            ctx.bind(weight.variable_binds[1], arg1);
+                        } else {
+                            let mut inner_builder = b.op_match_build(span);
+                            let empty_binary = b.value(Vec::<u8>::new());
+                            let next = inner_builder.push_value(empty_binary, b);
+                            inner_builder.finish(ok, arg1, b);
+                            ok = next;
+                        }
 
                         lower_cfg_rec(bump, b, pat, ctx, cfg, clauses, ok, outgoing.target());
                     }

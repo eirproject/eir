@@ -154,34 +154,39 @@ pub fn match_op(
                 };
                 return ret;
             }
-            MatchKind::Binary(BinaryEntrySpecifier::Bytes { unit: 8 }) => match &*unpack_term {
-                Term::Binary(bin) => {
-                    if bin.bit_len() % 8 != 0 {
-                        continue;
-                    }
+            MatchKind::Binary(BinaryEntrySpecifier::Bytes { unit }) => {
+                let size = branch_args[0].as_usize().unwrap_or(1);
+                let byte_len = (*unit as usize) * size;
 
-                    return TermCall {
-                        fun: branches_elems[idx].clone(),
-                        args: vec![
-                            unpack_term.clone(),
-                            Term::Binary(BitVec::new().into()).into(),
-                        ],
-                    };
-                }
-                Term::BinarySlice { bit_length, .. } => {
-                    if *bit_length % 8 != 0 {
-                        continue;
-                    }
+                match &*unpack_term {
+                    Term::Binary(bin) => {
+                        //if bin.bit_len() % 8 != 0 {
+                        //    continue;
+                        //}
 
-                    return TermCall {
-                        fun: branches_elems[idx].clone(),
-                        args: vec![
-                            unpack_term.clone(),
-                            Term::Binary(BitVec::new().into()).into(),
-                        ],
-                    };
+                        return TermCall {
+                            fun: branches_elems[idx].clone(),
+                            args: vec![
+                                unpack_term.clone(),
+                                Term::Binary(BitVec::new().into()).into(),
+                            ],
+                        };
+                    }
+                    Term::BinarySlice { bit_length, .. } => {
+                        //if *bit_length % 8 != 0 {
+                        //    continue;
+                        //}
+
+                        return TermCall {
+                            fun: branches_elems[idx].clone(),
+                            args: vec![
+                                unpack_term.clone(),
+                                Term::Binary(BitVec::new().into()).into(),
+                            ],
+                        };
+                    }
+                    _ => (),
                 }
-                _ => (),
             },
             MatchKind::Wildcard => {
                 assert!(branch_args.len() == 0);

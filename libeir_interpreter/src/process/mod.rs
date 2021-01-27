@@ -436,6 +436,11 @@ impl CallExecutor {
 
                                 bin.push(binary);
                             }
+                            BinaryEntrySpecifier::Bits { unit: 1 } => {
+                                let binary = val_term.as_binary().unwrap();
+                                // TODO validate size
+                                bin.push(binary);
+                            }
                             k => unimplemented!("{:?}", k),
                         }
 
@@ -444,9 +449,11 @@ impl CallExecutor {
                             args: vec![Term::Binary(bin.into()).into()],
                         };
                     }
-                    _ if tid == TypeId::of::<BinaryConstructFinish>() => TermCall {
-                        fun: self.make_term(fun, reads[0]),
-                        args: vec![self.make_term(fun, reads[1])],
+                    _ if tid == TypeId::of::<BinaryConstructFinish>() => {
+                        TermCall {
+                            fun: self.make_term(fun, reads[0]),
+                            args: vec![self.make_term(fun, reads[1])],
+                        }
                     },
                     _ => unimplemented!(),
                 }

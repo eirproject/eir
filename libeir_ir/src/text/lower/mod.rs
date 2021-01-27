@@ -1,10 +1,8 @@
 use std::collections::HashMap;
-use std::error::Error;
 
-use libeir_diagnostics::{CodeMap, Diagnostic, Label, SourceSpan, ToDiagnostic};
+use libeir_diagnostics::{Diagnostic, Label, SourceSpan, ToDiagnostic};
 use libeir_intern::Ident;
 use libeir_util_datastructures::hashmap_stack::HashMapStack;
-use libeir_util_number::ToPrimitive;
 use libeir_util_parse::ErrorReceiver;
 
 use snafu::Snafu;

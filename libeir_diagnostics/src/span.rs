@@ -38,7 +38,7 @@ impl SourceSpan {
     pub fn new_align<F>(
         start: SourceIndex,
         end: SourceIndex,
-        get_codemap: &Fn(&mut dyn FnOnce(&CodeMap)),
+        get_codemap: &dyn Fn(&mut dyn FnOnce(&CodeMap)),
     ) -> SourceSpan {
         let start_source = start.source_id();
         let end_source = end.source_id();

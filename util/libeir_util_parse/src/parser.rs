@@ -4,7 +4,7 @@ use std::sync::Arc;
 use libeir_diagnostics::*;
 
 use crate::ErrorReceiver;
-use crate::{FileMapSource, Source, SourceError};
+use crate::{FileMapSource, Source};
 
 pub struct Parser<C> {
     pub config: C,

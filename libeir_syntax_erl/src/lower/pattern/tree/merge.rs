@@ -30,7 +30,7 @@ fn map_node(ctx: &mut LowerCtx, b: &mut FunctionBuilder, t: &mut Tree, node: Tre
                 new_elems.push(new, &mut t.node_pool);
             }
             t.nodes.push(TreeNodeKind::Tuple {
-                span: span,
+                span,
                 elems: new_elems,
             })
         }
@@ -38,7 +38,7 @@ fn map_node(ctx: &mut LowerCtx, b: &mut FunctionBuilder, t: &mut Tree, node: Tre
             let new_head = map_node(ctx, b, t, head);
             let new_tail = map_node(ctx, b, t, tail);
             t.nodes.push(TreeNodeKind::Cons {
-                span: span,
+                span,
                 head: new_head,
                 tail: new_tail,
             })
@@ -52,9 +52,9 @@ fn map_node(ctx: &mut LowerCtx, b: &mut FunctionBuilder, t: &mut Tree, node: Tre
             tail,
         } => {
             let n_value = map_node(ctx, b, t, value);
-            let n_tail = map_node(ctx, b, t, tail);
+            let n_tail = tail.map(|n| map_node(ctx, b, t, n));
             t.nodes.push(TreeNodeKind::Binary {
-                span: span,
+                span,
                 specifier,
                 size,
                 size_resolved,
@@ -80,7 +80,7 @@ fn map_node(ctx: &mut LowerCtx, b: &mut FunctionBuilder, t: &mut Tree, node: Tre
                 .map(|(k, v)| (*k, map_node(ctx, b, t, *v)))
                 .collect();
             t.nodes.push(TreeNodeKind::Map {
-                span: span,
+                span,
                 entries: new_entries,
             })
         }

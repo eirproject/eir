@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-use crate::{DivisionError, Float, FloatError, Integer};
+use crate::{Float, FloatError, Integer};
 
 #[derive(Debug, Clone, Hash)]
 pub enum Number {
@@ -27,7 +27,7 @@ impl Number {
             (Number::Integer(l), Number::Integer(r)) => l == r,
             (Number::Float(l), Number::Float(r)) => l == r,
 
-            (Number::Integer(l), Number::Float(r)) if exact => false,
+            (Number::Integer(_l), Number::Float(_r)) if exact => false,
             (Number::Integer(l), Number::Float(r)) => {
                 if r.is_precise() {
                     l.to_float() == r.inner()

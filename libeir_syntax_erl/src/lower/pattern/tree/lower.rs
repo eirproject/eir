@@ -109,7 +109,9 @@ fn create_nodes(
         }
         TreeNodeKind::Binary { value, tail, .. } => {
             create_nodes(b, pat, t, map, *value);
-            create_nodes(b, pat, t, map, *tail);
+            if let Some(tail_node) = tail {
+                create_nodes(b, pat, t, map, *tail_node);
+            }
         }
         TreeNodeKind::Map { entries, .. } => {
             for (_, v) in entries {
@@ -177,7 +179,7 @@ fn lower_tree_node(
             });
 
             let value_n = lower_tree_node(b, pat, cl_ctx, map, t, *value);
-            let tail_n = lower_tree_node(b, pat, cl_ctx, map, t, *tail);
+            let tail_n = tail.map(|n| lower_tree_node(b, pat, cl_ctx, map, t, n));
             pat.binary(p_node, *specifier, value_n, size, tail_n);
             pat.node_set_span(p_node, *span);
         }

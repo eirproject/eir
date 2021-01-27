@@ -55,6 +55,8 @@ pub(crate) struct LowerCtx<'a> {
     /// Top is current function name.
     /// Used to generate debug info.
     functions: Vec<String>,
+
+    unique: usize,
 }
 
 impl<'a> LowerCtx<'a> {
@@ -80,6 +82,11 @@ impl<'a> LowerCtx<'a> {
 
     pub fn failed(&self) -> bool {
         self.errors.is_failed()
+    }
+
+    pub fn make_unique(&mut self) -> usize {
+        self.unique += 1;
+        self.unique
     }
 
     /// Resolves the index of a field in a record.
@@ -198,6 +205,8 @@ pub fn lower_module<'a>(
 
         fun_num: 0,
         functions: Vec::new(),
+
+        unique: 0,
     };
 
     for (ident, function) in module.functions.iter() {
