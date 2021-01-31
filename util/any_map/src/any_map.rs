@@ -1,5 +1,6 @@
 use fnv::FnvBuildHasher;
-use hashbrown::raw::{AllocRef, Global, RawTable};
+use hashbrown::raw::RawTable;
+use std::alloc::{Allocator, Global};
 use std::any::{Any, TypeId};
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::mem;
@@ -88,7 +89,7 @@ impl AnyKey {
 
 pub struct AnyMap<V, S = DefaultBuildHasher, A = Global>
 where
-    A: AllocRef + Clone,
+    A: Allocator + Clone,
 {
     hash_builder: S,
     table: RawTable<(AnyKey, V), A>,
@@ -97,7 +98,7 @@ where
 impl<V, S, A> Default for AnyMap<V, S, A>
 where
     S: Default,
-    A: Default + AllocRef + Clone,
+    A: Default + Allocator + Clone,
 {
     fn default() -> Self {
         AnyMap {
@@ -120,7 +121,7 @@ impl<V> AnyMap<V> {
 impl<V, S, A> AnyMap<V, S, A>
 where
     S: BuildHasher,
-    A: AllocRef + Clone,
+    A: Allocator + Clone,
 {
     pub fn insert<K>(&mut self, k: K, v: V) -> Option<V>
     where

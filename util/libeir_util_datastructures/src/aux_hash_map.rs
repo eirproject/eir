@@ -1,3 +1,4 @@
+use std::alloc::{Allocator, Global};
 use std::borrow::Borrow;
 use std::collections::hash_map::RandomState;
 use std::fmt::Debug;
@@ -9,7 +10,7 @@ use crate::aux_traits::{AuxEq, AuxHash};
 //use cranelift_entity::{ListPool, EntityList, EntityRef};
 //use cranelift_entity::packed_option::ReservedValue;
 
-use hashbrown::raw::{RawIter, RawTable, Allocator, Global};
+use hashbrown::raw::{RawIter, RawTable};
 
 //impl<C, T> AuxHash<C> for T where T: Hash {
 //    fn aux_hash<H: Hasher>(&self, state: &mut H, _container: &C) {

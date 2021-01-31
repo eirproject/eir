@@ -1,5 +1,5 @@
 use crate::{AnyMap, DefaultBuildHasher};
-use hashbrown::raw::{AllocRef, Global};
+use std::alloc::{Allocator, Global};
 use std::any::Any;
 use std::hash::{BuildHasher, Hash};
 
@@ -21,7 +21,7 @@ where
 
 pub struct AnyAnyMap<S = DefaultBuildHasher, A = Global>
 where
-    A: AllocRef + Clone,
+    A: Allocator + Clone,
 {
     inner: AnyMap<Box<dyn Any>, S, A>,
 }
@@ -29,7 +29,7 @@ where
 impl<S, A> Default for AnyAnyMap<S, A>
 where
     S: Default,
-    A: Default + AllocRef + Clone,
+    A: Default + Allocator + Clone,
 {
     fn default() -> Self {
         AnyAnyMap {
@@ -46,7 +46,7 @@ impl AnyAnyMap {
 
 impl<S, A> AnyAnyMap<S, A>
 where
-    A: AllocRef + Clone,
+    A: Allocator + Clone,
     S: BuildHasher,
 {
     pub fn insert<K: AnyKey>(&mut self, k: K, v: K::Value) -> Option<K::Value>
