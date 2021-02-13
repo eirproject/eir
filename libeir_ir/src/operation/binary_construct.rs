@@ -254,5 +254,5 @@ pub fn register(dialect: &mut Dialect) {
     dialect.register_op_branches_impl::<BinaryConstructPush>();
 
     dialect.register_op::<BinaryConstructFinish>();
-    dialect.register_op_branches_impl::<BinaryConstructPush>();
+    dialect.register_op_branches_impl::<BinaryConstructFinish>();
 }
